@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_FixColorspaces v1.21 | Lega
+  LGA_NKS_FixColorspaces v1.22 | Lega
 
   Corrige el color transform de los clips del timeline activo.
 
@@ -51,6 +51,14 @@ ____________________________________________________________________
   adentro de las funciones que los usan: este archivo se puede importar en
   un proceso sin Nuke/Hiero sin que explote y sin que haga nada.
 
+  v1.22: El camino managed se extrae a `run_if_color_managed()`, que ahora
+         comparten el boton del Edit Panel y el Flow Pull -que lo dispara al
+         terminar, porque cada bump de version cambia el clip a otra Version,
+         que es otro Clip con su propio color transform-. NO abre grupo de undo:
+         lo abre el llamador, que es la convencion del repo, y los dos llamadores
+         ya vienen dentro de uno. `main()` pasa a delegar en ella y solo decide el
+         fallback al camino viejo. `_volcar_log()` pasa a `volcar_log()`, publica,
+         porque ahora la llama otro modulo. Sin cambios para el boton.
   v1.21: Dos huecos de robustez que salieron en la auditoria. El camino
          VIEJO ya no toca clips que pertenecen a un proyecto color managed:
          `hiero.core.projects()` devuelve todos los proyectos abiertos, asi
@@ -98,7 +106,7 @@ def debug_print(*message):
         print(linea)
 
 
-def _volcar_log():
+def volcar_log():
     """Escribe el log de la corrida, pisando el anterior. Nunca rompe la tool."""
     try:
         os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
@@ -504,56 +512,88 @@ def _imprimir_resumen_managed(project_name, corregidos, ya_bien, conflictos, sin
 # ============================
 
 
+def run_if_color_managed(seq=None):
+    """
+    Corre SOLO el camino managed sobre la secuencia dada (por defecto, la activa).
+
+    Es el punto de entrada que comparten el boton del Edit Panel y el Flow Pull,
+    que lo dispara al terminar: un bump de version cambia el clip a otra `Version`,
+    que en Hiero es OTRO Clip con su propio color transform, asi que despues de un
+    pull los clips recien versionados vuelven al espacio que traiga el archivo.
+
+    Si el proyecto NO esta color managed no hace NADA: no cae al camino viejo. Esa
+    decision es del llamador -`main()` la toma, el pull no-, porque correr el
+    barrido de rec709 sobre todos los clips del bin como efecto secundario de un
+    pull seria una sorpresa desagradable.
+
+    🔴 NO abre grupo de undo: lo abre el LLAMADOR, que es la convencion del repo
+    ("El undo lo maneja el propio script, para no anidar bloques",
+    LGA_NKS_Edit_Panel.py). Los dos llamadores ya vienen dentro de uno: el boton por
+    `fix_colorspaces()` del Edit Panel, y el pull por `run_FPT_pull()` /
+    `run_FPT_pull_with_deselect()` del Flow Panel, que envuelven `FPT_Hiero()` en
+    `project.beginUndo("Run External Script")`. Una version anterior de esto abria su
+    propio `beginUndo` para el pull, creyendo que el pull no tenia: lo tiene, pero lo
+    abre el panel, no el archivo del pull. Anidarlos fusiona los macros y el Ctrl+Z
+    deja de comportarse como uno espera.
+
+    Devuelve True si el proyecto estaba managed (haya corrido bien o haya fallado)
+    y False si no lo estaba, para que el llamador decida que sigue.
+    """
+    import hiero.ui
+
+    if seq is None:
+        seq = hiero.ui.activeSequence()
+    if seq is None:
+        debug_print("[managed] No hay secuencia activa.")
+        return False
+
+    project_name = _resolve_active_project_name(seq)
+    if not project_name or not is_color_managed(project_name):
+        return False
+
+    cm_config = get_color_management(project_name)
+    debug_print(
+        "[managed] project_name={0!r} managed=True cm_config={1!r}".format(
+            project_name, cm_config
+        )
+    )
+
+    # 🔴 El camino managed atrapa sus propias excepciones y NO cae al camino viejo.
+    # El porque esta en el header: el panel se traga las excepciones y devuelve True
+    # igual, asi que sin esto el boton no hace nada y nadie se entera; y correr el
+    # barrido de rec709 sobre un proyecto managed es justo lo que hay que evitar.
+    try:
+        corregir_clips_con_color_management(project_name, cm_config, seq)
+    except Exception as e:
+        print(
+            "Fix Colorspaces fallo en el proyecto color managed {0}: {1}".format(
+                project_name, e
+            )
+        )
+        print(
+            "No se aplico ningun cambio. El detalle esta en "
+            "logs/DebugPy_LGA_NKS_FixColorspaces.log"
+        )
+        debug_print("[managed][ERROR] {0}".format(traceback.format_exc()))
+    return True
+
+
 def main():
     """
     Punto de entrada que llama LGA_NKS_Edit_Panel.py via exec_module() +
     module.main(). Ver el CONTRATO DE EJECUCION en el header del modulo.
+
+    Delega el camino managed en run_if_color_managed() -la misma funcion que
+    dispara el Flow Pull al terminar- y decide el fallback: si el proyecto no
+    esta color managed, corre el barrido viejo. Sin `undo_label` porque el panel
+    ya envuelve la llamada en su propio `project.beginUndo("Fix Colorspaces")`.
     """
-    import hiero.ui
-
     try:
-        seq = hiero.ui.activeSequence()
-        project_name = _resolve_active_project_name(seq) if seq is not None else ""
-
-        if project_name and is_color_managed(project_name):
-            cm_config = get_color_management(project_name)
-            debug_print(
-                "[main] project_name={0!r} managed=True cm_config={1!r}".format(
-                    project_name, cm_config
-                )
-            )
-            # 🔴 El camino managed va con su propio except, y NO cae al camino viejo.
-            #
-            # Sin este except, cualquier excepcion no contemplada -un track cuyo .name()
-            # tira, la API de Hiero cambiando- se propaga hasta execute_external_script()
-            # del panel, que la traga y devuelve False, y fix_colorspaces() solo lo manda
-            # a un log de archivo: el usuario aprieta el boton, no pasa nada y nadie le
-            # avisa.
-            #
-            # Y NO se cae al camino viejo a proposito, aunque sea lo intuitivo: correr el
-            # barrido de rec709 sobre un proyecto managed es justo lo que el filtro de
-            # buscar_y_cambiar_clips_rec709_en_todos existe para evitar. Fallar ruidoso es
-            # mejor que arreglar mal.
-            try:
-                corregir_clips_con_color_management(project_name, cm_config, seq)
-            except Exception as e:
-                print(
-                    "Fix Colorspaces fallo en el proyecto color managed {0}: {1}".format(
-                        project_name, e
-                    )
-                )
-                print(
-                    "No se aplico ningun cambio. El detalle esta en "
-                    "logs/DebugPy_LGA_NKS_FixColorspaces.log"
-                )
-                debug_print("[managed][ERROR] {0}".format(traceback.format_exc()))
-        else:
-            debug_print(
-                "[main] project_name={0!r} managed=False, camino viejo".format(project_name)
-            )
+        if not run_if_color_managed():
+            debug_print("[main] proyecto no managed, camino viejo")
             corregir_clips_con_colorspace_rec709()
     finally:
-        _volcar_log()
+        volcar_log()
 
 
 # Ejecucion desde el panel: LGA_NKS_Edit_Panel.py carga este script con

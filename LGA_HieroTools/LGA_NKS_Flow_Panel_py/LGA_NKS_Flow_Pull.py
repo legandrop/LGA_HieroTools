@@ -1,12 +1,20 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.61 | Lega
+  LGA_NKS_Flow_Pull v3.62 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.62: Al terminar el Pull, y solo si cambio algo, corre Fix Colorspaces si
+         el proyecto esta color managed (`fix_colorspaces_si_proyecto_managed`).
+         El Pull cambia clips a su version mas alta, y en Hiero cada Version es
+         otro Clip con su propio color transform, asi que sin esto cada bump
+         deshacia la correccion. Reusa `run_if_color_managed()` del Edit Panel,
+         con import diferido y a prueba de fallos: si algo se rompe, el Pull
+         sigue igual. No abre grupo de undo propio: ya corre dentro del que abre
+         el Flow Panel, y anidarlos rompe el Ctrl+Z.
   v3.61: "Keep this window on top" lleva lgaLabeled: sin la propiedad la
          hoja del pack deja el texto pegado al cuadrito (spacing 0).
   v3.60: La ventana de resultados (GUI_Table) migra al modulo de estilo
@@ -958,6 +966,56 @@ def _save_keep_on_top(value):
         debug_print(f"[WindowSize] No se pudo guardar keep_on_top: {e}")
 
 
+def fix_colorspaces_si_proyecto_managed():
+    """Corre Fix Colorspaces al terminar el Pull, solo si el proyecto esta color managed.
+
+    POR QUE ACA: el Pull cambia clips a su version mas alta
+    (`HieroOperations.change_to_highest_version`), y en Hiero una `Version` distinta es
+    OTRO Clip, con su propio color transform. O sea que cada bump de version devuelve al
+    clip al espacio que traiga el archivo y deshace lo que ya se habia corregido.
+    Dispararlo al final del Pull es lo que mantiene el timeline consistente sin que haya
+    que acordarse de apretar el boton despues de cada pull.
+
+    Es la MISMA funcion que usa el boton del Edit Panel (`run_if_color_managed`), no una
+    copia: si el proyecto no esta color managed no hace nada, y en particular NO cae al
+    barrido viejo de rec709, que como efecto secundario de un pull seria una sorpresa fea.
+
+    🔴 NO abre grupo de undo, a proposito. Este camino YA corre dentro del
+    `project.beginUndo("Run External Script")` que abren `run_FPT_pull()` y
+    `run_FPT_pull_with_deselect()` en LGA_NKS_Flow_Panel.py alrededor de `FPT_Hiero()`.
+    Abrir otro lo anidaria, que es justo lo que el repo evita ("El undo lo maneja el
+    propio script, para no anidar bloques", LGA_NKS_Edit_Panel.py). Asi el Ctrl+Z deshace
+    el Pull entero -versiones y colorspaces- como una sola operacion, que es lo que el
+    usuario hizo.
+
+    Corre en el hilo principal, que es donde ya corre `update_table()`: toca la API de
+    Hiero y no puede salir de ahi.
+
+    Nada de esto puede voltear el Pull: el import es diferido -el modulo vive en la
+    carpeta hermana del Edit Panel- y cualquier fallo se loguea y se sigue.
+    """
+    fixcs = None
+    try:
+        edit_panel_dir = Path(__file__).parent.parent / "LGA_NKS_Edit_Panel_py"
+        if edit_panel_dir.exists() and str(edit_panel_dir) not in sys.path:
+            sys.path.insert(0, str(edit_panel_dir))
+        import LGA_NKS_FixColorspaces as fixcs
+
+        corrio = fixcs.run_if_color_managed()
+        debug_print(f"Fix Colorspaces post-pull: proyecto managed={corrio}")
+    except Exception as e:
+        debug_print(f"Fix Colorspaces post-pull fallo (el pull sigue igual): {e}")
+    finally:
+        # En el finally y no al final del try: si algo tira ANTES de terminar, las lineas
+        # que ya se acumularon tienen que llegar igual al log, que es de donde sale el
+        # diagnostico.
+        if fixcs is not None:
+            try:
+                fixcs.volcar_log()
+            except Exception:
+                pass
+
+
 class GUI_Table(QtWidgets.QDialog):
     def __init__(self, sg_manager, parent=None):
         super(GUI_Table, self).__init__(parent)
@@ -995,6 +1053,16 @@ class GUI_Table(QtWidgets.QDialog):
             changes_exist = self.hiero_ops.process_selected_clips(
                 self.table, self.sg_manager
             )
+
+            # El Pull acaba de cambiar clips de version, y cada version nueva es otro
+            # Clip con su propio color transform. Ver fix_colorspaces_si_proyecto_managed.
+            # Solo si el Pull efectivamente cambio algo: `changes_made` se prende
+            # cuando encuentra una diferencia con Flow, que es la condicion previa a un
+            # bump de version. Sin cambios no hay version nueva, y sin version nueva no
+            # hay colorspace que reparar: barrer el timeline entero en cada pull que no
+            # toca nada es costo puro.
+            if changes_exist:
+                fix_colorspaces_si_proyecto_managed()
 
             def show_pull_results():
                 self.update_title()

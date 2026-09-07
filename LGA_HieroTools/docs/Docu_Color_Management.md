@@ -32,6 +32,32 @@ del `.hrox`: `extract_project_name_from_path()` de `LGA_NKS_Flow_NamingUtils.py`
 `extract_project_name()` como fallback. Es el mismo patron que usa
 `LGA_NKS_Flow_CheckTimelineShots.py`.
 
+### 🔴 La trampa: hay DOS bases, y este repo lee la del PipeSync INSTALADO
+
+`LGA_NKS_PipeSyncPaths.get_pipesync_db_path()` apunta **siempre** al PipeSync instalado
+(`C:/Portable/LGA/PipeSync/cache` en Windows studio), **nunca** al arbol de desarrollo
+(`C:/Portable/LGA_PipeSync_2/cache`). Es a proposito y esta comentado en la cabecera de ese modulo:
+ignora el `CachePath` del `config.secure` justamente para no leer el build de dev.
+
+La consecuencia muerde al probar: **si configuras un proyecto desde el PipeSync compilado del repo
+de desarrollo, HieroTools no lo va a ver.** El sintoma es exactamente este par de lineas en el log:
+
+```
+[managed] Proyecto (desde ruta): PROJA
+[main] project_name='PROJA' managed=False, camino viejo
+```
+
+o sea, el proyecto se resuelve bien pero sale como no managed. Antes de buscar el problema en el
+codigo, comparar las dos bases:
+
+```sql
+SELECT p.project_name, c.settings_json FROM projects p
+JOIN project_settings_cache c ON c.project_id = p.id WHERE p.project_name = 'PROJA';
+```
+
+Si la clave `color_management` esta en la del arbol de desarrollo y no en la del instalado, no hay
+ningun bug: se guardo desde la edicion equivocada.
+
 ## Los dos caminos del boton
 
 ### Proyecto NO color managed — el comportamiento de siempre
@@ -87,6 +113,51 @@ resolver a quien pida uno de esos. Dentro de cada pasada va de igualdad, a sufij
 Si el token no resuelve contra el config activo, el clip **no se toca** y se reporta como *sin
 transform disponible*.
 
+## Quien dispara la correccion
+
+Hay **dos** disparadores, y los dos usan la MISMA funcion, `run_if_color_managed()`:
+
+| Disparador | Donde | Quien abre el grupo de undo |
+|---|---|---|
+| Boton `Fix Colorspaces` del Edit Panel | `LGA_NKS_Edit_Panel.py::fix_colorspaces()` -> `main()` | el panel, con `beginUndo("Fix Colorspaces")` |
+| Al terminar un **Flow Pull** | `LGA_NKS_Flow_Pull.py::fix_colorspaces_si_proyecto_managed()` | el Flow Panel, con `beginUndo("Run External Script")` |
+
+🔴 **`run_if_color_managed()` NO abre grupo de undo. Lo abre siempre el llamador**, que es la
+convencion del repo ("El undo lo maneja el propio script, para no anidar bloques",
+`LGA_NKS_Edit_Panel.py`). Los dos llamadores ya vienen dentro de uno, y el del pull es facil de
+pasar por alto: no esta en `LGA_NKS_Flow_Pull.py` sino en `LGA_NKS_Flow_Panel.py`, en
+`run_FPT_pull()` y `run_FPT_pull_with_deselect()`, que envuelven `FPT_Hiero()`. Buscar `beginUndo`
+en el archivo del pull no lo encuentra. Anidar dos `beginUndo` fusiona los macros y el Ctrl+Z deja
+de comportarse como uno espera. Con esto, un Ctrl+Z despues de un Pull deshace la operacion
+completa -versiones y colorspaces-, que es lo que el usuario hizo.
+
+### Por que el Pull tiene que dispararla
+
+El Pull cambia los clips a su version mas alta
+(`HieroOperations.change_to_highest_version`), y **en Hiero una `Version` distinta es otro `Clip`,
+con su propio color transform**. O sea que cada bump devuelve el clip al espacio que traiga el
+archivo y deshace la correccion que ya se habia hecho. Sin este disparo habria que acordarse de
+apretar el boton despues de cada pull, y el timeline quedaria inconsistente justo despues de la
+operacion que mas versiones cambia.
+
+### Lo que el Pull NO hace
+
+`run_if_color_managed()` corre **solo** el camino managed. Si el proyecto no esta color managed no
+hace nada, y en particular **no cae al barrido viejo de rec709**: eso lo decide `main()`, no el
+pull. Un barrido sobre todos los clips del bin de todos los proyectos abiertos, disparado como
+efecto secundario de un pull, seria una sorpresa desagradable.
+
+Ademas, **solo corre si el Pull cambio algo** (`changes_exist`). Ese flag se prende cuando el Pull
+encuentra una diferencia contra Flow, que es la condicion previa a un bump de version: sin cambios
+no hay version nueva, y sin version nueva no hay colorspace que reparar. Barrer el timeline entero
+en cada pull que no toca nada es costo puro sobre la operacion mas frecuente del panel.
+
+La llamada corre en el hilo principal, que es donde ya corre `update_table()` -toca la API de
+Hiero y no puede salir de ahi-, con import diferido y envuelta en su propio `try/except`: si algo
+falla, se loguea y el Pull sigue igual. Un fallo de la correccion no puede voltear el Pull. El
+volcado del log va en un `finally` y usa `volcar_log()`, que es publica justamente porque la llama
+otro modulo.
+
 ## Contrato de ejecucion: por que el modulo no hace nada al importarse
 
 `LGA_NKS_FixColorspaces.py` **no ejecuta nada al importarse** y expone `main()`. La version anterior
@@ -138,5 +209,7 @@ el mapa lo incluya.
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_Flow_NamingUtils.py` —
   `extract_project_name_from_path()`, `extract_project_name()`, `clean_base_name()`.
 - `LGA_HieroTools/LGA_NKS_Edit_Panel.py` — `fix_colorspaces()`, `execute_external_script()`.
+- `LGA_HieroTools/LGA_NKS_Edit_Panel_py/LGA_NKS_FixColorspaces.py` — `run_if_color_managed()`, el punto de entrada que comparten el boton y el Pull.
+- `LGA_HieroTools/LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py` — `fix_colorspaces_si_proyecto_managed()`, `GUI_Table.update_table()`, `HieroOperations.change_to_highest_version()`.
 - `LGA_HieroTools/LGA_NKS_Shared/tests/test_color_management_config.py` — banco de pruebas sin Nuke.
 - `LGA_HieroTools/docs/Docu_Logica_Nombres_Tracks.md` — la convencion de nombres de track.
