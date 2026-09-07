@@ -322,7 +322,7 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
             ("Rec709 | Clip", self.rec709_clip, "#434c41", None, "Cambia el color transform a Rec.709 en los clips seleccionados"),
             ("Default | Clip", self.default_clip, "#434c41", None, "Cambia el color transform a default en los clips seleccionados"),
             ("Compositing Log | Clip", self.set_compositing_log, "#434c41", None, "Cambia el color transform a compositing_log en los clips seleccionados"),
-            ("Fix Colorspaces", self.fix_colorspaces, "#434c41", None, "Detecta y corrige clips con colorspace rec709 o gamma2.2"),
+            ("Fix Colorspaces", self.fix_colorspaces, "#434c41", None, "Corrige el colorspace de los clips segun la configuracion del proyecto: si esta color managed en PipeSync usa el espacio de plates y el de publish segun el track, y si no corrige rec709 y gamma2.2"),
             ("App&ly AMF", self.apply_amf, "#434c41", "Shift+L", "Shift+L\nPone o saca los soft effects de color del shot segun su .amf (.cdl y .clf de _input/Look_Files).\nSi los clips ya los tienen, los borra.\nCon 2 o mas clips seleccionados trabaja sobre esos; si no, sobre los .exr bajo el playhead en todos los tracks"),
             # Toggle AMF queda DESACTIVADO a proposito, no borrado: Apply AMF
             # ahora pone y saca los efectos, asi que tener ademas un boton que
