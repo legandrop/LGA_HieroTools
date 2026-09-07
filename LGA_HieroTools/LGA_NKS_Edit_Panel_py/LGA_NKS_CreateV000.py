@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateV000 v1.17 | Lega
+  LGA_NKS_CreateV000 v1.18 | Lega
 
   Crea una secuencia EXR negra v000 para el shot activo en Hiero/Nuke Studio.
   Permite elegir frame range, resolucion, handle persistente y una o varias
@@ -16,6 +16,11 @@ ____________________________________________________________________
   crear solo los EXRs, crear/importar al bin sin insertar, o reemplazar los
   clips solapados por la nueva v000.
 
+  v1.18: Se borra el dict TASK_COLORS local y los cuatro usos pasan a
+         get_task_color() de LGA_NKS_Flow_Task_Config, que ya estaba importado
+         y no se usaba. Era una copia de cuatro entradas del catalogo, y para
+         cg tenia el color viejo (el cyan de cleanup) en vez del naranja de la
+         familia 3D. Cada call site conserva SU fallback, que no eran iguales.
   v1.17: El shot code deja de salir mal cuando el vendor code no esta
          cargado en la DB de PipeSync. El parseo del filename se desviaba
          para los dos lados: con un plate real
@@ -152,12 +157,6 @@ TASK_FOLDER = {
 }
 TASK_SUBFOLDERS = ("0_assets", "1_projects", "2_prerenders", "3_review", "4_publish")
 RANGE_SOURCE_EDITREF = "editref"
-TASK_COLORS = {
-    "comp":    "#3381e0",
-    "roto":    "#2abf7e",
-    "cleanup": "#27c8c3",
-    "cg":      "#27c8c3",  # mismo color que cleanup: en client no coexisten
-}
 RANGE_SOURCE_PLATE = "plate"
 
 CURRENT_DIR = Path(__file__).resolve().parent
@@ -199,8 +198,9 @@ except Exception:
 
 TASKS = _resolve_active_tasks()
 
-# Colores de header y de paths, ahora tokens del modulo de estilo. Van aca y
-# no junto a TASK_COLORS porque necesitan el import de LGA_UI_Style de arriba.
+# Colores de header y de paths, ahora tokens del modulo de estilo. Van aca
+# porque necesitan el import de LGA_UI_Style de arriba. El color por TASK ya no
+# vive en este archivo: sale de get_task_color() del catalogo compartido.
 PROJECT_NAME_COLOR = Color.INFO    # nombre del proyecto en el header
 SHOT_NAME_COLOR = Color.ENTITY     # nombre del shot en el header
 
@@ -2338,8 +2338,8 @@ class CreateV000Dialog(QtWidgets.QDialog):
             btn = QtWidgets.QPushButton(task)
             btn.setCheckable(True)
             btn.setMinimumWidth(90)
-            task_color = TASK_COLORS.get(task.lower(), "#3B9ACA")
-            # El color por task es DATA (TASK_COLORS); la caja sale de tokens.
+            task_color = get_task_color(task, "#3B9ACA")
+            # El color por task sale del catalogo compartido; la caja, de tokens.
             btn.setStyleSheet(
                 """
                 QPushButton {
@@ -2586,7 +2586,7 @@ class CreateV000Dialog(QtWidgets.QDialog):
         preview_blocks = []
         for params in params_list:
             task = params["task"]
-            task_color = TASK_COLORS.get(task.lower(), Color.TEXT)
+            task_color = get_task_color(task, Color.TEXT)
             format_dict = dict(params)
             format_dict["task_colored"] = '<span style="color: {color}; font-weight: bold;">{task}</span>'.format(
                 color=task_color,
@@ -2706,7 +2706,7 @@ class CreateV000Dialog(QtWidgets.QDialog):
 
         Devuelve True si el usuario confirma, False si cancela.
         """
-        task_color = TASK_COLORS.get(task.lower(), Color.TEXT)
+        task_color = get_task_color(task, Color.TEXT)
         parent = self
 
         dialog = QtWidgets.QDialog(parent)
@@ -2789,7 +2789,7 @@ class CreateV000Dialog(QtWidgets.QDialog):
 
         Devuelve uno de: 'exrs_only', 'bin_only', 'replace_timeline', None (cancelar).
         """
-        task_color = TASK_COLORS.get(task.lower(), Color.TEXT)
+        task_color = get_task_color(task, Color.TEXT)
 
         dialog = QtWidgets.QDialog(self)
         dialog.setWindowTitle("Create v000")

@@ -1,13 +1,20 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.39 | Lega
+  LGA_import_shots v1.40 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.40: Los colores por task (_CLR_COMP/_ROTO/_CLEANUP/_DMP) dejan de estar
+         escritos a mano y salen de get_task_color() del catalogo compartido.
+         Ya habian derivado: dmp figuraba "#e08033" contra el "#CACA3B" del
+         catalogo. De paso se consolidan los cuatro sitios que tenian los hex
+         inline sin pasar por las variables (los dos gradientes de PUBLISH).
+         "#e08033" queda libre para su otro rol en este archivo: el aviso de
+         handle asimetrico.
   v1.39: Las pestanas usan Style.TABS del modulo en vez de la hoja
          propia: la pestana activa deja de salir en SURFACE_HEADER, dos
          tonos mas clara que su panel, y pasa a WINDOW. Los QColor del
@@ -213,6 +220,7 @@ from LGA_NKS_Shared.LGA_NKS_MessageBox import (
     styled_message_box,
 )
 from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, apply_ui_font
+from LGA_NKS_Flow_Task_Config import get_task_color
 from LGA_NKS_Flow_NamingUtils import clean_base_name, extract_shot_code
 from LGA_NKS_Edit_Panel_py.LGA_tab_width_config import ANCHO_TAB_EXRA
 
@@ -473,13 +481,20 @@ PATH_LEVEL_COLORS = {
 }
 
 # ── colores de tabla de media (borde izquierdo por tipo de fila) ──
-# task colors: igual que TASK_COLORS en CreateV000
-_CLR_COMP    = "#3381e0"   # comp publish
-_CLR_ROTO    = "#2abf7e"   # roto publish
-_CLR_CLEANUP = "#27c8c3"   # cleanup publish
-_CLR_DMP     = "#e08033"   # dmp publish
-_CLR_PLATES  = "#42616d"   # plates input (EXR seq)
-_CLR_REFS    = "#aa9e54"   # references (editref / seqref)
+# Los colores por TASK salen del catalogo compartido (LGA_NKS_Flow_Task_Config), que es
+# la copia canonica del mundo Python. Antes estaban escritos a mano aca y ya habian
+# derivado: dmp figuraba "#e08033" contra el "#CACA3B" del catalogo.
+#
+# Ojo con "#e08033": en este mismo archivo sigue siendo el color de aviso de handle
+# asimetrico. Tenia doble rol, y sacarlo de aca es justamente lo que lo deja libre.
+#
+# Las variables locales se conservan porque hay 20+ usos y sirven de alias corto.
+_CLR_COMP    = get_task_color("comp")      # comp publish
+_CLR_ROTO    = get_task_color("roto")      # roto publish
+_CLR_CLEANUP = get_task_color("cleanup")   # cleanup publish
+_CLR_DMP     = get_task_color("dmp")       # dmp publish
+_CLR_PLATES  = "#42616d"   # plates input (EXR seq) - NO es una task
+_CLR_REFS    = "#aa9e54"   # references (editref / seqref) - NO es una task
 
 _TASK_ROW_COLORS = {
     "comp":    _CLR_COMP,
@@ -2637,9 +2652,9 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
         if label == "PUBLISH":
             gradient = QtGui.QLinearGradient(0, 0, 0, 1)
             gradient.setCoordinateMode(QtGui.QGradient.ObjectBoundingMode)
-            gradient.setColorAt(0.0, QtGui.QColor("#27c8c3"))   # cleanup
-            gradient.setColorAt(0.5, QtGui.QColor("#2abf7e"))   # roto
-            gradient.setColorAt(1.0, QtGui.QColor("#3381e0"))   # comp
+            gradient.setColorAt(0.0, QtGui.QColor(_CLR_CLEANUP))
+            gradient.setColorAt(0.5, QtGui.QColor(_CLR_ROTO))
+            gradient.setColorAt(1.0, QtGui.QColor(_CLR_COMP))
             bar = QtWidgets.QTableWidgetItem()
             bar.setBackground(QtGui.QBrush(gradient))
             bar.setFlags(QtCore.Qt.NoItemFlags)
@@ -2654,7 +2669,7 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
         table.setSpan(row_i, 1, 1, ncols - 1)
         if label == "PUBLISH":
             lbl = GradientTextLabel(
-                "  " + label, ["#3381e0", "#2abf7e", "#27c8c3"]
+                "  " + label, [_CLR_COMP, _CLR_ROTO, _CLR_CLEANUP]
             )
             lbl.setContentsMargins(8, 3, 8, 3)
             font = lbl.font()
@@ -3416,9 +3431,9 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
         if label == "PUBLISH":
             gradient = QtGui.QLinearGradient(0, 0, 0, 1)
             gradient.setCoordinateMode(QtGui.QGradient.ObjectBoundingMode)
-            gradient.setColorAt(0.0, QtGui.QColor("#27c8c3"))
-            gradient.setColorAt(0.5, QtGui.QColor("#2abf7e"))
-            gradient.setColorAt(1.0, QtGui.QColor("#3381e0"))
+            gradient.setColorAt(0.0, QtGui.QColor(_CLR_CLEANUP))
+            gradient.setColorAt(0.5, QtGui.QColor(_CLR_ROTO))
+            gradient.setColorAt(1.0, QtGui.QColor(_CLR_COMP))
             bar = QtWidgets.QTableWidgetItem()
             bar.setBackground(QtGui.QBrush(gradient))
             bar.setFlags(QtCore.Qt.NoItemFlags)
@@ -3431,7 +3446,7 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
 
         self._rename_table.setSpan(row_i, 1, 1, ncols - 1)
         if label == "PUBLISH":
-            lbl = GradientTextLabel("  " + label, ["#3381e0", "#2abf7e", "#27c8c3"])
+            lbl = GradientTextLabel("  " + label, [_CLR_COMP, _CLR_ROTO, _CLR_CLEANUP])
             lbl.setContentsMargins(8, 3, 8, 3)
             font = lbl.font()
             font.setBold(True)

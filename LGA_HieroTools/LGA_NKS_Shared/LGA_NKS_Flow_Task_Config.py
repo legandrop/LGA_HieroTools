@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Task_Config v1.26 | Lega
+  LGA_NKS_Flow_Task_Config v1.27 | Lega
 
   Usado por runtime activo:
   - LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Assignee.py
@@ -13,6 +13,15 @@ ____________________________________________________________________
   La lista está sincronizada con los scripts de creación/modificación de shots y
   provee colores consistentes para las UIs compactas (assignee panel, create shot, etc.).
 
+  v1.27: Toda la familia 3D pasa al MISMO naranja #CA7A3B: match move, model, retopo,
+         rigging, shaders, animation, fx, lighting y cg. La disciplina no se distingue
+         por color, y el corte visual queda 2D frias / 3D calidas. De paso saca dos
+         colisiones: CG dejo de compartir el cyan de cleanup, y lighting (#3BCA7A)
+         estaba a 4 grados de hue de roto (#2abf7e).
+         Esta tabla tiene un ESPEJO en C++ que hay que tocar en la misma pasada:
+         `TaskVersioningManager::applyTaskColors()` de LGA_FileManagerS3 (le llega a
+         PipeSync y a FileManagerS3). Plan y verificador en
+         `LGA_PipeSync_2/Docs/Plan_Colores_Task_Unificados.md`.
   v1.26: Color para la task CG (client) en _TASK_COLOR_MAP, sin sumarla a
          AVAILABLE_TASKS: CG no se ofrece en los catalogos de creacion.
   1.25: Actualizado para usar colores de tasks alineados con los colores de create v000
@@ -54,49 +63,49 @@ AVAILABLE_TASKS: List[Dict[str, str]] = [
         "name": "Model",
         "pipeline_step": "Model",
         "enabled_by_default": False,
-        "color": "#CA7A3B",  # Naranja
+        "color": "#CA7A3B",  # Naranja - familia 3D
     },
     {
         "name": "Retopo",
         "pipeline_step": "Retopo",
         "enabled_by_default": False,
-        "color": "#CA7A3B",  # Naranja
+        "color": "#CA7A3B",  # Naranja - familia 3D
     },
     {
         "name": "Rigging",
         "pipeline_step": "Rigging",
         "enabled_by_default": False,
-        "color": "#3BCA7A",  # Verde
+        "color": "#CA7A3B",  # Naranja - familia 3D
     },
     {
         "name": "Shaders",
         "pipeline_step": "Shaders",
         "enabled_by_default": False,
-        "color": "#3BCA7A",  # Verde
+        "color": "#CA7A3B",  # Naranja - familia 3D
     },
     {
         "name": "Match Move",
         "pipeline_step": "Match Move",
         "enabled_by_default": False,
-        "color": "#9A3BCA",  # Morado/Púrpura
+        "color": "#CA7A3B",  # Naranja - familia 3D
     },
     {
         "name": "Animation",
         "pipeline_step": "Animation",
         "enabled_by_default": False,
-        "color": "#CA7A3B",  # Naranja
+        "color": "#CA7A3B",  # Naranja - familia 3D
     },
     {
         "name": "FX",
         "pipeline_step": "FX",
         "enabled_by_default": False,
-        "color": "#CA3B9A",  # Magenta/Fucsia
+        "color": "#CA7A3B",  # Naranja - familia 3D
     },
     {
         "name": "Lighting",
         "pipeline_step": "Lighting",
         "enabled_by_default": False,
-        "color": "#3BCA7A",  # Verde
+        "color": "#CA7A3B",  # Naranja - familia 3D
     },
 ]
 
@@ -106,8 +115,9 @@ _TASK_COLOR_MAP = {task["name"].lower(): task["color"] for task in AVAILABLE_TAS
 
 # Tasks que existen en Flow pero NO se ofrecen en los catalogos de creacion
 # (AVAILABLE_TASKS alimenta Create Shot / Assignee en studio). La task CG es
-# exclusiva del contexto client y usa el color de cleanup en los dialogos.
-_TASK_COLOR_MAP["cg"] = "#27c8c3"
+# exclusiva del contexto client y agrupa todas las entregas 3D de los vendors, asi
+# que lleva el mismo naranja que el resto de la familia 3D.
+_TASK_COLOR_MAP["cg"] = "#CA7A3B"
 
 
 def get_task_color(task_name: str, fallback: str = "#4A4A4A") -> str:
