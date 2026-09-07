@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_FileManagerS3_DownloadClip v1.01 | Lega
+  LGA_NKS_FileManagerS3_DownloadClip v1.02 | Lega
 
   Descarga el/los clip(s) seleccionado(s) desde Wasabi S3 usando
   FileManagerS3 CLI. A diferencia de "Download Shot", descarga solo el
@@ -15,6 +15,10 @@ ____________________________________________________________________
   cada descarga; el watcher LGA_NKS_DownloadClip_Watcher.py lo detecta y reconecta
   el clip offline automaticamente.
 
+  v1.02: El .log no se escribia nunca: DEBUG estaba en False y debug_print
+         pregunta por `DEBUG and DEBUG_LOG`, asi que el maestro apagado
+         tapaba al DEBUG_LOG=True. Queda DEBUG=True con DEBUG_CONSOLE=False:
+         log siempre, consola apagada, que es la regla del repo.
   v1.01: migra al helper central FileManagerS3 + --context studio/client.
          Conserva --notify-completion y modo latest.
 
@@ -57,8 +61,12 @@ if utils_path.exists():
         resolve_context_mode,
     )
 
-# Variables globales de logging
-DEBUG = False
+# Variables globales de logging.
+# DEBUG es el interruptor MAESTRO: con DEBUG en False no escribe el .log aunque
+# DEBUG_LOG diga True, porque debug_print() pregunta por `DEBUG and DEBUG_LOG`.
+# La regla del repo es que el .log se escriba SIEMPRE y que lo que quede apagado
+# sea la consola, asi que va DEBUG=True + DEBUG_CONSOLE=False.
+DEBUG = True
 DEBUG_CONSOLE = False
 DEBUG_LOG = True
 script_start_time = None
