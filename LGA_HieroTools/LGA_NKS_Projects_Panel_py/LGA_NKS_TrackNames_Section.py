@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_TrackNames_Section v1.00 | Lega
+  LGA_NKS_TrackNames_Section v1.01 | Lega
 
   Seccion read-only del panel de Settings con los nombres de track que el
   pack espera para cada task del contexto activo.
@@ -15,6 +15,10 @@ ____________________________________________________________________
   Vive en su propio modulo y NO importa hiero, asi que el harness de capturas
   puede construir la seccion sin levantar NKS.
 
+  v1.01: Las filas se pueden rehacer sin rearmar la seccion
+         (populate_track_names_section). La vista de Settings se construye
+         una sola vez y el toggle Studio/Client cambia el scope de tasks en
+         caliente: sin esto quedaba mostrando las tasks del contexto viejo.
   v1.00: Version inicial.
 ____________________________________________________________________
 
@@ -89,6 +93,9 @@ def _fila(carpeta, track_exr, track_rev):
     return widget
 
 
+_ROWS_OBJECT_NAME = "lgaTrackNamesRows"
+
+
 def build_track_names_section(filas=None):
     """Arma la seccion completa y la devuelve como un QWidget.
 
@@ -99,9 +106,6 @@ def build_track_names_section(filas=None):
     de Settings todavia usa hexes a mano y la fuente del host; migrarla es
     otro trabajo y cambiarle el aspecto de prepo no es parte de este.
     """
-    if filas is None:
-        filas = _tasks_del_contexto()
-
     container = QtWidgets.QWidget()
     box = QtWidgets.QVBoxLayout(container)
     box.setContentsMargins(0, 0, 0, 0)
@@ -115,14 +119,52 @@ def build_track_names_section(filas=None):
     hint.setStyleSheet("color: %s;" % Color.TEXT_DIM)
     box.addWidget(hint)
 
+    # Las filas viven en su propio contenedor para poder rehacerlas sin
+    # rearmar la seccion entera (ver populate_track_names_section).
+    filas_widget = QtWidgets.QWidget()
+    filas_widget.setObjectName(_ROWS_OBJECT_NAME)
+    filas_layout = QtWidgets.QVBoxLayout(filas_widget)
+    filas_layout.setContentsMargins(0, 0, 0, 0)
+    filas_layout.setSpacing(4)
+    box.addWidget(filas_widget)
+
+    populate_track_names_section(container, filas)
+    return container
+
+
+def populate_track_names_section(container, filas=None):
+    """Rehace las filas con las tasks del contexto ACTIVO.
+
+    Hay que llamarla cada vez que se muestra la vista de Settings, no solo al
+    armarla: el toggle Studio/Client cambia el scope de tasks en caliente y la
+    vista se construye una sola vez. Es el mismo motivo por el que los colores
+    de proyecto se repueblan en cada apertura.
+    """
+    if container is None:
+        return
+    filas_widget = container.findChild(QtWidgets.QWidget, _ROWS_OBJECT_NAME)
+    if filas_widget is None:
+        return
+    layout = filas_widget.layout()
+    if layout is None:
+        return
+
+    for i in reversed(range(layout.count())):
+        item = layout.itemAt(i)
+        if item is not None and item.widget() is not None:
+            item.widget().setParent(None)
+
+    if filas is None:
+        filas = _tasks_del_contexto()
+
     if not filas:
         vacio = QtWidgets.QLabel("Task scope unavailable.")
         vacio.setStyleSheet("color: %s;" % Color.TEXT_DIM)
-        box.addWidget(vacio)
+        layout.addWidget(vacio)
     else:
         for carpeta, track_exr, track_rev in filas:
-            box.addWidget(_fila(carpeta, track_exr, track_rev))
+            layout.addWidget(_fila(carpeta, track_exr, track_rev))
 
-    # La fuente va al final: medir antes de aplicarla usa la del host.
+    # La fuente va al final y sobre el contenedor entero: las filas nuevas
+    # arrancan con la del host, y medir antes de aplicarla da mal.
     apply_ui_font(container, size=Metric.FORM_PATH_FONT_SIZE)
-    return container

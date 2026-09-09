@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.30 | Lega
+  LGA_NKS_Projects_Panel v2.31 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,10 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.31: La seccion Track names se repuebla en cada apertura de Settings,
+         igual que los colores. La vista se arma una sola vez y el toggle
+         Studio/Client cambia el scope de tasks en caliente, asi que despues
+         de un switch mostraba las tasks del contexto viejo.
   v2.30: La vista de Settings suma la seccion read-only "Track names", con
          los nombres de track que el pack espera para cada task del
          contexto activo. Es informativa: la convencion vive en el codigo
@@ -83,9 +87,11 @@ from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectsPanel_Logging import (
 try:
     from LGA_NKS_Projects_Panel_py.LGA_NKS_TrackNames_Section import (
         build_track_names_section,
+        populate_track_names_section,
     )
 except Exception:  # pragma: no cover - la seccion es informativa
     build_track_names_section = None
+    populate_track_names_section = None
 
 # Importar funciones de utilidad de estilos
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "LGA_NKS_Shared"))
@@ -358,6 +364,7 @@ class ProjectsPanel(QtWidgets.QWidget):
         self.content_stack = None
         self.projects_container = None
         self.settings_widget = None
+        self.track_names_container = None
         self.settings_list_layout = None
         self.settings_rows = []
         self.settings_timer_dropdown = None
@@ -526,10 +533,21 @@ class ProjectsPanel(QtWidgets.QWidget):
             # La vista se construye una sola vez, pero los colores viven en la DB de
             # PipeSync y pueden haber cambiado desde la ultima apertura.
             self._populate_settings_colors()
+            # Y las tasks dependen del contexto, que el toggle cambia en caliente.
+            self._refresh_track_names()
         if self.content_stack and self.settings_widget:
             self.content_stack.setCurrentWidget(self.settings_widget)
             # Actualizar la etiqueta de cuenta regresiva cada vez que se muestra settings
             self._update_next_refresh_label()
+
+    def _refresh_track_names(self):
+        """Rehace la seccion Track names con las tasks del contexto activo."""
+        if populate_track_names_section is None:
+            return
+        try:
+            populate_track_names_section(getattr(self, "track_names_container", None))
+        except Exception as exc:
+            debug_print(f"No se pudo refrescar la seccion Track names: {exc}")
 
     def show_projects_view(self):
         if self.content_stack and self.projects_container:
@@ -650,7 +668,8 @@ class ProjectsPanel(QtWidgets.QWidget):
         # Seccion informativa: si falla, la vista de Settings sigue andando.
         if build_track_names_section is not None:
             try:
-                layout.addWidget(build_track_names_section())
+                self.track_names_container = build_track_names_section()
+                layout.addWidget(self.track_names_container)
             except Exception as exc:
                 debug_print(f"No se pudo armar la seccion Track names: {exc}")
 
