@@ -132,6 +132,33 @@ problema distinto y con arreglo.
     última.
   - En `client`, el flujo post-import `Create v000` hereda el scope de tasks
     del contexto (`comp` y `cg`).
+- `Create NK v000` ([LGA_NKS_Edit_Panel_py/LGA_NKS_CreateNKScript.py](../LGA_NKS_Edit_Panel_py/LGA_NKS_CreateNKScript.py))
+  es **solo de la task comp, a propósito y por decisión cerrada**: las
+  entregas de CG llegan renderizadas del vendor y no se componen en Nuke, así
+  que esa task no necesita script `.nk`. No es una limitación pendiente de
+  resolver; si alguna vez cambia el flujo, hay que reabrir la decisión antes
+  de tocar el código.
+
+## Nombre de las carpetas de task en disco
+
+La carpeta de cada task dentro del shot va **capitalizada**: `Comp`, `Roto`,
+`Cleanup`, `CG`, `DMP`. Ese es el nombre canónico y sale de
+`LGA_NKS_TaskScope.task_folder_name()`.
+
+Los shots creados antes de unificar esto las tienen en minúscula, porque
+`Create Shot Folders` era la única herramienta que las escribía así mientras
+todos los lectores armaban la ruta capitalizada. En Windows la diferencia no
+se nota porque el filesystem no distingue mayúsculas; **en macOS `comp/` y
+`Comp/` son dos carpetas distintas** y el lector no encuentra nada.
+
+Por eso nada arma el nombre de la carpeta con un literal:
+
+- Para **leer**, `LGA_NKS_TaskScope.resolve_task_folder(shot_root, task)`
+  devuelve el caso real que hay en disco, y el canónico si la carpeta todavía
+  no existe.
+- Para **crear**, `LGA_NKS_Flow_CreateShot_Folders.resolve_existing_case()`
+  respeta el caso de los segmentos que ya existan, así un shot histórico no
+  queda partido en dos carpetas.
 
 ## Impacto en Coordination Panel
 

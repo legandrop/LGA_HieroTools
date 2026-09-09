@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateNKScript v1.12 | Lega
+  LGA_NKS_CreateNKScript v1.13 | Lega
 
   Crea el script de comp de Nuke de un shot a partir del template .nk
   del proyecto (<raiz>/ASSETS/*.nk), editandolo como texto plano:
@@ -12,6 +12,14 @@ ____________________________________________________________________
   el frame range del proyecto. El resultado se escribe en
   <shot>/Comp/1_projects/<shot>_comp_v000.nk (si existe, pregunta antes de pisar).
 
+  v1.13: La carpeta "Comp" de las tres rutas armadas a mano (2_prerenders,
+         4_publish y el output del v000) se resuelve contra el disco del
+         shot con resolve_task_folder() de LGA_NKS_TaskScope, para que los
+         shots viejos con "comp/" en minuscula se sigan encontrando en
+         macOS. PROJECTS_SUBPATH pasa de constante de modulo a funcion
+         _projects_subpath(shot_root), porque el nombre de carpeta ya
+         depende del shot. Sin shot_root o sin poder importar TaskScope,
+         cae al canonico "Comp" de siempre.
   v1.12: Una sola confirmacion para todos los denoised faltantes de los
          plates del shot; permite conservar sus rutas originales del template.
          El cartel destaca los denoised faltantes y las rutas que se conservan.
@@ -141,7 +149,6 @@ BACKDROP_RIGHT_PAD = 2532
 INPUT_DIR_NAME = "_input"
 LOOK_DIR_NAME = "Look_Files"
 ASSETS_DIR_NAME = "ASSETS"
-PROJECTS_SUBPATH = ("Comp", "1_projects")
 DEFAULT_HANDLE = 8
 START_FRAME = 1001  # los .nk arrancan siempre en 1001
 # Primer frame del clip del EditRef tal como lo entrega el Read del .mov.
@@ -337,12 +344,42 @@ def confirm_missing_denoised(parent, missing):
     )
 
 
+def _comp_folder_name(shot_root):
+    """Nombre de la carpeta de la task comp para ESTE shot ("Comp" o, en un
+    shot viejo, "comp").
+
+    Esta tool es siempre de la task comp (CG no usa script .nk), asi que la
+    task es fija; lo que cambia es el CASO de la carpeta segun lo que ya
+    exista en disco, via resolve_task_folder() de LGA_NKS_TaskScope. Sin
+    shot_root o sin poder importar TaskScope, cae al canonico "Comp".
+    """
+    try:
+        try:
+            from LGA_NKS_TaskScope import resolve_task_folder
+        except ImportError:
+            from LGA_NKS_Shared.LGA_NKS_TaskScope import resolve_task_folder
+        return resolve_task_folder(shot_root, "comp", default="Comp")
+    except Exception as exc:
+        # No se silencia del todo: resolve_task_folder solo atrapa OSError y
+        # ValueError, asi que cualquier otra cosa que caiga aca es un error
+        # de programacion y tiene que quedar en el log.
+        debug_print("No se pudo resolver la carpeta de comp, se usa 'Comp': %s" % exc)
+        return "Comp"
+
+
+def _projects_subpath(shot_root):
+    """Reemplaza a la vieja constante PROJECTS_SUBPATH = ("Comp", "1_projects"):
+    el nombre de carpeta ya depende del shot, asi que no puede ser una
+    constante de modulo."""
+    return (_comp_folder_name(shot_root), "1_projects")
+
+
 def scan_shot(shot_root):
     """Plan de columnas del shot: lista ordenada de dicts
     {key, token, kind, info}, solo con lo que existe en disco, mas la lista
     de avisos (plates sin EXR, denoised huerfanos, versiones vacias)."""
     input_root = os.path.join(shot_root, INPUT_DIR_NAME)
-    prerender_root = os.path.join(shot_root, "Comp", "2_prerenders")
+    prerender_root = os.path.join(shot_root, _comp_folder_name(shot_root), "2_prerenders")
     plates = list_plate_folders(input_root)
 
     letters = sorted(
@@ -469,7 +506,9 @@ def probe_mov_frames(mov_path):
 
 def publish_v000_info(shot_root, shot_name):
     """Secuencia EXR del publish comp_v000 del shot (Create EXR v000), o None."""
-    folder = os.path.join(shot_root, "Comp", "4_publish", "%s_comp_v000" % shot_name)
+    folder = os.path.join(
+        shot_root, _comp_folder_name(shot_root), "4_publish", "%s_comp_v000" % shot_name
+    )
     if not os.path.isdir(folder):
         return None
     return sequence_from_folder(folder)
@@ -1248,7 +1287,7 @@ def v000_output(shot_root, shot_name):
     """<shot>/Comp/1_projects/<shot>_comp_v000.nk — la herramienta crea
     siempre la v000 del comp; si ya existe, write_script rechaza pisarla."""
     return os.path.join(
-        shot_root, *PROJECTS_SUBPATH, "%s_comp_v000.nk" % shot_name
+        shot_root, *_projects_subpath(shot_root), "%s_comp_v000.nk" % shot_name
     )
 
 

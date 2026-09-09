@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CreateShot_Folders v1.35 | Lega
+  LGA_NKS_Flow_CreateShot_Folders v1.36 | Lega
 
   Módulo para creación automática de estructura de carpetas por task.
   Se integra con CreateShot y ModifyShot para mantener consistencia.
@@ -10,6 +10,15 @@ ____________________________________________________________________
   - Logging detallado de carpetas creadas/existentes
   - Normalización de paths para verificación de existencia
 
+  v1.36: Las carpetas de las tasks 2D pasan a capitalizadas (`Comp`, `Roto`,
+         `Cleanup`, `CG`), que es como arman la ruta TODOS los lectores del
+         pipeline; esta tool era la unica que las creaba en minuscula. En
+         Windows daba igual, pero en macOS `comp/` y `Comp/` son dos
+         carpetas distintas y el lector no encontraba nada. Antes de crear
+         se resuelve el caso de lo que YA exista (resolve_existing_case),
+         asi que un shot historico con `comp/` no queda partido en dos. Esa
+         resolucion mira solo DIRECTORIOS y desempata de forma determinista
+         si coexisten dos variantes de caso.
   v1.35: Estructura de carpetas para la task CG (solo client). Una sola
          carpeta para todas las disciplinas: los streams se distinguen por
          el nombre de la version, no por la ruta.
@@ -32,36 +41,36 @@ logger = logging.getLogger(__name__)
 TASK_FOLDER_STRUCTURE = {
     # Tasks 2D - van directamente bajo SHOTNAME/
     "Comp": [
-        "comp/0_assets",
-        "comp/1_projects",
-        "comp/2_prerenders",
-        "comp/3_review",
-        "comp/4_publish"
+        "Comp/0_assets",
+        "Comp/1_projects",
+        "Comp/2_prerenders",
+        "Comp/3_review",
+        "Comp/4_publish"
     ],
     "Roto": [
-        "roto/0_assets",
-        "roto/1_projects",
-        "roto/2_prerenders",
-        "roto/3_review",
-        "roto/4_publish"
+        "Roto/0_assets",
+        "Roto/1_projects",
+        "Roto/2_prerenders",
+        "Roto/3_review",
+        "Roto/4_publish"
     ],
     "Cleanup": [
-        "cleanup/0_assets",
-        "cleanup/1_projects",
-        "cleanup/2_prerenders",
-        "cleanup/3_review",
-        "cleanup/4_publish"
+        "Cleanup/0_assets",
+        "Cleanup/1_projects",
+        "Cleanup/2_prerenders",
+        "Cleanup/3_review",
+        "Cleanup/4_publish"
     ],
     # CG (solo client): una sola task agrupa todas las entregas 3D de los
     # vendors (layout, lighting, anim, fx, ...), asi que lleva UNA carpeta,
     # no una por disciplina. Los streams se distinguen por el nombre de la
     # version, no por la ruta.
     "CG": [
-        "cg/0_assets",
-        "cg/1_projects",
-        "cg/2_prerenders",
-        "cg/3_review",
-        "cg/4_publish"
+        "CG/0_assets",
+        "CG/1_projects",
+        "CG/2_prerenders",
+        "CG/3_review",
+        "CG/4_publish"
     ],
     "DMP": [
         "DMP/0_assets",
@@ -130,6 +139,49 @@ TASK_FOLDER_STRUCTURE = {
 }
 
 
+def resolve_existing_case(base_path: str, relative_folder: str) -> str:
+    """Devuelve `relative_folder` con el caso REAL de lo que ya existe en disco.
+
+    La tabla de arriba es la convencion canonica y va capitalizada (`Comp`,
+    `CG`), que es como arman la ruta todos los lectores del pipeline. Pero
+    esta herramienta creo carpetas en minuscula durante mucho tiempo, y en
+    macOS `comp/` y `Comp/` son DOS carpetas distintas: crear la canonica al
+    lado de la que ya existe partiria el shot en dos.
+
+    Por eso, segmento por segmento, si ya hay uno que coincide sin importar
+    mayusculas, se usa ese. Los segmentos que no existen se crean con el
+    caso canonico. En Windows la funcion no cambia nada porque el filesystem
+    no distingue.
+    """
+    partes = [p for p in relative_folder.replace("\\", "/").split("/") if p]
+    actual = base_path
+    resueltas = []
+    for parte in partes:
+        encontrada = parte
+        try:
+            objetivo = parte.lower()
+            # Solo DIRECTORIOS: un archivo que se llame igual que la carpeta
+            # no es la carpeta, y tomarlo mandaba a crear adentro de un
+            # archivo (el error quedaba tapado como "ya existia").
+            candidatos = sorted(
+                entrada
+                for entrada in os.listdir(actual)
+                if entrada.lower() == objetivo
+                and os.path.isdir(os.path.join(actual, entrada))
+            )
+            if candidatos:
+                # En un filesystem case-sensitive pueden coexistir `comp` y
+                # `Comp`. El orden de os.listdir no esta garantizado, asi que
+                # gana el canonico si esta y si no el primero alfabetico.
+                encontrada = parte if parte in candidatos else candidatos[0]
+        except (OSError, ValueError):
+            # Todavia no existe ese nivel: se sigue con el caso canonico.
+            pass
+        resueltas.append(encontrada)
+        actual = os.path.join(actual, encontrada)
+    return "/".join(resueltas)
+
+
 def normalize_path(path: str) -> str:
     """
     Normaliza un path para comparación consistente.
@@ -193,6 +245,9 @@ def create_task_folders(shot_base_path: str, task_names: List[str]) -> tuple[Dic
         task_folders = TASK_FOLDER_STRUCTURE[task_name]
 
         for relative_folder in task_folders:
+            # Respetar el caso de las carpetas que ya existan en el shot, para
+            # no duplicar `Comp/` al lado de un `comp/` historico en macOS.
+            relative_folder = resolve_existing_case(shot_base_path, relative_folder)
             # Construir path completo
             full_folder_path = os.path.join(shot_base_path, relative_folder)
 

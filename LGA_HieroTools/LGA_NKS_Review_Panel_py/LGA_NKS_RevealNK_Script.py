@@ -1,9 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_RevealNK_Script v1.00 | Lega
+  LGA_NKS_RevealNK_Script v1.01 | Lega
 
   Revela el script NKS asociado al clip seleccionado en el explorador de archivos
+
+  v1.01: La carpeta "Comp" de get_project_path() se resuelve contra el disco
+         del shot con resolve_task_folder() de LGA_NKS_TaskScope, para que
+         los shots viejos con "comp/" en minuscula se sigan encontrando en
+         macOS. Sin poder importar TaskScope, cae al canonico "Comp".
+  v1.00: Version inicial.
 ____________________________________________________________________
 
 """
@@ -27,11 +33,30 @@ def open_file_explorer(path):
     else:
         debug_print("Sistema operativo no soportado para abrir el explorador de archivos.")
 
+def _comp_folder_name(shot_root):
+    """Nombre de la carpeta de la task comp para ESTE shot ("Comp" o, en un
+    shot viejo, "comp"), resuelto contra el disco via resolve_task_folder()
+    de LGA_NKS_TaskScope. Sin shot_root o sin poder importar TaskScope, cae
+    al canonico "Comp" (comportamiento historico de esta tool)."""
+    try:
+        try:
+            from LGA_NKS_TaskScope import resolve_task_folder
+        except ImportError:
+            from LGA_NKS_Shared.LGA_NKS_TaskScope import resolve_task_folder
+        return resolve_task_folder(shot_root, "comp", default="Comp")
+    except Exception as exc:
+        # No se silencia del todo: resolve_task_folder solo atrapa OSError y
+        # ValueError, asi que cualquier otra cosa que caiga aca es un error
+        # de programacion y tiene que quedar en el log.
+        debug_print("No se pudo resolver la carpeta de comp, se usa 'Comp': %s" % exc)
+        return "Comp"
+
 def get_project_path(file_path):
     # Dividir el path en partes usando '/' como separador
     path_parts = file_path.split('/')
-    # Construir la nueva ruta agregando '/Comp/1_projects'
-    project_path = '/'.join(path_parts[:4]) + '/Comp/1_projects'
+    # Construir la nueva ruta agregando '/<Comp>/1_projects'
+    shot_root = '/'.join(path_parts[:4])
+    project_path = shot_root + '/' + _comp_folder_name(shot_root) + '/1_projects'
     return project_path
 
 def main():

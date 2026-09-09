@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_TaskScope v1.00 | Lega
+  LGA_NKS_TaskScope v1.01 | Lega
 
   Scope de tasks por contexto Studio/Client, en un solo lugar.
 
@@ -21,11 +21,21 @@ ____________________________________________________________________
   hiero). La consistencia entre las dos la verifica
   tests/test_task_scope.py leyendo GetClip.py como texto.
 
+  v1.01: resolve_task_folder() devuelve el caso REAL de la carpeta de la
+         task en disco. El creador de carpetas escribia en minuscula y los
+         lectores arman la ruta en mayuscula: en macOS son dos carpetas
+         distintas y el lector no encontraba nada. Solo considera
+         DIRECTORIOS -un archivo homonimo no es la carpeta- y si en un
+         filesystem case-sensitive coexisten `comp` y `Comp` elige de forma
+         determinista: gana el canonico, y si no esta, el primero
+         alfabetico.
   v1.00: Version inicial. Tabla TRACK_TASKS con scope por contexto,
          resolucion de nombre de track y de carpeta por task.
 ____________________________________________________________________
 
 """
+
+import os
 
 MODE_STUDIO = "studio"
 MODE_CLIENT = "client"
@@ -143,6 +153,51 @@ def task_folder_name(task_name, default=_UNSET):
     return default
 
 
+def resolve_task_folder(shot_root, task_name, default=_UNSET):
+    """Carpeta de la task dentro de un shot, con el caso REAL que hay en disco.
+
+    Devuelve el nombre canonico capitalizado (`Comp`, `CG`), salvo que en el
+    shot ya exista una carpeta con ese mismo nombre en otro caso -por
+    ejemplo `comp/`, que es como las creaba Create Shot historicamente-, y
+    entonces devuelve la que existe.
+
+    Existe porque el pipeline tuvo las dos convenciones a la vez: el creador
+    de carpetas escribia en minuscula y todos los lectores arman la ruta en
+    mayuscula. En Windows no se nota, porque el filesystem no distingue
+    mayusculas; en macOS son DOS carpetas distintas y el lector no encuentra
+    nada. Resolver contra el disco deja andar los shots que ya existen sin
+    tener que renombrarles nada.
+    """
+    canonico = task_folder_name(task_name, default=default)
+    if not canonico or not shot_root:
+        return canonico
+    try:
+        raiz = str(shot_root)
+        objetivo = str(canonico).lower()
+        # Solo DIRECTORIOS: un archivo que se llame igual que la carpeta de la
+        # task no es la carpeta de la task, y devolverlo mandaba a construir
+        # una ruta que no se puede crear.
+        candidatos = sorted(
+            entrada
+            for entrada in os.listdir(raiz)
+            if entrada.lower() == objetivo
+            and os.path.isdir(os.path.join(raiz, entrada))
+        )
+        if not candidatos:
+            return canonico
+        # En un filesystem case-sensitive pueden coexistir `comp` y `Comp`.
+        # El orden de os.listdir no esta garantizado, asi que se elige de
+        # forma determinista: gana el canonico si esta, si no el primero
+        # alfabetico.
+        if canonico in candidatos:
+            return canonico
+        return candidatos[0]
+    except (OSError, ValueError):
+        # Shot inexistente o ruta ilegible: vale el canonico.
+        pass
+    return canonico
+
+
 def exr_track_for_task(task_name):
     """Nombre del track EXR de una task ("cg" -> "_cg_")."""
     key = _clean_task_key(task_name)
@@ -183,6 +238,7 @@ __all__ = [
     "active_track_tasks",
     "is_track_task_active",
     "task_folder_name",
+    "resolve_task_folder",
     "exr_track_for_task",
     "rev_track_for_task",
     "task_for_track",

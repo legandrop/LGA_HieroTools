@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateV000 v1.19 | Lega
+  LGA_NKS_CreateV000 v1.20 | Lega
 
   Crea una secuencia EXR negra v000 para el shot activo en Hiero/Nuke Studio.
   Permite elegir frame range, resolucion, handle persistente y una o varias
@@ -16,6 +16,13 @@ ____________________________________________________________________
   crear solo los EXRs, crear/importar al bin sin insertar, o reemplazar los
   clips solapados por la nueva v000.
 
+  v1.20: La carpeta de la task (Comp/CG/...) se resuelve contra el disco del
+         shot con resolve_task_folder() de LGA_NKS_TaskScope, en vez de usar
+         siempre TASK_FOLDER (el canonico capitalizado). Asi los shots viejos
+         creados con la carpeta en minuscula (comp/) siguen encontrando su
+         estructura en macOS, donde el filesystem distingue mayusculas. Sin
+         shot_root o sin poder importar TaskScope, cae al canonico de
+         TASK_FOLDER de siempre.
   v1.19: Las tasks activas salen de LGA_NKS_TaskScope en vez de las
          constantes locales ALL_TASKS/CLIENT_TASKS, y se resuelven en cada
          llamada: antes la constante TASKS se fijaba al IMPORTAR el modulo,
@@ -173,6 +180,32 @@ def _task_folder_map():
 
 TASK_FOLDER = _task_folder_map()
 TASK_SUBFOLDERS = ("0_assets", "1_projects", "2_prerenders", "3_review", "4_publish")
+
+
+def _task_folder_for_shot(shot_root, task):
+    """Carpeta de la task para ESTE shot, con el caso real que hay en disco.
+
+    Delega en resolve_task_folder() de LGA_NKS_TaskScope: si el shot ya tiene
+    la carpeta en minuscula (convencion vieja del creador), devuelve esa; si
+    no existe ninguna, devuelve el canonico capitalizado. Sin shot_root o sin
+    poder importar TaskScope, cae a TASK_FOLDER (el comportamiento historico).
+    Task invalida sigue reventando con KeyError, igual que el TASK_FOLDER[task]
+    de siempre.
+    """
+    canonico = TASK_FOLDER[task]
+    try:
+        try:
+            from LGA_NKS_TaskScope import resolve_task_folder
+        except ImportError:
+            from LGA_NKS_Shared.LGA_NKS_TaskScope import resolve_task_folder
+        return resolve_task_folder(shot_root, task, default=canonico)
+    except Exception as exc:
+        # No se silencia del todo: resolve_task_folder solo atrapa OSError y
+        # ValueError, asi que cualquier otra cosa que caiga aca es un error
+        # de programacion y tiene que quedar en el log.
+        debug_print("No se pudo resolver la carpeta de '%s', se usa '%s': %s"
+                    % (task, canonico, exc))
+        return canonico
 RANGE_SOURCE_EDITREF = "editref"
 RANGE_SOURCE_PLATE = "plate"
 
@@ -1193,7 +1226,7 @@ def _insert_task_track(seq, task):
 
 def _ensure_task_folder_structure(shot_root, task):
     """Creates the standard subfolder tree for a task if any folder is missing."""
-    task_root = Path(shot_root.replace("\\", "/")) / TASK_FOLDER[task]
+    task_root = Path(shot_root.replace("\\", "/")) / _task_folder_for_shot(shot_root, task)
     created = []
     errors = []
     for subfolder in TASK_SUBFOLDERS:
@@ -2534,7 +2567,7 @@ class CreateV000Dialog(QtWidgets.QDialog):
         output_dir = "/".join(
             [
                 shot_root.rstrip("/\\"),
-                TASK_FOLDER[task],
+                _task_folder_for_shot(shot_root, task),
                 "4_publish",
                 version_name,
             ]

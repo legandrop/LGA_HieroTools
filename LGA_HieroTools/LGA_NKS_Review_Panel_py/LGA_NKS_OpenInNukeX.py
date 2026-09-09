@@ -1,12 +1,16 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_OpenInNukeX v1.33 | Lega
+  LGA_NKS_OpenInNukeX v1.34 | Lega
 
   Abre el script asociado al clip seleccionado en NukeX
   Verifica si hay una version mas reciente y pregunta si desea abrirla
 
 
+  v1.34 - La carpeta "Comp" de get_project_path() se resuelve contra el
+          disco del shot con resolve_task_folder() de LGA_NKS_TaskScope, para
+          que los shots viejos con "comp/" en minuscula se sigan encontrando
+          en macOS. Sin poder importar TaskScope, cae al canonico "Comp".
   v1.33 - Los dialogos y carteles llevan la fuente del pack
           (apply_ui_font); sin eso salian con la fuente del host
   v1.32 - Dialogos y carteles migrados al modulo de estilo del pack
@@ -308,13 +312,33 @@ class TimedMessageBox(QtWidgets.QMessageBox):
             self.accept()  # Close the message box automatically
 
 
+def _comp_folder_name(shot_root):
+    """Nombre de la carpeta de la task comp para ESTE shot ("Comp" o, en un
+    shot viejo, "comp"), resuelto contra el disco via resolve_task_folder()
+    de LGA_NKS_TaskScope. Sin shot_root o sin poder importar TaskScope, cae
+    al canonico "Comp" (comportamiento historico de esta tool)."""
+    try:
+        try:
+            from LGA_NKS_TaskScope import resolve_task_folder
+        except ImportError:
+            from LGA_NKS_Shared.LGA_NKS_TaskScope import resolve_task_folder
+        return resolve_task_folder(shot_root, "comp", default="Comp")
+    except Exception as exc:
+        # No se silencia del todo: resolve_task_folder solo atrapa OSError y
+        # ValueError, asi que cualquier otra cosa que caiga aca es un error
+        # de programacion y tiene que quedar en el log.
+        debug_print("No se pudo resolver la carpeta de comp, se usa 'Comp': %s" % exc)
+        return "Comp"
+
+
 def get_project_path(file_path):
     debug_print(f"Obteniendo project path de: {file_path}")
     # Dividir el path en partes usando '/' como separador
     path_parts = file_path.split("/")
     debug_print(f"Partes del path: {path_parts}")
-    # Construir la nueva ruta agregando '/Comp/1_projects'
-    project_path = "/".join(path_parts[:4]) + "/Comp/1_projects"
+    # Construir la nueva ruta agregando '/<Comp>/1_projects'
+    shot_root = "/".join(path_parts[:4])
+    project_path = shot_root + "/" + _comp_folder_name(shot_root) + "/1_projects"
     debug_print(f"Project path construido: {project_path}")
     return project_path
 

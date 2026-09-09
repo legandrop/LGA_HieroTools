@@ -1,13 +1,21 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.41 | Lega
+  LGA_import_shots v1.42 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.42: Dos correcciones sobre el soporte de CG. `_cg_` estaba ANTES de
+         `_comp_` en _IMPORT_TRACK_ORDER, y en esa lista antes es MAS
+         ARRIBA -lo demuestra la mecanica de _create_plate_track, donde
+         insert_at es siempre el indice del vecino que queda arriba-, asi
+         que el track de CG caia encima del de comp. Y el nombre de la
+         carpeta de task se resuelve contra el disco: los shots creados
+         con la convencion vieja la tienen en minuscula y en macOS esa no
+         es la misma carpeta que la capitalizada.
   v1.41: Reconoce la task/track CG (contexto client) como una task de
          primera clase: nuevo _CLR_CG (naranja familia 3D, via
          get_task_color(CG_TASK_NAME)), _cg_ sumado a _IMPORT_TRACK_ORDER
@@ -246,6 +254,7 @@ from LGA_NKS_TaskScope import (
     CG_TASK_NAME,
     exr_track_for_task,
     is_track_task_active,
+    resolve_task_folder,
     task_folder_name,
 )
 from LGA_NKS_Edit_Panel_py.LGA_tab_width_config import ANCHO_TAB_EXRA
@@ -622,17 +631,20 @@ _DWAA_COMPRESSION_LEVEL = 45
 # hardcodearlo: CG existe solo en contexto client y ahi es una task mas.
 _CG_EXR_TRACK = exr_track_for_task(CG_TASK_NAME)
 
-# Orden canónico de tracks de video, de abajo hacia arriba en el stack de Hiero
-# (= de arriba hacia abajo tal como los devuelve reversed(seq.videoTracks())).
+# Orden canónico de tracks de video, de ARRIBA hacia abajo: el primero de la
+# lista es el que va mas arriba en el panel. Lo demuestra la mecanica de
+# _create_plate_track(): `insert_at` es siempre el indice del vecino que
+# queda ARRIBA del track nuevo, y ese vecino se elige como el de mayor rango
+# todavia MENOR que el del track nuevo. O sea, menor rango = mas arriba.
 # Se usa para ordenar el dropdown y para determinar la posición de inserción
 # cuando se crea un track nuevo desde el combo.
-# _cg_ (client) va justo debajo de _comp_: en client el stack queda
-# BurnIn > _comp_ > _cg_ > plates. En studio nunca aparece un track llamado
-# "_cg_", asi que sumarlo aca no cambia nada del comportamiento existente.
+# _cg_ (client) va DESPUES de _comp_ para quedar justo debajo suyo: en client
+# el stack es BurnIn > _comp_ > _cg_ > plates. En studio nunca aparece un
+# track llamado "_cg_", asi que sumarlo aca no cambia nada de lo existente.
 _IMPORT_TRACK_ORDER = [
     "aPlate", "bPlate", "cPlate", "dPlate", "ePlate",
     "fgPlate", "bgPlate", "EditRef", "EditRefClean",
-    _CG_EXR_TRACK, "_comp_", "_roto_", "_cleanup_", "_dmp_",
+    "_comp_", _CG_EXR_TRACK, "_roto_", "_cleanup_", "_dmp_",
 ]
 
 PLATE_KEYWORDS = [
@@ -1050,7 +1062,10 @@ def _scan_publish_folders(shot_root):
     results = []
     shot_path = Path(shot_root)
     for task, (folder_name, track) in _task_folders_for_context().items():
-        task_dir = shot_path / folder_name
+        # El nombre de la carpeta se resuelve contra el disco: los shots
+        # creados con la convencion vieja la tienen en minuscula (`comp/`) y
+        # en macOS esa no es la misma carpeta que `Comp/`.
+        task_dir = shot_path / resolve_task_folder(shot_root, task, default=folder_name)
         if not task_dir.exists():
             continue
         publish_dir = task_dir / "4_publish"
