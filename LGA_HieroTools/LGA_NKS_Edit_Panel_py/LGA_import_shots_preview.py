@@ -1,10 +1,17 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_preview v1.02 | Lega
+  LGA_import_shots_preview v1.03 | Lega
 
   Logica de datos para la pagina Import Preview de LGA_import_shots.
 
+  v1.03: classify_track_type reconoce tracks _cg_ como tipo "cg" (contexto
+         client, familia 3D de vendors). El token de track sale de
+         LGA_NKS_TaskScope.exr_track_for_task(CG_TASK_NAME) en vez de
+         hardcodear "_cg_": la clasificacion sigue siendo por NOMBRE DE
+         TRACK, nunca por filename (una entrega CG no lleva el token "cg"
+         en el nombre de archivo, lleva el stream). No hay track "_cg_" en
+         contexto studio, asi que esto no cambia nada ahi.
   v1.02: classify_track_type reconoce tracks _dmp_ como tipo "dmp".
   v1.01: Soporte de track keys unicas (name||bt_index) para distinguir tracks
          duplicados por nombre en preview/import. Expone track_key y
@@ -23,6 +30,16 @@ try:
     _HIERO_AVAILABLE = True
 except ImportError:
     _HIERO_AVAILABLE = False
+
+try:
+    from LGA_NKS_TaskScope import CG_TASK_NAME, exr_track_for_task
+except ImportError:
+    from LGA_NKS_Shared.LGA_NKS_TaskScope import CG_TASK_NAME, exr_track_for_task
+
+# Token de track de CG ("_cg_"), resuelto desde TaskScope: CG existe solo en
+# contexto client. No hay track asi en studio, por eso clasificarlo aca no
+# cambia nada del comportamiento de ese contexto.
+_CG_EXR_TRACK = exr_track_for_task(CG_TASK_NAME)
 
 
 # ── logging inyectable ────────────────────────────────────────────────────────
@@ -76,7 +93,7 @@ def classify_track_type(track_name: str) -> str:
     """
     Clasifica el tipo de track por su nombre.
 
-    Retorna: "plate" | "editref" | "comp" | "roto" | "cleanup" | "dmp" | "other"
+    Retorna: "plate" | "editref" | "comp" | "roto" | "cleanup" | "dmp" | "cg" | "other"
     """
     lower = str(track_name).strip().lower()
     if lower.endswith("plate"):
@@ -91,6 +108,8 @@ def classify_track_type(track_name: str) -> str:
         return "cleanup"
     if lower == "_dmp_" or lower.startswith("_dmp_"):
         return "dmp"
+    if lower == _CG_EXR_TRACK or lower.startswith(_CG_EXR_TRACK):
+        return CG_TASK_NAME
     return "other"
 
 
@@ -244,7 +263,7 @@ def build_import_preview_data(
               "track_key": str,
               "track_name": str,
               "track_label": str,
-              "track_type": "plate"|"editref"|"comp"|"roto"|"cleanup"|"other",
+              "track_type": "plate"|"editref"|"comp"|"roto"|"cleanup"|"dmp"|"cg"|"other",
               "before_clip": {"name": str, "tl_in": int, "tl_out": int, "duration": int} | None,
               "new_items":   [item_dict],
               "after_clip":  {"name": str, "tl_in": int, "tl_out": int, "duration": int} | None,

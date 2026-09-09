@@ -1,13 +1,33 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.40 | Lega
+  LGA_import_shots v1.41 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.41: Reconoce la task/track CG (contexto client) como una task de
+         primera clase: nuevo _CLR_CG (naranja familia 3D, via
+         get_task_color(CG_TASK_NAME)), _cg_ sumado a _IMPORT_TRACK_ORDER
+         justo debajo de _comp_ (stack client: BurnIn > _comp_ > _cg_ >
+         plates) y a los dicts/tuplas de color y v000 que ya cubrian
+         comp/roto/cleanup/dmp. TASK_FOLDERS historico (comp/roto/cleanup/
+         dmp) no se toca; se agrega _task_folders_for_context(), que suma
+         CG solo si LGA_NKS_TaskScope.is_track_task_active() dice que el
+         contexto activo es client, para que _scan_publish_folders() la
+         detecte por CARPETA de publish (nunca por filename: una entrega
+         CG no lleva el token "cg", lleva el stream). En CG la ultima
+         version se calcula POR STREAM (nuevo _stream_token()): una carpeta
+         CG junta layout, lighting, anim... cada uno con su propia
+         numeracion, y el maximo global dejaba a todos menos uno sin marcar
+         como ultimo. El token saca TODOS los sufijos _vNNN y no solo el
+         ultimo: con un nombre de doble version (`..._layout_v001_v002`) el
+         stream quedaba partido en dos grupos y las dos carpetas salian
+         marcadas como ultima. Las demas tasks conservan el maximo por
+         carpeta y sus dicts de resultado no cambian de claves. Sin cambios
+         de comportamiento en contexto studio.
   v1.40: Los colores por task (_CLR_COMP/_ROTO/_CLEANUP/_DMP) dejan de estar
          escritos a mano y salen de get_task_color() del catalogo compartido.
          Ya habian derivado: dmp figuraba "#e08033" contra el "#CACA3B" del
@@ -222,6 +242,12 @@ from LGA_NKS_Shared.LGA_NKS_MessageBox import (
 from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, apply_ui_font
 from LGA_NKS_Flow_Task_Config import get_task_color
 from LGA_NKS_Flow_NamingUtils import clean_base_name, extract_shot_code
+from LGA_NKS_TaskScope import (
+    CG_TASK_NAME,
+    exr_track_for_task,
+    is_track_task_active,
+    task_folder_name,
+)
 from LGA_NKS_Edit_Panel_py.LGA_tab_width_config import ANCHO_TAB_EXRA
 
 
@@ -493,6 +519,7 @@ _CLR_COMP    = get_task_color("comp")      # comp publish
 _CLR_ROTO    = get_task_color("roto")      # roto publish
 _CLR_CLEANUP = get_task_color("cleanup")   # cleanup publish
 _CLR_DMP     = get_task_color("dmp")       # dmp publish
+_CLR_CG      = get_task_color(CG_TASK_NAME)  # CG publish (solo client) - naranja familia 3D
 _CLR_PLATES  = "#42616d"   # plates input (EXR seq) - NO es una task
 _CLR_REFS    = "#aa9e54"   # references (editref / seqref) - NO es una task
 
@@ -501,8 +528,11 @@ _TASK_ROW_COLORS = {
     "roto":    _CLR_ROTO,
     "cleanup": _CLR_CLEANUP,
     "dmp":     _CLR_DMP,
+    CG_TASK_NAME: _CLR_CG,
 }
-_TASK_ORDER = {"comp": 0, "roto": 1, "cleanup": 2, "dmp": 3}
+# CG solo existe en contexto client (ver LGA_NKS_TaskScope); en studio esta
+# entrada nunca se usa porque _task_folders_for_context() no la agrega ahi.
+_TASK_ORDER = {"comp": 0, "roto": 1, "cleanup": 2, "dmp": 3, CG_TASK_NAME: 4}
 
 # ── colores para anotaciones en tabla / dropdowns ─────────────────
 # Derivados de la paleta PATH_LEVEL_COLORS pero desaturados ~40 %
@@ -560,6 +590,12 @@ _PREVIEW_DMP_BG_COLOR = "#5f3d22"
 _PREVIEW_DMP_BORDER_COLOR = "#5f3d22"
 _PREVIEW_DMP_TEXT_COLOR = "#e79f66"
 
+# CG (solo client): mismo calculo que las demas tasks pero partiendo de
+# _CLR_CG (#CA7A3B, naranja familia 3D de LGA_NKS_Flow_Task_Config).
+_PREVIEW_CG_BG_COLOR = "#573b25"
+_PREVIEW_CG_BORDER_COLOR = "#573b25"
+_PREVIEW_CG_TEXT_COLOR = "#d79b6c"
+
 _PREVIEW_OTHER_BG_COLOR = "#2e2e2e"
 _PREVIEW_OTHER_BORDER_COLOR = "#2e2e2e"
 _PREVIEW_OTHER_TEXT_COLOR = "#7f7f7f"
@@ -582,14 +618,21 @@ _TRACK_KEY_SEP = "||"
 BURNIN_TRACK_NAMES = {"burnin", "burn in", "burn_in"}
 _DWAA_COMPRESSION_LEVEL = 45
 
+# Token de track de CG ("_cg_"), resuelto desde LGA_NKS_TaskScope en vez de
+# hardcodearlo: CG existe solo en contexto client y ahi es una task mas.
+_CG_EXR_TRACK = exr_track_for_task(CG_TASK_NAME)
+
 # Orden canónico de tracks de video, de abajo hacia arriba en el stack de Hiero
 # (= de arriba hacia abajo tal como los devuelve reversed(seq.videoTracks())).
 # Se usa para ordenar el dropdown y para determinar la posición de inserción
 # cuando se crea un track nuevo desde el combo.
+# _cg_ (client) va justo debajo de _comp_: en client el stack queda
+# BurnIn > _comp_ > _cg_ > plates. En studio nunca aparece un track llamado
+# "_cg_", asi que sumarlo aca no cambia nada del comportamiento existente.
 _IMPORT_TRACK_ORDER = [
     "aPlate", "bPlate", "cPlate", "dPlate", "ePlate",
     "fgPlate", "bgPlate", "EditRef", "EditRefClean",
-    "_comp_", "_roto_", "_cleanup_", "_dmp_",
+    _CG_EXR_TRACK, "_comp_", "_roto_", "_cleanup_", "_dmp_",
 ]
 
 PLATE_KEYWORDS = [
@@ -611,6 +654,25 @@ TASK_FOLDERS = {
     "cleanup": ("Cleanup", "_cleanup_"),
     "dmp":     ("DMP",     "_dmp_"),
 }
+
+
+def _task_folders_for_context(mode=None):
+    """TASK_FOLDERS del contexto activo: en client suma la task CG.
+
+    TASK_FOLDERS (comp/roto/cleanup/dmp) queda intacto: es la lista historica
+    y no depende de LGA_NKS_TaskScope (dmp no tiene track registrado en
+    GetClip.py, TaskScope no lo conoce). CG si esta en TaskScope y existe
+    SOLO en client (is_track_task_active) -- se agrega aca por CARPETA/TRACK
+    de publish, nunca por filename: el filename de una entrega CG lleva el
+    stream (layout, lighting, anim...), nunca el token "cg" (ver
+    Docu_MultiTask.md, seccion "El concepto de stream en CG"). En modo
+    studio esta funcion devuelve exactamente TASK_FOLDERS, sin cambios.
+    """
+    folders = dict(TASK_FOLDERS)
+    if is_track_task_active(CG_TASK_NAME, mode):
+        folders[CG_TASK_NAME] = (task_folder_name(CG_TASK_NAME), _CG_EXR_TRACK)
+    return folders
+
 
 EXR_EXTENSIONS  = {".exr"}
 MOV_EXTENSIONS  = {".mov", ".mxf", ".mp4"}
@@ -641,6 +703,28 @@ def _version_number(name):
     """Extrae numero de version de un nombre (v01, v001, v002). Retorna -1 si no hay."""
     m = re.search(r"[_\-]v(\d+)", name, re.IGNORECASE)
     return int(m.group(1)) if m else -1
+
+
+def _stream_token(version_name):
+    """Nombre de una version sin sus sufijos _vNNN, en minusculas.
+
+    En CG identifica la DISCIPLINA (stream): `PROJA_1013_0800_layout_v003`
+    da `proja_1013_0800_layout`. Dos entregas de streams distintos comparten
+    numero de version y solo se distinguen por este token, asi que es lo que
+    permite calcular la ultima version de cada uno por separado.
+
+    Se sacan TODOS los sufijos de version, no solo el ultimo: un prerender
+    puede venir con dos (`..._layout_v001_v002`), y sacando uno solo el
+    token se quedaba con el `_v001` adentro. Dos carpetas del mismo stream
+    caian entonces en grupos distintos y las dos quedaban marcadas como
+    ultima version.
+    """
+    token = str(version_name or "")
+    while True:
+        recortado = re.sub(r"[_\-]v\d+$", "", token, flags=re.IGNORECASE)
+        if recortado == token:
+            return token.lower()
+        token = recortado
 
 
 def _is_v000_item(item):
@@ -959,11 +1043,13 @@ def _scan_publish_folders(shot_root):
     Escanea las carpetas de task en shot_root y retorna una lista de dicts,
     una entrada por cada version encontrada (no solo la mas alta).
     Cada dict incluye is_latest=True solo para la version mas alta de cada task.
-    Orden: por task (TASK_FOLDERS insertion order), luego version descendente.
+    Orden: por task (insertion order de _task_folders_for_context()), luego
+    version descendente. En client suma la task CG (ver esa funcion); en
+    studio es exactamente TASK_FOLDERS.
     """
     results = []
     shot_path = Path(shot_root)
-    for task, (folder_name, track) in TASK_FOLDERS.items():
+    for task, (folder_name, track) in _task_folders_for_context().items():
         task_dir = shot_path / folder_name
         if not task_dir.exists():
             continue
@@ -987,18 +1073,39 @@ def _scan_publish_folders(shot_root):
         version_dirs.sort(key=lambda d: _version_number(d.name), reverse=True)
         max_ver = _version_number(version_dirs[0].name)
 
+        # Para CG el "latest" se calcula POR STREAM y no por carpeta: una sola
+        # carpeta CG junta las entregas de varias disciplinas (layout,
+        # lighting, anim, ...) y cada una lleva su propia numeracion, asi que
+        # un maximo global dejaria a todas menos una sin marcar como ultima.
+        # Las demas tasks conservan el maximo por carpeta: ahi todas las
+        # versiones comparten el mismo nombre base y agrupar no cambiaria
+        # nada, pero tampoco hace falta tocarlas.
+        max_por_stream = {}
+        latest_por_stream = task == CG_TASK_NAME
+        if latest_por_stream:
+            for d in version_dirs:
+                token = _stream_token(d.name)
+                num = _version_number(d.name)
+                if num > max_por_stream.get(token, -1):
+                    max_por_stream[token] = num
+
         for vd in version_dirs:
             first_f, last_f, count, first_file = _scan_exr_sequence(str(vd))
             w, h, fps, comp, bd, ch, par = (None,) * 7
             if first_file:
                 w, h, fps, comp, bd, ch, par = _read_exr_metadata(first_file)
             ver_num = _version_number(vd.name)
-            results.append({
+            token = _stream_token(vd.name) if latest_por_stream else None
+            item = {
                 "task": task, "folder_name": folder_name, "track": track,
                 "publish_exists": True, "has_versions": True,
                 "version_dir": str(vd), "version_name": vd.name,
                 "version_num": ver_num,
-                "is_latest": (ver_num == max_ver),
+                "is_latest": (
+                    ver_num == max_por_stream.get(token, max_ver)
+                    if latest_por_stream
+                    else ver_num == max_ver
+                ),
                 "first_file": first_file,
                 "first_frame": first_f, "last_frame": last_f, "frame_count": count,
                 "width": w, "height": h, "fps": fps, "compression": comp,
@@ -1007,7 +1114,12 @@ def _scan_publish_folders(shot_root):
                 # Campos normalizados para compatibilidad con import_item_to_bin:
                 "kind": "exr_seq",   # publish items son siempre EXR sequences
                 "name": vd.name,     # nombre de la versión (ej. TEST_013_020_comp_v02)
-            })
+            }
+            # La clave del stream se agrega SOLO en CG: en studio los dicts de
+            # resultado quedan con las mismas claves que antes.
+            if latest_por_stream:
+                item["stream_token"] = token
+            results.append(item)
 
     return results
 
@@ -4116,6 +4228,7 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
             "roto":    _CLR_ROTO,
             "cleanup": _CLR_CLEANUP,
             "dmp":     _CLR_DMP,
+            CG_TASK_NAME: _CLR_CG,
         }
         seen_sections = []
         display_rows = []
@@ -4932,6 +5045,7 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
             "roto":    _CLR_ROTO,
             "cleanup": _CLR_CLEANUP,
             "dmp":     _CLR_DMP,
+            CG_TASK_NAME: _CLR_CG,
         }.get(track_type, "#555555")
 
     def _preview_track_label_color(self, track_name: str, greyed: bool = False):
@@ -4981,7 +5095,7 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
         contiene una versión v000, v00, v0000, etc., el color es #8a8a8a (gris oscuro).
         Esto indica que es una versión cero/base, aún no trabajada.
         """
-        if track_type in ("comp", "roto", "cleanup", "dmp"):
+        if track_type in ("comp", "roto", "cleanup", "dmp", CG_TASK_NAME):
             if re.search(r'[._]v0{2,}(?:\b|_|$)', clip_name, re.IGNORECASE):
                 return "#8a8a8a"
         return bar_color
@@ -5019,6 +5133,11 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
                 _PREVIEW_DMP_BG_COLOR,
                 _PREVIEW_DMP_BORDER_COLOR,
                 _PREVIEW_DMP_TEXT_COLOR,
+            ),
+            _CLR_CG.lower(): (
+                _PREVIEW_CG_BG_COLOR,
+                _PREVIEW_CG_BORDER_COLOR,
+                _PREVIEW_CG_TEXT_COLOR,
             ),
             "#555555": (
                 _PREVIEW_OTHER_BG_COLOR,
@@ -5620,7 +5739,7 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
             task = row_data.get("item", {}).get("task", "")
             clip_name = (row_data.get("item", {}).get("name", "")
                          or row_data.get("item", {}).get("version_name", ""))
-            track_type = task if task in ("comp", "roto", "cleanup") else "other"
+            track_type = task if task in ("comp", "roto", "cleanup", CG_TASK_NAME) else "other"
             return self._chip_color(clip_name, bar_color, track_type)
         return bar_color
 
