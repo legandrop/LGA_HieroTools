@@ -2,13 +2,23 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.29 | Lega
+  LGA_NKS_Projects_Panel v2.30 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
   - Permite abrir proyectos y secuencias (cross-project) sin perder ajustes de viewer.
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
+
+  v2.30: La vista de Settings suma la seccion read-only "Track names", con
+         los nombres de track que el pack espera para cada task del
+         contexto activo. Es informativa: la convencion vive en el codigo
+         (LGA_NKS_TaskScope) y no se edita desde la UI. Sirve para que un
+         artista al que una tool no le encuentra el clip vea con que
+         nombres se lo busca. Vive en LGA_NKS_TrackNames_Section, que no
+         importa hiero -asi el harness la captura sin levantar NKS-, usa el
+         modulo de estilo del pack, y esta blindada: si falla, la vista de
+         Settings sigue andando.
 
   v2.29: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
          estilo del pack.
@@ -70,6 +80,12 @@ from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectsPanel_Logging import (
     debug_print,
     print_debug_messages,
 )
+try:
+    from LGA_NKS_Projects_Panel_py.LGA_NKS_TrackNames_Section import (
+        build_track_names_section,
+    )
+except Exception:  # pragma: no cover - la seccion es informativa
+    build_track_names_section = None
 
 # Importar funciones de utilidad de estilos
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "LGA_NKS_Shared"))
@@ -627,6 +643,16 @@ class ProjectsPanel(QtWidgets.QWidget):
         layout.addWidget(self.settings_list_container)
 
         self._populate_settings_colors()
+
+        # Línea en blanco antes de los nombres de track
+        layout.addWidget(QtWidgets.QLabel(""))
+
+        # Seccion informativa: si falla, la vista de Settings sigue andando.
+        if build_track_names_section is not None:
+            try:
+                layout.addWidget(build_track_names_section())
+            except Exception as exc:
+                debug_print(f"No se pudo armar la seccion Track names: {exc}")
 
         # Línea en blanco antes de los botones Cancel y Save
         layout.addWidget(QtWidgets.QLabel(""))
