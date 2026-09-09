@@ -1,13 +1,24 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_ShowInFlow v1.31 | Lega
+  LGA_NKS_Flow_ShowInFlow v1.32 | Lega
 
-  Abre la URL de la task Comp del shot, tomando información del clip en TRACK_comp_EXR bajo el playhead.
+  Abre la URL de la task del shot que corresponde al contexto (Comp en studio;
+  Comp o, si no existe, CG en client), tomando información del clip en
+  TRACK_comp_EXR bajo el playhead.
   Si no hay clip en playhead, usa el clip seleccionado como fallback.
   Verifica si existe más de un shot con el mismo nombre y te pide que selecciones uno.
   Usa el módulo utilitario LGA_NKS_GetClip para obtener clips.
 
+  v1.32: La task a abrir sale de _task_preferida() y no del literal "Comp"
+         repetido en cuatro lugares. En client, un shot que solo tiene la
+         task CG abria la URL del shot pelado como si no tuviera ninguna
+         task; ahora cae a CG. En studio no cambia NADA: el orden sigue
+         siendo solo ("Comp",) -no se suman roto ni cleanup- y el helper
+         conserva las dos semanticas de matcheo que tenia cada sitio, la
+         exacta y la de substring del dialogo de seleccion. Normalizar el
+         matcheo a minusculas, como estaba en la primera version, hacia
+         matchear tasks que antes no matcheaban.
   v1.31: Limita máximo 2 threads simultáneos para evitar cuelgues de ShotGrid/navegador.
          Ahora funciona con clips offline (sin media presente).
   v1.30: Eliminado navegador hardcodeado (Chrome). Usa el navegador por defecto del sistema.
@@ -112,6 +123,57 @@ else:
     debug_print("ERROR: No se encontró el módulo LGA_NKS_GetClip")
 
 
+def _nombres_preferidos():
+    """Nombres de task a abrir, en orden de preferencia, segun el contexto.
+
+    studio -> ("Comp",), exactamente como antes.
+    client -> ("Comp", "CG"): si el shot no tiene Comp se cae a CG.
+
+    En studio NO se agrega roto ni cleanup a proposito: esta herramienta
+    siempre abrio la task Comp y sumarlas cambiaria su comportamiento sin
+    que nadie lo haya pedido.
+    """
+    try:
+        from LGA_NKS_Shared.LGA_NKS_TaskScope import is_track_task_active
+
+        if is_track_task_active("cg"):
+            return ("Comp", "CG")
+    except Exception as e:
+        debug_print(f"No se pudo resolver el contexto, se usa solo Comp: {e}")
+    return ("Comp",)
+
+
+def _task_preferida(tasks, permitir_substring=False):
+    """Task del shot que conviene abrir, segun el contexto activo.
+
+    En studio devuelve la task Comp, con el MISMO matcheo que tenia cada
+    sitio antes de existir este helper: exacto y sensible a mayusculas por
+    default, y por substring donde el codigo viejo usaba `"Comp" in ...`
+    (el dialogo de seleccion de shot, que asi seguia encontrando tasks
+    tipo "Comp 2"). Cambiar esa semantica fue un hallazgo de auditoria:
+    normalizar a minusculas hacia matchear tasks que antes no matcheaban.
+
+    En client, si el shot no tiene Comp cae a CG: antes se abria la URL del
+    shot pelado aunque la task de CG existiera.
+
+    Devuelve None si el shot no tiene ninguna task del contexto.
+    """
+    if not tasks:
+        return None
+    nombres = _nombres_preferidos()
+    if permitir_substring:
+        for nombre in nombres:
+            for task in tasks:
+                if nombre in (task.get("content") or ""):
+                    return task
+        return None
+    for nombre in nombres:
+        for task in tasks:
+            if (task.get("content") or "") == nombre:
+                return task
+    return None
+
+
 class ShotSelectionDialog(QDialog):
     """Dialogo para seleccionar entre multiples shots encontrados"""
 
@@ -130,13 +192,15 @@ class ShotSelectionDialog(QDialog):
 
         # Botones para cada shot
         for i, (shot, tasks) in enumerate(shots_with_tasks):
-            comp_tasks = [t for t in tasks if "Comp" in t["content"]]
-            if comp_tasks:
+            # Substring: el codigo viejo de este dialogo usaba `"Comp" in ...`
+            task_preferida = _task_preferida(tasks, permitir_substring=True)
+            if task_preferida:
                 text = (
-                    f"Shot ID: {shot['id']} - Comp: {comp_tasks[0]['sg_status_list']}"
+                    f"Shot ID: {shot['id']} - "
+                    f"{task_preferida['content']}: {task_preferida['sg_status_list']}"
                 )
             else:
-                text = f"Shot ID: {shot['id']} - Sin Comp"
+                text = f"Shot ID: {shot['id']} - Sin task"
 
             btn = QPushButton(text)
             btn.clicked.connect(lambda checked=False, idx=i: self.select_shot(idx))
@@ -280,11 +344,7 @@ class HieroOperations:
 
         if shot:
             # Buscar task Comp
-            comp_task = None
-            for task in tasks:
-                if task["content"] == "Comp":
-                    comp_task = task
-                    break
+            comp_task = _task_preferida(tasks)
 
             if comp_task:
                 # Si hay task Comp, abrir la URL de la task
@@ -376,11 +436,7 @@ class ShowInFlowWorker(QRunnable):
 
             if shot:
                 # Buscar task Comp
-                comp_task = None
-                for task in tasks:
-                    if task["content"] == "Comp":
-                        comp_task = task
-                        break
+                comp_task = _task_preferida(tasks)
 
                 if comp_task:
                     # Si hay task Comp, abrir la URL de la task
@@ -461,11 +517,7 @@ def show_in_flow_from_selected_clip():
                     sg_manager = ShotGridManager(url, login, password)
 
                     # Intentar encontrar task Comp
-                    comp_task = None
-                    for task in selected_tasks:
-                        if task["content"] == "Comp":
-                            comp_task = task
-                            break
+                    comp_task = _task_preferida(selected_tasks)
 
                     if comp_task:
                         # Si hay task Comp, abrir la URL de la task

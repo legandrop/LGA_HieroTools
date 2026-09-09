@@ -1,11 +1,18 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CheckTimelineShots v1.04 | Lega
+  LGA_NKS_Flow_CheckTimelineShots v1.05 | Lega
 
-  Chequea si los shots del track comp del timeline existen en Flow.
+  Chequea si los shots de los tracks de task del timeline existen en Flow.
+  Los tracks dependen del contexto: `_comp_` en studio; `_comp_` y `_cg_`
+  en client.
   Muestra una ventana con la lista de shots existentes y los faltantes.
 
+  v1.05: En client se revisa tambien el track `_cg_`: un shot que ahi vive
+         unicamente en CG no se chequeaba contra Flow. Ademas se recorren
+         TODOS los tracks que coincidan con cada nombre -antes solo el
+         primero-, porque en client puede haber varios `_cg_`, uno por
+         stream. En studio se sigue revisando solo `_comp_`.
   v1.04: La ventana lleva la fuente del pack (apply_ui_font); sin
          eso salia con la fuente del host.
   v1.03: La ventana de resultados migra al modulo de estilo del pack
@@ -75,6 +82,34 @@ if utils_path.exists():
     from LGA_NKS_Shared.LGA_NKS_GetClip import TRACK_comp_EXR
 else:
     TRACK_comp_EXR = "_comp_"
+
+
+def _tracks_de_tasks_activas():
+    """Tracks EXR a revisar segun el contexto activo.
+
+    studio -> [`_comp_`], exactamente como antes.
+    client -> [`_comp_`, `_cg_`]: un shot que ahi vive unicamente en CG no
+    se chequeaba contra Flow.
+
+    En studio NO se suman `_roto_` ni `_cleanup_` a proposito: ampliar el
+    alcance del chequeo en studio es un cambio de comportamiento que nadie
+    pidio. Sumarlos es una linea, si alguna vez se decide.
+    """
+    tracks = [TRACK_comp_EXR]
+    try:
+        from LGA_NKS_Shared.LGA_NKS_TaskScope import (
+            exr_track_for_task,
+            is_track_task_active,
+        )
+
+        if is_track_task_active("cg"):
+            track_cg = exr_track_for_task("cg")
+            if track_cg:
+                tracks.append(track_cg)
+    except Exception as e:
+        debug_print(f"No se pudo resolver el contexto, se revisa solo comp: {e}")
+    return tracks
+
 
 # Mantener referencia a la ventana de resultados para evitar GC
 _results_window = None
@@ -226,23 +261,33 @@ class ShotCheckResultsDialog(QDialog):
 
 
 def _collect_shots_from_track(seq, track_name):
-    """Obtiene los shots únicos desde un track específico del timeline."""
+    """Shots únicos de uno o varios tracks del timeline, sin repetir.
+
+    `track_name` acepta un nombre suelto o una lista de nombres. Recorre
+    TODOS los tracks que coincidan con cada nombre, no el primero: en client
+    puede haber varios tracks `_cg_`, uno por stream (layout, lighting, ...).
+    """
     if not seq:
         return []
 
-    target_track = None
-    for track in seq.videoTracks():
-        if track.name().upper() == track_name.upper():
-            target_track = track
-            break
+    nombres = [track_name] if isinstance(track_name, str) else list(track_name)
+    orden = {str(n).upper(): i for i, n in enumerate(nombres) if n}
+    target_tracks = [
+        track for track in seq.videoTracks() if track.name().upper() in orden
+    ]
+    # Se recorren en el orden en que vinieron pedidos los nombres y NO en el
+    # orden fisico del stack: si un mismo shot vive en dos tracks, el clip que
+    # queda en el reporte es el de la task de mayor prioridad (comp antes que
+    # cg) y no el que la secuencia tenga mas abajo.
+    target_tracks.sort(key=lambda t: orden[t.name().upper()])
 
-    if not target_track:
+    if not target_tracks:
         return []
 
     shots_info = []
     seen = set()
 
-    for clip in target_track:
+    for clip in [c for track in target_tracks for c in track]:
         if isinstance(clip, hiero.core.EffectTrackItem):
             continue
 
@@ -307,12 +352,14 @@ def check_timeline_shots():
         show_warning(None, "Flow | Check Shots", "No hay secuencia activa.")
         return
 
-    shots_info = _collect_shots_from_track(seq, TRACK_comp_EXR)
+    tracks_a_revisar = _tracks_de_tasks_activas()
+    shots_info = _collect_shots_from_track(seq, tracks_a_revisar)
     if not shots_info:
+        listado = ", ".join("'%s'" % nombre for nombre in tracks_a_revisar)
         show_warning(
             None,
             "Flow | Check Shots",
-            f"No se encontraron clips en el track '{TRACK_comp_EXR}'.",
+            f"No se encontraron clips en los tracks de task ({listado}).",
         )
         return
 
