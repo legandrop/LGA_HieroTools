@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_NamingUtils v1.16 | Lega
+  LGA_NKS_Flow_NamingUtils v1.17 | Lega
 
   Utilidades para detectar y extraer información de nombres de archivos/shots
   Compatible con sistemas de nomenclatura actuales y series:
@@ -45,6 +45,10 @@ ____________________________________________________________________
   - LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Push_connector.py
   - LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Shot_info.py
 
+  v1.17: la familia CG lee las tasks registradas de LGA_NKS_TaskScope en vez
+         de LGA_NKS_GetClip. GetClip importa hiero, asi que fuera de NKS el
+         import fallaba, el except lo tapaba y la regla no se aplicaba nunca
+         (ni se podia testear). Sin cambio de comportamiento dentro de NKS.
   v1.16: normalize_task_name() aplica la familia CG en contexto client: toda
          task que no sea un track registrado (layout, lighting, anim, ...)
          se mapea por exclusion a la task CG. En studio no cambia nada.
@@ -101,6 +105,11 @@ def _apply_cg_family(name):
     Los imports son lazy y tolerantes a fallas, igual que _get_vendor_lookup:
     este modulo tiene que seguir funcionando sin la cadena de imports de
     contexto (scripts sueltos, tests).
+
+    La lista de tasks registradas sale de LGA_NKS_TaskScope y NO de
+    LGA_NKS_GetClip: GetClip importa hiero, asi que fuera de NKS ese import
+    fallaba, el `except Exception` se lo tragaba y la regla de familia CG no
+    se aplicaba ni se podia testear. TaskScope no importa hiero.
     """
     try:
         try:
@@ -110,13 +119,13 @@ def _apply_cg_family(name):
         if not is_client_context():
             return name
         try:
-            from LGA_NKS_GetClip import registered_task_names, CG_TASK_NAME
+            from LGA_NKS_TaskScope import all_track_task_names, CG_TASK_NAME
         except ImportError:
-            from LGA_NKS_Shared.LGA_NKS_GetClip import (
-                registered_task_names,
+            from LGA_NKS_Shared.LGA_NKS_TaskScope import (
+                all_track_task_names,
                 CG_TASK_NAME,
             )
-        if name in registered_task_names():
+        if name in all_track_task_names():
             return name
         return CG_TASK_NAME
     except Exception:

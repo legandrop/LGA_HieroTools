@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CreateShot_Folders v1.34 | Lega
+  LGA_NKS_Flow_CreateShot_Folders v1.35 | Lega
 
   Módulo para creación automática de estructura de carpetas por task.
   Se integra con CreateShot y ModifyShot para mantener consistencia.
@@ -10,6 +10,9 @@ ____________________________________________________________________
   - Logging detallado de carpetas creadas/existentes
   - Normalización de paths para verificación de existencia
 
+  v1.35: Estructura de carpetas para la task CG (solo client). Una sola
+         carpeta para todas las disciplinas: los streams se distinguen por
+         el nombre de la version, no por la ruta.
   v1.34: Creación automática de estructura de carpetas por task
          Integración completa con CreateShot y ModifyShot
          Soporte para todas las tasks 2D y 3D del pipeline
@@ -48,6 +51,17 @@ TASK_FOLDER_STRUCTURE = {
         "cleanup/2_prerenders",
         "cleanup/3_review",
         "cleanup/4_publish"
+    ],
+    # CG (solo client): una sola task agrupa todas las entregas 3D de los
+    # vendors (layout, lighting, anim, fx, ...), asi que lleva UNA carpeta,
+    # no una por disciplina. Los streams se distinguen por el nombre de la
+    # version, no por la ruta.
+    "CG": [
+        "cg/0_assets",
+        "cg/1_projects",
+        "cg/2_prerenders",
+        "cg/3_review",
+        "cg/4_publish"
     ],
     "DMP": [
         "DMP/0_assets",

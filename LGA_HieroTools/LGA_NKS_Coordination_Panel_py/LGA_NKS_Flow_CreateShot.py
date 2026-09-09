@@ -1,11 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CreateShot v1.49 | Lega
+  LGA_NKS_Flow_CreateShot v1.50 | Lega
 
   Script para crear shots en ShotGrid basado en el nombre del clip seleccionado en Hiero.
   SIN usar templates predefinidos - crea tasks manualmente para mayor control.
 
+  v1.50: El catalogo de tasks se filtra por contexto con
+         get_available_tasks(): en client ofrecia Roto/Cleanup/DMP y toda
+         la familia 3D, que en ese sitio de Flow no existen, y no ofrecia
+         CG. El lookup de pipeline_step sigue viendo el catalogo completo.
   v1.49: Las dos ventanas (config de shot y estado) llevan la
          fuente del pack (apply_ui_font); sin eso salian con la
          fuente del host.
@@ -166,7 +170,10 @@ if utils_path.exists():
     from LGA_NKS_Shared import LGA_NKS_GetClip as clip_utils
     # La sincronización de DEBUG se hace después de su definición (ver más abajo)
 
-from LGA_NKS_Shared.LGA_NKS_Flow_Task_Config import AVAILABLE_TASKS
+from LGA_NKS_Shared.LGA_NKS_Flow_Task_Config import (
+    AVAILABLE_TASKS,
+    get_available_tasks,
+)
 from LGA_NKS_Shared.LGA_NKS_ContextProfile import get_context_mode
 from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import filter_states_for_mode
 
@@ -985,8 +992,10 @@ class ShotConfigDialog(QDialog):
         # ==================================================================================
         # GENERACIÓN DINÁMICA DE TASKS
         # ==================================================================================
-        # Generar una sección para cada task configurada
-        for task_config in AVAILABLE_TASKS:
+        # Generar una sección para cada task configurada del contexto activo.
+        # En client solo existen Comp y CG: ofrecer Roto/Cleanup/DMP/3D ahi
+        # crea tasks que ese sitio de Flow no usa.
+        for task_config in get_available_tasks():
             # Separador antes de cada task
             task_separator = QFrame()
             task_separator.setFrameShape(QFrame.HLine)

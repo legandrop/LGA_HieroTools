@@ -1,10 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_ReviewPanel v2.82 | Lega
+  LGA_ReviewPanel v2.83 | Lega
 
   Tools panel for Hiero / Nuke Studio
 
+  v2.83: El segundo boton ON/OFF sigue el contexto: en studio es _roto_ y
+         en client es _cg_ (ahi roto no existe y el boton no servia para
+         nada). El atajo Ctrl+Shift+D es el mismo en los dos.
   v2.82: Movido boton Self ReplaceClip al Edit Panel.
   v2.81: Agregados botones Next Annotation y Previous Annotation para navegar
          las anotaciones del clip seleccionado.
@@ -203,7 +206,7 @@ class ReviewPanel(QtWidgets.QWidget):
         self.buttons = [
             ("ON Clips | OFF v00", self.execute_EnableOrDisableClips, "#0e1f3a", None, "Click: Activa todos los clips del timeline y desactiva los clips v00\nShift+Click: Solo en los clips seleccionados"),
             ("ON OFF _comp_", self.execute_DisableEXR, "#0e1f3a", "Shift+D", "Shift+D\nHabilita/deshabilita el clip del track _comp_"),
-            ("ON OFF _roto_", self.execute_DisableRoto, "#0e1f3a", "Ctrl+Shift+D", "Ctrl+Shift+D\nHabilita/deshabilita el clip del track _roto_"),
+            self._second_task_button(),
             (
                 "Difference Mode",
                 self.execute_ToggleBlendModeForEXRTrack,
@@ -501,6 +504,52 @@ class ReviewPanel(QtWidgets.QWidget):
 
     def execute_DisableEXR(self):
         self.execute_external_script("LGA_NKS_Clip_DisableEXR.py")
+
+    # Script wrapper de ON/OFF por task. Comp tiene su propio boton fijo; esta
+    # tabla cubre la SEGUNDA task del contexto, que en studio es roto y en
+    # client es cg (ahi roto no existe).
+    # Cleanup NO esta aca a proposito: su wrapper todavia no existe (pendiente
+    # en el roadmap de Docu_MultiTask.md). Mapearlo apuntaria a un archivo
+    # inexistente y el boton fallaria en silencio.
+    _SEGUNDA_TASK_SCRIPTS = {
+        "roto": "LGA_NKS_Clip_DisableRoto.py",
+        "cg": "LGA_NKS_Clip_DisableCG.py",
+    }
+
+    def _segunda_task(self):
+        """Task del segundo boton ON/OFF segun el contexto activo.
+
+        studio -> roto, client -> cg. Ante cualquier falla de la cadena de
+        imports de contexto se mantiene el comportamiento historico (roto).
+        """
+        try:
+            from LGA_NKS_Shared.LGA_NKS_TaskScope import active_track_tasks
+
+            activas = active_track_tasks()
+            for task in activas[1:]:
+                if task in self._SEGUNDA_TASK_SCRIPTS:
+                    return task
+        except Exception:
+            pass
+        return "roto"
+
+    def _second_task_button(self):
+        """Fila de botones del ON/OFF de la segunda task del contexto."""
+        task = self._segunda_task()
+        etiqueta = "ON OFF _%s_" % task
+        tooltip = "Ctrl+Shift+D\nHabilita/deshabilita el clip del track _%s_" % task
+        return (
+            etiqueta,
+            self.execute_DisableSecondTask,
+            "#0e1f3a",
+            "Ctrl+Shift+D",
+            tooltip,
+        )
+
+    def execute_DisableSecondTask(self):
+        task = self._segunda_task()
+        script = self._SEGUNDA_TASK_SCRIPTS.get(task, "LGA_NKS_Clip_DisableRoto.py")
+        self.execute_external_script(script)
 
     def execute_DisableRoto(self):
         self.execute_external_script("LGA_NKS_Clip_DisableRoto.py")

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateV000 v1.18 | Lega
+  LGA_NKS_CreateV000 v1.19 | Lega
 
   Crea una secuencia EXR negra v000 para el shot activo en Hiero/Nuke Studio.
   Permite elegir frame range, resolucion, handle persistente y una o varias
@@ -16,6 +16,12 @@ ____________________________________________________________________
   crear solo los EXRs, crear/importar al bin sin insertar, o reemplazar los
   clips solapados por la nueva v000.
 
+  v1.19: Las tasks activas salen de LGA_NKS_TaskScope en vez de las
+         constantes locales ALL_TASKS/CLIENT_TASKS, y se resuelven en cada
+         llamada: antes la constante TASKS se fijaba al IMPORTAR el modulo,
+         asi que despues de un switch de contexto en caliente el dialogo
+         seguia ofreciendo las tasks del arranque hasta recargar Nuke.
+         TASK_FOLDER tambien se deriva de ahi.
   v1.18: Se borra el dict TASK_COLORS local y los cuatro usos pasan a
          get_task_color() de LGA_NKS_Flow_Task_Config, que ya estaba importado
          y no se usaba. Era una copia de cuatro entradas del catalogo, y para
@@ -120,41 +126,52 @@ CONFIG_SECTION = "Settings"
 CONFIG_HANDLE_KEY = "handle"
 CONFIG_CREATE_FOLDERS_KEY = "create_folders"
 BURNIN_TRACK_NAME = "BurnIn"
-ALL_TASKS = ("comp", "roto", "cleanup")
-CLIENT_TASKS = ("comp", "cg")
-
-
-def _resolve_active_tasks():
-    """Define las tasks activas según contexto Studio/Client.
+def _active_tasks():
+    """Tasks activas según el contexto Studio/Client.
 
     En client existen solo comp y cg (la task CG agrupa las entregas 3D de los
     vendors); roto y cleanup no existen ahí. En studio no existe cg.
+
+    Se resuelve EN CADA LLAMADA y no una vez al importar el módulo: el switch
+    de contexto del Projects Panel cambia el modo en caliente, y una constante
+    de módulo se quedaba con el valor del arranque hasta recargar Nuke.
     """
     try:
-        if is_client_context():
-            return CLIENT_TASKS
+        try:
+            from LGA_NKS_TaskScope import active_track_tasks
+        except ImportError:
+            from LGA_NKS_Shared.LGA_NKS_TaskScope import active_track_tasks
+        return tuple(active_track_tasks())
     except Exception:
-        pass
-    return ALL_TASKS
-
-
-TASKS = ALL_TASKS
+        # Sin la cadena de imports de contexto, el comportamiento histórico.
+        return ("comp", "roto", "cleanup")
 
 
 def _tasks_human_list():
-    if not TASKS:
+    tasks = _active_tasks()
+    if not tasks:
         return ""
-    if len(TASKS) == 1:
-        return TASKS[0]
-    return ", ".join(TASKS[:-1]) + " y " + TASKS[-1]
+    if len(tasks) == 1:
+        return tasks[0]
+    return ", ".join(tasks[:-1]) + " y " + tasks[-1]
 
 
-TASK_FOLDER = {
-    "comp": "Comp",
-    "roto": "Roto",
-    "cleanup": "Cleanup",
-    "cg": "CG",
-}
+def _task_folder_map():
+    """Carpeta en disco por task ("cg" -> "CG"). No depende del contexto."""
+    try:
+        try:
+            from LGA_NKS_TaskScope import all_track_task_names, task_folder_name
+        except ImportError:
+            from LGA_NKS_Shared.LGA_NKS_TaskScope import (
+                all_track_task_names,
+                task_folder_name,
+            )
+        return {task: task_folder_name(task) for task in all_track_task_names()}
+    except Exception:
+        return {"comp": "Comp", "roto": "Roto", "cleanup": "Cleanup", "cg": "CG"}
+
+
+TASK_FOLDER = _task_folder_map()
 TASK_SUBFOLDERS = ("0_assets", "1_projects", "2_prerenders", "3_review", "4_publish")
 RANGE_SOURCE_EDITREF = "editref"
 RANGE_SOURCE_PLATE = "plate"
@@ -195,8 +212,6 @@ try:
 except Exception:
     def is_client_context():
         return False
-
-TASKS = _resolve_active_tasks()
 
 # Colores de header y de paths, ahora tokens del modulo de estilo. Van aca
 # porque necesitan el import de LGA_UI_Style de arriba. El color por TASK ya no
@@ -1123,13 +1138,14 @@ def _get_above_neighbor_for_task(seq, task):
 
     Panel order top-to-bottom: BurnIn > _comp_ > _roto_ > _cleanup_ > plates
     (client: BurnIn > _comp_ > _cg_ > plates).
-    For each task, candidates are the task tracks that come before it in TASKS order,
-    then BurnIn. Returns the first one found, or None if none exist.
+    For each task, candidates are the task tracks that come before it in the
+    active task order, then BurnIn. Returns the first one found, or None.
     """
-    if task not in TASKS:
+    tasks = _active_tasks()
+    if task not in tasks:
         return None
-    task_idx = TASKS.index(task)
-    candidates = [track_for_task(TASKS[i]) for i in range(task_idx - 1, -1, -1)]
+    task_idx = tasks.index(task)
+    candidates = [track_for_task(tasks[i]) for i in range(task_idx - 1, -1, -1)]
     candidates.append(BURNIN_TRACK_NAME)
     for name in candidates:
         t = _find_video_track(seq, name)
@@ -1624,7 +1640,7 @@ def _range_bounds(range_sources):
 def _task_overlap_state(seq, timeline_in, timeline_out):
     """Retorna overlaps por task usando criterio de solape en rango de shot."""
     state = {}
-    for task in TASKS:
+    for task in _active_tasks():
         track_name = track_for_task(task)
         track = _find_video_track(seq, track_name) if track_name else None
         overlaps = (
@@ -1642,7 +1658,9 @@ def _task_overlap_state(seq, timeline_in, timeline_out):
 
 def _context_has_available_tasks(context):
     task_state = context.get("task_state") or {}
-    return any(not task_state.get(task, {}).get("blocked") for task in TASKS)
+    return any(
+        not task_state.get(task, {}).get("blocked") for task in _active_tasks()
+    )
 
 
 def _build_context_from_sources(
@@ -2334,7 +2352,7 @@ class CreateV000Dialog(QtWidgets.QDialog):
     def _build_task_box(self):
         layout = QtWidgets.QHBoxLayout()
 
-        for task in TASKS:
+        for task in _active_tasks():
             btn = QtWidgets.QPushButton(task)
             btn.setCheckable(True)
             btn.setMinimumWidth(90)
@@ -2459,14 +2477,23 @@ class CreateV000Dialog(QtWidgets.QDialog):
         return None
 
     def _selected_tasks(self):
-        return [task for task in TASKS if self.task_buttons[task].isChecked()]
+        # Se recorren los botones YA construidos y no _active_tasks(): si el
+        # contexto cambiara con el dialogo abierto, resolver de nuevo pediria
+        # una task sin boton y reventaria con KeyError.
+        return [
+            task for task, btn in self.task_buttons.items() if btn.isChecked()
+        ]
 
     def has_selected_tasks(self):
         return bool(self._selected_tasks())
 
     def available_task_count(self):
         state = self.context.get("task_state") or {}
-        return sum(1 for task in TASKS if not state.get(task, {}).get("blocked"))
+        return sum(
+            1
+            for task in self.task_buttons
+            if not state.get(task, {}).get("blocked")
+        )
 
     def _selected_resolution_info(self):
         for btn, info in self.resolution_buttons.items():
