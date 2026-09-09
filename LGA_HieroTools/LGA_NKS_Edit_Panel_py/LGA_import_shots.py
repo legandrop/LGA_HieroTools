@@ -1,13 +1,20 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.43 | Lega
+  LGA_import_shots v1.44 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.44: La ultima version de CG sale de la DB de PipeSync, por fecha de
+         subida, y no del numero mas alto de la carpeta: cada disciplina
+         lleva su propio contador. La correspondencia entre la carpeta de
+         publish y la version de Flow se compara por (disciplina, numero) y
+         no por nombre completo, porque el version_code de Flow trae
+         sufijos que la carpeta no tiene. Sin DB no se marca ninguna como
+         ultima, que es preferible a marcar la equivocada.
   v1.43: Corrige la INSERCION de tracks, que era el bug de fondo, y con eso
          revierte el movimiento de `_cg_` que hizo la v1.42. El track nuevo
          queda siempre justo DEBAJO de video_tracks[insert_at], asi que
@@ -728,26 +735,46 @@ def _version_number(name):
     return int(m.group(1)) if m else -1
 
 
-def _stream_token(version_name):
-    """Nombre de una version sin sus sufijos _vNNN, en minusculas.
+def _ultima_version_cg_del_shot(shot_root):
+    """`version_code` de la ultima version subida de la task CG de este shot.
 
-    En CG identifica la DISCIPLINA (stream): `PROJA_1013_0800_layout_v003`
-    da `proja_1013_0800_layout`. Dos entregas de streams distintos comparten
-    numero de version y solo se distinguen por este token, asi que es lo que
-    permite calcular la ultima version de cada uno por separado.
+    Sale de la DB de PipeSync, que es donde esta la fecha de subida. El nombre
+    del shot es el de su carpeta, igual que en el resto del pipeline.
 
-    Se sacan TODOS los sufijos de version, no solo el ultimo: un prerender
-    puede venir con dos (`..._layout_v001_v002`), y sacando uno solo el
-    token se quedaba con el `_v001` adentro. Dos carpetas del mismo stream
-    caian entonces en grupos distintos y las dos quedaban marcadas como
-    ultima version.
+    Devuelve None si no se puede resolver: sin DB, sin task CG o sin versiones.
+    Con None ninguna version de CG queda marcada como ultima, que es mejor que
+    marcar la equivocada.
     """
-    token = str(version_name or "")
-    while True:
-        recortado = re.sub(r"[_\-]v\d+$", "", token, flags=re.IGNORECASE)
-        if recortado == token:
-            return token.lower()
-        token = recortado
+    try:
+        try:
+            from LGA_NKS_CG_Versions import ultima_version_cg_de_shot
+        except ImportError:
+            from LGA_NKS_Shared.LGA_NKS_CG_Versions import ultima_version_cg_de_shot
+
+        return ultima_version_cg_de_shot(Path(shot_root).name)
+    except Exception as exc:
+        debug_print("No se pudo resolver la ultima version de CG: %s" % exc)
+        return None
+
+
+def _mismo_codigo(nombre_carpeta, version_code):
+    """True si la carpeta de version corresponde a ese `version_code` de Flow.
+
+    Delega en `misma_entrega()` del modulo compartido, que compara por
+    (disciplina, numero) y no por nombre completo: el version_code de Flow
+    trae sufijos que la carpeta no tiene y una igualdad exacta no matchea
+    nunca.
+    """
+    try:
+        try:
+            from LGA_NKS_CG_Versions import misma_entrega
+        except ImportError:
+            from LGA_NKS_Shared.LGA_NKS_CG_Versions import misma_entrega
+
+        return misma_entrega(nombre_carpeta, version_code)
+    except Exception as exc:
+        debug_print("No se pudo comparar la version de CG: %s" % exc)
+        return False
 
 
 def _is_v000_item(item):
@@ -1099,21 +1126,17 @@ def _scan_publish_folders(shot_root):
         version_dirs.sort(key=lambda d: _version_number(d.name), reverse=True)
         max_ver = _version_number(version_dirs[0].name)
 
-        # Para CG el "latest" se calcula POR STREAM y no por carpeta: una sola
-        # carpeta CG junta las entregas de varias disciplinas (layout,
-        # lighting, anim, ...) y cada una lleva su propia numeracion, asi que
-        # un maximo global dejaria a todas menos una sin marcar como ultima.
-        # Las demas tasks conservan el maximo por carpeta: ahi todas las
-        # versiones comparten el mismo nombre base y agrupar no cambiaria
-        # nada, pero tampoco hace falta tocarlas.
-        max_por_stream = {}
-        latest_por_stream = task == CG_TASK_NAME
-        if latest_por_stream:
-            for d in version_dirs:
-                token = _stream_token(d.name)
-                num = _version_number(d.name)
-                if num > max_por_stream.get(token, -1):
-                    max_por_stream[token] = num
+        # En CG el numero NO decide cual es la ultima: la task junta entregas
+        # de varias disciplinas y cada una lleva su propio contador, asi que
+        # un `lighting_v004` puede ser mas nuevo que un `animation_v013`. La
+        # ultima es la ULTIMA SUBIDA, y esa fecha solo esta en la DB de
+        # PipeSync: el disco no la tiene (la mtime de la carpeta cambia por
+        # cualquier motivo). Si no se puede consultar la DB, ninguna version
+        # de CG queda marcada como ultima, que es preferible a marcar la
+        # equivocada.
+        # Las demas tasks conservan el maximo por numero, como siempre.
+        es_cg = task == CG_TASK_NAME
+        ultima_cg = _ultima_version_cg_del_shot(shot_root) if es_cg else None
 
         for vd in version_dirs:
             first_f, last_f, count, first_file = _scan_exr_sequence(str(vd))
@@ -1121,15 +1144,14 @@ def _scan_publish_folders(shot_root):
             if first_file:
                 w, h, fps, comp, bd, ch, par = _read_exr_metadata(first_file)
             ver_num = _version_number(vd.name)
-            token = _stream_token(vd.name) if latest_por_stream else None
             item = {
                 "task": task, "folder_name": folder_name, "track": track,
                 "publish_exists": True, "has_versions": True,
                 "version_dir": str(vd), "version_name": vd.name,
                 "version_num": ver_num,
                 "is_latest": (
-                    ver_num == max_por_stream.get(token, max_ver)
-                    if latest_por_stream
+                    _mismo_codigo(vd.name, ultima_cg)
+                    if es_cg
                     else ver_num == max_ver
                 ),
                 "first_file": first_file,
@@ -1141,10 +1163,6 @@ def _scan_publish_folders(shot_root):
                 "kind": "exr_seq",   # publish items son siempre EXR sequences
                 "name": vd.name,     # nombre de la versión (ej. TEST_013_020_comp_v02)
             }
-            # La clave del stream se agrega SOLO en CG: en studio los dicts de
-            # resultado quedan con las mismas claves que antes.
-            if latest_por_stream:
-                item["stream_token"] = token
             results.append(item)
 
     return results

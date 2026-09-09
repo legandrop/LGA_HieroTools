@@ -1,12 +1,42 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.63 | Lega
+  LGA_NKS_Flow_Pull v3.65 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.65: Los clips de CG se REEMPLAZAN en vez de subir de version. El
+         escaneo de versiones de Hiero busca por patron de nombre
+         (`_cg_v001`, `_cg_v002`...) y las entregas de CG se llaman por
+         disciplina (`_lighting_v011`), asi que nunca encontraba nada: el
+         v000 que crea Create v000 se quedaba para siempre. Ahora se
+         resuelve la ultima version por fecha en la DB, se busca su
+         carpeta en el 4_publish de la task y, SOLO si existe y tiene
+         frames, se reemplaza la media del clip. Si algo no se puede
+         resolver no se toca nada: dejar el v000 es mejor que dejar el
+         clip apuntando a la nada.
+         El DISPARADOR de CG tampoco es el numero, por lo mismo: es que la
+         ultima entrega sea una carpeta distinta de la que el clip apunta
+         hoy. Con el gate por numero, un animation_v005 subido despues de
+         un lighting_v011 no se aplicaba nunca. El destino se resuelve una
+         sola vez (resolver_destino_cg) y se reusa.
+         El primer frame se elige por PRIORIDAD DE EXTENSION y no por orden
+         alfabetico: una carpeta de entrega suele traer un thumb al lado de
+         la secuencia, y un `preview_thumb.jpg` le ganaba a un
+         `shot_0001.exr`. La comparacion de idempotencia va en minusculas,
+         porque en Windows el filesystem no distingue mayusculas y el clip
+         volvia a reemplazarse en cada Pull.
+  v3.64: La ultima version de la task CG se decide por FECHA de subida y no
+         por numero. CG es una sola task que junta entregas de varias
+         disciplinas y cada una lleva su propio contador, asi que un
+         `lighting_v004` puede ser mas nuevo que un `animation_v013`. El
+         criterio vive en LGA_NKS_CG_Versions, compartido con Import Shots.
+         Comp, roto y cleanup no cambian: siguen por numero. De paso, el
+         aviso de CG sin clip en el timeline pasa de una linea por
+         disciplina a una por SHOT: la task es una sola y su ultima version
+         tambien.
   v3.63: El fallback de imports dejaba TASK_EXR_TRACKS con solo comp, asi
          que si no se encontraba LGA_NKS_Shared el Pull descartaba en
          silencio los clips de roto, cleanup y cg. La lista va completa.
@@ -122,6 +152,28 @@ import configparser
 import builtins
 import nuke
 import logging  # Agregar esta importación
+# El criterio de "ultima version" de la task CG vive en un modulo compartido,
+# para que el Pull e Import Shots no tengan dos implementaciones distintas.
+try:
+    from LGA_NKS_CG_Versions import orden_por_subida as _cg_orden_por_subida
+
+    _CG_POR_FECHA = True
+except ImportError:
+    try:
+        from LGA_NKS_Shared.LGA_NKS_CG_Versions import (
+            orden_por_subida as _cg_orden_por_subida,
+        )
+
+        _CG_POR_FECHA = True
+    except ImportError:
+        # Sin el modulo compartido no hay fecha, y ordenar CG por numero SIN
+        # filtrar por disciplina seria peor que el codigo que este cambio
+        # reemplaza: volveria a comparar un lighting contra el numero de un
+        # animation, que es el falso mismatch que arreglo la v3.58. El flag
+        # hace que se conserve ese filtro por disciplina como respaldo.
+        _CG_POR_FECHA = False
+        _cg_orden_por_subida = None
+
 import queue
 from logging.handlers import QueueHandler, QueueListener
 from pathlib import Path
@@ -839,41 +891,56 @@ class ShotGridManager:
         return None
 
     def find_highest_version_for_task(self, shot, task, task_name, stream_token=None):
-        """Encuentra la version mas alta de una task especifica del shot.
+        """Encuentra la ultima version de una task especifica del shot.
 
         Solo recorre las versiones de esa task: no mezcla comp/roto/cleanup.
         El string devuelto usa el task_name real (no hardcoded a comp).
 
-        stream_token (task CG): dentro de CG conviven streams de naming por
-        disciplina (layout, lighting, ...). Si se pasa el token, la comparacion
-        se acota a las versiones cuyo version_code pertenece a ese stream, para
-        no comparar un layout contra el numero de un lighting. Las filas legacy
-        sin version_code no se pueden clasificar; si el filtro deja la lista
-        vacia se cae al comportamiento historico (todas las versiones).
+        El criterio depende de la task:
+
+        - comp / roto / cleanup: la de NUMERO mas alto, como siempre. Cada una
+          es su propia task en Flow, con su propio contador.
+        - CG: la ULTIMA SUBIDA, por fecha. Una sola task de Flow junta las
+          entregas de varias disciplinas y cada disciplina lleva su propio
+          contador, asi que el numero no ordena: un `lighting_v004` puede ser
+          mas nuevo que un `animation_v013`. El nombre de la version tampoco
+          decide nada; cualquier nombre dentro de la task CG es valido.
+
+        `stream_token` quedo sin uso al pasar CG a fecha, y se conserva solo
+        para no romper a los callers.
         """
         task_versions = task.get("versions", []) if task else []
         if not task_versions:
             return None
 
-        if stream_token:
-            filtered = [
-                v for v in task_versions
-                if _stream_token_from_code(v.get("version_code")) == stream_token.lower()
-            ]
-            if filtered:
-                task_versions = filtered
-            else:
-                debug_print(
-                    f"Sin versiones con version_code del stream '{stream_token}'; "
-                    "se usa el listado completo de la task (fallback legacy)."
-                )
-
-        highest_version = max(
-            task_versions,
-            key=lambda v: (
-                v["version_number"] if v["version_number"] is not None else 0
-            ),
-        )
+        es_cg = (task_name or "").strip().lower() == CG_TASK_NAME
+        if es_cg and _CG_POR_FECHA:
+            highest_version = max(task_versions, key=_cg_orden_por_subida)
+        elif es_cg:
+            # Respaldo sin el modulo compartido: se conserva el filtro por
+            # disciplina de la v3.58 para no comparar un lighting contra el
+            # numero de un animation.
+            if stream_token:
+                filtradas = [
+                    v for v in task_versions
+                    if _stream_token_from_code(v.get("version_code"))
+                    == stream_token.lower()
+                ]
+                if filtradas:
+                    task_versions = filtradas
+            highest_version = max(
+                task_versions,
+                key=lambda v: (
+                    v["version_number"] if v["version_number"] is not None else 0
+                ),
+            )
+        else:
+            highest_version = max(
+                task_versions,
+                key=lambda v: (
+                    v["version_number"] if v["version_number"] is not None else 0
+                ),
+            )
         display_code = highest_version.get("version_code") or (
             f"{shot['shot_name']}_{task_name}_v{highest_version['version_number']:03d}"
         )
@@ -1120,18 +1187,19 @@ class GUI_Table(QtWidgets.QDialog):
             missing_cg = getattr(self.hiero_ops, "missing_cg_streams", [])
             if missing_cg:
                 lines = "\n".join(
-                    f"  •  {shot_code}  —  {stream}   ({code})"
-                    for shot_code, stream, code in missing_cg
+                    f"  •  {shot_code}   (ultima: {code})"
+                    for shot_code, code in missing_cg
                 )
                 show_warning(
                     self,
-                    "CG tasks sin clip en el timeline",
+                    "Shots con CG sin clip en el timeline",
                     (
-                        "La DB de PipeSync tiene versiones de la task CG cuyo "
-                        f"stream no tiene ningun clip en un track {TRACK_cg_EXR} del timeline:\n\n"
+                        "Estos shots tienen la task CG con versiones en la DB de "
+                        "PipeSync, pero no tienen ningun clip en un track "
+                        f"{TRACK_cg_EXR} del timeline:\n\n"
                         f"{lines}\n\n"
-                        f"Importa esas versiones a un track {TRACK_cg_EXR} (puede haber mas "
-                        f"de un track {TRACK_cg_EXR}, uno por disciplina) para poder verlas y pullearlas."
+                        f"Importa la ultima version a un track {TRACK_cg_EXR} para "
+                        "poder verla y pullearla."
                     ),
                 )
 
@@ -1578,8 +1646,8 @@ class HieroOperations:
         self.shots_not_found = 0
         self.current_user_review_status_codes = _current_user_review_status_codes()
         self.task_mismatches = []
-        # Streams (disciplinas) de la task CG presentes en la DB pero sin clip
-        # en el timeline: [(shot_code, stream, version_code_mas_alto), ...]
+        # Shots con task CG en la DB y sin ningun clip en un track de CG en el
+        # timeline: [(shot_code, version_code_de_la_ultima_subida), ...]
         self.missing_cg_streams = []
 
     def parse_exr_name(self, file_name):
@@ -2125,10 +2193,28 @@ class HieroOperations:
                                 str(task_status_code).lower()
                                 in self.current_user_review_status_codes
                             )
+                            # En CG el disparador NO puede ser el numero: cada
+                            # disciplina lleva su propio contador, asi que una
+                            # entrega nueva puede tener un numero MENOR que la
+                            # que el clip ya muestra (un animation_v005 subido
+                            # despues de un lighting_v011). Lo que decide es si
+                            # la ultima entrega es una carpeta distinta de la
+                            # que el clip apunta hoy. Se resuelve una sola vez
+                            # y se reusa mas abajo para no pagar dos veces la
+                            # consulta a la DB y el listado del publish.
+                            destino_cg, frame_cg = (
+                                self.resolver_destino_cg(file_path)
+                                if task_name == CG_TASK_NAME
+                                else (None, None)
+                            )
+
                             row_reason = []
                             if change:
                                 row_reason.append("status_change")
-                            if sg_version_number > version_number:
+                            if task_name == CG_TASK_NAME:
+                                if destino_cg:
+                                    row_reason.append("cg_replace")
+                            elif sg_version_number > version_number:
                                 row_reason.append("version_mismatch")
                             if is_current_user_review:
                                 row_reason.append("current_user_review")
@@ -2164,7 +2250,23 @@ class HieroOperations:
                                 # Recordar si el clip estaba offline antes del cambio de versión
                                 was_offline_before_version_change = not clip.source().mediaSource().isMediaPresent()
 
-                                if sg_version_number > version_number:
+                                # CG va por REEMPLAZO y no por escaneo de versiones:
+                                # el escaneo busca por patron de nombre y las
+                                # entregas de CG se llaman por disciplina, asi que
+                                # nunca encuentra nada. Ademas se intenta siempre,
+                                # sin comparar numeros: en CG el numero no ordena
+                                # (cada disciplina lleva su contador) y el v000 que
+                                # crea Create v000 no es comparable con un v011 de
+                                # lighting.
+                                if task_name == CG_TASK_NAME:
+                                    nueva_ruta = self.replace_cg_clip(clip, frame_cg)
+                                    highest_version = None
+                                    new_version_number = (
+                                        extract_version_number(os.path.basename(nueva_ruta))
+                                        if nueva_ruta
+                                        else version_number
+                                    )
+                                elif sg_version_number > version_number:
                                     # comente esta linea para que no agregue tags amarillos
                                     # self.add_custom_tag_to_clip(clip, "Updated Version", sg_description, "icons:TagYellow.png", assignee)
                                     highest_version = self.change_to_highest_version(
@@ -2234,26 +2336,33 @@ class HieroOperations:
                 cg_task = sg_manager.find_task(shot, CG_TASK_NAME)
                 if not cg_task:
                     continue
-                streams_in_db = {}
-                for v in cg_task.get("versions", []):
-                    stream = _stream_token_from_code(v.get("version_code"))
-                    if not stream:
-                        continue
-                    prev = streams_in_db.get(stream)
-                    if prev is None or (v.get("version_number") or 0) > (prev.get("version_number") or 0):
-                        streams_in_db[stream] = v
-                timeline_streams = cg_streams_in_timeline.get(shot_code, set())
-                for stream, v in sorted(streams_in_db.items()):
-                    if stream not in timeline_streams:
-                        self.missing_cg_streams.append(
-                            (shot_code, stream, v.get("version_code") or "")
-                        )
+                versiones = cg_task.get("versions", []) or []
+                if not versiones:
+                    continue
+                # Un aviso por SHOT, no uno por nombre de version: la task CG
+                # es una sola y su ultima version es la ultima subida. Lo que
+                # importa es si el shot tiene o no un clip de CG en el
+                # timeline, no cuantas disciplinas distintas hay en la DB.
+                if cg_streams_in_timeline.get(shot_code):
+                    continue
+                # Sin el modulo compartido no hay fecha: el aviso cae al numero
+                # mas alto, que para nombrar una version en un cartel alcanza.
+                if _CG_POR_FECHA:
+                    ultima = max(versiones, key=_cg_orden_por_subida)
+                else:
+                    ultima = max(
+                        versiones, key=lambda v: v.get("version_number") or 0
+                    )
+                self.missing_cg_streams.append(
+                    (shot_code, ultima.get("version_code") or "")
+                )
             if self.missing_cg_streams:
                 debug_print(
-                    f"Streams CG sin clip en el timeline: {self.missing_cg_streams}"
+                    f"Shots con task CG y sin clip en un track {TRACK_cg_EXR}: "
+                    f"{self.missing_cg_streams}"
                 )
         except Exception as e:
-            debug_print(f"Error detectando streams CG faltantes: {e}")
+            debug_print(f"Error detectando shots CG sin clip: {e}")
 
         return changes_made
 
@@ -2271,6 +2380,130 @@ class HieroOperations:
             return highest_version
         except Exception as e:
             debug_print(f"Error al obtener la version mas alta: {e}")
+            return None
+
+    # Extensiones que cuentan como frame de una entrega. La carpeta de publish
+    # suele traer ademas thumbs, notas o un .db del explorador, y `sorted()[0]`
+    # se quedaba con cualquiera de esos.
+    _EXTENSIONES_DE_FRAME = (".exr", ".dpx", ".tif", ".tiff", ".png", ".jpg", ".jpeg")
+
+    def resolver_destino_cg(self, file_path):
+        """Adonde deberia apuntar un clip de CG, si hay que moverlo.
+
+        Devuelve (carpeta_destino, primer_frame) o (None, None). Es de SOLO
+        LECTURA: no toca el clip. Se usa dos veces por clip -una para decidir
+        si hay algo que hacer y otra para hacerlo-, asi que el resultado se
+        pasa de una a la otra en vez de resolverlo dos veces.
+
+        Devuelve (None, None) tambien cuando el clip YA apunta a la ultima
+        entrega: en ese caso no hay nada que reemplazar.
+        """
+        if not file_path:
+            return None, None
+
+        try:
+            from LGA_NKS_CG_Versions import (
+                carpeta_de_version_cg,
+                ultima_version_cg_de_shot,
+            )
+        except ImportError:
+            try:
+                from LGA_NKS_Shared.LGA_NKS_CG_Versions import (
+                    carpeta_de_version_cg,
+                    ultima_version_cg_de_shot,
+                )
+            except ImportError as exc:
+                debug_print(f"CG: sin LGA_NKS_CG_Versions no se reemplaza: {exc}")
+                return None, None
+
+        try:
+            media = os.path.normpath(str(file_path))
+            version_dir = os.path.dirname(media)
+            publish_dir = os.path.dirname(version_dir)
+            # Se exige la estructura conocida: .../<task>/4_publish/<version>/
+            # Si el clip de CG apunta a otro lado, no se adivina.
+            if os.path.basename(publish_dir).lower() != "4_publish":
+                debug_print(
+                    f"CG: el clip no cuelga de un 4_publish ({publish_dir}), "
+                    "no se reemplaza"
+                )
+                return None, None
+            task_dir = os.path.dirname(publish_dir)
+            shot_root = os.path.dirname(task_dir)
+            shot_name = os.path.basename(shot_root)
+
+            # El shot se busca por nombre y sin acotar por proyecto: el nombre
+            # ya trae el prefijo del proyecto y en la DB no hay homonimos
+            # (verificado sobre los 162 shots del contexto client).
+            version_code = ultima_version_cg_de_shot(shot_name)
+            if not version_code:
+                debug_print(
+                    f"CG: la DB no tiene versiones de CG para '{shot_name}'"
+                )
+                return None, None
+
+            destino = carpeta_de_version_cg(publish_dir, version_code)
+            if not destino:
+                debug_print(
+                    f"CG: la ultima version de la DB ('{version_code}') no tiene "
+                    f"carpeta en {publish_dir}"
+                )
+                return None, None
+
+            # Comparacion en minusculas: en Windows el filesystem no distingue
+            # mayusculas, y el path guardado en el clip puede venir con otro
+            # caso que el que devuelve os.listdir. Sin esto se reemplazaba
+            # contra la misma carpeta en cada Pull.
+            if os.path.normpath(destino).lower() == os.path.normpath(version_dir).lower():
+                debug_print(f"CG: el clip ya apunta a la ultima version ({destino})")
+                return None, None
+
+            archivos = sorted(
+                f
+                for f in os.listdir(destino)
+                if os.path.isfile(os.path.join(destino, f))
+            )
+            # Se recorren las extensiones POR PRIORIDAD y no alfabeticamente:
+            # una carpeta de entrega suele traer un thumb o un preview al lado
+            # de la secuencia, y un `preview_thumb.jpg` le gana por nombre a un
+            # `shot_0001.exr`. La secuencia manda sobre el material auxiliar.
+            frames = []
+            for extension in self._EXTENSIONES_DE_FRAME:
+                frames = [f for f in archivos if f.lower().endswith(extension)]
+                if frames:
+                    break
+            if not frames:
+                debug_print(f"CG: la carpeta {destino} no tiene frames")
+                return None, None
+
+            return destino, os.path.join(destino, frames[0])
+        except Exception as exc:
+            debug_print(f"CG: error resolviendo el destino: {exc}")
+            return None, None
+
+    def replace_cg_clip(self, clip, primer_frame):
+        """Reemplaza la media de un clip de CG por la entrega ya resuelta.
+
+        En CG el mecanismo de versiones de Hiero NO sirve: escanea por patron
+        de nombre (`_cg_v001`, `_cg_v002`, ...) y las entregas se llaman por
+        disciplina (`_lighting_v011`, `_animation_v013`). Nunca va a existir
+        un archivo que se llame `_cg_`, asi que el v000 que crea Create v000
+        no puede "subir de version": hay que REEMPLAZARLO.
+
+        `primer_frame` lo resuelve resolver_destino_cg(). Si viene vacio no se
+        toca nada: dejar el clip como esta es mejor que dejarlo apuntando a la
+        nada.
+
+        Devuelve la ruta nueva si reemplazo, o None.
+        """
+        if not primer_frame:
+            return None
+        try:
+            debug_print(f"CG: reemplazando la media por {primer_frame}")
+            clip.replaceClips(primer_frame)
+            return primer_frame
+        except Exception as exc:
+            debug_print(f"CG: error reemplazando el clip: {exc}")
             return None
 
     def change_to_highest_version(self, clip):
