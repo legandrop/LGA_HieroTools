@@ -1,13 +1,25 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.42 | Lega
+  LGA_import_shots v1.43 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.43: Corrige la INSERCION de tracks, que era el bug de fondo, y con eso
+         revierte el movimiento de `_cg_` que hizo la v1.42. El track nuevo
+         queda siempre justo DEBAJO de video_tracks[insert_at], asi que
+         insert_at tiene que ser el vecino de ARRIBA (upper_idx); el codigo
+         usaba lower_idx, o sea el de abajo, y la rama de fallback usaba la
+         convencion opuesta. Todo track creado desde el combo caia mal, no
+         solo el de CG. La lista _IMPORT_TRACK_ORDER va de abajo hacia
+         arriba y `_cg_` vuelve a su lugar original, antes de `_comp_`.
+         OJO: la nota de la v1.42 describe la mecanica al reves; se deja
+         como esta -las entradas viejas no se reescriben- y la buena es
+         esta. Verificado con 5040 permutaciones de creacion desde una
+         secuencia vacia, chequeando el orden despues de cada insercion.
   v1.42: Dos correcciones sobre el soporte de CG. `_cg_` estaba ANTES de
          `_comp_` en _IMPORT_TRACK_ORDER, y en esa lista antes es MAS
          ARRIBA -lo demuestra la mecanica de _create_plate_track, donde
@@ -631,20 +643,19 @@ _DWAA_COMPRESSION_LEVEL = 45
 # hardcodearlo: CG existe solo en contexto client y ahi es una task mas.
 _CG_EXR_TRACK = exr_track_for_task(CG_TASK_NAME)
 
-# Orden canónico de tracks de video, de ARRIBA hacia abajo: el primero de la
-# lista es el que va mas arriba en el panel. Lo demuestra la mecanica de
-# _create_plate_track(): `insert_at` es siempre el indice del vecino que
-# queda ARRIBA del track nuevo, y ese vecino se elige como el de mayor rango
-# todavia MENOR que el del track nuevo. O sea, menor rango = mas arriba.
+# Orden canónico de tracks de video, de ABAJO hacia arriba en el stack de
+# Hiero: el primero de la lista es el que va mas ABAJO en el panel, y a mayor
+# indice mas arriba. Lo fija `bt_order_idx()` de _create_plate_track(), que le
+# da a BurnIn el rango mas alto justamente para que quede siempre encima.
 # Se usa para ordenar el dropdown y para determinar la posición de inserción
 # cuando se crea un track nuevo desde el combo.
-# _cg_ (client) va DESPUES de _comp_ para quedar justo debajo suyo: en client
-# el stack es BurnIn > _comp_ > _cg_ > plates. En studio nunca aparece un
-# track llamado "_cg_", asi que sumarlo aca no cambia nada de lo existente.
+# _cg_ (client) va ANTES de _comp_ para quedar justo debajo suyo: en client el
+# stack es BurnIn > _comp_ > _cg_ > plates. En studio nunca aparece un track
+# llamado "_cg_", asi que sumarlo aca no cambia nada de lo existente.
 _IMPORT_TRACK_ORDER = [
     "aPlate", "bPlate", "cPlate", "dPlate", "ePlate",
     "fgPlate", "bgPlate", "EditRef", "EditRefClean",
-    "_comp_", _CG_EXR_TRACK, "_roto_", "_cleanup_", "_dmp_",
+    _CG_EXR_TRACK, "_comp_", "_roto_", "_cleanup_", "_dmp_",
 ]
 
 PLATE_KEYWORDS = [
@@ -3013,22 +3024,34 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
         SISTEMA DE COORDENADAS
         ─────────────────────
         seq.videoTracks() devuelve bt-order: índice 0 = fondo del panel,
-        índice mayor = tope. aPlate tiene el mayor índice (está arriba).
-        _IMPORT_TRACK_ORDER = ["aPlate", "bPlate", ..., "_dmp_"] está en
-        orden visual TOP→BOTTOM (índice 0 = arriba en el panel).
+        índice mayor = tope.
+        _IMPORT_TRACK_ORDER está en el MISMO sentido: índice 0 = abajo,
+        rango mayor = más arriba. Por eso bt_order_idx() le da a BurnIn el
+        rango más alto, para que quede siempre encima de todo.
 
-        BÚSQUEDA DE VECINOS (en términos de _IMPORT_TRACK_ORDER):
-        · lower_idx: track con mayor rank en _IMPORT_TRACK_ORDER aún < new_pos.
-          Este track tiene un MAYOR bt-trackIndex que el nuevo → está ENCIMA
-          del nuevo track en el panel. Es el track "debajo del cual" se inserta
-          el nuevo (el nuevo ocupa su índice y él sube uno).
-        · upper_idx: track con menor rank en _IMPORT_TRACK_ORDER aún > new_pos.
-          Tiene MENOR bt-trackIndex → está DEBAJO del nuevo en el panel.
+        INSERCIÓN
+        ─────────
+        `new_bt_list` se arma metiendo el track nuevo EN la posición
+        `insert_at`, con lo cual el que estaba ahí sube uno. O sea: el track
+        nuevo queda SIEMPRE justo DEBAJO de video_tracks[insert_at].
 
-        INSERCIÓN (patrón LGA_NKS_CreateNewTrack / InsertTest):
-          insert_at = lower_idx   (trackIndex del vecino de arriba)
-          new_list = video_tracks[:insert_at] + [new_track] + video_tracks[insert_at:]
-          for t in new_list: seq.addTrack(t)
+        De ahí que insert_at tenga que ser el índice del vecino de ARRIBA,
+        que es `upper_idx`: el de menor rango entre los que rankean por
+        encima del nuevo. Si no hay ninguno, el track nuevo es el más alto
+        de los conocidos y va al tope (insert_at = len(video_tracks)).
+
+        `lower_idx` (el vecino de abajo) queda solo para el log: usarlo como
+        insert_at metía el track nuevo DEBAJO de su vecino inferior, que es
+        justo al revés. Ese era el bug: un track creado desde el combo caía
+        en la posición equivocada, y con dos convenciones opuestas entre las
+        dos ramas el resultado dependía de qué tracks ya hubiera.
+
+        ALCANCE: ubica el track nuevo respecto de sus vecinos, y eso deja el
+        stack ordenado SIEMPRE QUE ya lo estuviera antes. No reordena un
+        stack que venga desordenado de otro lado —el artista arrastrando
+        filas en el panel, o un track creado con el menú nativo de Hiero, que
+        siempre cae al tope—. Arreglar eso seria un reordenamiento global, y
+        es otra funcion.
 
         Retorna el nuevo hiero.core.VideoTrack, o None en caso de error.
         """
@@ -3067,15 +3090,12 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
 
             # Punto de inserción en video_tracks (el resto del stack no cambia).
             # videoTracks() es bt-order: índice 0 = fondo, índice mayor = tope.
-            # aPlate tiene el MAYOR índice (está arriba en el panel).
-            # Para insertar dPlate DEBAJO de bPlate se usa insert_at = trackIndex(bPlate)
-            # = lower_idx: el nuevo track ocupa el índice de bPlate y bPlate sube uno.
-            if lower_idx is not None:
-                insert_at = lower_idx       # el vecino de arriba cede su índice y sube
-            elif upper_idx is not None:
-                insert_at = upper_idx       # insertar justo antes del vecino inferior
+            # El track nuevo queda siempre JUSTO DEBAJO de video_tracks[insert_at],
+            # asi que insert_at es el indice del vecino de ARRIBA.
+            if upper_idx is not None:
+                insert_at = upper_idx       # cede su índice y sube uno
             else:
-                insert_at = 0               # sin vecinos conocidos → fondo
+                insert_at = len(video_tracks)  # nada por encima → al tope
 
             new_bt_list = (video_tracks[:insert_at]
                            + [new_track]
@@ -3089,6 +3109,8 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
 
             below = video_tracks[lower_idx].name() if lower_idx is not None else "—"
             above = video_tracks[upper_idx].name() if upper_idx is not None else "—"
+            # `below`/`above` son literales: lower_idx rankea por debajo del
+            # nuevo y upper_idx por encima.
             debug_print("_create_plate_track: '%s' creado entre '%s' (abajo) y "
                         "'%s' (arriba)  insert_at=%d"
                         % (track_name, below, above, insert_at))
