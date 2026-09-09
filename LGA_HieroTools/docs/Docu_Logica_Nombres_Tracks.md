@@ -57,6 +57,16 @@ El track `Rev` contiene archivos `.mov` o `.mxf` indistintamente según el proye
 
 La task **CG existe solo en contexto client** (en studio no existe; ver
 [Doc_HieroTools_Studio_Client_Context.md](Doc_HieroTools_Studio_Client_Context.md)).
+Este documento define el NOMBRE de los tracks (`_cg_`, `_cgRev_`, las
+constantes de `GetClip.py`); **qué tasks existen en cada contexto** (el
+scope) es una pregunta distinta que resuelve
+[LGA_NKS_Shared/LGA_NKS_TaskScope.py](../LGA_NKS_Shared/LGA_NKS_TaskScope.py)
+(`active_track_tasks(mode)`, `is_track_task_active()`), que no importa
+`hiero` y por eso lo pueden usar también tests y módulos compartidos que
+`GetClip.py` no puede cargar fuera de NKS. Las dos tablas tienen que
+coincidir; lo verifica `LGA_NKS_Shared/tests/test_task_scope.py` leyendo
+`GetClip.py` como texto.
+
 El nombre de la task (`CG_TASK_NAME`) se deriva del propio token del track:
 `TRACK_cg_EXR.strip("_").lower()`, así que renombrar la variable del track
 renombra la familia entera.
@@ -141,6 +151,11 @@ Los pasos para sumar una task nueva son:
 - **Módulo central:** [LGA_NKS_Shared/LGA_NKS_GetClip.py](../LGA_NKS_Shared/LGA_NKS_GetClip.py)
   - Variables: `TRACK_comp_EXR`, `TRACK_comp_REV`, `TRACK_roto_EXR`, `TRACK_roto_REV`, `TRACK_cleanup_EXR`, `TRACK_cleanup_REV`, `TRACK_cg_EXR`, `TRACK_cg_REV`, `TASK_EXR_TRACKS`, `TASK_REV_TRACKS`, `CG_TASK_NAME`, `registered_task_names()`
   - Funciones: `get_clip_to_process()`, `get_clips_to_process()`, `find_clip_at_playhead_in_track()` (acepta múltiples tracks con el mismo nombre), `get_selected_clips_in_track()` (ídem)
+
+- **Scope de tasks por contexto:** [LGA_NKS_Shared/LGA_NKS_TaskScope.py](../LGA_NKS_Shared/LGA_NKS_TaskScope.py) (no importa `hiero`)
+  - Datos: `TRACK_TASKS`, `CG_TASK_NAME`
+  - Funciones: `resolve_mode()`, `all_track_task_names()`, `active_track_tasks()`, `is_track_task_active()`, `task_folder_name()`, `exr_track_for_task()`, `rev_track_for_task()`, `task_for_track()`
+  - Consistencia con `GetClip.py` verificada por [LGA_NKS_Shared/tests/test_task_scope.py](../LGA_NKS_Shared/tests/test_task_scope.py)
 
 - **Estado multi-task por script:** [Docu_MultiTask.md](Docu_MultiTask.md)
 

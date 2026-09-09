@@ -1,12 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.62 | Lega
+  LGA_NKS_Flow_Pull v3.63 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.63: El fallback de imports dejaba TASK_EXR_TRACKS con solo comp, asi
+         que si no se encontraba LGA_NKS_Shared el Pull descartaba en
+         silencio los clips de roto, cleanup y cg. La lista va completa.
   v3.62: Al terminar el Pull, y solo si cambio algo, corre Fix Colorspaces si
          el proyecto esta color managed (`fix_colorspaces_si_proyecto_managed`).
          El Pull cambia clips a su version mas alta, y en Hiero cada Version es
@@ -152,10 +155,14 @@ if utils_path.exists():
         CG_TASK_NAME,
     )
 else:
-    # Fallback si no se encuentra el módulo
+    # Fallback si no se encuentra el módulo. Este camino se toma cuando NO
+    # existe la carpeta LGA_NKS_Shared, asi que tampoco se puede leer la
+    # lista de LGA_NKS_TaskScope y hay que repetirla a mano.
+    # TASK_EXR_TRACKS va COMPLETA: dejarla con solo comp descartaba en
+    # silencio los clips de roto, cleanup y cg, que es peor que no arrancar.
     TRACK_comp_EXR = "_comp_"
     TRACK_cg_EXR = "_cg_"
-    TASK_EXR_TRACKS = [TRACK_comp_EXR]
+    TASK_EXR_TRACKS = [TRACK_comp_EXR, "_roto_", "_cleanup_", TRACK_cg_EXR]
     CG_TASK_NAME = "cg"
 
 tools_root = Path(__file__).parent.parent

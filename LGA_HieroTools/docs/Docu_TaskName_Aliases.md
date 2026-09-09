@@ -65,11 +65,21 @@ que sumara el pipeline de un cliente obligaría a tocar código.
 ### La solución
 
 `_apply_cg_family()` no mantiene una lista de streams: en contexto client,
-**toda task que no esté en `registered_task_names()`** (los nombres
-derivados de `TASK_EXR_TRACKS` en `LGA_NKS_GetClip.py`: `comp`, `roto`,
+**toda task que no esté en `all_track_task_names()`** (los nombres
+registrados en `LGA_NKS_Shared/LGA_NKS_TaskScope.py`: `comp`, `roto`,
 `cleanup`, `cg`) se normaliza a `CG_TASK_NAME` (`"cg"`) por exclusión. En
 studio esta regla no se activa nunca — ahí la resolución de task se gobierna
 por la presencia del track en el timeline, y studio no tiene track `_cg_`.
+
+Hasta la v1.16 de `LGA_NKS_Flow_NamingUtils` esta lista salía de
+`registered_task_names()` de `LGA_NKS_GetClip.py`. Se cambió a
+`all_track_task_names()` de `LGA_NKS_TaskScope` porque `GetClip.py` importa
+`hiero`: fuera de NKS ese import fallaba, el `except Exception` de
+`_apply_cg_family()` se lo tragaba en silencio, y la regla de familia CG
+terminaba sin aplicarse nunca fuera de NKS ni poder testearse. `TaskScope` no
+importa `hiero`, así que la regla corre igual dentro y fuera de NKS; la
+consistencia entre las dos tablas la verifica
+`LGA_NKS_Shared/tests/test_task_scope.py` leyendo `GetClip.py` como texto.
 
 ```python
 normalize_task_name("layout")    # en client → "cg"; en studio → "layout"
@@ -170,7 +180,7 @@ Leyenda:
 
 | Script | Estado |
 |--------|--------|
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShowInFlow.py` | 🔵 Analizado · no necesitaba cambio — busca task "Comp" hardcodeado, no desde filename |
+| `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShowInFlow.py` | 🔵 Analizado · no necesitaba cambio — resuelve la task por contexto con `_task_preferida()`, no desde el filename |
 | `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_Thumbs.py` | 🔵 Analizado · no necesitaba cambio — no interactúa con task names |
 | `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py` | 🔵 Analizado · no necesitaba cambio — no filtra clips por task name ni busca en DB por task |
 | `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ModifyShot.py` | 🔵 Analizado · no necesitaba cambio — ídem CreateShot |

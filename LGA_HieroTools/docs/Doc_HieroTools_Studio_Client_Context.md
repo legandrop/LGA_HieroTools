@@ -30,6 +30,13 @@ HieroTools, qué scripts quedaron adaptados y cuáles requieren revisión adicio
 - Scope de tasks por contexto:
   - `studio`: tasks `comp`, `roto`, `cleanup` (no existe `cg`).
   - `client`: tasks `comp` y `cg` (no se consideran `roto`/`cleanup`).
+  - La fuente de este scope es
+    [LGA_NKS_Shared/LGA_NKS_TaskScope.py](../LGA_NKS_Shared/LGA_NKS_TaskScope.py)
+    (`TRACK_TASKS`, `active_track_tasks(mode)`, `is_track_task_active()`):
+    NO importa hiero, así que lo consultan tanto scripts que corren dentro de
+    NKS como tests y módulos compartidos que no pueden cargar `hiero`. Todo
+    catálogo o UI que decida qué tasks ofrecer o revisar por contexto tiene
+    que resolverlo desde ahí y no mantener su propia lista en paralelo.
   - La task `cg` agrupa todas las disciplinas/streams del shot (layout,
     lighting, anim, fx, ...); el filename de cada versión lleva el stream,
     nunca el token "cg". Ver
@@ -38,7 +45,7 @@ HieroTools, qué scripts quedaron adaptados y cuáles requieren revisión adicio
     concepto de stream.
   - `normalize_task_name()` (en `LGA_NKS_Flow_NamingUtils.py`) aplica en
     client la **familia CG por exclusión**: toda task que no esté en
-    `registered_task_names()` (los tracks EXR registrados: `comp`, `roto`,
+    `all_track_task_names()` de `LGA_NKS_TaskScope` (`comp`, `roto`,
     `cleanup`, `cg`) normaliza a `cg`. No hay una lista de streams que
     mantener. En studio esta regla no se activa. Detalle en
     [Docu_TaskName_Aliases.md](Docu_TaskName_Aliases.md).
@@ -92,19 +99,73 @@ problema distinto y con arreglo.
 ## Impacto en herramientas de Edit
 
 - `Create v000` ([LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py](../LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py)):
-  - En `client`, `_resolve_active_tasks()` fija `CLIENT_TASKS = ("comp", "cg")`:
-    la UI muestra los botones `comp` y `cg`.
-  - `TASK_FOLDER["cg"] = "CG"` y `TASK_COLORS["cg"] = "#27c8c3"` (el mismo
-    color que cleanup en studio; en client no coexisten, así que no hay
-    ambigüedad visual).
+  - Las tasks activas salen de `_active_tasks()`, que resuelve
+    `LGA_NKS_TaskScope.active_track_tasks()` **en cada llamada** (no hay
+    constante `CLIENT_TASKS`/`ALL_TASKS` ni función `_resolve_active_tasks()`:
+    ese diseño se reemplazó porque una constante de módulo quedaba fijada al
+    valor del arranque y no reflejaba un switch de contexto en caliente). En
+    `client` esto resuelve a `("comp", "cg")`, y la UI muestra los botones
+    `comp` y `cg`.
+  - `TASK_FOLDER` sale de `_task_folder_map()` (deriva de
+    `LGA_NKS_TaskScope.task_folder_name()`) y resuelve `"cg" -> "CG"`. No
+    existe un dict `TASK_COLORS` local: el color de cada task sale de
+    `get_task_color()` del catálogo compartido
+    ([LGA_NKS_Flow_Task_Config.py](../LGA_NKS_Shared/LGA_NKS_Flow_Task_Config.py)),
+    y el de `cg` es `#CA7A3B` (naranja de la familia 3D), no cyan.
   - Orden de tracks en el timeline de client: `BurnIn` > `_comp_` > `_cg_` >
     plates.
   - El chequeo de solape/versions en timeline para elegibilidad de shot
     considera ambas tasks de client.
-- `Import Shot`:
-  - El import mantiene su comportamiento general.
+- `Import Shot` ([LGA_NKS_Edit_Panel_py/LGA_import_shots.py](../LGA_NKS_Edit_Panel_py/LGA_import_shots.py)
+  y [LGA_import_shots_preview.py](../LGA_NKS_Edit_Panel_py/LGA_import_shots_preview.py)):
+  - En `client`, CG es una task de primera clase del import: tiene su color
+    (`_CLR_CG`, vía `get_task_color(CG_TASK_NAME)`), su lugar en el orden de
+    tracks (`_cg_` justo debajo de `_comp_`) y su carpeta de publish
+    (`_task_folders_for_context()` suma `CG` a `TASK_FOLDERS` solo si
+    `is_track_task_active(CG_TASK_NAME)`; en studio esa función devuelve
+    `TASK_FOLDERS` sin cambios). La detección es siempre por carpeta de
+    publish y por nombre de track, nunca por filename.
+  - Dentro de la carpeta `CG`, la versión "más alta" se calcula **por
+    stream** (`_stream_token()`), porque una sola carpeta CG agrupa
+    disciplinas (layout, lighting, anim, ...) con numeración independiente
+    cada una; un máximo global dejaría a todas menos una sin marcar como
+    última.
   - En `client`, el flujo post-import `Create v000` hereda el scope de tasks
     del contexto (`comp` y `cg`).
+
+## Impacto en Coordination Panel
+
+- `Create Shot` ([LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py](../LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py)):
+  el diálogo de creación genera una sección por task con
+  `get_available_tasks()` de `LGA_NKS_Flow_Task_Config` en vez de iterar
+  `AVAILABLE_TASKS` completo. En `client` eso ofrece únicamente `Comp` y
+  `CG`; en `studio`, todo el catálogo salvo `CG`.
+  ([LGA_NKS_Flow_CreateShot_Folders.py](../LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py)
+  suma la estructura de carpetas de `CG` — una sola carpeta para todas las
+  disciplinas, sin subdividir por stream.)
+- `Show in Flow` ([LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShowInFlow.py](../LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShowInFlow.py)):
+  la task a abrir sale de `_task_preferida()` / `_nombres_preferidos()`. En
+  `studio` el orden de preferencia sigue siendo únicamente `("Comp",)`,
+  idéntico al comportamiento histórico. En `client` es `("Comp", "CG")`: si
+  el shot no tiene task Comp, cae a CG en vez de abrir la URL del shot
+  pelado.
+- `Check Shots` ([LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py](../LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py)):
+  en `studio` sigue revisando solo el track `_comp_`. En `client` suma
+  `_cg_` (`_tracks_de_tasks_activas()`) y recorre TODOS los tracks que
+  coincidan con cada nombre, no solo el primero, porque puede haber varios
+  `_cg_` en el mismo timeline (uno por stream).
+
+## Impacto en Review Panel
+
+- El segundo botón ON/OFF ya no es siempre `_roto_`: `_segunda_task()`
+  ([LGA_NKS_Review_Panel.py](../LGA_NKS_Review_Panel.py)) resuelve la
+  segunda task activa desde `LGA_NKS_TaskScope.active_track_tasks()`. En
+  `studio` sigue siendo `roto` (`LGA_NKS_Clip_DisableRoto.py`); en `client`
+  es `cg`, con el wrapper nuevo
+  [LGA_NKS_Clip_DisableCG.py](../LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableCG.py)
+  (mismo patrón que `DisableRoto`: envuelve `LGA_NKS_Clip_DisableEXR` con
+  `track_name=exr_track_for_task("cg")` y `enable_rev_fallback=False`). El
+  atajo de teclado (`Ctrl+Shift+D`) es el mismo en los dos contextos.
 
 ## Archivos adaptados (confirmados)
 
@@ -143,7 +204,27 @@ problema distinto y con arreglo.
 ### Edit / CreateV000
 
 - `LGA_HieroTools/LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py`
-- `LGA_HieroTools/LGA_NKS_Edit_Panel_py/LGA_import_shots.py` (flujo post-import hacia CreateV000)
+- `LGA_HieroTools/LGA_NKS_Edit_Panel_py/LGA_import_shots.py` (flujo post-import hacia CreateV000; reconoce la task/track CG)
+- `LGA_HieroTools/LGA_NKS_Edit_Panel_py/LGA_import_shots_preview.py` (clasifica tracks `_cg_` en el preview)
+
+### Scope de tasks por contexto (TaskScope)
+
+- `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_TaskScope.py` (módulo nuevo; no importa hiero)
+- `LGA_HieroTools/LGA_NKS_Shared/tests/test_task_scope.py` (verifica consistencia contra `LGA_NKS_GetClip.py` leyéndolo como texto)
+- `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_Flow_Task_Config.py` (`contexts` por task, `get_available_tasks()`)
+- `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_Flow_NamingUtils.py` (familia CG lee `all_track_task_names()` de TaskScope)
+
+### Coordination Panel (Create Shot / Show in Flow / Check Shots)
+
+- `LGA_HieroTools/LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py`
+- `LGA_HieroTools/LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py`
+- `LGA_HieroTools/LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShowInFlow.py`
+- `LGA_HieroTools/LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py`
+
+### Review Panel
+
+- `LGA_HieroTools/LGA_NKS_Review_Panel.py` (segundo botón ON/OFF por contexto)
+- `LGA_HieroTools/LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableCG.py` (wrapper nuevo)
 
 ## Archivos revisados que siguen parciales o con deuda
 
