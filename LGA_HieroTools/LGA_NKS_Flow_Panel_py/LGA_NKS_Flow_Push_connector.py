@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push_connector v1.11 | Lega
+  LGA_NKS_Flow_Push_connector v1.12 | Lega
 
   Conector simple para operaciones de red con Flow
   Este script se ejecuta con Python personalizado para evitar problemas de dependencias
@@ -10,6 +10,15 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
   - PROYECTO_TEMP_EP_SEQ_SHOT_DESC1_DESC2 (6 bloques con descripción)
   - PROYECTO_TEMP_EP_SEQ_SHOT (4 bloques simplificado)
+
+  v1.12: La nota del push fallaba siempre que la task estuviera asignada a un
+         Group (el caso tipico de un vendor en el sitio del cliente): los
+         destinatarios se armaban todos como {"type": "HumanUser"} con el id
+         del Group, Flow rechazaba el create por un HumanUser inexistente y la
+         excepcion se tragaba. Ahora cada destinatario conserva su tipo real
+         (Note.addressings_to acepta HumanUser y Group; lo demas, como un
+         ApiUser autor de la Version, se descarta en vez de romper la nota), y
+         el error de Flow viaja en el warning en vez de perderse.
 
   v1.11: La nota del push ahora escribe subject y tasks. La columna "Tasks"
          del Notes page es el campo propio Note.tasks, distinto de note_links,
@@ -100,14 +109,15 @@ else:
 import shotgun_api3
 
 
-# Los logs del conector van SIEMPRE prendidos. Este proceso corre aparte, en el
-# python de PipeSync, y es el unico que ve lo que Flow contesta de verdad: los
-# IDs de Note y Version, y el resultado de cada upload. Con esto apagado, un
-# push que perdia la nota se veia desde Hiero como un exito sin un solo warning
-# y no habia forma de saber a que entidad se habia linkeado nada.
-# debug_print escribe a stderr, y Flow_Push lo recoge y lo vuelca al .log
-# prefijado con [Conector] (ver call_flow_connector).
+# Este proceso corre aparte, en el python de PipeSync, y es el unico que ve lo
+# que Flow contesta de verdad. debug_print escribe a stderr, y Flow_Push lo
+# recoge y lo vuelca al .log prefijado con [Conector] (ver call_flow_connector).
+# Apagado por default desde v1.10: los errores que el usuario tiene que ver NO
+# dependen de esto, viajan en el campo "warnings" de la respuesta.
 DEBUG = False
+
+# Tipos de entidad que Flow acepta en Note.addressings_to.
+ADDRESSABLE_TYPES = ("HumanUser", "Group")
 
 
 def debug_print(message):
@@ -602,18 +612,23 @@ class ShotGridManager:
             return False, f"Error al actualizar el estado de la version: {e}"
 
     def get_task_assignees(self, task_id):
+        """Asignados de la Task como entidades {type, id}.
+
+        Se conserva el tipo: un asignado puede ser un HumanUser o un Group, y
+        los ids de las dos tablas se pisan entre si.
+        """
         if not self.sg:
             debug_print("ShotGrid no inicializado")
             return []
         try:
             task = self.sg.find_one("Task", [["id", "is", task_id]], ["task_assignees"])
-            assignee_ids = []
+            assignees = []
             if task and task.get("task_assignees"):
                 for assignee in task["task_assignees"]:
-                    assignee_id = assignee.get("id")
-                    if assignee_id and assignee_id not in assignee_ids:
-                        assignee_ids.append(assignee_id)
-            return assignee_ids
+                    entity = {"type": assignee.get("type"), "id": assignee.get("id")}
+                    if entity["type"] and entity["id"] and entity not in assignees:
+                        assignees.append(entity)
+            return assignees
         except Exception as e:
             debug_print(f"Error al obtener los asignados de la tarea: {e}")
             return []
@@ -623,29 +638,36 @@ class ShotGridManager:
         version_id,
         project_id,
         comment,
-        user_id,
-        task_assignee_ids=None,
+        recipients=None,
         shot_id=None,
         task_id=None,
         version_code=None,
         shot_code=None,
     ):
+        """Crea la Note del push. Devuelve (nota, error).
+
+        `recipients` son entidades {type, id}. Solo van a addressings_to las
+        de un tipo que Flow acepta ahi; el resto se descarta, porque un
+        destinatario invalido hace fallar el create entero y se pierde la nota.
+        """
         if not self.sg:
             debug_print("ShotGrid no inicializado")
-            return
+            return None, "ShotGrid no inicializado"
         try:
             debug_print(
                 f"Agregando comentario a la version (ID: {version_id}): {comment}"
             )
-            recipient_ids = []
-            if user_id:
-                recipient_ids.append(user_id)
+            addressings_to = []
+            for entity in recipients or []:
+                if not entity or not entity.get("id"):
+                    continue
+                if entity.get("type") not in ADDRESSABLE_TYPES:
+                    debug_print(f"Destinatario descartado por tipo: {entity}")
+                    continue
+                ref = {"type": entity["type"], "id": entity["id"]}
+                if ref not in addressings_to:
+                    addressings_to.append(ref)
 
-            for assignee_id in task_assignee_ids or []:
-                if assignee_id and assignee_id not in recipient_ids:
-                    recipient_ids.append(assignee_id)
-
-            addressings_to = [{"type": "HumanUser", "id": rid} for rid in recipient_ids]
             note_links = [{"type": "Version", "id": version_id}]
             if shot_id:
                 note_links.append({"type": "Shot", "id": shot_id})
@@ -673,10 +695,10 @@ class ShotGridManager:
                 )
 
             created_note = self.sg.create("Note", note_data)
-            return created_note
+            return created_note, None
         except Exception as e:
             debug_print(f"Error al agregar comentario a la version: {e}")
-            return None
+            return None, str(e)
 
     def attach_images_to_note(self, note_id, version_id, image_paths):
         """
@@ -1049,12 +1071,12 @@ def execute_full_push_operation(
             }
 
         task_id = None
-        task_assignee_ids = []
+        task_assignees = []
 
         for task in tasks:
             if task["content"].lower() == task_name:
                 task_id = task["id"]
-                task_assignee_ids = sg_manager.get_task_assignees(task_id)
+                task_assignees = sg_manager.get_task_assignees(task_id)
                 break
 
         if not task_id:
@@ -1189,12 +1211,15 @@ def execute_full_push_operation(
                     f"Agregando comentario a versión específica {sg_specific_version['id']} "
                     f"(v{requested_version_number:02d})"
                 )
-                created_note = sg_manager.add_comment_to_version(
+                # Destinatarios: el autor de la Version y los asignados de la
+                # Task, cada uno con su tipo real (en el sitio del cliente un
+                # vendor suele estar asignado como Group, no como persona).
+                recipients = [sg_specific_version.get("user")] + list(task_assignees)
+                created_note, note_error = sg_manager.add_comment_to_version(
                     sg_specific_version["id"],
                     project["id"],
                     message or "",
-                    user_id,
-                    task_assignee_ids,
+                    recipients,
                     shot["id"],
                     task_id,
                     sg_specific_version.get("code"),
@@ -1277,7 +1302,8 @@ def execute_full_push_operation(
                         f"creó la nota, no se pueden adjuntar"
                     )
                     warnings.append(
-                        "No se pudo crear la nota en Flow; imágenes no adjuntadas"
+                        f"No se pudo crear la nota en Flow ({note_error}); "
+                        f"imágenes no adjuntadas"
                     )
                     return {
                         "success": True,
@@ -1288,7 +1314,7 @@ def execute_full_push_operation(
                     }
 
                 # No se creó la nota y no había imágenes.
-                warnings.append("No se pudo crear la nota en Flow")
+                warnings.append(f"No se pudo crear la nota en Flow ({note_error})")
 
         elif sg_status == "rev_su":
             debug_print(f"Actualizando versión a rev")

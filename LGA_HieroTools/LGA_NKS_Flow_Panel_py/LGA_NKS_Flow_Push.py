@@ -12,6 +12,9 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v4.15: El texto de la nota queda escrito en el log al arrancar el Worker.
+         Solo viajaba por stdin al conector: si Flow no creaba la nota, el
+         texto se perdia sin copia en ningun lado.
   v4.14: Los dialogos y carteles llevan la fuente del pack
          (apply_ui_font), tambien al sumar thumbnails arrastrados;
          sin eso salian con la fuente del host.
@@ -2025,6 +2028,10 @@ class Worker(QRunnable):
             debug_print(
                 f"Worker: Iniciando operación {self.button_name} para {self.base_name}"
             )
+            # El texto de la nota solo viaja por stdin al conector: si Flow no
+            # la crea, esta linea es la unica copia que queda para reenviarla.
+            if self.message:
+                debug_print(f"Worker: Texto de la nota:\n{self.message}")
 
             # La verificación de versiones ya se hizo en el timeline antes de crear el Worker
             # No es necesario hacer otra verificación con Flow aquí (era redundante)
@@ -2355,7 +2362,8 @@ class Worker(QRunnable):
                     db_manager.add_version_note(target_version["id"], self.message)
                 elif self.message:
                     debug_print(
-                        "Worker: Flow no creó la nota; no se agrega a la DB local"
+                        "Worker: Flow no creó la nota; no se agrega a la DB local "
+                        "(el texto quedó arriba, en 'Texto de la nota')"
                     )
 
         except Exception as e:
