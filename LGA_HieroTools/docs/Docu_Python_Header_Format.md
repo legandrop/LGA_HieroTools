@@ -210,7 +210,6 @@ Todos los scripts LGA_NKS_*.py en la raíz deben seguir este formato:
 - `LGA_NKS_Review_Panel.py` ✅
 - `LGA_NKS_ViewerTL_Panel.py` ✅
 - `LGA_NKS_Projects_Panel.py` ✅
-- `LGA_NKS_Playlist_Panel.py` ✅
 - `LGA_NKS_ClipColor_Panel.py` ✅
 
 ---

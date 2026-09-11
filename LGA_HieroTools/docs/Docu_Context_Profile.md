@@ -28,7 +28,7 @@ Valores válidos:
 - Lectura de `config.secure` y `.key` desde:
   - `%APPDATA%/LGA/PipeSync` (studio)
   - `%APPDATA%/LGA/PipeSyncClient` (client)
-- Resolución de `pipesync.db` y `pipesync_playlists.db` mediante helper compartido
+- Resolución de `pipesync.db` mediante helper compartido
   (`LGA_NKS_Shared/LGA_NKS_PipeSyncPaths.py`) sin hardcodes fijos por script.
 - Fallback de escaneo base en panel de proyectos:
   - `T:\` en studio

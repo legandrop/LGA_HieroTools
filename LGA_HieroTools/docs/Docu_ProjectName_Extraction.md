@@ -1,6 +1,6 @@
 # Extracción de Project Name (y Sequence) desde el path — Patrón Canónico
 
-**Fecha:** 2026-05-22 (extendido 2026-06-13: Playlist Panel + Edit/CreateV000 + sequence desde el path en CreateShot/ModifyShot)  
+**Fecha:** 2026-05-22 (extendido 2026-06-13: Edit/CreateV000 + sequence desde el path en CreateShot/ModifyShot)  
 **Afecta a:** todos los scripts que busquen shots/tasks en la DB de PipeSync usando `project_name`, y los que asignen `sg_sequence` al crear/modificar shots en Flow.
 
 ---
@@ -194,20 +194,6 @@ Leyenda:
 |--------|--------|
 | `LGA_NKS_Edit_Panel_py/LGA_NKS_MatchVerToEXR.py` | 🔵 Analizado · no aplica — no interactúa con Flow ni DB, solo compara versiones dentro de Hiero |
 | `LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py` | ✅ Actualizado v1.08 — fix en `_collect_context()`; usa `default_plate["media_path"]` |
-
-### Playlist Panel
-
-> El Playlist Panel es un panel WIP (todos sus scripts en título `v0.01`). Su
-> changelog interno hereda numeración de los scripts Flow originales; las entradas
-> propias del panel arrancan en `v0.02`.
-
-| Script | Estado |
-|--------|--------|
-| `LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Pull.py` | ✅ Actualizado v0.02 — `file_path` ya estaba en scope del loop de clips |
-| `LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Push.py` | ✅ Actualizado v0.02 — `file_path` propagado por `InputDialog`, `Worker`, `Push_Task_Status` y `push_from_selected_clips`; fix en `get_shot_assignee()` y `update_local_database()` |
-| `LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Push_connector.py` | ✅ Actualizado v0.02 — proceso separado; recibe `file_path` vía JSON en `execute_full_push` y `check_version`. ⚠️ Nota: `FlowPlaylist_Push.py` apunta su `connector_script` a `LGA_NKS_Flow_Push_connector.py` (nombre inexistente en la carpeta del panel) — bug preexistente del panel WIP, no relacionado con este cambio |
-| `LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Shot_info.py` | ✅ Actualizado v0.02 — path como primario; fallback a nombre del timeline / filename en `process_selected_clips()` |
-| `LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_ReviewPic.py` | 🔵 Analizado · no necesitaba cambio — solo cache local, no extrae project_name (espejo de `LGA_NKS_ReviewPic.py`) |
 
 ---
 

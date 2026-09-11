@@ -215,13 +215,6 @@ Por eso nada arma el nombre de la carpeta con un literal:
 - `LGA_HieroTools/LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py`
 - `LGA_HieroTools/LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Shot_info.py`
 
-### Playlist / permisos
-
-- `LGA_HieroTools/LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Pull.py`
-- `LGA_HieroTools/LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Push.py`
-- `LGA_HieroTools/LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Shot_info.py`
-- `LGA_HieroTools/LGA_NKS_Playlist_Panel_py/LGA_NKS_Playlist_Panel_Permissions.py`
-
 ### Projects
 
 - `LGA_HieroTools/LGA_NKS_Projects_Panel.py`

@@ -40,10 +40,6 @@ ____________________________________________________________________
   - LGA_NKS_Edit_Panel_py/LGA_NKS_CompareVerToEditref.py
   - LGA_NKS_Edit_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py
   - LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py
-  - LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Pull.py
-  - LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Push.py
-  - LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Push_connector.py
-  - LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Shot_info.py
 
   v1.17: la familia CG lee las tasks registradas de LGA_NKS_TaskScope en vez
          de LGA_NKS_GetClip. GetClip importa hiero, asi que fuera de NKS el

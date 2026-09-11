@@ -12,10 +12,9 @@ Cuando entra o sale un reviewer del estudio hay que actualizar Flow y todos los 
 3. Actualizar Create/Modify Shot para que el reviewer exista como checkbox de `task_reviewers`.
 4. Actualizar Flow Push para traducir botones/estados de Hiero hacia el codigo SG.
 5. Actualizar Flow Pull para reconocer el estado, pintar clips, taggear carpetas y mostrar filas de review del usuario actual.
-6. Actualizar Playlist Push/Pull si el reviewer tambien aplica al flujo de playlist.
-7. Actualizar ViewerTL para que el usuario tenga botones dinamicos `Prev Rev` / `Next Rev`.
-8. Actualizar `PrevNext Rev` para que pueda buscar clips con el color del reviewer.
-9. Actualizar la documentacion de estados/reviewers y el changelog general.
+6. Actualizar ViewerTL para que el usuario tenga botones dinamicos `Prev Rev` / `Next Rev`.
+7. Actualizar `PrevNext Rev` para que pueda buscar clips con el color del reviewer.
+8. Actualizar la documentacion de estados/reviewers y el changelog general.
 
 ## Mapeo actual
 
@@ -48,10 +47,6 @@ Cuando entra o sale un reviewer del estudio hay que actualizar Flow y todos los 
   - `_normalize_flow_login()` - aliases de login del usuario actual.
   - `_current_user_review_status_codes()` - estados que fuerzan filas de review en la tabla.
   - `HieroOperations.enable_or_disable_clips()` - lista de colores de review que habilitan clips.
-- `LGA_HieroTools/LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Push.py`
-  - `status_translation` y `task_status_dict` - equivalentes de playlist para push.
-- `LGA_HieroTools/LGA_NKS_Playlist_Panel_py/LGA_NKS_FlowPlaylist_Pull.py`
-  - `ShotGridManager.task_status_dict` y `enable_or_disable_clips()` - equivalentes de playlist para pull.
 - `LGA_HieroTools/LGA_NKS_ViewerTL_Panel.py`
   - `ViewerPanel.create_dynamic_buttons()` - aliases, colores y botones dinamicos por usuario.
   - `prev_rev_<reviewer>()` / `next_rev_<reviewer>()` - dispatch hacia `LGA_NKS_PrevNext_Rev`.
