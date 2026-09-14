@@ -1,11 +1,17 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.65 | Lega
+  LGA_NKS_Flow_Pull v3.66 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
+
+  v3.66: La fila seleccionada de la tabla de resultados perdia todos los
+         colores: fondo gris y texto negro. Con hoja de estilo en la tabla Qt
+         ignora la paleta que tocaba el ColorMixDelegate y mandaba la regla
+         item:selected. Ahora el delegate pinta la seleccion a mano: el fondo
+         de cada celda y su texto claro suben de brillo sobre el original.
 
   v3.65: Los clips de CG se REEMPLAZAN en vez de subir de version. El
          escaneo de versiones de Hiero busca por patron de nombre
@@ -1382,8 +1388,7 @@ class GUI_Table(QtWidgets.QDialog):
             " QHeaderView::section { background-color: %(header_bg)s;"
             " color: %(header_fg)s; padding: 4px 8px; border: 0px;"
             " border-bottom: 1px solid %(border_strong)s; font-weight: bold; }"
-            " QTableView::item:selected { color: black;"
-            " background-color: transparent; }"
+            " QTableView::item:selected { background-color: transparent; }"
             % {
                 "surface": UIColor.SURFACE,
                 "border": UIColor.BORDER,
@@ -1608,24 +1613,53 @@ class ColorMixDelegate(QStyledItemDelegate):
         self.mix_color = mix_color
 
     def paint(self, painter, option, index):
-        row = index.row()
-        column = index.column()
-        if option.state & QStyle.State_Selected:
-            original_color = QColor(self.background_colors[row][column])
-            mixed_color = self.mix_colors(
-                (original_color.red(), original_color.green(), original_color.blue()),
-                self.mix_color,
-            )
-            option.palette.setColor(QPalette.Highlight, QColor(*mixed_color))
-        else:
-            original_color = QColor(self.background_colors[row][column])
-            option.palette.setColor(QPalette.Base, original_color)
-        super(ColorMixDelegate, self).paint(painter, option, index)
+        if not (option.state & QStyle.State_Selected):
+            super(ColorMixDelegate, self).paint(painter, option, index)
+            return
 
-    def mix_colors(self, original_color, mix_color):
-        r1, g1, b1 = original_color
-        r2, g2, b2 = mix_color
-        return ((r1 + r2) // 2, (g1 + g2) // 2, (b1 + b2) // 2)
+        # La fila seleccionada se pinta a mano. Con una hoja de estilo en la
+        # tabla, Qt ignora la paleta (Highlight/Base) que se le pase al estilo,
+        # y la regla item:selected ganaba: fondo transparente y texto negro.
+        opt = QtWidgets.QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        widget = opt.widget
+        style = widget.style() if widget else QtWidgets.QApplication.style()
+
+        painter.save()
+        fondo = self._brush_color(index.data(Qt.BackgroundRole), UIColor.SURFACE)
+        painter.fillRect(opt.rect, self.aclarar(fondo))
+
+        texto = self._brush_color(index.data(Qt.ForegroundRole), UIColor.TEXT)
+        # El texto claro sube de brillo; el oscuro (sobre estados claros) se
+        # conserva, porque aclararlo le quitaria contraste al fondo ya aclarado.
+        if texto.valueF() >= 0.5:
+            texto = self.aclarar(texto)
+        # Mismo margen horizontal que usa el estilo al dibujar la celda sin
+        # seleccionar, para que el texto no salte al hacer clic.
+        margen = style.pixelMetric(QStyle.PM_FocusFrameHMargin, None, widget) + 1
+        rect_texto = style.subElementRect(
+            QStyle.SE_ItemViewItemText, opt, widget
+        ).adjusted(margen, 0, -margen, 0)
+        painter.setFont(opt.font)
+        painter.setPen(texto)
+        painter.drawText(rect_texto, int(opt.displayAlignment), opt.text)
+        painter.restore()
+
+    @staticmethod
+    def _brush_color(data, fallback_hex):
+        """Color de un BackgroundRole/ForegroundRole, o el fallback si no hay."""
+        if isinstance(data, QBrush) and data.style() != Qt.NoBrush:
+            return data.color()
+        if isinstance(data, QColor) and data.isValid():
+            return data
+        return QColor(fallback_hex)
+
+    @staticmethod
+    def aclarar(color):
+        """Sube el brillo manteniendo el tono y la saturacion del color."""
+        h, s, v, a = color.getHsv()
+        v = min(255, int(v * 1.3) + 30)
+        return QColor.fromHsv(max(h, 0), s, v, a)
 
 
 class HieroOperations:

@@ -1,3 +1,7 @@
+v3.94:
+
+        - Al seleccionar una fila en la ventana de resultados del Flow Pull se perdian todos los colores: fondo gris y texto negro (`LGA_NKS_Flow_Pull v3.66`). Con una hoja de estilo en la tabla, Qt ignora la paleta que tocaba el delegate para la seleccion, y mandaba la regla `item:selected` con texto negro y fondo transparente. Ahora el delegate pinta la fila seleccionada a mano: cada celda conserva su color de estado con mas brillo, y el texto claro tambien se aclara. [ HieroTools - Seleccion del Flow Pull resalta los colores ]
+
 v3.93:
 
         - Se elimina el Playlist Panel, una herramienta a medias que no se usaba: el panel, su carpeta de scripts, sus tres documentos y su registro en el arranque (`LGA_HieroTools_Startup`, `LGA_NKS_Flow_Shot_info v2.00`). Flow Shot Info era lo unico vivo que dependia de el: en timelines de vendor con usuario Master le pasaba el control al Shot Info del panel. Ese desvio se va y Shot Info muestra siempre la vista normal. Las referencias en docs se limpian; el estado de Flow "In playlist" y las notas `from_playlist` de PipeSync no tienen que ver con el panel y quedan. [ HieroTools - Eliminado el Playlist Panel ]
