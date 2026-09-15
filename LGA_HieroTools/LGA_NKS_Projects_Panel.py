@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.33 | Lega
+  LGA_NKS_Projects_Panel v2.34 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,10 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.34: El toggle vuelve a largar el escaneo ANTES del switch, en paralelo, y
+         ScanManager difiere el display si termina con la UI congelada. En
+         v2.33 el escaneo esperaba al switch y la lista llegaba ~0.2s tarde.
+         El aviso a los paneles sigue yendo despues del switch.
   v2.33: El toggle Studio/Client hace el switch de timeline ANTES del rescan y
          del aviso a los paneles. El switch congela el repintado de la ventana
          principal, y el rescan terminaba en ese lapso: el panel y el timeline
@@ -468,6 +472,9 @@ class ProjectsPanel(QtWidgets.QWidget):
             debug_print(f"Error guardando el timeline del contexto '{current_mode}': {e}")
         try:
             self._write_context_mode(new_mode)
+            # El escaneo corre en otro hilo y arranca ya, en paralelo con el switch.
+            # Si termina con la UI congelada, ScanManager difiere el display.
+            self._reload_after_context_switch()
             self._refresh_context_toggle()
             debug_print(f"Contexto cambiado a '{new_mode}' desde toggle")
             # Diferido: el toggle se repinta antes del switch, que tarda medio segundo.
@@ -481,21 +488,20 @@ class ProjectsPanel(QtWidgets.QWidget):
 
     def _finish_context_switch(self, mode):
         """
-        Segunda mitad del toggle: primero el timeline, despues el rescan y el aviso.
+        Segunda mitad del toggle: el switch de timeline y, despues, el aviso.
 
-        El switch de secuencia congela el repintado de la ventana principal y
-        procesa eventos adentro. Con el rescan largado antes, la lista se rearmaba
-        en ese lapso con el repintado apagado, y el panel y el timeline quedaban
-        sin dibujar hasta que NKS perdia y recuperaba el foco.
+        El switch congela el repintado de la ventana principal y procesa eventos
+        adentro. Todo lo que rearme UI en ese lapso queda sin dibujar hasta que
+        NKS pierde y recupera el foco. Por eso el aviso a los paneles suscriptos
+        va despues, y el escaneo propio (ya largado) difiere su display.
         """
         self._return_to_context_timeline(mode)
         try:
-            self._reload_after_context_switch()
             # Recien despues de que el INI quedo escrito: los paneles suscriptos
             # releen el contexto y tienen que ver el valor nuevo, no el viejo.
             notify_context_change(mode)
         except Exception as e:
-            debug_print(f"Error recargando despues del cambio a '{mode}': {e}")
+            debug_print(f"Error avisando el cambio a '{mode}': {e}")
 
     def _return_to_context_timeline(self, mode):
         """Vuelve al ultimo timeline usado en `mode`, si hay uno y su proyecto sigue abierto."""

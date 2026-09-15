@@ -3,17 +3,35 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ScanManager v1.01 | Lega
+  LGA_NKS_ScanManager v1.02 | Lega
 
   Gestor de escaneo para el panel de proyectos LGA.
 
+  v1.02: Solo se aplica el escaneo mas reciente: los anteriores se descartan.
+         Si el escaneo termina mientras un switch de secuencia tiene congelado
+         el repintado de la ventana principal, el resultado se aplica recien
+         cuando se descongela. Rearmar la lista congelada la dejaba sin dibujar
+         hasta que NKS perdia y recuperaba el foco. Asi el toggle Studio/Client
+         puede largar el escaneo en paralelo con el switch.
   v1.01: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el estilo del pack.
 ____________________________________________________________________
 
 """
 
+import hiero.ui
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
 from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
+
+# Cada cuanto se reintenta aplicar un escaneo que termino con la UI congelada.
+FROZEN_UI_RETRY_MS = 50
+
+
+def _main_window_frozen():
+    """True si un switch de secuencia tiene apagado el repintado de la ventana principal."""
+    try:
+        return not hiero.ui.mainWindow().updatesEnabled()
+    except Exception:
+        return False
 
 # Importar funciones necesarias del módulo principal
 # Estas serán importadas desde el archivo principal cuando se importe este módulo
@@ -39,9 +57,15 @@ class ScanManager:
         debug_print("🚀 Iniciando escaneo desde botón refresh...")
         panel.refresh_button.setEnabled(False)
 
-        debug_print("👷 Creando ScanWorker...")
+        # Numero de escaneo: si se largan varios seguidos, solo se aplica el ultimo.
+        panel._scan_generation = getattr(panel, "_scan_generation", 0) + 1
+        generation = panel._scan_generation
+
+        debug_print(f"👷 Creando ScanWorker #{generation}...")
         worker = ScanWorker()
-        worker.signals.scan_finished.connect(lambda proyectos, abiertos: ScanManager.on_scan_finished(panel, proyectos, abiertos))
+        worker.signals.scan_finished.connect(
+            lambda proyectos, abiertos: ScanManager.on_scan_finished(panel, proyectos, abiertos, generation)
+        )
         worker.signals.error.connect(lambda error: ScanManager.on_scan_error(panel, error))
         worker.signals.debug_output.connect(lambda: print_debug_messages())
         debug_print("🏃 Ejecutando ScanWorker en thread pool...")
@@ -49,8 +73,25 @@ class ScanManager:
         debug_print("✅ ScanWorker enviado a thread pool")
 
     @staticmethod
-    def on_scan_finished(panel, proyectos_encontrados, proyectos_abiertos):
+    def on_scan_finished(panel, proyectos_encontrados, proyectos_abiertos, generation=None):
         """Callback cuando el escaneo se completa exitosamente"""
+        latest = getattr(panel, "_scan_generation", None)
+        if generation is not None and latest is not None and generation != latest:
+            # Hay un escaneo mas nuevo en camino: aplicar este rearma la lista dos
+            # veces seguidas, que es lo que dejaba items huerfanos.
+            debug_print(f"⏭️ Escaneo #{generation} descartado: hay uno mas nuevo (#{latest})")
+            return
+        if _main_window_frozen():
+            # El switch procesa eventos adentro, asi que este timer puede volver
+            # a dispararse congelado: se re-agenda hasta que se descongele.
+            debug_print("⏸️ Escaneo listo con la UI congelada por un switch: display diferido")
+            QtCore.QTimer.singleShot(
+                FROZEN_UI_RETRY_MS,
+                lambda: ScanManager.on_scan_finished(
+                    panel, proyectos_encontrados, proyectos_abiertos, generation
+                ),
+            )
+            return
         debug_print("🎉 Escaneo completado exitosamente!")
         debug_print(f"   📊 Proyectos encontrados: {len(proyectos_encontrados)}")
         debug_print(f"   📂 Grupos de proyectos abiertos: {len(proyectos_abiertos)}")

@@ -3,10 +3,12 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectItem v1.02 | Lega
+  LGA_NKS_ProjectItem v1.03 | Lega
 
   Widget personalizado para mostrar proyectos y secuencias en el panel de proyectos LGA.
 
+  v1.03: Las secuencias se limpian con takeAt + hide + deleteLater en vez de
+         setParent(None), que podia dejar un widget huerfano abierto como ventana.
   v1.02: El nombre visible conserva lo que va despues del bloque _SUP
   v1.01: El color sale de 'project_key' (carpeta VFX-) y no del nombre del archivo
 ____________________________________________________________________
@@ -218,8 +220,14 @@ class ProjectItem(QtWidgets.QWidget):
 
     def show_sequences(self):
         # Limpiar secuencias anteriores
-        for i in reversed(range(self.sequences_layout.count())):
-            self.sequences_layout.itemAt(i).widget().setParent(None)
+        # takeAt + hide + deleteLater, no setParent(None): un widget huerfano con
+        # un show() pendiente de Qt se abre como ventana suelta.
+        while self.sequences_layout.count():
+            layout_item = self.sequences_layout.takeAt(0)
+            widget = layout_item.widget() if layout_item else None
+            if widget is not None:
+                widget.hide()
+                widget.deleteLater()
 
         proyecto_obj = self.project_info.get("proyecto_obj")
         sequences_dict = {}

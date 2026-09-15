@@ -3,10 +3,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectHandler v1.03 | Lega
+  LGA_NKS_ProjectHandler v1.04 | Lega
 
   Gestor de manejo de proyectos para el panel de proyectos LGA.
 
+  v1.04: La lista se limpia con takeAt + hide + deleteLater en vez de
+         setParent(None). Con dos displays seguidos, un item todavia sin
+         mostrar quedaba huerfano y Qt lo abria como ventana suelta.
   v1.03: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el estilo del pack.
   v1.02: El display formateado usa obtener_nombre_display_proyecto()
   v1.01: 'project_key' y 'vfx_folder' de los proyectos abiertos salen de la ruta en disco
@@ -51,11 +54,16 @@ class ProjectHandler:
             obtener_nombre_display_proyecto,
         )
 
-        # Limpiar items anteriores
-        for i in reversed(range(panel.projects_layout.count())):
-            item = panel.projects_layout.itemAt(i)
-            if item.widget():
-                item.widget().setParent(None)
+        # Limpiar items anteriores. NO con setParent(None): un widget recien
+        # agregado a un layout visible tiene un show() agendado por Qt, y si se lo
+        # deja sin padre antes de que corra, aparece como ventana suelta. Pasaba con
+        # dos displays seguidos. hide() cancela ese show y deleteLater() lo destruye.
+        while panel.projects_layout.count():
+            layout_item = panel.projects_layout.takeAt(0)
+            widget = layout_item.widget() if layout_item else None
+            if widget is not None:
+                widget.hide()
+                widget.deleteLater()
 
         panel.project_items.clear()
 
