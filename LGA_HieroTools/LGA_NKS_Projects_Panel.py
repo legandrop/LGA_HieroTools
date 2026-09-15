@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.32 | Lega
+  LGA_NKS_Projects_Panel v2.33 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,10 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.33: El toggle Studio/Client hace el switch de timeline ANTES del rescan y
+         del aviso a los paneles. El switch congela el repintado de la ventana
+         principal, y el rescan terminaba en ese lapso: el panel y el timeline
+         quedaban sin dibujar hasta que NKS perdia y recuperaba el foco.
   v2.32: El toggle Studio/Client vuelve al ultimo timeline usado en el contexto
          de destino. Antes de cambiar guarda el timeline activo como el ultimo
          del contexto que se deja (LGA_NKS_TimelineMemory); despues, si el de
@@ -464,20 +468,34 @@ class ProjectsPanel(QtWidgets.QWidget):
             debug_print(f"Error guardando el timeline del contexto '{current_mode}': {e}")
         try:
             self._write_context_mode(new_mode)
-            self._reload_after_context_switch()
             self._refresh_context_toggle()
-            # Recien despues de que el INI quedo escrito: los paneles suscriptos
-            # releen el contexto y tienen que ver el valor nuevo, no el viejo.
-            notify_context_change(new_mode)
             debug_print(f"Contexto cambiado a '{new_mode}' desde toggle")
             # Diferido: el toggle se repinta antes del switch, que tarda medio segundo.
-            QtCore.QTimer.singleShot(0, lambda: self._return_to_context_timeline(new_mode))
+            QtCore.QTimer.singleShot(0, lambda: self._finish_context_switch(new_mode))
         except Exception as e:
             debug_print(f"Error al cambiar contexto: {e}")
             self._refresh_context_toggle()
             show_warning(
                 self, "Error al cambiar contexto", f"No se pudo cambiar el contexto:\n{e}"
             )
+
+    def _finish_context_switch(self, mode):
+        """
+        Segunda mitad del toggle: primero el timeline, despues el rescan y el aviso.
+
+        El switch de secuencia congela el repintado de la ventana principal y
+        procesa eventos adentro. Con el rescan largado antes, la lista se rearmaba
+        en ese lapso con el repintado apagado, y el panel y el timeline quedaban
+        sin dibujar hasta que NKS perdia y recuperaba el foco.
+        """
+        self._return_to_context_timeline(mode)
+        try:
+            self._reload_after_context_switch()
+            # Recien despues de que el INI quedo escrito: los paneles suscriptos
+            # releen el contexto y tienen que ver el valor nuevo, no el viejo.
+            notify_context_change(mode)
+        except Exception as e:
+            debug_print(f"Error recargando despues del cambio a '{mode}': {e}")
 
     def _return_to_context_timeline(self, mode):
         """Vuelve al ultimo timeline usado en `mode`, si hay uno y su proyecto sigue abierto."""
@@ -507,6 +525,15 @@ class ProjectsPanel(QtWidgets.QWidget):
         ScanManager.on_scan_error(self, error_msg)
 
     def update_projects_display(self):
+        # Diagnostico: si esto sale False, la lista se esta rearmando mientras un
+        # switch de secuencia tiene congelado el repintado.
+        try:
+            debug_print(
+                f"[Freeze] Display de proyectos con repintado de la ventana principal="
+                f"{hiero.ui.mainWindow().updatesEnabled()}"
+            )
+        except Exception:
+            pass
         # Se releen los colores en cada display para que un cambio hecho en PipeSync
         # se vea con un Refresh, sin reiniciar Hiero.
         load_project_colors()

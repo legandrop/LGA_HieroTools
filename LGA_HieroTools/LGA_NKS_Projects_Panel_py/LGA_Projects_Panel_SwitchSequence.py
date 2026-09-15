@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel_SwitchSequence v2.34 | Lega
+  LGA_NKS_Projects_Panel_SwitchSequence v2.35 | Lega
 
   Hiero / Nuke Studio - Switch V3: HÍBRIDO OPTIMIZADO + LIMPIEZA TOTAL + CROSS-PROJECT
 
@@ -19,6 +19,7 @@ ____________________________________________________________________
   INTEGRACIÓN EN PANEL DE PROYECTOS:
   from switch_sequence_v3_final import switch_to_sequence_hybrid
 
+  v2.35: Switch mas rapido y sin saltos visibles, detras de flags para medir cada uno: diagnosticos de widgets y espera de limpieza apagados (~0.45s de snapshots), la vista guardada se aplica apenas se abre la secuencia en vez de heredar playhead + scroll al top y corregirlos al final, y la ventana principal no repinta durante el switch (FREEZE_UI_DURING_SWITCH).
   v2.34: Memoria de vista por timeline (LGA_NKS_TimelineMemory). Antes de cerrar el timeline viejo se guardan su zoom, scroll y playhead; al abrir una secuencia que ya tenia vista guardada se restaura, con un segundo intento diferido porque Hiero sigue reacomodando el layout despues de openInTimeline.
   v2.33: _cleanup_viewers_aggressive() y _cleanup_timelines_aggressive() revalidan con is_widget_alive() antes de cada deleteLater(). Llaman a _process_events() adentro del loop, que ejecuta los deleteLater() ya encolados, asi que un widget capturado al principio del barrido podia estar muerto cuando le tocaba el turno.
   v2.32: Se deja de barrer QApplication.allWidgets() a pelo. Esa llamada materializa de una sola vez un wrapper de PySide por cada widget del proceso, y si Hiero esta creando o destruyendo widgets en ese momento corrompe el heap: eso tumbaba a Nuke Studio con 0xc0000374, o mas tarde con un access violation adentro de QWidget::~QWidget. Ahora se itera con iter_live_widgets() y se revalida con is_widget_alive() antes de cada deleteLater().
@@ -61,6 +62,19 @@ from LGA_NKS_Projects_Panel_py import LGA_NKS_TimelineMemory as timeline_memory
 # que pueden pisar el zoom o el scroll recien aplicados.
 MEMORY_RESTORE_RETRY_MS = 150
 
+# Con vista guardada, aplicarla apenas se abre la secuencia (despues del reduce)
+# en vez de heredar el playhead del timeline anterior, scrollear al top track y
+# corregir todo al final. Esos pasos intermedios se veian como saltos.
+APPLY_MEMORY_EARLY = True
+
+# Congela el repintado de la ventana principal durante el switch: el usuario ve
+# solo el estado final. El layout se sigue calculando (no depende del paint).
+FREEZE_UI_DURING_SWITCH = True
+
+# Espera diagnostica al final del switch hasta que Qt destruye de verdad los
+# widgets agendados. Solo informa: apagada no cambia el resultado.
+SWITCH_DIAGNOSTIC_CLEANUP_WAIT = False
+
 # Si True, cierra TODOS los viewers + timelines viejos y deja solo el nuevo
 CLOSE_ALL_TIMELINES = True
 
@@ -78,7 +92,7 @@ CLOSE_BEFORE_OPEN = True
 
 # Logging diagnostico post-switch. Mide si Qt/Hiero siguen procesando cierres
 # despues de que las llamadas Python ya retornaron.
-SWITCH_DIAGNOSTIC_LOG_WIDGETS = True
+SWITCH_DIAGNOSTIC_LOG_WIDGETS = False
 
 # Diagnostico: destruye viewer y timeline originales por separado en vez de
 # simultaneamente, para saber cual de los dos se come los segundos.
@@ -962,6 +976,27 @@ def _restore_memory_view(seq, retry=False):
 
 
 def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
+    """Switch de secuencia con la ventana principal congelada si el flag esta activo."""
+    frozen_window = None
+    if FREEZE_UI_DURING_SWITCH:
+        try:
+            frozen_window = hiero.ui.mainWindow()
+            frozen_window.setUpdatesEnabled(False)
+        except Exception:
+            frozen_window = None
+    try:
+        return _switch_to_sequence_impl(target_sequence_name, target_project)
+    finally:
+        if frozen_window is not None:
+            try:
+                frozen_window.setUpdatesEnabled(True)
+                frozen_window.update()
+                debug_print("   [Freeze] Repintado reactivado")
+            except Exception as e:
+                debug_print(f"   [Freeze] Error reactivando el repintado: {e}")
+
+
+def _switch_to_sequence_impl(target_sequence_name, target_project=None):
     """
     Switch HÍBRIDO V3 PERFECTO: Mejor que v4 + LIMPIEZA TOTAL + CROSS-PROJECT
     - Velocidad del v2 + Estado completo del v1
@@ -1064,6 +1099,16 @@ def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
     except Exception as e:
         debug_print(f"   [Memoria] Error guardando la vista: {e}")
 
+    # Con vista guardada para el destino se saltean los pasos que la memoria
+    # despues pisaria (playhead heredado y scroll al top track).
+    use_early_memory = False
+    if APPLY_MEMORY_EARLY:
+        try:
+            use_early_memory = timeline_memory.has_view(target_seq)
+        except Exception:
+            use_early_memory = False
+    debug_print(f"   [Memoria] Aplicacion temprana: {use_early_memory}")
+
     # 3. Capturar ajustes del viewer ACTUAL (gain/gamma para transferir)
     step_start = time.time()
     current_viewer = hiero.ui.currentViewer()
@@ -1143,8 +1188,10 @@ def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
         open_time = time.time() - step_start
         _log_widget_snapshot("despues openInTimeline")
 
-        # Restaurar el playhead: sin viewer previo, Hiero no tiene de donde sacarlo
-        _restore_playhead(playhead_original)
+        # Restaurar el playhead: sin viewer previo, Hiero no tiene de donde sacarlo.
+        # Con memoria temprana no hace falta: el playhead guardado llega enseguida.
+        if not use_early_memory:
+            _restore_playhead(playhead_original)
     else:
         # Orden histórico: abrir y después cerrar. Mucho más lento, se conserva
         # solo para poder volver atrás si el orden nuevo diera problemas.
@@ -1203,12 +1250,18 @@ def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
     reduce_time = time.time() - step_start
     debug_print(f"   [Stage] UI reduce: fin | ok={reduce_success} | {reduce_time:.3f}s")
 
-    # 11. Scrollear al top track (como v4)
+    # 11. Scrollear al top track (como v4), o aplicar la vista guardada si la hay
     step_start = time.time()
-    debug_print("   [Stage] UI scroll: inicio")
-    scroll_success = scroll_to_top_track(new_timeline)
+    memory_restored = False
+    if use_early_memory:
+        debug_print("   [Stage] Memoria temprana: inicio")
+        memory_restored = _restore_memory_view(new_active)
+        scroll_success = memory_restored
+    else:
+        debug_print("   [Stage] UI scroll: inicio")
+        scroll_success = scroll_to_top_track(new_timeline)
     scroll_time = time.time() - step_start
-    debug_print(f"   [Stage] UI scroll: fin | ok={scroll_success} | {scroll_time:.3f}s")
+    debug_print(f"   [Stage] UI scroll/memoria: fin | ok={scroll_success} | {scroll_time:.3f}s")
 
     # 12. Cerrar TODOS los viewers + timelines viejos si el flag está activo
     close_all_widgets_time = 0
@@ -1258,19 +1311,23 @@ def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
     frame_number_off_time = time.time() - step_start
 
     # 15. Espera diagnostica post-event-loop: confirma cierre real de widgets
-    cleanup_wait_time, cleanup_wait_ok, cleanup_pending = (
-        _wait_for_scheduled_widget_cleanup(
-            scheduled_original_names + scheduled_extra_names,
-            SWITCH_CLEANUP_WAIT_TIMEOUT,
-            SWITCH_CLEANUP_WAIT_INTERVAL,
-            SWITCH_CLEANUP_LOG_INTERVAL,
+    cleanup_wait_time, cleanup_wait_ok, cleanup_pending = 0.0, True, []
+    if SWITCH_DIAGNOSTIC_CLEANUP_WAIT:
+        cleanup_wait_time, cleanup_wait_ok, cleanup_pending = (
+            _wait_for_scheduled_widget_cleanup(
+                scheduled_original_names + scheduled_extra_names,
+                SWITCH_CLEANUP_WAIT_TIMEOUT,
+                SWITCH_CLEANUP_WAIT_INTERVAL,
+                SWITCH_CLEANUP_LOG_INTERVAL,
+            )
         )
-    )
-    _log_widget_snapshot("final post cleanup wait")
+        _log_widget_snapshot("final post cleanup wait")
 
-    # 16. Restaurar la vista guardada de esta secuencia. Va al final porque el
-    # reduce, el scroll al top track y los cierres mueven zoom y scroll.
-    memory_restored = _restore_memory_view(new_active)
+    # 16. Restaurar la vista guardada de esta secuencia. Sin memoria temprana va
+    # al final, porque el reduce, el scroll al top track y los cierres mueven
+    # zoom y scroll. El reintento diferido corre en los dos modos.
+    if not use_early_memory:
+        memory_restored = _restore_memory_view(new_active)
     if memory_restored:
         QtCore.QTimer.singleShot(
             MEMORY_RESTORE_RETRY_MS, lambda seq=new_active: _restore_memory_view(seq, retry=True)

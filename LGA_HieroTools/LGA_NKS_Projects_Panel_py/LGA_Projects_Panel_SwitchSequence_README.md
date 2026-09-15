@@ -224,6 +224,22 @@ playhead. Desde v2.34:
 
 Gain/gamma/saturation no se guardan por timeline: siguen transfiriendose.
 
+Desde v2.35, con `APPLY_MEMORY_EARLY` la vista se aplica en el paso 11, apenas
+despues del reduce, y se saltean el playhead heredado y el scroll al top track:
+antes se veian como saltos intermedios que la memoria corregia al final.
+
+### Flags de velocidad (v2.35)
+
+| Flag | Default | Efecto |
+|---|---|---|
+| `FREEZE_UI_DURING_SWITCH` | `True` | `hiero.ui.mainWindow().setUpdatesEnabled(False)` durante el switch, reactivado en `finally`. No hay que rearmar UI ajena mientras dura (ver el orden del toggle en `docs/LGA_NKS_Projects_Panel.md`). |
+| `APPLY_MEMORY_EARLY` | `True` | Vista guardada aplicada temprano. |
+| `SWITCH_DIAGNOSTIC_LOG_WIDGETS` | `False` | Snapshots de widgets (~0.45s por switch). |
+| `SWITCH_DIAGNOSTIC_CLEANUP_WAIT` | `False` | Espera al cierre real de los widgets agendados. |
+
+Medido: el switch de timeline paso de 1.73s a 1.03s, de los cuales 0.53s son
+`openInTimeline`.
+
 ## Problemas Conocidos
 
 ### ✅ **RESUELTO: Dos proyectos con secuencia del mismo nombre**

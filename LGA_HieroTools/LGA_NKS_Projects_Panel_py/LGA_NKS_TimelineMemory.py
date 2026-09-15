@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_TimelineMemory v1.01 | Lega
+  LGA_NKS_TimelineMemory v1.02 | Lega
 
   Memoria de vista por timeline para el Projects Panel.
 
@@ -26,6 +26,10 @@ ____________________________________________________________________
   sesion: que se guardo al salir de cada timeline y que se restauro al
   volver, con el valor pedido y el que quedo.
 
+  v1.02: El zoom se reintenta en el lugar hasta que el slider acepta el
+         valor: recien abierto el timeline, su rango todavia no esta armado y
+         el valor quedaba recortado (629 pedido, 187 aplicado). Nuevo
+         has_view() para que el switch sepa si hay vista que aplicar.
   v1.01: Nada se guardaba: leer el slider tiraba "Internal C++ object
          (QSlider) already deleted" y esa excepcion cortaba el guardado
          entero, playhead incluido. Ahora cada dato se lee por separado,
@@ -52,6 +56,10 @@ _LOGS_DIR = os.path.join(
 # haria que cada sesion descarte y pise la memoria de la otra.
 _MEMORY_PATH = os.path.join(_LOGS_DIR, f"ProjectsPanel_TimelineMemory_{os.getpid()}.json")
 _LOG_PATH = os.path.join(_LOGS_DIR, "DebugPy_TimelineMemory.log")
+
+# Intentos de aplicar el zoom procesando eventos entre cada uno. Con el timeline
+# recien abierto el slider todavia no tiene su rango final y recorta el valor.
+ZOOM_SETTLE_TRIES = 8
 
 
 # =========================
@@ -247,9 +255,36 @@ def _write_value(widget, value, label):
         return None
 
 
+def _apply_zoom(slider, value):
+    """Aplica el zoom y reintenta procesando eventos hasta que el slider lo acepta."""
+    result = None
+    for attempt in range(1, ZOOM_SETTLE_TRIES + 1):
+        result = _write_value(slider, value, "zoom")
+        QtCore.QCoreApplication.processEvents()
+        if result is None or not is_widget_alive(slider):
+            return result
+        result = slider.value()
+        if result == int(value):
+            if attempt > 1:
+                _log(f"Zoom {value} aceptado en el intento {attempt}")
+            return result
+    _log(
+        f"Zoom {value} no se asento tras {ZOOM_SETTLE_TRIES} intentos: quedo {result} "
+        f"(rango del slider {slider.minimum()}..{slider.maximum()})",
+        level="warning",
+    )
+    return result
+
+
 # =========================
 #       API DEL PANEL
 # =========================
+
+
+def has_view(seq):
+    """True si hay una vista guardada para `seq`."""
+    key = _sequence_key(seq) if seq else None
+    return bool(key and _load()["timelines"].get(key))
 
 
 def capture_active():
@@ -305,8 +340,7 @@ def restore_view(seq, attempt="principal"):
     editor = hiero.ui.getTimelineEditor(seq)
     controls = _find_view_controls(editor) if editor else {}
     if controls.get("zoom") is not None and state.get("zoom") is not None:
-        applied["zoom"] = _write_value(controls["zoom"], state["zoom"], "zoom")
-        QtCore.QCoreApplication.processEvents()
+        applied["zoom"] = _apply_zoom(controls["zoom"], state["zoom"])
     for name in ("scroll_h", "scroll_v"):
         applied[name] = _write_value(controls.get(name), state.get(name), name)
 
