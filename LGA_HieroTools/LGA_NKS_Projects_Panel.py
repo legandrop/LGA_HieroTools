@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.31 | Lega
+  LGA_NKS_Projects_Panel v2.32 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,12 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.32: El toggle Studio/Client vuelve al ultimo timeline usado en el contexto
+         de destino. Antes de cambiar guarda el timeline activo como el ultimo
+         del contexto que se deja (LGA_NKS_TimelineMemory); despues, si el de
+         destino tiene uno guardado y su proyecto sigue abierto, cambia a esa
+         secuencia con su zoom, scroll y playhead. Si no, el timeline queda
+         donde estaba.
   v2.31: La seccion Track names se repuebla en cada apertura de Settings,
          igual que los colores. La vista se arma una sola vez y el toggle
          Studio/Client cambia el scope de tasks en caliente, asi que despues
@@ -77,6 +83,7 @@ from LGA_NKS_Shared.LGA_NKS_Project_Colors_Config import (
     load_project_colors as load_project_colors_from_db,
 )
 from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
+from LGA_NKS_Projects_Panel_py import LGA_NKS_TimelineMemory as timeline_memory
 from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectsPanel_Logging import (
     DEBUG,
     DEBUG_CONSOLE,
@@ -450,6 +457,11 @@ class ProjectsPanel(QtWidgets.QWidget):
         current_mode = get_context_mode()
         if new_mode == current_mode:
             return
+        # Antes de tocar nada: el timeline activo es el ultimo del contexto que se deja.
+        try:
+            timeline_memory.remember_context(current_mode)
+        except Exception as e:
+            debug_print(f"Error guardando el timeline del contexto '{current_mode}': {e}")
         try:
             self._write_context_mode(new_mode)
             self._reload_after_context_switch()
@@ -458,12 +470,27 @@ class ProjectsPanel(QtWidgets.QWidget):
             # releen el contexto y tienen que ver el valor nuevo, no el viejo.
             notify_context_change(new_mode)
             debug_print(f"Contexto cambiado a '{new_mode}' desde toggle")
+            # Diferido: el toggle se repinta antes del switch, que tarda medio segundo.
+            QtCore.QTimer.singleShot(0, lambda: self._return_to_context_timeline(new_mode))
         except Exception as e:
             debug_print(f"Error al cambiar contexto: {e}")
             self._refresh_context_toggle()
             show_warning(
                 self, "Error al cambiar contexto", f"No se pudo cambiar el contexto:\n{e}"
             )
+
+    def _return_to_context_timeline(self, mode):
+        """Vuelve al ultimo timeline usado en `mode`, si hay uno y su proyecto sigue abierto."""
+        try:
+            target = timeline_memory.recall_context(mode)
+            if not target:
+                return
+            project, seq_name = target
+            switch_to_sequence(seq_name, target_project=project)
+            # El switch reinicia el log: esta linea queda como primera traza visible.
+            debug_print(f"[Memoria] Toggle a '{mode}': vuelta a '{seq_name}' de {project.name()}")
+        except Exception as e:
+            debug_print(f"Error volviendo al timeline del contexto '{mode}': {e}")
 
     def eventFilter(self, obj, event):
         """Manejar eventos de hover para botones y labels"""

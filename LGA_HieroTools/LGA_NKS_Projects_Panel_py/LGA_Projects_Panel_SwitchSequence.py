@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel_SwitchSequence v2.33 | Lega
+  LGA_NKS_Projects_Panel_SwitchSequence v2.34 | Lega
 
   Hiero / Nuke Studio - Switch V3: HÍBRIDO OPTIMIZADO + LIMPIEZA TOTAL + CROSS-PROJECT
 
@@ -19,6 +19,7 @@ ____________________________________________________________________
   INTEGRACIÓN EN PANEL DE PROYECTOS:
   from switch_sequence_v3_final import switch_to_sequence_hybrid
 
+  v2.34: Memoria de vista por timeline (LGA_NKS_TimelineMemory). Antes de cerrar el timeline viejo se guardan su zoom, scroll y playhead; al abrir una secuencia que ya tenia vista guardada se restaura, con un segundo intento diferido porque Hiero sigue reacomodando el layout despues de openInTimeline.
   v2.33: _cleanup_viewers_aggressive() y _cleanup_timelines_aggressive() revalidan con is_widget_alive() antes de cada deleteLater(). Llaman a _process_events() adentro del loop, que ejecuta los deleteLater() ya encolados, asi que un widget capturado al principio del barrido podia estar muerto cuando le tocaba el turno.
   v2.32: Se deja de barrer QApplication.allWidgets() a pelo. Esa llamada materializa de una sola vez un wrapper de PySide por cada widget del proceso, y si Hiero esta creando o destruyendo widgets en ese momento corrompe el heap: eso tumbaba a Nuke Studio con 0xc0000374, o mas tarde con un access violation adentro de QWidget::~QWidget. Ahora se itera con iter_live_widgets() y se revalida con is_widget_alive() antes de cada deleteLater().
 
@@ -53,6 +54,12 @@ from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectsPanel_Logging import (
     debug_print,
     reset_debug_log,
 )
+from LGA_NKS_Projects_Panel_py import LGA_NKS_TimelineMemory as timeline_memory
+
+# Segundo intento de restaurar la vista guardada. openInTimeline deja el layout
+# del timeline a medio armar y Hiero lo sigue ajustando en eventos posteriores,
+# que pueden pisar el zoom o el scroll recien aplicados.
+MEMORY_RESTORE_RETRY_MS = 150
 
 # Si True, cierra TODOS los viewers + timelines viejos y deja solo el nuevo
 CLOSE_ALL_TIMELINES = True
@@ -940,6 +947,20 @@ def disable_frame_number_on_active_sequence():
     return False
 
 
+def _restore_memory_view(seq, retry=False):
+    """Aplica la vista guardada de `seq`. No hace nada si ya no es la secuencia activa."""
+    try:
+        # El reintento corre diferido: si en el medio se cambio de timeline, el
+        # playhead se aplicaria al viewer de OTRA secuencia.
+        if retry and hiero.ui.activeSequence() != seq:
+            debug_print("   [Memoria] Reintento cancelado: cambio la secuencia activa")
+            return False
+        return timeline_memory.restore_view(seq, attempt="reintento" if retry else "principal")
+    except Exception as e:
+        debug_print(f"   [Memoria] Error restaurando la vista: {e}")
+        return False
+
+
 def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
     """
     Switch HÍBRIDO V3 PERFECTO: Mejor que v4 + LIMPIEZA TOTAL + CROSS-PROJECT
@@ -1035,6 +1056,13 @@ def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
         else:
             debug_print("✅ Ya activa - sin cambios")
             return True
+
+    # 2b. Guardar zoom, scroll y playhead del timeline que se va a destruir,
+    # para restaurarlos si despues se vuelve a esta secuencia.
+    try:
+        timeline_memory.capture_active()
+    except Exception as e:
+        debug_print(f"   [Memoria] Error guardando la vista: {e}")
 
     # 3. Capturar ajustes del viewer ACTUAL (gain/gamma para transferir)
     step_start = time.time()
@@ -1240,7 +1268,15 @@ def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
     )
     _log_widget_snapshot("final post cleanup wait")
 
-    # 16. Resultado final
+    # 16. Restaurar la vista guardada de esta secuencia. Va al final porque el
+    # reduce, el scroll al top track y los cierres mueven zoom y scroll.
+    memory_restored = _restore_memory_view(new_active)
+    if memory_restored:
+        QtCore.QTimer.singleShot(
+            MEMORY_RESTORE_RETRY_MS, lambda seq=new_active: _restore_memory_view(seq, retry=True)
+        )
+
+    # 17. Resultado final
     total_time = time.time() - total_start
     debug_print(f"✅ Switch híbrido perfecto completado en {total_time:.2f}s")
     debug_print(f"   ├── Viewer capture: {viewer_capture_time:.3f}s")

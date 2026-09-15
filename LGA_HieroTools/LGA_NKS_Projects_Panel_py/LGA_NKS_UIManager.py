@@ -1,11 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_UIManager v1.05 | Lega
+  LGA_NKS_UIManager v1.06 | Lega
 
   Gestor de interfaz de usuario para el panel de proyectos LGA.
   Centraliza creación de widgets, conexión de señales, y manejo de eventos.
 
+  v1.06: El toggle de contexto arranca alineado con los nombres de proyecto
+         (antes quedaba mas a la izquierda) y la separacion entre el toggle y
+         el primer proyecto es un 35% menor. Los dos valores se calculan con
+         los margenes reales de la lista, que dependen del estilo del host.
   v1.05: El toggle de contexto pasa a una fila propia ARRIBA de la lista de
          proyectos, alineado a la izquierda. Antes compartia la fila del
          contador, debajo de la lista. La fila solo se crea si el toggle existe.
@@ -37,6 +41,17 @@ SWITCH_ALLOWED_LOGIN = None
 GET_CONTEXT_MODE = None
 FIND_CONTEXT_INI = None
 GET_NORMAL_PIPESYNC_LOGIN = None
+
+# Margenes de LGA_NKS_ProjectItem (setContentsMargins(5, 2, 5, 2)). Se repiten
+# aca para alinear el toggle con el texto de los proyectos; si cambian alla,
+# cambiarlos tambien aca.
+PROJECT_ITEM_LEFT_MARGIN = 5
+PROJECT_ITEM_TOP_MARGIN = 2
+
+# Margen inferior original de la fila del toggle, y cuanto se achica la
+# separacion entre el toggle y el primer proyecto.
+TOGGLE_ROW_BOTTOM_MARGIN = 4
+TOGGLE_GAP_REDUCTION = 0.35
 
 
 def initialize_ui_dependencies(reimport_flag, switch_login=None, get_context_fn=None, find_ini_fn=None, get_login_fn=None):
@@ -84,8 +99,11 @@ class UIManager:
         # y la lista queda pegada al borde superior como antes.
         context_toggle = UIManager._build_context_toggle(panel)
         if context_toggle is not None:
+            left_margin, bottom_margin = UIManager._fit_toggle_to_list(
+                projects_container_layout, scroll_area, panel.projects_layout
+            )
             toggle_row = QtWidgets.QHBoxLayout()
-            toggle_row.setContentsMargins(0, 0, 0, 4)
+            toggle_row.setContentsMargins(left_margin, 0, 0, bottom_margin)
             toggle_row.setSpacing(6)
             toggle_row.addWidget(context_toggle, 0, QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
             toggle_row.addStretch(1)
@@ -204,6 +222,36 @@ class UIManager:
 
         # Añadir columna derecha al layout principal (sin stretch para mantener tamaño pequeño)
         panel.main_layout.addLayout(right_column, 0)  # stretch factor 0
+
+    @staticmethod
+    def _fit_toggle_to_list(container_layout, scroll_area, list_layout):
+        """
+        Calcula (margen_izquierdo, margen_inferior) de la fila del toggle.
+
+        Izquierda: el texto de un proyecto arranca despues del marco del scroll,
+        el margen de la lista y el margen del ProjectItem. Abajo: la separacion
+        original sumaba el margen de la fila, el spacing del contenedor, el marco,
+        el margen superior de la lista y el del item; el recorte se saca primero
+        del margen superior de la lista y el resto del margen de la fila.
+        """
+        frame = scroll_area.frameWidth()
+        margins = list_layout.contentsMargins()
+        left_margin = frame + margins.left() + PROJECT_ITEM_LEFT_MARGIN
+
+        gap = (
+            TOGGLE_ROW_BOTTOM_MARGIN
+            + max(container_layout.spacing(), 0)
+            + frame
+            + margins.top()
+            + PROJECT_ITEM_TOP_MARGIN
+        )
+        cut = int(round(gap * TOGGLE_GAP_REDUCTION))
+        cut_from_list = min(cut, margins.top())
+        cut_from_row = min(cut - cut_from_list, TOGGLE_ROW_BOTTOM_MARGIN)
+        list_layout.setContentsMargins(
+            margins.left(), margins.top() - cut_from_list, margins.right(), margins.bottom()
+        )
+        return left_margin, TOGGLE_ROW_BOTTOM_MARGIN - cut_from_row
 
     @staticmethod
     def _build_context_toggle(panel):

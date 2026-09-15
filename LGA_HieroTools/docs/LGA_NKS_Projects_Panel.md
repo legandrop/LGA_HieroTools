@@ -39,6 +39,10 @@
 - Update automatico: proyectos abiertos muestran boton `Update` cuando existe version mas nueva en disco. La version mas alta se busca SOLO entre archivos del mismo proyecto: `encontrar_version_mas_alta()` filtra por `obtener_clave_proyecto_archivo()`, la misma clave con la que agrupa el escaneo. No usar globs por prefijo aca — `PROJB*` tambien matchea `PROJB_BREAKDOWN_*` y termina ofreciendo la version de otro proyecto.
 - Proyectos abiertos: solo se listan los que cuelgan del root del contexto activo (`T:\` en studio, `N:\` en client). Un proyecto abierto desde el otro contexto queda fuera de la lista, del chequeo de versiones nuevas y del match de "ya esta abierto". El filtro lo hace `is_path_under_root()` comparando por componentes, no por prefijo de texto.
 - Secuencias: solo de proyectos abiertos. Click llama `switch_to_sequence_hybrid()` y usa `hiero.ui.openInTimeline()` con el objeto `Sequence`.
+- Memoria de vista por timeline (`LGA_NKS_TimelineMemory`): antes de destruir el timeline viejo, el switch guarda su zoom (el slider del contenedor horizontal del TimelineView), el scroll horizontal y vertical y el playhead. Al volver a esa secuencia se restauran al final del switch, con un segundo intento a los 150 ms porque Hiero sigue reacomodando el layout. La clave es ruta del `.hrox` + nombre de secuencia. Gain/gamma/saturation no se guardan: siguen pasando de un timeline al siguiente.
+  - La memoria vive en `logs/ProjectsPanel_TimelineMemory_<PID>.json`, un archivo por proceso de NKS: sobrevive al reimport del panel, no a reabrir NKS, y dos NKS abiertos a la vez no se pisan. Los archivos de sesiones viejas quedan en `logs/`, que no se versiona.
+  - Log propio: `logs/DebugPy_TimelineMemory.log`. A diferencia del log del panel, NO se reinicia en cada switch: conserva toda la sesion, con lineas `GUARDADO` (vista al salir de cada timeline), `Controles` (widgets encontrados, vivos y muertos) y `RESTAURADO` (valor pedido contra valor que quedo, en el intento principal y en el reintento).
+  - Cada dato se lee y aplica por separado y los wrappers muertos de PySide se descartan con `is_widget_alive()`: un `QSlider` destruido no puede volver a cortar el guardado del playhead.
 - En el cambio de secuencia se ejecuta un pre-cleanup sobre el timeline nuevo antes de los ajustes finales de UI: elimina tracks NukeVFX y extiende BurnIn hasta el ultimo clip visible.
 - Al final de cada cambio de secuencia, `disable_frame_number_on_active_sequence()` busca `Frame_Only` en el track `BurnIn` de la secuencia activa y lo deshabilita si estaba activo. No llama al toggle de posicionamiento, por lo que no crea el efecto ni lo enciende por accidente.
 - Contadores: etiqueta inferior muestra totales de proyectos encontrados y abiertos.
@@ -67,6 +71,7 @@
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel.py`: `ProjectsPanel`, import y wiring de `switch_to_sequence_hybrid()`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel_py\LGA_NKS_ProjectItem.py`: `ProjectItem.show_sequences()`, `ProjectItem.on_sequence_click()`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel_py\LGA_Projects_Panel_SwitchSequence.py`: `switch_to_sequence_hybrid()`, `disable_frame_number_on_active_sequence()`, `import_script()`.
+- `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel_py\LGA_NKS_TimelineMemory.py`: `capture_active()`, `restore_view()`, `remember_context()`, `recall_context()`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_ViewerTL_Panel_py\LGA_NKS_FrameNumber.py`: `find_frame_only_effect()`, `print_box_values()`.
 
 ## UI del panel
@@ -74,7 +79,9 @@
 - Toolbar derecha: `Refresh`, `Settings`, estado, `Reimport` (opcional).
 - Lista con scroll: proyectos cerrados/abiertos y boton `Update` cuando corresponde.
 - Etiqueta inferior con resumen de conteos.
-- Toggle de contexto (pill) a la derecha de la etiqueta inferior, solo visible para el login habilitado (`SWITCH_ALLOWED_LOGIN`). Orden visual: **`studio` a la izquierda, `client` a la derecha**. El activo se pinta violeta.
+- Toggle de contexto (pill) en una fila propia arriba de la lista, solo visible para el login habilitado (`SWITCH_ALLOWED_LOGIN`). Orden visual: **`studio` a la izquierda, `client` a la derecha**. El activo se pinta violeta.
+  - `UIManager._fit_toggle_to_list()` lo alinea con el texto de los proyectos y achica un 35% la separacion con el primero. Calcula con los margenes reales de la lista (dependen del estilo del host) y con los del `ProjectItem`, repetidos como constantes en el UIManager.
+  - Al cambiar de modo, el timeline activo queda guardado como el ultimo del contexto que se deja. Si el contexto de destino tiene uno guardado y su proyecto sigue abierto, el panel cambia a esa secuencia con su vista (`_return_to_context_timeline()`); si no, el timeline queda donde estaba.
   - Lo construye `UIManager._build_context_toggle()`; el estado lo pinta `_refresh_context_toggle()` del panel, que elige el boton por IDENTIDAD (`ctx_studio_btn` / `ctx_client_btn`) y no por su posicion en el layout. Por eso reordenar los `addWidget` es un cambio puramente visual.
   - Al cambiar de modo, `_write_context_mode()` reescribe `LGA_HieroTools_context.ini` en runtime. Ese archivo es estado de la maquina y NO se versiona: el repo publico lo excluye en `.git/info/exclude` y el contenedor `.nuke` en su `.gitignore`. Sin el archivo, `get_context_mode()` devuelve `studio`.
 - Vista de `Settings`:

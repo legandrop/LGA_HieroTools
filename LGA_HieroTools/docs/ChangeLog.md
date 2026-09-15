@@ -1,5 +1,9 @@
 v3.94:
 
+        - La memoria de vista de timelines no guardaba nada (`LGA_NKS_TimelineMemory v1.01`, `LGA_NKS_Projects_Panel_Smart_Reload v2.23`): leer el slider de zoom tiraba "Internal C++ object (QSlider) already deleted" y esa excepcion cortaba el guardado entero, playhead incluido, y con el tambien la memoria del toggle Studio/Client. Ahora cada dato se lee por separado, los widgets muertos se descartan antes de usarlos y todo queda en un log propio que no se reinicia en cada switch. El reimport del panel no recargaba el modulo; ahora si. [ HieroTools - Arreglada la memoria de vista de timelines ]
+
+        - Al volver a un timeline desde el Projects Panel se perdian el zoom, el scroll y el playhead (`LGA_NKS_Projects_Panel_SwitchSequence v2.34`, `LGA_NKS_TimelineMemory v1.00`): el switch destruye el timeline viejo y nada guardaba su vista. Ahora se guarda antes de cerrarlo y se restaura al reabrir esa secuencia. El toggle Studio/Client tambien vuelve al ultimo timeline de cada contexto si su proyecto sigue abierto (`LGA_NKS_Projects_Panel v2.32`). La memoria dura la sesion de NKS. De paso, el toggle queda alineado con los nombres de proyecto y mas pegado a la lista (`LGA_NKS_UIManager v1.06`). [ HieroTools - Los timelines recuerdan zoom, scroll y playhead ]
+
         - Al seleccionar una fila en la ventana de resultados del Flow Pull se perdian todos los colores: fondo gris y texto negro (`LGA_NKS_Flow_Pull v3.66`). Con una hoja de estilo en la tabla, Qt ignora la paleta que tocaba el delegate para la seleccion, y mandaba la regla `item:selected` con texto negro y fondo transparente. Ahora el delegate pinta la fila seleccionada a mano: cada celda conserva su color de estado con mas brillo, y el texto claro tambien se aclara. [ HieroTools - Seleccion del Flow Pull resalta los colores ]
 
 v3.93:

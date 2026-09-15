@@ -27,6 +27,10 @@ HieroTools, qué scripts quedaron adaptados y cuáles requieren revisión adicio
 - En client no se debe caer en DB studio como fallback funcional.
 - El switch Studio/Client actualiza INI, fuerza recarga del Projects Panel y
   avisa por el bus a los paneles suscriptos.
+- El switch tambien cambia de timeline: guarda el activo como el ultimo del
+  contexto que se deja y vuelve al ultimo del contexto de destino, con su zoom,
+  scroll y playhead, si su proyecto sigue abierto. Es memoria de la sesion de
+  NKS (`LGA_NKS_TimelineMemory`); detalle en `LGA_NKS_Projects_Panel.md`.
 - Scope de tasks por contexto:
   - `studio`: tasks `comp`, `roto`, `cleanup` (no existe `cg`).
   - `client`: tasks `comp` y `cg` (no se consideran `roto`/`cleanup`).

@@ -208,6 +208,22 @@ Scrolled to position -266.
 - **Error:** `❌ Error: Secuencia 'nombre' no encontrada`
 - **Proyecto diferente:** `❌ Error: Secuencia '000' no encontrada` (limitación conocida)
 
+## Memoria de vista por timeline
+
+El switch destruye el timeline viejo, y con el se perdian zoom, scroll y
+playhead. Desde v2.34:
+
+1. Antes de cerrar, `LGA_NKS_TimelineMemory.capture_active()` guarda la vista
+   del timeline activo, con clave ruta del `.hrox` + nombre de secuencia.
+2. Al final del switch, `restore_view()` aplica la vista guardada de la
+   secuencia nueva, si la hay: primero el zoom, que cambia el rango del scroll
+   horizontal, despues los dos scrolls y el playhead. Pisa el scroll al top
+   track y el playhead que se trae del timeline anterior.
+3. A los `MEMORY_RESTORE_RETRY_MS` (150 ms) se reintenta, solo si esa secuencia
+   sigue activa, porque Hiero sigue reacomodando el layout.
+
+Gain/gamma/saturation no se guardan por timeline: siguen transfiriendose.
+
 ## Problemas Conocidos
 
 ### ✅ **RESUELTO: Dos proyectos con secuencia del mismo nombre**
