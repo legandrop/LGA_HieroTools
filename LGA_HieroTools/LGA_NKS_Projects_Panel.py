@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.34 | Lega
+  LGA_NKS_Projects_Panel v2.35 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,8 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.35: El toggle larga un solo escaneo. El segundo, a los 150 ms, era trabajo
+         doble: con los escaneos numerados solo se aplicaba el ultimo.
   v2.34: El toggle vuelve a largar el escaneo ANTES del switch, en paralelo, y
          ScanManager difiere el display si termina con la UI congelada. En
          v2.33 el escaneo esperaba al switch y la lista llegaba ~0.2s tarde.
@@ -456,8 +458,9 @@ class ProjectsPanel(QtWidgets.QWidget):
         return ini_path
 
     def _reload_after_context_switch(self):
+        # Un solo escaneo. Hasta v2.34 se largaba un segundo a los 150 ms; con
+        # los escaneos numerados solo contaba el ultimo, asi que era trabajo doble.
         self.start_scan()
-        QtCore.QTimer.singleShot(150, self.start_scan)
 
     def set_context_mode(self, mode):
         """Cambia el contexto al modo indicado (studio|client) si difiere del actual."""

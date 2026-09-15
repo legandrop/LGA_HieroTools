@@ -1,10 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ScrollTo_TopTrack v1.02 | Lega
+  LGA_NKS_ScrollTo_TopTrack v1.03 | Lega
 
   Utilidad para llevar el timeline al track superior.
 
+  v1.03: El metodo robusto pasa a ser el primero. El camino por indices de
+         Nuke 15 devolvia otro QScrollBar (rango 0..7507) sin tirar error: el
+         boton Top Track movia ese y el timeline no subia. Los indices quedan
+         como respaldo.
   Usado por runtime activo:
   - LGA_NKS_ViewerTL_Panel.py
   - LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Timeline_Refresh_Wrap.py
@@ -85,14 +89,20 @@ def obtener_limites_scrollbar(timeline_editor=None):
         else:
             t = timeline_editor
 
-        # Primero intentar método original (Nuke 15)
-        scrollbar = None
-        try:
-            scrollbar = t.window().children()[3].children()[0].children()[0].children()[7].children()[0]
-            debug_print("Usando método original (Nuke 15)")
-        except (IndexError, AttributeError):
-            debug_print("Método original falló, intentando método robusto")
-            scrollbar = obtener_scrollbar_robusto()
+        # Primero el metodo robusto: busca por nombre de contenedor y valida el
+        # rango negativo propio del scroll de tracks. El camino por indices de
+        # Nuke 15 puede caer en OTRO QScrollBar sin tirar error (medido: rango
+        # 0..7507 contra -558..-209 del real) y mover algo que no se ve.
+        scrollbar = obtener_scrollbar_robusto(t)
+        if scrollbar is not None:
+            debug_print("Usando método robusto")
+        else:
+            try:
+                scrollbar = t.window().children()[3].children()[0].children()[0].children()[7].children()[0]
+                debug_print("Método robusto falló, usando método original (Nuke 15)")
+            except (IndexError, AttributeError):
+                debug_print("Tampoco funcionó el método original (Nuke 15)")
+                scrollbar = None
 
         if scrollbar is None:
             debug_print("No se pudo encontrar scrollbar con ningún método")

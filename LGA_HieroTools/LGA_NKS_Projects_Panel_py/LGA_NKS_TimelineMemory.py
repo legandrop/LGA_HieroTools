@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_TimelineMemory v1.02 | Lega
+  LGA_NKS_TimelineMemory v1.03 | Lega
 
   Memoria de vista por timeline para el Projects Panel.
 
@@ -17,15 +17,18 @@ ____________________________________________________________________
 
   Lo que se guarda por timeline:
     - zoom: el slider del contenedor horizontal del TimelineView
-    - scroll horizontal y vertical
+    - scroll horizontal
     - playhead
-  Gain/gamma/saturation NO: siguen pasando de un timeline al siguiente.
+  NO se guardan: el scroll vertical (cada switch vuelve al top track) ni
+  gain/gamma/saturation (siguen pasando de un timeline al siguiente).
 
   Log propio: logs/DebugPy_TimelineMemory.log. NO se reinicia en cada
   switch (el log del panel si), asi que conserva la historia completa de la
   sesion: que se guardo al salir de cada timeline y que se restauro al
   volver, con el valor pedido y el que quedo.
 
+  v1.03: El scroll vertical deja de guardarse y restaurarse: el switch siempre
+         lleva el timeline al track superior, como el boton Top Track.
   v1.02: El zoom se reintenta en el lugar hasta que el slider acepta el
          valor: recien abierto el timeline, su rango todavia no esta armado y
          el valor quedaba recortado (629 pedido, 187 aplicado). Nuevo
@@ -300,7 +303,7 @@ def capture_active():
         _log("Guardar: no hay secuencia activa")
         return False
 
-    state = {"playhead": None, "zoom": None, "scroll_h": None, "scroll_v": None}
+    state = {"playhead": None, "zoom": None, "scroll_h": None}
 
     # Playhead primero y por separado: no depende de los widgets del timeline
     try:
@@ -311,8 +314,9 @@ def capture_active():
 
     if editor:
         controls = _find_view_controls(editor)
-        for name, widget in controls.items():
-            state[name] = _read_value(widget, name)
+        # El scroll vertical no se guarda: el switch siempre vuelve al top track.
+        for name in ("zoom", "scroll_h"):
+            state[name] = _read_value(controls.get(name), name)
     else:
         _log(f"Guardar: '{key}' no tiene TimelineEditor", level="warning")
 
@@ -341,8 +345,7 @@ def restore_view(seq, attempt="principal"):
     controls = _find_view_controls(editor) if editor else {}
     if controls.get("zoom") is not None and state.get("zoom") is not None:
         applied["zoom"] = _apply_zoom(controls["zoom"], state["zoom"])
-    for name in ("scroll_h", "scroll_v"):
-        applied[name] = _write_value(controls.get(name), state.get(name), name)
+    applied["scroll_h"] = _write_value(controls.get("scroll_h"), state.get("scroll_h"), "scroll_h")
 
     try:
         viewer = hiero.ui.currentViewer()

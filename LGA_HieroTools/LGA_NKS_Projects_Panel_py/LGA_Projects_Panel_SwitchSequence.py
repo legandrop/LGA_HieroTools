@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel_SwitchSequence v2.35 | Lega
+  LGA_NKS_Projects_Panel_SwitchSequence v2.36 | Lega
 
   Hiero / Nuke Studio - Switch V3: HÍBRIDO OPTIMIZADO + LIMPIEZA TOTAL + CROSS-PROJECT
 
@@ -19,6 +19,7 @@ ____________________________________________________________________
   INTEGRACIÓN EN PANEL DE PROYECTOS:
   from switch_sequence_v3_final import switch_to_sequence_hybrid
 
+  v2.36: Con memoria temprana tambien se scrollea al top track despues de aplicar la vista guardada: el scroll vertical ya no forma parte de la memoria.
   v2.35: Switch mas rapido y sin saltos visibles, detras de flags para medir cada uno: diagnosticos de widgets y espera de limpieza apagados (~0.45s de snapshots), la vista guardada se aplica apenas se abre la secuencia en vez de heredar playhead + scroll al top y corregirlos al final, y la ventana principal no repinta durante el switch (FREEZE_UI_DURING_SWITCH).
   v2.34: Memoria de vista por timeline (LGA_NKS_TimelineMemory). Antes de cerrar el timeline viejo se guardan su zoom, scroll y playhead; al abrir una secuencia que ya tenia vista guardada se restaura, con un segundo intento diferido porque Hiero sigue reacomodando el layout despues de openInTimeline.
   v2.33: _cleanup_viewers_aggressive() y _cleanup_timelines_aggressive() revalidan con is_widget_alive() antes de cada deleteLater(). Llaman a _process_events() adentro del loop, que ejecuta los deleteLater() ya encolados, asi que un widget capturado al principio del barrido podia estar muerto cuando le tocaba el turno.
@@ -1256,7 +1257,9 @@ def _switch_to_sequence_impl(target_sequence_name, target_project=None):
     if use_early_memory:
         debug_print("   [Stage] Memoria temprana: inicio")
         memory_restored = _restore_memory_view(new_active)
-        scroll_success = memory_restored
+        # El scroll vertical no se guarda: cada switch vuelve al track superior,
+        # igual que el boton Top Track del ViewerTL.
+        scroll_success = scroll_to_top_track(new_timeline)
     else:
         debug_print("   [Stage] UI scroll: inicio")
         scroll_success = scroll_to_top_track(new_timeline)

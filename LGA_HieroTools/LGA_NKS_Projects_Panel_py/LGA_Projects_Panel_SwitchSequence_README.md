@@ -217,16 +217,18 @@ playhead. Desde v2.34:
    del timeline activo, con clave ruta del `.hrox` + nombre de secuencia.
 2. Al final del switch, `restore_view()` aplica la vista guardada de la
    secuencia nueva, si la hay: primero el zoom, que cambia el rango del scroll
-   horizontal, despues los dos scrolls y el playhead. Pisa el scroll al top
-   track y el playhead que se trae del timeline anterior.
+   horizontal, despues el scroll horizontal y el playhead. Pisa el playhead que
+   se trae del timeline anterior. El scroll vertical no se guarda: el switch
+   siempre termina en el top track (v2.36).
 3. A los `MEMORY_RESTORE_RETRY_MS` (150 ms) se reintenta, solo si esa secuencia
    sigue activa, porque Hiero sigue reacomodando el layout.
 
 Gain/gamma/saturation no se guardan por timeline: siguen transfiriendose.
 
 Desde v2.35, con `APPLY_MEMORY_EARLY` la vista se aplica en el paso 11, apenas
-despues del reduce, y se saltean el playhead heredado y el scroll al top track:
-antes se veian como saltos intermedios que la memoria corregia al final.
+despues del reduce, y se saltea el playhead heredado: antes se veia como un salto
+intermedio que la memoria corregia al final. Desde v2.36 el scroll al top track
+corre despues de aplicar la vista.
 
 ### Flags de velocidad (v2.35)
 
