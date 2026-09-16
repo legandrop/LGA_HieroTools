@@ -181,6 +181,8 @@ Timeline editing, cleanup, reconnect, colorspace, and validation utilities.
 - **Reconnect Media**  
   Opens a dialog for manual media reconnection.  
   Shortcut: `Alt+M`.
+- **Replace Clip**  
+  Replaces the media of the selected clip with a file you choose, even if it has a different name or folder. Pick any frame of a sequence. Frame range and resolution are checked before replacing, and trims, color and bin are kept.
 - **Clear Tag**  
   Removes all tags from the selected clips.
 - **Match Rev Ver**  

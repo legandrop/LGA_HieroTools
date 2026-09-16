@@ -1,10 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_EditToolsPanel v3.07 | Lega
+  LGA_EditToolsPanel v3.08 | Lega
 
   Tools panel for Hiero / Nuke Studio
 
+  v3.08: Nuevo boton Replace Clip, entre Reconnect Media y Self ReplaceClip,
+         que llama a LGA_NKS_ReplaceClip.py.
   v3.07: Apply AMF toma el atajo Shift+L y el boton Toggle AMF queda
          comentado como referencia (sin atajo, por si se reactiva).
   v3.06: Apply AMF pasa a poner y sacar los efectos, y sin seleccion
@@ -55,6 +57,11 @@ from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
 TOOLTIP_CREATE_NK_SCRIPT = (
     "Crea el script de comp de Nuke del shot activo desde el template del proyecto "
     "(ASSETS), con los plates y denoised reales, el CDL/CLF del shot y el EditRef centrado"
+)
+TOOLTIP_REPLACE_CLIP = (
+    "Reemplaza el media del clip seleccionado por un archivo que elegis, aunque tenga "
+    "otro nombre o este en otra carpeta. Compara frame range y resolucion antes de "
+    "reemplazar y conserva trims, color y bin"
 )
 import importlib.util
 import importlib.machinery
@@ -350,6 +357,7 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
                 "Alt+M",
                 "Alt+M\nAbre un diálogo para reconectar media manualmente",
             ),
+            ("Replace Clip", self.execute_ReplaceClip, "#4a4329", None, TOOLTIP_REPLACE_CLIP),
             ("Self ReplaceClip", self.execute_SelfReplaceClip, "#4a4329", None, "Crea una nueva versión duplicada del clip seleccionado para que sea única (a veces arregla problemas)"),
             (
                 "Clear Tag",
@@ -1067,6 +1075,10 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
 
         for track_item in selected_track_items:
             track_item.reconnectMedia(search_path)
+
+    ###### Replace Clip
+    def execute_ReplaceClip(self):
+        self.execute_external_script("LGA_NKS_ReplaceClip.py")
 
     ###### Self ReplaceClip
     def execute_SelfReplaceClip(self):
