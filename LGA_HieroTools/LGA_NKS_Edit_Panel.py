@@ -1,10 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_EditToolsPanel v3.08 | Lega
+  LGA_EditToolsPanel v3.09 | Lega
 
   Tools panel for Hiero / Nuke Studio
 
+  v3.09: Nuevo boton Fix Zombies, debajo de Self ReplaceClip, que llama a
+         LGA_NKS_FixZombieClips.py.
   v3.08: Nuevo boton Replace Clip, entre Reconnect Media y Self ReplaceClip,
          que llama a LGA_NKS_ReplaceClip.py.
   v3.07: Apply AMF toma el atajo Shift+L y el boton Toggle AMF queda
@@ -62,6 +64,11 @@ TOOLTIP_REPLACE_CLIP = (
     "Reemplaza el media del clip seleccionado por un archivo que elegis, aunque tenga "
     "otro nombre o este en otra carpeta. Compara frame range y resolucion antes de "
     "reemplazar y conserva trims, color y bin"
+)
+TOOLTIP_FIX_ZOMBIES = (
+    "Revisa todos los clips del timeline y arregla los que quedaron sin Properties "
+    "ni metadata (su ficha del bin quedo huerfana), haciendoles un self replace. "
+    "Los que estan offline hay que arreglarlos a mano con Replace Clip"
 )
 import importlib.util
 import importlib.machinery
@@ -359,6 +366,7 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
             ),
             ("Replace Clip", self.execute_ReplaceClip, "#4a4329", None, TOOLTIP_REPLACE_CLIP),
             ("Self ReplaceClip", self.execute_SelfReplaceClip, "#4a4329", None, "Crea una nueva versión duplicada del clip seleccionado para que sea única (a veces arregla problemas)"),
+            ("Fix Zombies", self.execute_FixZombieClips, "#4a4329", None, TOOLTIP_FIX_ZOMBIES),
             (
                 "Clear Tag",
                 self.run_clear_tag_script,
@@ -1083,6 +1091,10 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
     ###### Self ReplaceClip
     def execute_SelfReplaceClip(self):
         self.execute_external_script("LGA_NKS_SelfReplaceClip.py")
+
+    ###### Fix Zombies
+    def execute_FixZombieClips(self):
+        self.execute_external_script("LGA_NKS_FixZombieClips.py")
 
     ###### Clean Project
     def clean_project(self):

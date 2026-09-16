@@ -162,6 +162,12 @@ Timeline editing, cleanup, reconnect, colorspace, and validation utilities.
   Creates a new video track above the selected track.
 - **Set Shot Name**  
   Sets the shot name based on the file path.
+- **Import shot**  
+  Imports shots into the project: plates and references into the shot bin and onto their tracks.
+- **Create NK v000**  
+  Builds the shot's Nuke comp script from the project template. See [Docu_CreateNKScript.md](LGA_HieroTools/docs/Docu_CreateNKScript.md).
+- **Apply AMF**  
+  Builds the shot's color chain (CDL + CLF) on the selected clips, driven by the shot's `.amf`. Click again to remove it. Shortcut: `Shift+L`.
 - **Extend &Edit**  
   Extends the clip out point to the playhead by retiming the clip.  
   Shortcut: `Alt+E`.
@@ -182,7 +188,11 @@ Timeline editing, cleanup, reconnect, colorspace, and validation utilities.
   Opens a dialog for manual media reconnection.  
   Shortcut: `Alt+M`.
 - **Replace Clip**  
-  Replaces the media of the selected clip with a file you choose, even if it has a different name or folder. Pick any frame of a sequence. Frame range and resolution are checked before replacing, and trims, color and bin are kept.
+  Replaces the media of the selected clip with a file you choose, even if it has a different name or folder. Pick any frame of a sequence. Frame range and resolution are checked before replacing, and trims, color and bin are kept. See [Docu_Clips_Zombie.md](LGA_HieroTools/docs/Docu_Clips_Zombie.md).
+- **Self ReplaceClip**  
+  Replaces the selected clip with its own media, which rebuilds its bin entry. Fixes clips that stopped showing Properties or metadata.
+- **Fix Zombies**  
+  Scans every clip in the timeline and repairs the broken ones (no Properties, no metadata, Reconnect Media does nothing) with a self replace. Offline ones are listed so you can fix them with Replace Clip.
 - **Clear Tag**  
   Removes all tags from the selected clips.
 - **Match Rev Ver**  
@@ -204,8 +214,6 @@ Review and inspection tools for compare workflows, reveals, clip toggling, and o
 - **ON Clips | OFF v00**  
   Click: enables all clips in the timeline and disables `v00` clips.  
   Shift+Click: applies only to selected clips.
-- **Self ReplaceClip**  
-  Creates a new duplicated version of the selected clip so it becomes unique. This can help fix certain timeline issues.
 - **ON OFF _comp_**  
   Enables or disables the clip on the `_comp_` track.  
   Shortcut: `Shift+D`.
