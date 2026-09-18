@@ -253,6 +253,22 @@ en `item_path` o `_input/Originals/<plate>/`, la herramienta debe aplicar estas 
   de `item_path` no tiene su original en `Originals/<plate>`. El caso real: un borrado anterior
   que quedo a medias por un original bloqueado deja 1 EXR de 5 en Originals.
 
+#### Plate re-entregado: el overwrite solo restaura lo que puede demostrar (transcode v1.04)
+
+- Un transcode OK que conserva `Originals/<plate>` deja ahi `.lga_transcode_outputs.json`: nombre,
+  tamano y `mtime_ns` de cada EXR convertido que escribio en el plate.
+- El overwrite solo restaura `Originals/<plate>` encima del plate si TODOS los EXR actuales
+  coinciden con ese registro. Si falta el registro (transcode de una version anterior) o algo no
+  coincide (llego un plate nuevo con los mismos nombres), aborta sin borrar y explica en ingles
+  que hacer. Antes, un plate re-entregado se reemplazaba por el viejo.
+- Por que ese criterio: la compresion o los metadatos no distinguen un convertido de un EXR de
+  camara (tambien puede venir en DWAA), y el tamano solo no alcanza (un plate sin comprimir de la
+  misma resolucion pesa igual). Un falso negativo solo lleva a no restaurar.
+- El dialogo de overwrite ya dice que va a pasar: que se borran los convertidos, o que se va a
+  rechazar.
+- Modo sin Originals: si `_tc_temp_src` tiene EXR, son los originales de un transcode
+  interrumpido. El overwrite ya no lo borra: aborta y explica como devolverlos a mano.
+
 ### Solución QSpinBox — `_ArrowSpinBox` (ganadora, implementada)
 
 Clase de módulo definida en `LGA_import_shots.py` (junto a `_ArrowComboBox`).

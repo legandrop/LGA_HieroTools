@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_transcode v1.03 | Lega
+  LGA_import_shots_transcode v1.04 | Lega
 
   Helper de transcode EXR para LGA_import_shots.
 
@@ -10,6 +10,13 @@ ____________________________________________________________________
   en serie; el paralelismo por frame lo maneja internamente
   LGA_EXR_Convert.py con concurrent.futures.
 
+  v1.04: Un plate re-entregado con los mismos nombres se reemplazaba por
+         el viejo: el overwrite restauraba Originals/<plate> encima de EXR
+         que no eran los convertidos. Ahora el transcode deja un manifiesto
+         (nombre, tamano, mtime_ns de cada EXR que escribio) y el overwrite
+         solo restaura si los EXR actuales coinciden todos; si no, aborta
+         sin borrar y lo explica en ingles. Tambien aborta si _tc_temp_src
+         tiene EXR: son originales de un transcode interrumpido.
   v1.03: Dos caminos de perdida de EXR originales. (1) Si mover los
          EXR fallaba a mitad, el restore borraba TODO *.exr de item_path,
          incluidos los originales que todavia no se habian movido: ahora
@@ -353,6 +360,47 @@ def _safe_remove_exr(path: Path, parent: Path, label: str) -> None:
     target.unlink()
 
 
+# Manifiesto que deja un transcode OK adentro de Originals/<plate>: la firma (tamano y
+# mtime_ns) de cada EXR convertido que escribio en el plate. Es la unica forma confiable de
+# saber, despues, que los EXR del plate SON esos convertidos: la compresion o los metadatos
+# no sirven (un EXR de camara tambien puede venir en DWAA) y el tamano solo tampoco (un plate
+# sin comprimir de la misma resolucion pesa igual). Un falso negativo (el mtime cambio porque
+# se copio el shot con una herramienta que no lo preserva) solo lleva a NO restaurar.
+OUTPUTS_MANIFEST_NAME = ".lga_transcode_outputs.json"
+
+
+def _exr_signatures(folder: Path) -> dict:
+    signatures = {}
+    for f in sorted(Path(folder).glob("*.exr")):
+        st = f.stat()
+        signatures[f.name] = [st.st_size, st.st_mtime_ns]
+    return signatures
+
+
+def _write_outputs_manifest(originals_dir: Path, plate_dir: Path) -> None:
+    data = {"version": 1, "plate": Path(plate_dir).name, "outputs": _exr_signatures(plate_dir)}
+    with open(Path(originals_dir) / OUTPUTS_MANIFEST_NAME, "w", encoding="utf-8") as fh:
+        json.dump(data, fh)
+
+
+def _plate_matches_outputs_manifest(originals_dir: Path, plate_dir: Path):
+    """(True, "") si TODOS los EXR del plate son los que dejo el transcode anterior."""
+    manifest = Path(originals_dir) / OUTPUTS_MANIFEST_NAME
+    if not manifest.is_file():
+        return False, "there is no record of what that transcode wrote (older version, or it did not finish)"
+    try:
+        with open(manifest, "r", encoding="utf-8") as fh:
+            recorded = json.load(fh).get("outputs") or {}
+    except Exception as exc:
+        return False, "its record could not be read (%s)" % exc
+    current = _exr_signatures(plate_dir)
+    changed = sorted(n for n, sig in current.items() if recorded.get(n) != sig)
+    if changed:
+        return False, "%d EXR are not the converted files it wrote (%s)" % (
+            len(changed), _describe_failures(changed))
+    return True, ""
+
+
 def _log_optional(log_fn, message: str) -> None:
     if log_fn:
         try:
@@ -384,7 +432,17 @@ def check_existing_outputs(item: dict, test_mode: bool, move_originals: bool):
         if orig.exists():
             count = sum(1 for _ in orig.glob("*.exr"))
             label = "%d EXR" % count if count else "carpeta vacía"
-            return True, "_input/Originals/%s ya existe (%s — transcode anterior)" % (item_path.name, label)
+            desc = "_input/Originals/%s ya existe (%s — transcode anterior)" % (item_path.name, label)
+            if count and any(item_path.glob("*.exr")):
+                same, _why = _plate_matches_outputs_manifest(orig, item_path)
+                if same:
+                    desc += ("\nOverwrite restores those originals into %s and DELETES the "
+                             "converted EXR currently there." % item_path.name)
+                else:
+                    desc += ("\nThe EXR now in %s are NOT the ones that transcode produced "
+                             "(re-delivered plate?). Overwrite will be refused and nothing will "
+                             "be deleted." % item_path.name)
+            return True, desc
     else:
         tmp = item_path / "_tc_temp_src"
         if tmp.exists():
@@ -427,6 +485,21 @@ def delete_existing_outputs(item: dict, test_mode: bool, move_originals: bool, l
             )
             if orig_exrs:
                 _ensure_safe_child(orig_plate, item_path.parent / "Originals", "Originals restore")
+                # Restaurar Originals encima del plate solo si se PUEDE DEMOSTRAR que los EXR
+                # del plate son los convertidos de ese transcode. Si llego un plate nuevo con
+                # los mismos nombres, restaurar lo reemplazaba por el viejo.
+                if any(item_path.glob("*.exr")):
+                    same, why = _plate_matches_outputs_manifest(orig_plate, item_path)
+                    if not same:
+                        raise RuntimeError(
+                            "Overwrite refused, nothing was deleted. _input/Originals/%s holds the "
+                            "originals of an earlier transcode, but the EXR now in %s cannot be "
+                            "confirmed as that transcode's output: %s. Restoring would replace "
+                            "them with the old plate. If %s is a new delivery, move "
+                            "_input/Originals/%s out of the way (or delete it once you are sure it "
+                            "is obsolete) and transcode again."
+                            % (item_path.name, item_path.name, why, item_path.name, item_path.name)
+                        )
                 # Antes de borrar UN solo convertido: cada EXR de item_path tiene que tener
                 # su original, con el MISMO nombre, en Originals/<plate> (el manifest mapea
                 # src->dst con el mismo filename). Si un borrado anterior quedo a medias (un
@@ -498,6 +571,16 @@ def delete_existing_outputs(item: dict, test_mode: bool, move_originals: bool, l
                 raise RuntimeError(
                     "Cleanup abortado: no hay EXR en item_path ni en _tc_temp_src. item_path=%s temp=%s"
                     % (item_path, tmp)
+                )
+            if tmp_count > 0:
+                # En modo sin Originals, _tc_temp_src guarda los ORIGINALES mientras dura el
+                # transcode. Si quedo con EXR, el transcode se corto sin restaurar: borrarlo
+                # era borrar los originales y quedarse con un plate a medio convertir.
+                raise RuntimeError(
+                    "Overwrite refused, nothing was deleted. %s/_tc_temp_src holds %d original "
+                    "EXR from an interrupted transcode. Move them back into %s by hand (replacing "
+                    "the partial files there), delete the empty _tc_temp_src and transcode again."
+                    % (item_path.name, tmp_count, item_path.name)
                 )
             _safe_rmtree_or_raise(tmp, item_path, "_tc_temp_src cleanup")
             deleted += 1
@@ -930,6 +1013,17 @@ class TranscodeWorker(QRunnable):
                             "  %s ⚠ Originals/%s NO se borro por completo (%s). "
                             "El transcode esta OK; los originales que quedaron siguen en %s"
                             % (self._t(), item_path.name, detail, originals_dir)
+                        )
+                elif originals_dir:
+                    # Se conservan los originales: dejar registrado QUE convertidos se
+                    # escribieron, para que un overwrite futuro pueda demostrarlo. Nunca
+                    # levanta (ver _cleanup_after_success).
+                    try:
+                        _write_outputs_manifest(originals_dir, dst_dir)
+                    except Exception as exc:
+                        self.signals.log_message.emit(
+                            "  %s ⚠ No se pudo escribir el registro de convertidos en %s: %s"
+                            % (self._t(), originals_dir, exc)
                         )
                 elif temp_src_dir and temp_src_dir.exists():
                     removed_ok, detail = _cleanup_after_success(

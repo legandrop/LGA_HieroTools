@@ -46,6 +46,10 @@ Dos caminos de perdida que no pasaban por ningun `rmtree`, en el transcode de Im
 - **Validar contra lo que hay, no contra que haya algo.** El overwrite borraba los convertidos
   si `Originals/<plate>` tenia ALGUN EXR. Si un borrado anterior quedo a medias, eso puede ser 1
   de 5. Regla: antes de borrar un convertido, su original con el mismo nombre tiene que estar.
+- **Restaurar tambien es sobrescribir.** Si llega un plate nuevo con los mismos nombres,
+  restaurar los originales de un transcode viejo lo reemplazaba por el plate viejo. Regla: solo
+  se restaura encima de algo que se puede demostrar que es producto de la herramienta; para eso el
+  transcode deja un registro de firmas (tamano + `mtime_ns`) de lo que escribio.
 
 ## Donde se aplica
 
