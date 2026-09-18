@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_transcode v1.02 | Lega
+  LGA_import_shots_transcode v1.03 | Lega
 
   Helper de transcode EXR para LGA_import_shots.
 
@@ -10,6 +10,15 @@ ____________________________________________________________________
   en serie; el paralelismo por frame lo maneja internamente
   LGA_EXR_Convert.py con concurrent.futures.
 
+  v1.03: Dos caminos de perdida de EXR originales. (1) Si mover los
+         EXR fallaba a mitad, el restore borraba TODO *.exr de item_path,
+         incluidos los originales que todavia no se habian movido: ahora
+         solo borra un EXR de item_path si su original esta a salvo en la
+         carpeta de origen, y el move es rename atomico (o copiar,
+         verificar tamano y recien ahi borrar entre discos distintos).
+         (2) El overwrite borraba los convertidos si Originals/<plate>
+         tenia ALGUN EXR: ahora cada convertido tiene que tener su
+         original con el mismo nombre, o no se borra nada.
   v1.02: Borrado honesto de Originals/ y _tc_temp_src/. Sin
          ignore_errors: se cuenta y se nombra lo que no se pudo
          borrar, y el log solo dice "eliminado" si se verifico. La
@@ -418,6 +427,24 @@ def delete_existing_outputs(item: dict, test_mode: bool, move_originals: bool, l
             )
             if orig_exrs:
                 _ensure_safe_child(orig_plate, item_path.parent / "Originals", "Originals restore")
+                # Antes de borrar UN solo convertido: cada EXR de item_path tiene que tener
+                # su original, con el MISMO nombre, en Originals/<plate> (el manifest mapea
+                # src->dst con el mismo filename). Si un borrado anterior quedo a medias (un
+                # original bloqueado), Originals puede tener 1 EXR de 5: borrar ahi los
+                # convertidos dejaba el plate con 1 frame. Que Originals tenga frames DE MAS
+                # no es riesgo: nada de item_path se queda sin copia.
+                orig_names = {f.name for f in orig_exrs}
+                sin_original = sorted(
+                    f.name for f in item_path.glob("*.exr") if f.name not in orig_names
+                )
+                if sin_original:
+                    raise RuntimeError(
+                        "Overwrite abortado, no se borro nada: %d EXR de %s no tienen su original "
+                        "en Originals/%s (hay %d originales). Esos EXR son la unica copia de sus "
+                        "frames. Sin original: %s. Revisar a mano antes de re-transcodear."
+                        % (len(sin_original), item_path.name, item_path.name, len(orig_exrs),
+                           _describe_failures(sin_original))
+                    )
                 # Borra los EXR convertidos que quedaron en item_path del run anterior.
                 for f in list(item_path.glob("*.exr")):
                     _safe_remove_exr(f, item_path, "converted output cleanup")
@@ -426,11 +453,8 @@ def delete_existing_outputs(item: dict, test_mode: bool, move_originals: bool, l
                 # nuevo a Originals/<plate>/ y usarlos como source.
                 item_path.mkdir(parents=True, exist_ok=True)
                 for f in orig_exrs:
-                    dst = item_path / f.name
-                    try:
-                        os.rename(str(f), str(dst))
-                    except OSError:
-                        shutil.move(str(f), str(dst))
+                    # Mismo move seguro que el worker: sin copias a medias ni pisar nada.
+                    TranscodeWorker._move_one_exr(f, item_path / f.name)
                 restored_count = _exr_count(item_path)
                 remaining_orig_count = _exr_count(orig_plate)
                 _log_optional(
@@ -989,28 +1013,61 @@ class TranscodeWorker(QRunnable):
     # ── File helpers ──────────────────────────────────────────────────────
 
     @staticmethod
+    def _move_one_exr(src: Path, dst: Path) -> None:
+        """Mueve UN EXR sin dejar nunca una copia a medias como unica version.
+
+        - Nunca pisa: si el destino ya existe, levanta.
+        - Mismo disco: `os.rename`, atomico. Si falla (archivo tomado por un antivirus o
+          un indexador), levanta y el archivo sigue entero en el origen. Antes se caia a
+          `shutil.move`, que copia y puede dejar un destino parcial.
+        - Discos distintos: copiar, verificar el tamano y recien ahi borrar el origen. Si
+          la copia falla, se borra SOLO esa copia parcial (la acabamos de crear).
+        """
+        src = Path(src)
+        dst = Path(dst)
+        if dst.exists():
+            raise RuntimeError("Move bloqueado: el destino ya existe: %s" % dst)
+        try:
+            os.rename(str(src), str(dst))
+            return
+        except OSError:
+            try:
+                same_device = os.stat(str(src)).st_dev == os.stat(str(dst.parent)).st_dev
+            except OSError:
+                same_device = True
+            if same_device:
+                raise
+        try:
+            shutil.copy2(str(src), str(dst))
+            if os.path.getsize(str(dst)) != os.path.getsize(str(src)):
+                raise RuntimeError("Copia incompleta: %s" % dst)
+        except Exception:
+            try:
+                if dst.exists():
+                    dst.unlink()
+            except Exception:
+                pass
+            raise
+        # Si esto falla quedan DOS copias completas: no se pierde nada.
+        os.unlink(str(src))
+
+    @staticmethod
     def _move_exrs(src_dir: Path, dst_dir: Path) -> int:
         """
-        Mueve todos los .exr de src_dir a dst_dir.
+        Mueve todos los .exr de src_dir a dst_dir, uno por uno con `_move_one_exr`.
 
-        Usa os.rename() cuando es posible (misma unidad — operación atómica a nivel OS,
-        libera el GIL). Si falla (e.g. unidades distintas), usa shutil.move() como
-        fallback.
+        Si falla a mitad, levanta: cada EXR queda entero en el origen O en el destino,
+        nunca a medias, y el restore solo devuelve lo que efectivamente se movio.
 
         Returns:
             Número de archivos movidos.
         """
-        import os
         src_path = Path(src_dir)
         dst_path = Path(dst_dir)
         dst_path.mkdir(parents=True, exist_ok=True)
         moved = 0
         for f in sorted(src_path.glob("*.exr")):
-            dst = dst_path / f.name
-            try:
-                os.rename(str(f), str(dst))
-            except OSError:
-                shutil.move(str(f), str(dst))
+            TranscodeWorker._move_one_exr(f, dst_path / f.name)
             moved += 1
         return moved
 
@@ -1019,9 +1076,11 @@ class TranscodeWorker(QRunnable):
         """
         Restaura EXR fuente a dst_dir.
 
-        Si hay outputs parciales en dst_dir, los elimina solo despues de confirmar que
-        src_dir contiene EXR. Esto evita que un fallo del conversor bloquee el restore
-        por archivos con el mismo nombre.
+        Un EXR de dst_dir se borra SOLO si su original con el mismo nombre esta a salvo
+        en src_dir: ese es un output (parcial o no) que el original va a reemplazar. Todo
+        EXR de dst_dir SIN par en src_dir se deja: si el move fallo a mitad, esos son
+        originales que todavia no se habian movido y son la unica copia. Antes se borraba
+        todo `*.exr` de dst_dir.
         """
         src_path = Path(src_dir)
         dst_path = Path(dst_dir)
@@ -1029,8 +1088,10 @@ class TranscodeWorker(QRunnable):
         if source_count <= 0:
             return 0
         dst_path.mkdir(parents=True, exist_ok=True)
+        safe_names = {f.name for f in src_path.glob("*.exr") if f.is_file()}
         for f in list(dst_path.glob("*.exr")):
-            _safe_remove_exr(f, dst_path, "partial output cleanup before restore")
+            if f.name in safe_names:
+                _safe_remove_exr(f, dst_path, "partial output cleanup before restore")
         restored = TranscodeWorker._move_exrs(src_path, dst_path)
         restored_count = _exr_count(dst_path)
         if restored_count < source_count:

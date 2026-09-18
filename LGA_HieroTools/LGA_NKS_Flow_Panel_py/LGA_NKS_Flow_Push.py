@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push v4.14 | Lega
+  LGA_NKS_Flow_Push v4.16 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -12,6 +12,10 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v4.16: Borrar ReviewPic_Cache ya no da por borrado lo que sigue ahi:
+         los fallos se juntan, un archivo de solo lectura se destraba, y
+         si la carpeta es un enlace no se toca. Devuelve True solo si ya
+         no esta en disco.
   v4.15: El texto de la nota queda escrito en el log al arrancar el Worker.
          Solo viajaba por stdin al conector: si Flow no creaba la nota, el
          texto se perdia sin copia en ningun lado.
@@ -1747,8 +1751,30 @@ def delete_review_pic_cache():
         cache_dir = get_review_pic_cache_dir()
 
         if os.path.exists(cache_dir):
-            shutil.rmtree(cache_dir)
-            debug_print(f"Carpeta ReviewPic_Cache borrada: {cache_dir}")
+            # Carpeta propia de nombre fijo; si es un enlace, del otro lado no hay nada
+            # nuestro y no se toca.
+            st = os.lstat(cache_dir)
+            if (getattr(st, "st_file_attributes", 0) & 0x400) or os.path.islink(cache_dir):
+                debug_print(f"ReviewPic_Cache es un enlace, no se borra: {cache_dir}", level="warning")
+                return False
+            failures = []
+
+            def _retry(func, failed, _exc):
+                try:
+                    os.chmod(failed, 0o666)
+                    func(failed)
+                except Exception:
+                    failures.append(os.path.relpath(failed, cache_dir))
+
+            shutil.rmtree(cache_dir, onerror=_retry)
+            if failures or os.path.exists(cache_dir):
+                debug_print(
+                    f"ReviewPic_Cache NO se borro por completo ({cache_dir}). "
+                    f"Quedaron: {', '.join(failures[:10]) or 'la carpeta'}",
+                    level="warning",
+                )
+                return False
+            debug_print(f"Carpeta ReviewPic_Cache borrada (verificado): {cache_dir}")
             return True
         else:
             debug_print(f"Carpeta ReviewPic_Cache no existe: {cache_dir}")

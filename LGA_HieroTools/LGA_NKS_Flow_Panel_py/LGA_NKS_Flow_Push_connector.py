@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push_connector v1.12 | Lega
+  LGA_NKS_Flow_Push_connector v1.13 | Lega
 
   Conector simple para operaciones de red con Flow
   Este script se ejecuta con Python personalizado para evitar problemas de dependencias
@@ -11,6 +11,8 @@ ____________________________________________________________________
   - PROYECTO_TEMP_EP_SEQ_SHOT_DESC1_DESC2 (6 bloques con descripción)
   - PROYECTO_TEMP_EP_SEQ_SHOT (4 bloques simplificado)
 
+  v1.13: La carpeta temporal de las imagenes adjuntas (mkdtemp) se borra
+         contando los fallos: el log ya no dice "eliminada" si quedo algo.
   v1.12: La nota del push fallaba siempre que la task estuviera asignada a un
          Group (el caso tipico de un vendor en el sitio del cliente): los
          destinatarios se armaban todos como {"type": "HumanUser"} con el id
@@ -799,10 +801,20 @@ class ShotGridManager:
 
             # Limpiar carpeta temporal
             try:
-                shutil.rmtree(temp_dir)
-                debug_print(
-                    f"attach_images_to_note: Carpeta temporal eliminada: {temp_dir}"
+                cleanup_failures = []
+                shutil.rmtree(
+                    temp_dir,
+                    onerror=lambda _f, failed, _e: cleanup_failures.append(failed),
                 )
+                if cleanup_failures or os.path.exists(temp_dir):
+                    debug_print(
+                        f"attach_images_to_note: la carpeta temporal NO se borro por completo: "
+                        f"{temp_dir}. Quedaron: {', '.join(cleanup_failures[:10]) or 'la carpeta'}"
+                    )
+                else:
+                    debug_print(
+                        f"attach_images_to_note: Carpeta temporal eliminada (verificado): {temp_dir}"
+                    )
             except Exception as cleanup_error:
                 debug_print(
                     f"attach_images_to_note: Error limpiando carpeta temporal: {cleanup_error}"

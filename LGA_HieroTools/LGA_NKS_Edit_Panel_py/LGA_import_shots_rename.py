@@ -1,11 +1,16 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_rename v1.01 | Lega
+  LGA_import_shots_rename v1.02 | Lega
 
   Helpers de logica para la seccion Rename de LGA_import_shots.
 
   Changelog:
+  - v1.02: El modo test borraba la copia anterior de <plate>/../renamned/<plate>
+           con rmtree(ignore_errors=True), al lado del plate real y sin guardas.
+           Ahora exige que la copia cuelgue de la carpeta de test (nombre fijo,
+           nunca la del plate), contencion canonica, cero enlaces en el arbol y
+           levanta nombrando lo que no se pudo borrar.
   - v1.01: Agrega stages Prefix/Suffix al preview, rename real y colores.
 
 ____________________________________________________________________
@@ -16,6 +21,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import stat
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -644,7 +650,77 @@ def build_row_ops(preview_row: dict) -> list[RenameOp]:
     return ops
 
 
+def _is_reparse_point(path: Path) -> bool:
+    """Enlace o junction: `os.path.islink()` da False para un junction de Windows."""
+    try:
+        st = os.lstat(str(path))
+    except OSError:
+        return False
+    if stat.S_ISLNK(st.st_mode):
+        return True
+    return bool(getattr(st, "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0))
+
+
+def _canonical(path: Path) -> str:
+    return os.path.normcase(os.path.normpath(os.path.realpath(str(path))))
+
+
+def _remove_previous_test_clone(cloned_folder: Path, sandbox_root: Path, src_folder: Path) -> None:
+    """Borra la copia de una corrida de test anterior. Levanta si algo no cierra.
+
+    La copia vive AL LADO del plate real (`<padre>/renamned/<plate>`), asi que un error de
+    ruta borraria material del proyecto. Se exige: carpeta de test con nombre propio (no
+    vacio, sin separadores), la copia hija directa de esa carpeta, contencion canonica, que
+    no sea el plate real, y ningun enlace en el arbol. Los fallos se cuentan y se nombran.
+    """
+    cloned_folder = Path(cloned_folder)
+    sandbox_root = Path(sandbox_root)
+    if not cloned_folder.is_absolute() or not sandbox_root.is_absolute():
+        raise RuntimeError("Rename test: ruta no absoluta: %s" % cloned_folder)
+    if _canonical(sandbox_root) == _canonical(src_folder.parent):
+        raise RuntimeError("Rename test: la carpeta de test coincide con la del plate: %s" % sandbox_root)
+    if cloned_folder.parent != sandbox_root:
+        raise RuntimeError("Rename test: la copia no cuelga de la carpeta de test: %s" % cloned_folder)
+    if _is_reparse_point(sandbox_root) or _is_reparse_point(cloned_folder):
+        raise RuntimeError("Rename test: la carpeta de test o la copia es un enlace: %s" % cloned_folder)
+    clone_c, src_c = _canonical(cloned_folder), _canonical(src_folder)
+    root_c = _canonical(sandbox_root).rstrip("\\/")
+    if clone_c == src_c or not clone_c.startswith(root_c + os.sep):
+        raise RuntimeError("Rename test: la copia resuelve fuera de la carpeta de test: %s" % cloned_folder)
+    pending = [cloned_folder]
+    while pending:
+        current = pending.pop()
+        for entry in os.scandir(str(current)):
+            if _is_reparse_point(Path(entry.path)):
+                raise RuntimeError(
+                    "Rename test: hay un enlace adentro de %s (%s). No se borro nada."
+                    % (cloned_folder, entry.path)
+                )
+            if entry.is_dir(follow_symlinks=False):
+                pending.append(Path(entry.path))
+
+    failures = []
+
+    def _retry(func, failed, _exc):
+        try:
+            os.chmod(failed, stat.S_IWRITE)
+            func(failed)
+        except Exception:
+            failures.append(os.path.relpath(failed, str(cloned_folder)))
+
+    shutil.rmtree(str(cloned_folder), onerror=_retry)
+    if failures or cloned_folder.exists():
+        raise RuntimeError(
+            "Rename test: no se pudo borrar la copia anterior %s. Quedaron: %s"
+            % (cloned_folder, ", ".join(failures[:10]) or "la carpeta")
+        )
+
+
 def _prepare_test_rows(rows_to_apply: list[dict], test_folder_name: str):
+    name = str(test_folder_name or "")
+    if not name or name in (".", "..") or "/" in name or "\\" in name:
+        # Con un nombre vacio la "copia" seria el plate real.
+        raise RuntimeError("Rename test: nombre de carpeta de test invalido: %r" % test_folder_name)
     prepared = []
     for row in rows_to_apply:
         cloned = dict(row)
@@ -655,8 +731,8 @@ def _prepare_test_rows(rows_to_apply: list[dict], test_folder_name: str):
             sandbox_root = src_folder.parent / test_folder_name
             sandbox_root.mkdir(parents=True, exist_ok=True)
             cloned_folder = sandbox_root / src_folder.name
-            if cloned_folder.exists():
-                shutil.rmtree(str(cloned_folder), ignore_errors=True)
+            if cloned_folder.exists() or _is_reparse_point(cloned_folder):
+                _remove_previous_test_clone(cloned_folder, sandbox_root, src_folder)
             shutil.copytree(str(src_folder), str(cloned_folder))
             cloned["folder_path"] = str(cloned_folder)
             cloned["item_path"] = str(cloned_folder)
@@ -691,7 +767,13 @@ def execute_ops(rows_to_apply: list[dict], test_mode: bool = False, test_folder_
     effective_rows = rows_to_apply
     if test_mode:
         _log("Preparing test rows...")
-        effective_rows = _prepare_test_rows(rows_to_apply, test_folder_name)
+        try:
+            effective_rows = _prepare_test_rows(rows_to_apply, test_folder_name)
+        except Exception as exc:
+            # Las guardas del borrado de la copia anterior levantan: se informa por el
+            # mismo canal de errores que ya muestra el panel, sin tocar nada mas.
+            _log("Prepare test rows abortado:", exc)
+            return {"applied": 0, "errors": [str(exc)]}
         _log("Prepared test rows:", len(effective_rows))
 
     ops = []

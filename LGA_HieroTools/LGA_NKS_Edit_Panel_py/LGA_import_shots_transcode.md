@@ -241,6 +241,18 @@ en `item_path` o `_input/Originals/<plate>/`, la herramienta debe aplicar estas 
   `_restore_exrs`, que borra todos los EXR convertidos y restaura solo los originales que
   quedaron: se perderian las dos cosas. Se informa con una linea `⚠` y se deja todo como esta.
 
+#### Move y restore sin perdida (transcode v1.03)
+
+- `_move_one_exr`: `os.rename` en el mismo disco; si falla, levanta y el EXR sigue entero en
+  el origen (antes caia a `shutil.move`, que copia). Entre discos: copiar, verificar tamano y
+  recien ahi borrar el origen. Nunca pisa un destino existente.
+- `_restore_exrs` solo borra de `item_path` los EXR que tienen su original con el mismo nombre
+  en la carpeta de origen. Antes borraba todo `*.exr`: si el move se habia cortado a mitad, se
+  llevaba los originales que todavia no se habian movido.
+- El overwrite (`delete_existing_outputs`, modo Originals) aborta sin borrar nada si algun EXR
+  de `item_path` no tiene su original en `Originals/<plate>`. El caso real: un borrado anterior
+  que quedo a medias por un original bloqueado deja 1 EXR de 5 en Originals.
+
 ### Solución QSpinBox — `_ArrowSpinBox` (ganadora, implementada)
 
 Clase de módulo definida en `LGA_import_shots.py` (junto a `_ArrowComboBox`).
