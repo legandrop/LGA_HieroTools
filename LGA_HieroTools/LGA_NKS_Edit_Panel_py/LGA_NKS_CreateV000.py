@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateV000 v1.20 | Lega
+  LGA_NKS_CreateV000 v1.21 | Lega
 
   Crea una secuencia EXR negra v000 para el shot activo en Hiero/Nuke Studio.
   Permite elegir frame range, resolucion, handle persistente y una o varias
@@ -16,6 +16,12 @@ ____________________________________________________________________
   crear solo los EXRs, crear/importar al bin sin insertar, o reemplazar los
   clips solapados por la nueva v000.
 
+  v1.21: Reemplazar una v000 existente pasa por guardas duras antes del
+         rmtree: rutas absolutas, nunca la raiz de una unidad, contencion
+         canonica en <shot>/<task>/4_publish/<shot>_<task>_v000 (nombre y
+         profundidad exactos), ningun tramo del camino puede ser un enlace,
+         y si aparece un junction o symlink en el arbol no se borra nada.
+         Lo que no se pudo borrar se nombra y no se da por reemplazado.
   v1.20: La carpeta de la task (Comp/CG/...) se resuelve contra el disco del
          shot con resolve_task_folder() de LGA_NKS_TaskScope, en vez de usar
          siempre TASK_FOLDER (el canonico capitalizado). Asi los shots viejos
@@ -113,6 +119,7 @@ import logging
 import queue
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -1561,6 +1568,147 @@ def _remove_timeline_items(track, items):
         track.removeItem(item)
 
 
+# Guardas duras del reemplazo de una v000. Independientes de la logica de negocio: la
+# confirmacion del usuario y el chequeo de EXR esperados deciden SI se reemplaza; esto
+# decide si la ruta es la que tiene que ser. Si algo no cierra, no se borra nada.
+_V000_MAX_FAILED_NAMES = 10
+
+
+def _v000_is_reparse_point(path):
+    """¿Es un enlace, incluido un junction de Windows?
+
+    `os.path.islink()` da False para un junction (`mklink /J`): se mira el atributo
+    FILE_ATTRIBUTE_REPARSE_POINT del lstat.
+    """
+    try:
+        st = os.lstat(str(path))
+    except OSError:
+        return False
+    if stat.S_ISLNK(st.st_mode):
+        return True
+    attrs = getattr(st, "st_file_attributes", 0)
+    return bool(attrs & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0))
+
+
+def _v000_canonical(path):
+    return os.path.normcase(os.path.normpath(os.path.realpath(str(path))))
+
+
+def _v000_is_drive_root(path):
+    absolute = Path(os.path.abspath(str(path)))
+    return absolute.parent == absolute
+
+
+def _v000_find_links(root):
+    """Enlaces a cualquier nivel del arbol, sin seguirlos."""
+    found = []
+    pending = [Path(root)]
+    while pending:
+        current = pending.pop()
+        try:
+            entries = list(os.scandir(str(current)))
+        except OSError:
+            continue
+        for entry in entries:
+            entry_path = Path(entry.path)
+            if _v000_is_reparse_point(entry_path):
+                found.append(entry_path)
+                continue
+            try:
+                if entry.is_dir(follow_symlinks=False):
+                    pending.append(entry_path)
+            except OSError:
+                continue
+    return found
+
+
+def _v000_replace_guard_error(output_dir, shot_root, version_name):
+    """Devuelve None si `output_dir` es la carpeta v000 de ESTE shot; si no, el motivo.
+
+    La forma exigida es exactamente <shot_root>/<task>/4_publish/<version_name>: tres
+    niveles por debajo del shot, con el nombre de la version completo (no un prefijo).
+    """
+    if not shot_root or not version_name:
+        return "missing shot root or version name"
+    out = Path(str(output_dir))
+    root = Path(str(shot_root))
+    if not out.is_absolute() or not root.is_absolute():
+        return "path is not absolute: output=%s shot_root=%s" % (out, root)
+    if _v000_is_drive_root(out) or _v000_is_drive_root(root):
+        return "drive root rejected: output=%s shot_root=%s" % (out, root)
+    if not root.is_dir():
+        return "shot root does not exist: %s" % root
+    if out.name != version_name or not version_name.endswith("_" + VERSION):
+        return "unexpected folder name: %s (expected %s)" % (out.name, version_name)
+    if out.parent.name != "4_publish":
+        return "folder is not inside 4_publish: %s" % out
+
+    # Profundidad exacta sobre la ruta SIN resolver.
+    try:
+        rel = os.path.relpath(os.path.abspath(str(out)), os.path.abspath(str(root)))
+    except ValueError:
+        return "output and shot root are on different drives: %s / %s" % (out, root)
+    rel_parts = Path(rel).parts
+    if len(rel_parts) != 3 or ".." in rel_parts:
+        return "unexpected depth under the shot: %s" % rel
+
+    # Ningun tramo entre el shot y la v000 puede ser un enlace: si un tramo intermedio
+    # apunta a otro lugar ADENTRO del shot, la contencion canonica sola lo daria por bueno.
+    current = out
+    for _ in range(len(rel_parts)):
+        if _v000_is_reparse_point(current):
+            return "the path crosses a link (junction/symlink): %s" % current
+        current = current.parent
+
+    # Contencion CANONICA estricta.
+    out_c = _v000_canonical(out)
+    root_c = _v000_canonical(root).rstrip("\\/")
+    if out_c == root_c or not out_c.startswith(root_c + os.sep):
+        return "the v000 resolves outside the shot: %s -> %s" % (out, out_c)
+    return None
+
+
+def _v000_remove_existing(output_dir, shot_root, version_name):
+    """Borra la v000 existente si pasa las guardas. Devuelve None o el motivo del fallo.
+
+    Escanea el arbol ENTERO antes de tocar el disco y aborta si hay un enlace. Los
+    fallos se juntan (nada de dar por borrado lo que sigue ahi) y un archivo de solo
+    lectura se destraba y se reintenta.
+    """
+    reason = _v000_replace_guard_error(output_dir, shot_root, version_name)
+    if reason:
+        return "Replace blocked, nothing was deleted (%s)" % reason
+    links = _v000_find_links(output_dir)
+    if links:
+        return (
+            "Replace blocked, nothing was deleted: the v000 folder contains %d link(s) "
+            "(junction/symlink). First: %s" % (len(links), links[0])
+        )
+
+    failures = []
+
+    def _retry(func, failed_path, _exc):
+        try:
+            os.chmod(failed_path, stat.S_IWRITE)
+            func(failed_path)
+        except Exception:
+            try:
+                failures.append(os.path.relpath(failed_path, str(output_dir)))
+            except Exception:
+                failures.append(str(failed_path))
+
+    shutil.rmtree(str(output_dir), onerror=_retry)
+    if Path(output_dir).exists() and not failures:
+        failures.append(".")
+    if failures:
+        shown = ", ".join(failures[:_V000_MAX_FAILED_NAMES])
+        extra = len(failures) - _V000_MAX_FAILED_NAMES
+        if extra > 0:
+            shown += " (+%d more)" % extra
+        return "Could not remove the existing v000 completely. Left: %s" % shown
+    return None
+
+
 def _create_black_exr_sequence(params, replace=False):
     oiiotool = _oiio_tool_path()
     if not oiiotool:
@@ -1572,10 +1720,24 @@ def _create_black_exr_sequence(params, replace=False):
         if existing_expected:
             if not replace:
                 return False, "exists", "Output folder already contains EXR files: %s" % output_dir
+            version_name = params["output_name_pattern"][: -len("_####.exr")]
             try:
-                shutil.rmtree(str(output_dir))
+                remove_error = _v000_remove_existing(
+                    output_dir, params.get("shot_root"), version_name
+                )
             except Exception as exc:
-                return False, "error", "Failed to remove existing v000 folder: %s" % exc
+                remove_error = "Failed to remove existing v000 folder: %s" % exc
+            # Directo al logger y no por debug_print: la traza de un borrado no puede
+            # depender de un flag de debug.
+            try:
+                (debug_logger.warning if remove_error else debug_logger.info)(
+                    "Replace v000: %s result: %s"
+                    % (output_dir, remove_error or "removed (verified)")
+                )
+            except Exception:
+                pass
+            if remove_error:
+                return False, "error", remove_error
             output_dir.mkdir(parents=True)
         elif unexpected_exrs:
             debug_print(

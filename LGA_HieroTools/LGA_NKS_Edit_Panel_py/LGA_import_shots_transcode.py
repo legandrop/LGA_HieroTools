@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_transcode v1.01 | Lega
+  LGA_import_shots_transcode v1.02 | Lega
 
   Helper de transcode EXR para LGA_import_shots.
 
@@ -10,6 +10,14 @@ ____________________________________________________________________
   en serie; el paralelismo por frame lo maneja internamente
   LGA_EXR_Convert.py con concurrent.futures.
 
+  v1.02: Borrado honesto de Originals/ y _tc_temp_src/. Sin
+         ignore_errors: se cuenta y se nombra lo que no se pudo
+         borrar, y el log solo dice "eliminado" si se verifico. La
+         contencion pasa a normcase + realpath, exige rutas absolutas,
+         rechaza la raiz de una unidad y aborta sin borrar nada si hay
+         un junction o symlink en el camino o en el arbol. El borrado
+         posterior al exito ya no levanta excepcion: el except del
+         worker restauraria originales encima de los convertidos.
   v1.01: El dialogo de sobreescritura migra al modulo de estilo
          LGA_UI_Style_HieroTools: Style.FORM + BTN_PRIMARY/BTN_SECONDARY
          y tokens. El ambar del icono y el titulo pasa a
@@ -24,6 +32,7 @@ import json
 import os
 import platform
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -132,29 +141,199 @@ def _exr_count(path: Path) -> int:
     return sum(1 for _ in Path(path).glob("*.exr")) if Path(path).exists() else 0
 
 
+# Tope de nombres que se listan en el log cuando algo no se pudo borrar: diagnostico,
+# no inventario.
+_MAX_FAILED_NAMES_LOGGED = 10
+
+
 def _resolved(path: Path) -> Path:
     return Path(path).resolve()
 
 
+def _canonical_str(path: Path) -> str:
+    """Ruta canonica (enlaces resueltos) y normalizada para comparar contencion.
+
+    `normcase` en vez de `.lower()`: en Windows iguala mayusculas y separadores, y en
+    macOS/Linux no inventa igualdades que el sistema de archivos no tiene.
+    """
+    return os.path.normcase(os.path.normpath(str(_resolved(path))))
+
+
 def _is_inside(child: Path, parent: Path) -> bool:
-    child_s = str(_resolved(child)).lower()
-    parent_s = str(_resolved(parent)).lower().rstrip("\\/")
-    return child_s == parent_s or child_s.startswith(parent_s + "\\") or child_s.startswith(parent_s + "/")
+    child_s = _canonical_str(child)
+    parent_s = _canonical_str(parent).rstrip("\\/")
+    return child_s == parent_s or child_s.startswith(parent_s + os.sep)
+
+
+def _is_drive_root(path: Path) -> bool:
+    absolute = Path(os.path.abspath(str(path)))
+    return absolute.parent == absolute
+
+
+def _is_reparse_point(path: Path) -> bool:
+    """¿Es un enlace, incluido un junction de Windows?
+
+    `os.path.islink()` y `Path.is_symlink()` dan False para un junction (`mklink /J`):
+    hay que mirar el atributo FILE_ATTRIBUTE_REPARSE_POINT del lstat.
+    """
+    try:
+        st = os.lstat(str(path))
+    except OSError:
+        return False
+    if stat.S_ISLNK(st.st_mode):
+        return True
+    attrs = getattr(st, "st_file_attributes", 0)
+    return bool(attrs & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0))
+
+
+def _links_on_the_way(path: Path, parent: Path) -> list:
+    """Enlaces en CADA tramo entre `parent` (excluido) y `path` (incluido).
+
+    La contencion canonica sola no alcanza: si un tramo intermedio es un junction que
+    apunta a otro lugar ADENTRO del mismo arbol, el destino resuelto sigue "adentro" y
+    la comparacion lo da por bueno. Se recorre la ruta SIN resolver, tramo a tramo. La
+    hoja se revisa solo si es carpeta: borrar un archivo-enlace saca el enlace, no el
+    destino.
+    """
+    found = []
+    current = Path(path)
+    stop = os.path.normcase(os.path.normpath(os.path.abspath(str(parent))))
+    is_leaf = True
+    while True:
+        here = os.path.normcase(os.path.normpath(os.path.abspath(str(current))))
+        if here == stop or current.parent == current:
+            break
+        if (not is_leaf or current.is_dir()) and _is_reparse_point(current):
+            found.append(current)
+        is_leaf = False
+        current = current.parent
+    return found
 
 
 def _ensure_safe_child(path: Path, parent: Path, label: str) -> None:
+    path = Path(path)
+    parent = Path(parent)
+    if not path.is_absolute() or not parent.is_absolute():
+        raise RuntimeError(
+            "Ruta no absoluta para %s: path=%s parent=%s" % (label, path, parent)
+        )
+    if _is_drive_root(path) or _is_drive_root(parent):
+        raise RuntimeError(
+            "Raiz de unidad rechazada para %s: path=%s parent=%s" % (label, path, parent)
+        )
     if _resolved(path) == _resolved(parent) or not _is_inside(path, parent):
         raise RuntimeError(
             "Ruta insegura para %s: path=%s parent=%s" % (label, _resolved(path), _resolved(parent))
         )
+    links = _links_on_the_way(path, parent)
+    if links:
+        raise RuntimeError(
+            "Ruta insegura para %s: el camino cruza un enlace (junction/symlink): %s"
+            % (label, links[0])
+        )
 
 
-def _safe_rmtree(path: Path, parent: Path, label: str, ignore_errors: bool = False) -> None:
+def _find_links_in_tree(root: Path) -> list:
+    """Recorre el arbol ENTERO sin seguir enlaces y devuelve los que encuentra.
+
+    Revisar solo el primer nivel no alcanza: un junction anidado tres carpetas adentro
+    se cruza igual.
+    """
+    found = []
+    pending = [Path(root)]
+    while pending:
+        current = pending.pop()
+        try:
+            entries = list(os.scandir(str(current)))
+        except OSError:
+            continue
+        for entry in entries:
+            entry_path = Path(entry.path)
+            if _is_reparse_point(entry_path):
+                found.append(entry_path)
+                continue
+            try:
+                if entry.is_dir(follow_symlinks=False):
+                    pending.append(entry_path)
+            except OSError:
+                continue
+    return found
+
+
+def _safe_rmtree(path: Path, parent: Path, label: str) -> list:
+    """Borra `path` si pasa las guardas y devuelve lo que NO se pudo borrar.
+
+    Levanta RuntimeError si la ruta no pasa las guardas o si hay un enlace a cualquier
+    nivel del arbol: en esos casos no se borra NADA, porque del otro lado del enlace
+    puede haber material del proyecto.
+
+    Nunca con `ignore_errors=True`: eso se tragaba el fallo y el log decia
+    "eliminado" con la carpeta todavia ahi. Los fallos se juntan en una lista, en ruta
+    relativa a `path`, y un archivo de solo lectura se destraba y se reintenta.
+    """
     target = Path(path)
-    if not target.exists():
-        return
+    if not target.exists() and not _is_reparse_point(target):
+        return []
     _ensure_safe_child(target, parent, label)
-    shutil.rmtree(str(target), ignore_errors=ignore_errors)
+    links = _find_links_in_tree(target)
+    if links:
+        raise RuntimeError(
+            "Delete bloqueado para %s: hay %d enlace(s) (junction/symlink) adentro de %s. "
+            "No se borro nada. Primero: %s" % (label, len(links), target, links[0])
+        )
+
+    failures = []
+
+    def _retry(func, failed_path, _exc):
+        try:
+            os.chmod(failed_path, stat.S_IWRITE)
+            func(failed_path)
+        except Exception:
+            try:
+                failures.append(os.path.relpath(failed_path, str(target)))
+            except Exception:
+                failures.append(str(failed_path))
+
+    shutil.rmtree(str(target), onerror=_retry)
+    if target.exists() and not failures:
+        failures.append(".")
+    return failures
+
+
+def _describe_failures(failures: list) -> str:
+    shown = ", ".join(failures[:_MAX_FAILED_NAMES_LOGGED])
+    extra = len(failures) - _MAX_FAILED_NAMES_LOGGED
+    return shown + (" (+%d mas)" % extra if extra > 0 else "")
+
+
+def _safe_rmtree_or_raise(path: Path, parent: Path, label: str) -> None:
+    failures = _safe_rmtree(path, parent, label)
+    if failures:
+        raise RuntimeError(
+            "Delete incompleto para %s: quedaron %d entrada(s) en %s: %s"
+            % (label, len(failures), path, _describe_failures(failures))
+        )
+
+
+def _cleanup_after_success(path: Path, parent: Path, label: str):
+    """Borrado posterior a un transcode OK. NUNCA levanta excepcion.
+
+    Si levantara, el `except` de `_process_sequence` llamaria a `_restore_exrs`, que
+    borra TODOS los EXR convertidos y restaura solo los originales que hayan quedado:
+    se perderian las dos cosas. Aca se informa y se deja todo como esta.
+
+    Returns:
+        (ok, detalle): ok solo si la carpeta ya no existe, verificado en disco.
+    """
+    try:
+        failures = _safe_rmtree(path, parent, label)
+    except Exception as exc:
+        return False, "no se borro nada: %s" % exc
+    if failures:
+        return False, "quedaron %d entrada(s): %s" % (len(failures), _describe_failures(failures))
+    if Path(path).exists():
+        return False, "la carpeta sigue existiendo"
+    return True, ""
 
 
 def _safe_remove_exr(path: Path, parent: Path, label: str) -> None:
@@ -264,7 +443,7 @@ def delete_existing_outputs(item: dict, test_mode: bool, move_originals: bool, l
                         "Restore inseguro: item_path=%s restored=%d expected=%d remaining_originals=%d"
                         % (item_path, restored_count, len(orig_exrs), remaining_orig_count)
                     )
-                _safe_rmtree(orig_plate, item_path.parent / "Originals", "empty Originals plate")
+                _safe_rmtree_or_raise(orig_plate, item_path.parent / "Originals", "empty Originals plate")
                 deleted += 1
             else:
                 # Carpeta vacia: limpiarla, pero conservar los EXR actuales de
@@ -274,7 +453,7 @@ def delete_existing_outputs(item: dict, test_mode: bool, move_originals: bool, l
                         "Overwrite abortado: no hay EXR en item_path ni en Originals. item_path=%s originals_dir=%s"
                         % (item_path, orig_plate)
                     )
-                _safe_rmtree(orig_plate, item_path.parent / "Originals", "empty Originals plate")
+                _safe_rmtree_or_raise(orig_plate, item_path.parent / "Originals", "empty Originals plate")
                 deleted += 1
             try:
                 orig_plate.parent.rmdir()
@@ -296,7 +475,7 @@ def delete_existing_outputs(item: dict, test_mode: bool, move_originals: bool, l
                     "Cleanup abortado: no hay EXR en item_path ni en _tc_temp_src. item_path=%s temp=%s"
                     % (item_path, tmp)
                 )
-            _safe_rmtree(tmp, item_path, "_tc_temp_src cleanup")
+            _safe_rmtree_or_raise(tmp, item_path, "_tc_temp_src cleanup")
             deleted += 1
     return deleted
 
@@ -707,18 +886,41 @@ class TranscodeWorker(QRunnable):
                             "Delete Originals bloqueado: output sin EXR. dst_dir=%s originals_dir=%s"
                             % (dst_dir, originals_dir)
                         )
-                    _safe_rmtree(originals_dir, originals_dir.parent, "delete Originals after success", ignore_errors=True)
-                    self.signals.log_message.emit(
-                        "  %s Originals/%s eliminado." % (self._t(), item_path.name)
+                    # Nunca levanta: ver _cleanup_after_success. Y "eliminado" solo si se
+                    # verifico en disco que la carpeta ya no esta.
+                    removed_ok, detail = _cleanup_after_success(
+                        originals_dir, originals_dir.parent, "delete Originals after success"
                     )
-                    # Remover la carpeta padre Originals/ si quedó vacía
-                    parent_orig = originals_dir.parent
-                    try:
-                        parent_orig.rmdir()
-                    except Exception:
-                        pass
+                    if removed_ok:
+                        self.signals.log_message.emit(
+                            "  %s Originals/%s eliminado (verificado)." % (self._t(), item_path.name)
+                        )
+                        # Remover la carpeta padre Originals/ si quedó vacía
+                        parent_orig = originals_dir.parent
+                        try:
+                            parent_orig.rmdir()
+                        except Exception:
+                            pass
+                    else:
+                        self.signals.log_message.emit(
+                            "  %s ⚠ Originals/%s NO se borro por completo (%s). "
+                            "El transcode esta OK; los originales que quedaron siguen en %s"
+                            % (self._t(), item_path.name, detail, originals_dir)
+                        )
                 elif temp_src_dir and temp_src_dir.exists():
-                    shutil.rmtree(str(temp_src_dir), ignore_errors=True)
+                    removed_ok, detail = _cleanup_after_success(
+                        temp_src_dir, item_path, "_tc_temp_src after success"
+                    )
+                    if removed_ok:
+                        self.signals.log_message.emit(
+                            "  %s _tc_temp_src/ eliminado (verificado)." % self._t()
+                        )
+                    else:
+                        self.signals.log_message.emit(
+                            "  %s ⚠ _tc_temp_src/ NO se borro por completo (%s). "
+                            "El transcode esta OK; lo que quedo sigue en %s"
+                            % (self._t(), detail, temp_src_dir)
+                        )
 
             elif not ok and not self.test_mode:
                 # Restaurar originales en caso de fallo

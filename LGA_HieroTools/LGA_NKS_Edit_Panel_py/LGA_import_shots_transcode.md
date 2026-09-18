@@ -227,6 +227,20 @@ en `item_path` o `_input/Originals/<plate>/`, la herramienta debe aplicar estas 
 - Guardar en el log una linea de snapshot por job con `item_path`, `originals_dir`,
   `item_exr_count`, `originals_exr_count`, accion elegida y resultado. (implementado y testeado en Hiero)
 
+#### Borrado honesto y enlaces (transcode v1.02)
+
+- `_safe_rmtree` ya no acepta `ignore_errors`. Devuelve la lista de lo que NO se pudo borrar
+  (un archivo abierto por otro proceso, por ejemplo) y el log solo dice "eliminado
+  (verificado)" si la carpeta ya no esta en disco. Si queda algo, lo nombra.
+- Si hay un junction o symlink en el camino o en cualquier nivel del arbol, no se borra
+  NADA. Ojo: `os.path.islink()` da False para un junction de Windows; se mira el atributo de
+  reparse point. Detalle en `docs/Docu_Borrado_Seguro.md`.
+- **Excepcion deliberada a "abortar el job":** el borrado de `Originals/<plate>` o
+  `_tc_temp_src` DESPUES de un transcode OK nunca levanta excepcion
+  (`_cleanup_after_success`). Si levantara, el `except` del worker llamaria a
+  `_restore_exrs`, que borra todos los EXR convertidos y restaura solo los originales que
+  quedaron: se perderian las dos cosas. Se informa con una linea `⚠` y se deja todo como esta.
+
 ### Solución QSpinBox — `_ArrowSpinBox` (ganadora, implementada)
 
 Clase de módulo definida en `LGA_import_shots.py` (junto a `_ArrowComboBox`).
