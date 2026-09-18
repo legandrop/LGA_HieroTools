@@ -1,13 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.44 | Lega
+  LGA_import_shots v1.45 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.45: El aviso de un overwrite rechazado en el log del panel pasa a
+         ingles ("Overwrite aborted"), igual que el mensaje que lo sigue.
   v1.44: La ultima version de CG sale de la DB de PipeSync, por fecha de
          subida, y no del numero mas alto de la carpeta: cada disciplina
          lleva su propio contador. La correspondencia entre la carpeta de
@@ -6826,7 +6828,7 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
                     )
                 except Exception as exc:
                     self._set_convert_status(row_i, "✗ Error", _CLR_STATUS_ERROR)
-                    self._append_log("Cleanup abortado: %s" % exc)
+                    self._append_log("Overwrite aborted: %s" % exc)
                     debug_print("transcode cleanup failed: %s" % exc)
                     continue
 

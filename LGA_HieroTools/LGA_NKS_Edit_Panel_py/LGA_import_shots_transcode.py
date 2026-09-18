@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_transcode v1.04 | Lega
+  LGA_import_shots_transcode v1.05 | Lega
 
   Helper de transcode EXR para LGA_import_shots.
 
@@ -10,6 +10,10 @@ ____________________________________________________________________
   en serie; el paralelismo por frame lo maneja internamente
   LGA_EXR_Convert.py con concurrent.futures.
 
+  v1.05: El dialogo de overwrite y sus avisos quedan enteros en ingles (antes
+         mezclaba castellano). Cuando falta el registro de convertidos el
+         mensaje nombra las dos causas: la mas comun, un transcode hecho con
+         una version anterior, y un plate re-entregado.
   v1.04: Un plate re-entregado con los mismos nombres se reemplazaba por
          el viejo: el overwrite restauraba Originals/<plate> encima de EXR
          que no eran los convertidos. Ahora el transcode deja un manifiesto
@@ -387,7 +391,8 @@ def _plate_matches_outputs_manifest(originals_dir: Path, plate_dir: Path):
     """(True, "") si TODOS los EXR del plate son los que dejo el transcode anterior."""
     manifest = Path(originals_dir) / OUTPUTS_MANIFEST_NAME
     if not manifest.is_file():
-        return False, "there is no record of what that transcode wrote (older version, or it did not finish)"
+        return False, ("there is no record of which files that transcode wrote. Most likely it was "
+                       "made with an older version of this tool; it can also be a re-delivered plate")
     try:
         with open(manifest, "r", encoding="utf-8") as fh:
             recorded = json.load(fh).get("outputs") or {}
@@ -426,27 +431,28 @@ def check_existing_outputs(item: dict, test_mode: bool, move_originals: bool):
         if dst.exists():
             count = sum(1 for _ in dst.glob("*.exr"))
             if count > 0:
-                return True, "test_transcode/ ya contiene %d archivos EXR" % count
+                return True, "test_transcode/ already contains %d EXR files." % count
     elif move_originals:
         orig = item_path.parent / "Originals" / item_path.name
         if orig.exists():
             count = sum(1 for _ in orig.glob("*.exr"))
-            label = "%d EXR" % count if count else "carpeta vacía"
-            desc = "_input/Originals/%s ya existe (%s — transcode anterior)" % (item_path.name, label)
+            label = "%d EXR" % count if count else "empty folder"
+            desc = "_input/Originals/%s already exists (%s from an earlier transcode)." % (
+                item_path.name, label)
             if count and any(item_path.glob("*.exr")):
-                same, _why = _plate_matches_outputs_manifest(orig, item_path)
+                same, why = _plate_matches_outputs_manifest(orig, item_path)
                 if same:
                     desc += ("\nOverwrite restores those originals into %s and DELETES the "
                              "converted EXR currently there." % item_path.name)
                 else:
-                    desc += ("\nThe EXR now in %s are NOT the ones that transcode produced "
-                             "(re-delivered plate?). Overwrite will be refused and nothing will "
-                             "be deleted." % item_path.name)
+                    desc += ("\nThe EXR now in %s cannot be confirmed as that transcode's output: "
+                             "%s. Overwrite will be refused and nothing will be deleted."
+                             % (item_path.name, why))
             return True, desc
     else:
         tmp = item_path / "_tc_temp_src"
         if tmp.exists():
-            return True, "_tc_temp_src/ existe (transcode anterior incompleto)"
+            return True, "_tc_temp_src/ exists (an earlier transcode did not finish)."
     return False, ""
 
 
@@ -512,9 +518,9 @@ def delete_existing_outputs(item: dict, test_mode: bool, move_originals: bool, l
                 )
                 if sin_original:
                     raise RuntimeError(
-                        "Overwrite abortado, no se borro nada: %d EXR de %s no tienen su original "
-                        "en Originals/%s (hay %d originales). Esos EXR son la unica copia de sus "
-                        "frames. Sin original: %s. Revisar a mano antes de re-transcodear."
+                        "Overwrite refused, nothing was deleted: %d EXR in %s have no original "
+                        "in Originals/%s (%d originals there). Those EXR are the only copy of their "
+                        "frames. Without original: %s. Check by hand before transcoding again."
                         % (len(sin_original), item_path.name, item_path.name, len(orig_exrs),
                            _describe_failures(sin_original))
                     )
@@ -597,7 +603,7 @@ def show_overwrite_warning(seq_name: str, conflict_desc: str, parent=None) -> bo
     from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color
 
     dlg = QtWidgets.QDialog(parent)
-    dlg.setWindowTitle("Archivos existentes")
+    dlg.setWindowTitle("Existing files")
     dlg.setMinimumWidth(440)
     dlg.setWindowFlags(QtCore.Qt.Dialog | QtCore.Qt.FramelessWindowHint)
     # Style.FORM cubre fondo, labels y el separador. El borde va aparte
@@ -616,7 +622,7 @@ def show_overwrite_warning(seq_name: str, conflict_desc: str, parent=None) -> bo
     # Icono y titulo en el amarillo de advertencia del pack: este cartel SI
     # es una advertencia (se van a pisar archivos).
     icon_lbl.setStyleSheet("color:%s; font-size:20px;" % Color.WARNING_TEXT)
-    title_lbl = QtWidgets.QLabel("Archivos existentes")
+    title_lbl = QtWidgets.QLabel("Existing files")
     title_lbl.setStyleSheet(
         "color:%s; font-size:13px; font-weight:bold;" % Color.WARNING_TEXT
     )
@@ -641,10 +647,11 @@ def show_overwrite_warning(seq_name: str, conflict_desc: str, parent=None) -> bo
     layout.addWidget(name_lbl)
 
     desc_lbl = QtWidgets.QLabel(conflict_desc)
+    desc_lbl.setWordWrap(True)
     desc_lbl.setStyleSheet("color:%s; font-size:11px;" % Color.TEXT_DIM)
     layout.addWidget(desc_lbl)
 
-    q_lbl = QtWidgets.QLabel("¿Desea sobreescribir los archivos existentes?")
+    q_lbl = QtWidgets.QLabel("Overwrite the existing files?")
     q_lbl.setStyleSheet("font-size:11px; margin-top:4px;")
     layout.addWidget(q_lbl)
 
@@ -652,8 +659,8 @@ def show_overwrite_warning(seq_name: str, conflict_desc: str, parent=None) -> bo
 
     btn_row = QtWidgets.QHBoxLayout()
     btn_row.addStretch()
-    cancel_btn    = QtWidgets.QPushButton("Cancelar")
-    overwrite_btn = QtWidgets.QPushButton("Sobreescribir")
+    cancel_btn    = QtWidgets.QPushButton("Cancel")
+    overwrite_btn = QtWidgets.QPushButton("Overwrite")
     cancel_btn.setStyleSheet(Style.BTN_SECONDARY)
     overwrite_btn.setStyleSheet(Style.BTN_PRIMARY)
     btn_row.addWidget(cancel_btn)
