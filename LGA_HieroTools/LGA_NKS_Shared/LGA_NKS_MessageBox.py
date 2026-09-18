@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_MessageBox v1.01 | Lega
+  LGA_NKS_MessageBox v1.02 | Lega
 
   Carteles estandar de HieroTools: info, warning, error y pregunta,
   estilados con LGA_UI_Style_HieroTools. Reemplazan a los QMessageBox
@@ -31,6 +31,9 @@ ____________________________________________________________________
   Sin icono de sistema: los carteles del pack no usan los iconos del
   host, la jerarquia la dan el titulo de la ventana y el texto.
 
+  v1.02: ask_save_discard_cancel(): pregunta de tres botones (Cancel, Don't
+         save, Save) para cerrar algo con cambios sin guardar. La usa el
+         boton de cerrar proyecto del Projects Panel.
   v1.01: Los carteles llevan las fuentes del pack (apply_ui_font);
          sin eso salian con la fuente del host y el peso 600 de las
          hojas caia en una negrita sintetizada.
@@ -125,3 +128,48 @@ def ask_question(parent, title, text, yes_text="Yes", no_text="No", recommended=
 
     apply_ui_font(dialog)  # al final: recorre hijos, que recien ahora existen
     return dialog.exec_() == QtWidgets.QDialog.Accepted
+
+
+def ask_save_discard_cancel(parent, title, text, save_text="Save",
+                            discard_text="Don't save", cancel_text="Cancel"):
+    """Pregunta de tres botones para cerrar algo con cambios sin guardar.
+
+    Devuelve "save", "discard" o "cancel". Orden de izquierda a derecha:
+    Cancel, Don't save, Save; Save va ultimo, en violeta y responde a
+    Enter, como el afirmativo de ask_question. Escape y cerrar la ventana
+    cancelan: ante la duda no se pierde nada.
+    """
+    dialog = QtWidgets.QDialog(parent)
+    dialog.setWindowTitle(title)
+    dialog.setStyleSheet(Style.FORM)
+    result = {"value": "cancel"}
+
+    layout = QtWidgets.QVBoxLayout(dialog)
+    layout.setContentsMargins(18, 16, 18, 14)
+    layout.setSpacing(12)
+
+    label = QtWidgets.QLabel(text)
+    label.setWordWrap(True)
+    layout.addWidget(label)
+
+    row = QtWidgets.QHBoxLayout()
+    row.addStretch()
+    buttons = (
+        (cancel_text, "cancel", Style.BTN_SECONDARY),
+        (discard_text, "discard", Style.BTN_SECONDARY),
+        (save_text, "save", Style.BTN_PRIMARY),
+    )
+    for text_btn, value, sheet in buttons:
+        button = QtWidgets.QPushButton(text_btn)
+        button.setStyleSheet(sheet)
+        button.setAutoDefault(value == "save")
+        button.setDefault(value == "save")
+        button.clicked.connect(
+            lambda _checked=False, v=value: (result.update(value=v), dialog.accept())
+        )
+        row.addWidget(button)
+    layout.addLayout(row)
+
+    apply_ui_font(dialog)  # al final: recorre hijos, que recien ahora existen
+    dialog.exec_()
+    return result["value"]

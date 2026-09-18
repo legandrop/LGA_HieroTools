@@ -3,10 +3,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectHandler v1.06 | Lega
+  LGA_NKS_ProjectHandler v1.07 | Lega
 
   Gestor de manejo de proyectos para el panel de proyectos LGA.
 
+  v1.07: Click en el nombre o el triangulo de un proyecto abierto lo colapsa
+         o expande (antes volvia a llamar a openProject sobre un proyecto ya
+         abierto). La x de la fila cierra el proyecto via el panel.
   v1.06: El click en un proyecto congela el repintado antes de openProject; lo
          levanta la post-apertura del panel, o este mismo handler si falla.
   v1.05: Abrir un proyecto (click o Update de version) dispara la post-apertura
@@ -156,9 +159,16 @@ class ProjectHandler:
             debug_print(f"   🔍 Proyecto {nombre_base}: has_newer_version={has_newer_version}, is_open={isinstance(proyecto_info.get('proyecto_abierto'), hiero.core.Project)}")
 
             item = ProjectItem(proyecto_info, panel, has_newer_version, newer_version_info)
-            item.project_label.mousePressEvent = lambda e, p=proyecto_info: ProjectHandler.on_project_click(panel, p)
-            # Instalar event filter para hover del project label
-            item.project_label.installEventFilter(panel)
+            # Nombre y triangulo: abierto -> colapsar/expandir; cerrado -> abrir
+            for clickable in (item.project_label, item.toggle_label):
+                clickable.mousePressEvent = (
+                    lambda e, it=item, p=proyecto_info: ProjectHandler.on_project_label_click(panel, it, p)
+                )
+            item.close_button.clicked.connect(
+                lambda _checked=False, it=item: ProjectHandler.on_close_project_click(panel, it)
+            )
+            # El hover del nombre y el triangulo lo maneja el propio ProjectItem,
+            # que los ilumina juntos: el filtro del panel los iluminaba por separado.
 
             # Verificar si este proyecto está abierto
             is_open = "proyecto_abierto" in proyecto_info
@@ -196,6 +206,21 @@ class ProjectHandler:
             icono = "▼" if item.is_open else "▶"
 
             debug_print(f"   {icono} {formatted_display} ({estado}){update_indicator}")
+
+    @staticmethod
+    def on_project_label_click(panel, item, proyecto_info):
+        """Nombre o triangulo: un proyecto abierto se colapsa/expande; uno cerrado se abre."""
+        if item.is_open:
+            item.toggle_collapsed()
+            return
+        ProjectHandler.on_project_click(panel, proyecto_info)
+
+    @staticmethod
+    def on_close_project_click(panel, item):
+        """Boton x: delega en el panel, que pregunta si hay cambios y limpia."""
+        proyecto = item.project_info.get("proyecto_abierto") or item.project_info.get("proyecto_obj")
+        if proyecto is not None and hasattr(panel, "close_project"):
+            panel.close_project(proyecto)
 
     @staticmethod
     def on_project_click(panel, proyecto_info):

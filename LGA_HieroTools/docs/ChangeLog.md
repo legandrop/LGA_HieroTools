@@ -10,6 +10,8 @@ v3.95:
 
 v3.94:
 
+        - Un proyecto abierto no se podia colapsar en el Projects Panel ni cerrar desde ahi, y el panel no se enteraba cuando se cerraba por otra via (`LGA_NKS_Projects_Panel v2.38`, `LGA_NKS_ProjectItem v1.04`, `LGA_NKS_ProjectHandler v1.07`, `LGA_NKS_MessageBox v1.02`). Ahora el nombre y el triangulo colapsan un proyecto abierto sin cerrarlo, y una x con hover lo cierra. Como `project.close()` descarta los cambios sin avisar, la x pregunta antes si `modifiedSinceLastSave()` da cambios. El panel escucha `kAfterProjectClose`. El triangulo pasa a dibujarse, porque la fuente hacia desiguales los dos sentidos. [ HieroTools - Colapsar y cerrar proyectos desde el panel ]
+
         - La vista de cada timeline (zoom, scroll horizontal y playhead) se perdia al reabrir NKS y no se compartia entre versiones del proyecto (`LGA_NKS_TimelineMemory v1.05`): vivia en un JSON de sesion con clave por archivo `.hrox`, asi que un timeline recien abierto quedaba con el playhead lejos del contenido. Ahora es persistente y la clave es el proyecto sin version mas la secuencia. [ HieroTools - Vista de timelines persistente entre sesiones ]
 
         - La post-apertura de proyecto parpadeaba: se veia el timeline que abre Hiero y los restos del proyecto anterior, y despues el switch cerraba y reabria ese mismo timeline (`LGA_NKS_Projects_Panel v2.37`, `LGA_NKS_ProjectHandler v1.06`, `LGA_NKS_Projects_Panel_SwitchSequence v2.38`). Ahora el repintado se congela desde el click hasta el final, y si el destino ya esta activo el switch lo reusa y solo corre la limpieza. [ HieroTools - Post-apertura sin parpadeos ]

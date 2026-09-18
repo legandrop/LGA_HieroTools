@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.37 | Lega
+  LGA_NKS_Projects_Panel v2.38 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,12 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.38: Colapsar y cerrar proyectos. collapsed_projects recuerda los
+         colapsados a traves del rearmado de la lista. close_project() pregunta
+         con modifiedSinceLastSave() antes de cerrar (project.close() descarta
+         en silencio), y si era el proyecto activo va al ultimo timeline de otro
+         abierto. El panel escucha kAfterProjectClose para refrescarse aunque
+         el cierre venga de File > Close.
   v2.37: La ventana principal no repinta desde el click en el proyecto hasta el
          final de la post-apertura (FREEZE_DURING_PROJECT_OPEN): antes se veia
          el timeline que abre Hiero y los restos del proyecto anterior.
@@ -90,7 +96,7 @@ import sys
 import configparser
 import time
 from pathlib import Path
-from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
+from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt, is_widget_alive
 from LGA_NKS_Shared.LGA_NKS_ContextProfile import get_context_mode, find_context_ini
 from LGA_NKS_Shared.LGA_NKS_ContextSwitch import (
     SWITCH_USER_LOGIN,
@@ -101,7 +107,7 @@ from LGA_NKS_Shared.LGA_NKS_Project_Colors_Config import (
     get_project_colors_db_path,
     load_project_colors as load_project_colors_from_db,
 )
-from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
+from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning, ask_save_discard_cancel
 from LGA_NKS_Projects_Panel_py import LGA_NKS_TimelineMemory as timeline_memory
 from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectsPanel_Logging import (
     DEBUG,
@@ -381,6 +387,40 @@ except ImportError as e:
     raise
 
 
+def _install_project_close_listener(panel):
+    """
+    Refresca el panel cuando se cierra un proyecto por CUALQUIER via (la x del
+    panel, File > Close, un script). Antes el panel no se enteraba y seguia
+    mostrando el proyecto abierto con sus secuencias.
+
+    Se registra una sola vez por proceso: el handler anterior queda guardado en
+    hiero.core y se desregistra antes, porque el reimport del panel recarga este
+    modulo y sin eso se acumularian handlers apuntando a paneles destruidos.
+    """
+    import weakref
+
+    from hiero.core import events
+
+    panel_ref = weakref.ref(panel)
+
+    def _on_project_close(event):
+        target = panel_ref()
+        if target is None or not is_widget_alive(target):
+            return
+        if QtCore.QCoreApplication.closingDown():
+            return  # NKS cerrando: no largar escaneos en hilos
+        QtCore.QTimer.singleShot(0, target.start_scan)
+
+    previous = getattr(hiero.core, "_lga_projects_panel_close_handler", None)
+    if previous is not None:
+        try:
+            events.unregisterInterest(events.EventType.kAfterProjectClose, previous)
+        except Exception:
+            pass
+    events.registerInterest(events.EventType.kAfterProjectClose, _on_project_close)
+    hiero.core._lga_projects_panel_close_handler = _on_project_close
+
+
 class ProjectsPanel(QtWidgets.QWidget):
     """Panel final integrado: escaneo, apertura y cambio de secuencias"""
 
@@ -412,9 +452,16 @@ class ProjectsPanel(QtWidgets.QWidget):
         self.ctx_client_btn = None
         self.ctx_studio_btn = None
         self.normal_pipesync_login = self._get_normal_pipesync_login()
+        # Proyectos abiertos que el usuario colapso (por nombre_base). Estado del
+        # panel: sobrevive al rearmado de la lista, no a reabrir NKS.
+        self.collapsed_projects = set()
 
         UIManager.setup_ui(self)
         UIManager.setup_connections(self)
+        try:
+            _install_project_close_listener(self)
+        except Exception as e:
+            debug_print(f"No se pudo registrar el aviso de cierre de proyecto: {e}")
 
         # Aplicar intervalo de auto-refresh desde .ini
         interval_key = self._load_auto_refresh_interval()
@@ -593,6 +640,91 @@ class ProjectsPanel(QtWidgets.QWidget):
             # El switch ya reactiva el repintado al terminar; esto cubre los
             # caminos sin switch (sin secuencias, error) para no dejar NKS congelado.
             self.end_project_open()
+
+    # =========================
+    #   COLAPSAR Y CERRAR
+    # =========================
+    def set_project_collapsed(self, nombre_base, collapsed):
+        if collapsed:
+            self.collapsed_projects.add(nombre_base)
+        else:
+            self.collapsed_projects.discard(nombre_base)
+
+    def close_project(self, project):
+        """
+        Cierra un proyecto desde la x del panel.
+
+        project.close() desde Python NO pregunta ni guarda: descarta los cambios
+        en silencio (medido con explore_project_close). Por eso se pregunta aca,
+        con modifiedSinceLastSave(); si esa llamada falla, se pregunta igual.
+        """
+        try:
+            name, path = project.name(), project.path()
+        except Exception as e:
+            debug_print(f"[Cerrar] Proyecto invalido: {e}")
+            return
+
+        modified = None
+        try:
+            modified = bool(project.modifiedSinceLastSave())
+        except Exception as e:
+            debug_print(f"[Cerrar] modifiedSinceLastSave() fallo: {e}")
+        debug_print(f"[Cerrar] {name}: modifiedSinceLastSave={modified}")
+
+        if modified is not False:
+            text = (
+                f"{name} has unsaved changes. Save them before closing?"
+                if modified
+                else f"Couldn't check if {name} has unsaved changes. Save before closing?"
+            )
+            answer = ask_save_discard_cancel(self, "Close project", text)
+            debug_print(f"[Cerrar] Respuesta: {answer}")
+            if answer == "cancel":
+                return
+            if answer == "save":
+                try:
+                    project.save()
+                except Exception as e:
+                    show_warning(self, "Close project", f"Couldn't save {name}:\n{e}")
+                    return
+
+        try:
+            active = hiero.ui.activeSequence()
+            was_active = bool(active and active.project() == project)
+        except Exception:
+            was_active = False
+
+        try:
+            project.close()
+        except Exception as e:
+            show_warning(self, "Close project", f"Couldn't close {name}:\n{e}")
+            return
+        debug_print(f"[Cerrar] {name} cerrado | era el del timeline activo: {was_active}")
+
+        if was_active:
+            self._go_to_other_open_project(path)
+        self.start_scan()
+
+    def _go_to_other_open_project(self, closed_path):
+        """Tras cerrar el proyecto activo, va al ultimo timeline de otro abierto del panel."""
+        for item in self.project_items.values():
+            project = item.project_info.get("proyecto_abierto")
+            if not item.is_open or project is None:
+                continue
+            try:
+                if project.path() == closed_path:
+                    continue
+                target = timeline_memory.recall_last_sequence(project)
+                if not target:
+                    sequences = project.sequences()
+                    target = sequences[0].name() if sequences else None
+            except Exception:
+                continue  # el objeto puede ser del proyecto recien cerrado
+            if target:
+                switch_to_sequence(target, target_project=project, force_cleanup=True)
+                debug_print(f"[Cerrar] Vuelta a '{target}' de {project.name()}")
+                return
+        debug_print("[Cerrar] No hay otro proyecto abierto en el panel: sin timeline")
 
     def _finish_context_switch(self, mode):
         """

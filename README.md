@@ -243,7 +243,11 @@ Review and inspection tools for compare workflows, reveals, clip toggling, and o
 Project browser and sequence switcher built around the studio's project structure and PipeSync storage.
 
 - **Project list**  
-  Scans projects on disk, shows open projects, and lets you switch sequences without losing viewer state.
+  Scans projects on disk, shows open projects, and lets you switch sequences without losing viewer state. Each timeline remembers its zoom, horizontal scroll and playhead across sessions and project versions, and opening a project goes back to its last timeline.
+- **Collapse / expand**  
+  Clicking the name or the triangle of an open project collapses or expands its sequences without closing it.
+- **Close project (×)**  
+  Appears when hovering an open project. Asks before discarding unsaved changes, and jumps to another open project if the closed one was active.
 - **Refresh**  
   Re-scans projects.
 - **Reimport / Redock**  

@@ -3,10 +3,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectItem v1.03 | Lega
+  LGA_NKS_ProjectItem v1.04 | Lega
 
   Widget personalizado para mostrar proyectos y secuencias en el panel de proyectos LGA.
 
+  v1.04: El triangulo pasa a ser un label propio con hover compartido con el
+         nombre (los dos hacen lo mismo y se iluminan juntos). Un proyecto
+         abierto se colapsa y expande sin cerrarlo, y el estado sobrevive al
+         rearmado de la lista. Boton x para cerrar el proyecto, pegado al
+         nombre y visible solo con el mouse sobre la fila de un proyecto abierto.
   v1.03: Las secuencias se limpian con takeAt + hide + deleteLater en vez de
          setParent(None), que podia dejar un widget huerfano abierto como ventana.
   v1.02: El nombre visible conserva lo que va despues del bloque _SUP
@@ -22,6 +27,63 @@ if 'LGA_NKS_ProjectItem' in sys.modules:
     importlib.reload(sys.modules['LGA_NKS_ProjectItem'])
 
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt, horizontal_advance
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color
+
+# Lado del triangulo de expandir/colapsar, en px. Se dibuja en vez de usar los
+# caracteres de texto: la fuente dibuja el que apunta a la derecha mucho mas
+# chico que el que apunta hacia abajo.
+TRIANGLE_SIZE = 9
+
+
+def _triangle_pixmap(color, pointing_down, dpr=1.0, size=TRIANGLE_SIZE):
+    """Triangulo lleno del color pedido; los dos sentidos ocupan el mismo cuadrado."""
+    pixmap = QtGui.QPixmap(int(round(size * dpr)), int(round(size * dpr)))
+    pixmap.setDevicePixelRatio(dpr)
+    pixmap.fill(QtCore.Qt.transparent)
+    painter = QtGui.QPainter(pixmap)
+    painter.setRenderHint(QtGui.QPainter.Antialiasing)
+    painter.setPen(QtCore.Qt.NoPen)
+    painter.setBrush(QtGui.QColor(color))
+    inset = size * 0.12
+    if pointing_down:
+        points = [(0, inset), (size, inset), (size / 2.0, size - inset)]
+    else:
+        points = [(inset, 0), (size - inset, size / 2.0), (inset, size)]
+    painter.drawPolygon(QtGui.QPolygonF([QtCore.QPointF(x, y) for x, y in points]))
+    painter.end()
+    return pixmap
+
+
+# Boton de cerrar proyecto: caja chica (el rojo del hover de BTN_CLOSE ocupa toda
+# la caja) y la x dibujada, mas grande y clara que el glifo de la hoja.
+CLOSE_BUTTON_SIZE = 16
+CLOSE_ICON_SIZE = 10
+
+
+def _close_icon(color, dpr=1.0, size=CLOSE_ICON_SIZE):
+    """Cruz dibujada con trazo redondeado, del color pedido."""
+    pixmap = QtGui.QPixmap(int(round(size * dpr)), int(round(size * dpr)))
+    pixmap.setDevicePixelRatio(dpr)
+    pixmap.fill(QtCore.Qt.transparent)
+    painter = QtGui.QPainter(pixmap)
+    painter.setRenderHint(QtGui.QPainter.Antialiasing)
+    pen = QtGui.QPen(QtGui.QColor(color))
+    pen.setWidthF(1.6)
+    pen.setCapStyle(QtCore.Qt.RoundCap)
+    painter.setPen(pen)
+    margin = 1.5
+    painter.drawLine(QtCore.QPointF(margin, margin), QtCore.QPointF(size - margin, size - margin))
+    painter.drawLine(QtCore.QPointF(size - margin, margin), QtCore.QPointF(margin, size - margin))
+    painter.end()
+    return QtGui.QIcon(pixmap)
+
+
+# Tooltips en un solo lugar: van a pasar a ser bilingues y asi la migracion es
+# un cambio de datos, no de widgets.
+TOOLTIPS = {
+    "toggle": "Colapsar / expandir las secuencias (no cierra el proyecto)",
+    "close": "Cerrar el proyecto. Si tiene cambios sin guardar, pregunta antes",
+}
 
 # Importar funciones necesarias del módulo principal
 # Estas serán importadas desde el archivo principal cuando se importe este módulo
@@ -49,6 +111,11 @@ class ProjectItem(QtWidgets.QWidget):
         self.sequences = []
         self.has_newer_version = has_newer_version
         self.newer_version_info = newer_version_info  # Dict con info de versión más nueva
+        # Colapsado es estado del PANEL, no de Hiero: el panel lo recuerda por
+        # proyecto para que sobreviva al rearmado de la lista.
+        self.collapsed = bool(
+            panel and project_info.get("nombre_base", "") in getattr(panel, "collapsed_projects", ())
+        )
         self.setup_ui()
 
     def setup_ui(self):
@@ -61,6 +128,19 @@ class ProjectItem(QtWidgets.QWidget):
         project_layout.setContentsMargins(0, 0, 0, 0)
         project_layout.setSpacing(0)
 
+        # Triangulo propio: hueco = cerrado, lleno = abierto (abajo expandido,
+        # a la derecha colapsado). Antes era un caracter dentro del nombre y un
+        # proyecto abierto colapsado se veia igual que uno cerrado.
+        self.toggle_label = QtWidgets.QLabel()
+        self.toggle_label.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.toggle_label.setFixedWidth(16)
+        self.toggle_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self.toggle_label.setToolTip(TOOLTIPS["toggle"])
+        # Hover compartido con el nombre: lo maneja eventFilter() de este item,
+        # no el del panel, que iluminaba cada label por separado.
+        self.toggle_label.installEventFilter(self)
+        project_layout.addWidget(self.toggle_label)
+
         # Nombre del proyecto (clickable)
         self.project_label = QtWidgets.QLabel()
         self.project_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
@@ -69,7 +149,7 @@ class ProjectItem(QtWidgets.QWidget):
         self.project_label.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
         # Asegurar que el texto no se trunque
         self.project_label.setTextFormat(QtCore.Qt.PlainText)
-        # El event filter se instalará desde ProjectsPanel
+        self.project_label.installEventFilter(self)
         project_layout.addWidget(self.project_label)
 
         # Botón de update (siempre creado, inicialmente oculto)
@@ -107,9 +187,33 @@ class ProjectItem(QtWidgets.QWidget):
         self.update_button.clicked.connect(self.on_update_click)
         project_layout.addWidget(self.update_button)
 
+        # Boton de cerrar: pegado al nombre (despues de la flecha de update, si
+        # esta), solo en proyectos abiertos y solo con el mouse sobre la fila.
+        # Reserva su lugar oculto para que la fila no salte al aparecer.
+        self.close_button = QtWidgets.QPushButton()
+        self.close_button.setStyleSheet(Style.BTN_CLOSE)
+        try:
+            dpr = self.devicePixelRatioF()
+        except Exception:
+            dpr = 1.0
+        self.close_button.setIcon(_close_icon(Color.TEXT, dpr))
+        self.close_button.setIconSize(QtCore.QSize(CLOSE_ICON_SIZE, CLOSE_ICON_SIZE))
+        self.close_button.setFixedSize(CLOSE_BUTTON_SIZE, CLOSE_BUTTON_SIZE)
+        self.close_button.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.close_button.setToolTip(TOOLTIPS["close"])
+        policy = self.close_button.sizePolicy()
+        policy.setRetainSizeWhenHidden(True)
+        self.close_button.setSizePolicy(policy)
+        self.close_button.setVisible(False)
+        project_layout.addWidget(self.close_button)
+
         # Spacer horizontal para empujar los elementos a la izquierda
         spacer = QtWidgets.QSpacerItem(0, 0, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
         project_layout.addItem(spacer)
+
+        project_container.enterEvent = lambda event: self._set_close_visible(True)
+        project_container.leaveEvent = lambda event: self._set_close_visible(False)
+        self.project_container = project_container
 
         layout.addWidget(project_container)
 
@@ -148,23 +252,24 @@ class ProjectItem(QtWidgets.QWidget):
         base_color, hover_color = get_project_colors(color_key)
         debug_print(f"🎨 Colores aplicados - Base: {base_color}, Hover: {hover_color}")
 
-        # Agregar emoji según estado
-        if self.is_open and self.sequences:
-            display_text = f"▼ {formatted_text}"
-            self.project_label.setStyleSheet(f"font-size: 13px; color: {base_color};")
-            # Guardar colores para el event filter
-            self.project_label.setProperty("base_color", base_color)
-            self.project_label.setProperty("hover_color", hover_color)
-            self.project_label.setProperty("is_project_label", True)  # Para distinguir del resto
+        # Triangulo: hacia abajo si esta abierto y expandido; hacia la derecha si
+        # esta cerrado o colapsado. Lo que distingue a un abierto colapsado es la
+        # x que aparece con el mouse encima.
+        self._triangle_down = bool(self.is_open and self.sequences and not self.collapsed)
+        display_text = formatted_text
+        for label in (self.toggle_label, self.project_label):
+            # Guardar colores para el hover compartido
+            label.setProperty("base_color", base_color)
+            label.setProperty("hover_color", hover_color)
+            label.setProperty("is_project_label", True)  # Para distinguir del resto
+        self._paint_title("base_color")
+
+        if self.is_open and self.sequences and not self.collapsed:
             self.show_sequences()
         else:
-            display_text = f"▶ {formatted_text}"
-            self.project_label.setStyleSheet(f"font-size: 13px; color: {base_color};")
-            # Guardar colores para el event filter
-            self.project_label.setProperty("base_color", base_color)
-            self.project_label.setProperty("hover_color", hover_color)
-            self.project_label.setProperty("is_project_label", True)  # Para distinguir del resto
             self.sequences_widget.hide()
+        if not self.is_open:
+            self.close_button.setVisible(False)
 
         # Debug: mostrar exactamente qué texto se está configurando
         debug_print(f"UI: Configurando texto para {project_name}: '{display_text}' (longitud: {len(display_text)})")
@@ -180,7 +285,8 @@ class ProjectItem(QtWidgets.QWidget):
         text_height = font_metrics.height()
 
         # Establecer tamaño mínimo basado en el texto
-        min_width = text_width + 20  # +20 para padding
+        # Margen chico: la flecha de update y la x van pegadas al nombre
+        min_width = text_width + 8
         self.project_label.setMinimumWidth(min_width)
 
         # Manejar visibilidad del botón de update
@@ -297,6 +403,48 @@ class ProjectItem(QtWidgets.QWidget):
             import traceback
 
             debug_print(traceback.format_exc())
+
+    def eventFilter(self, obj, event):
+        """Hover compartido: el triangulo y el nombre hacen lo mismo, se iluminan juntos."""
+        # El filtro se instala en setup_ui() y Qt ya le manda eventos mientras
+        # arma la fila (ChildAdded, Polish...), antes de que exista el segundo
+        # label: primero el tipo de evento, y los labels con getattr.
+        event_type = event.type()
+        if event_type in (QtCore.QEvent.Enter, QtCore.QEvent.Leave):
+            titles = (getattr(self, "toggle_label", None), getattr(self, "project_label", None))
+            if obj in titles and None not in titles:
+                self._paint_title("hover_color" if event_type == QtCore.QEvent.Enter else "base_color")
+        return super(ProjectItem, self).eventFilter(obj, event)
+
+    def _paint_title(self, color_property):
+        """Pinta nombre y triangulo del mismo color (base o hover)."""
+        color = self.project_label.property(color_property)
+        if not color:
+            return
+        self.project_label.setStyleSheet(f"font-size: 13px; color: {color};")
+        try:
+            dpr = self.toggle_label.devicePixelRatioF()
+        except Exception:
+            dpr = 1.0
+        self.toggle_label.setPixmap(
+            _triangle_pixmap(color, getattr(self, "_triangle_down", False), dpr)
+        )
+
+    def _set_close_visible(self, visible):
+        """La x aparece con el mouse sobre la fila, y solo en proyectos abiertos."""
+        try:
+            self.close_button.setVisible(bool(visible and self.is_open))
+        except RuntimeError:
+            pass  # la fila ya se destruyo (rearmado de la lista)
+
+    def toggle_collapsed(self):
+        """Colapsa o expande las secuencias. Solo el panel: no toca Hiero."""
+        self.collapsed = not self.collapsed
+        if self.panel and hasattr(self.panel, "set_project_collapsed"):
+            self.panel.set_project_collapsed(
+                self.project_info.get("nombre_base", ""), self.collapsed
+            )
+        self.update_display()
 
     def set_open_state(self, is_open, sequences=None, proyecto_obj=None):
         self.is_open = is_open
