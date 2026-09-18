@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel_SwitchSequence v2.36 | Lega
+  LGA_NKS_Projects_Panel_SwitchSequence v2.37 | Lega
 
   Hiero / Nuke Studio - Switch V3: HÍBRIDO OPTIMIZADO + LIMPIEZA TOTAL + CROSS-PROJECT
 
@@ -19,6 +19,7 @@ ____________________________________________________________________
   INTEGRACIÓN EN PANEL DE PROYECTOS:
   from switch_sequence_v3_final import switch_to_sequence_hybrid
 
+  v2.37: Parametro force_cleanup: corre el switch completo aunque la secuencia ya este activa, para la post-apertura de proyecto. Cada switch exitoso anota la secuencia como el ultimo timeline de su proyecto (persistente entre sesiones).
   v2.36: Con memoria temprana tambien se scrollea al top track despues de aplicar la vista guardada: el scroll vertical ya no forma parte de la memoria.
   v2.35: Switch mas rapido y sin saltos visibles, detras de flags para medir cada uno: diagnosticos de widgets y espera de limpieza apagados (~0.45s de snapshots), la vista guardada se aplica apenas se abre la secuencia en vez de heredar playhead + scroll al top y corregirlos al final, y la ventana principal no repinta durante el switch (FREEZE_UI_DURING_SWITCH).
   v2.34: Memoria de vista por timeline (LGA_NKS_TimelineMemory). Antes de cerrar el timeline viejo se guardan su zoom, scroll y playhead; al abrir una secuencia que ya tenia vista guardada se restaura, con un segundo intento diferido porque Hiero sigue reacomodando el layout despues de openInTimeline.
@@ -976,8 +977,14 @@ def _restore_memory_view(seq, retry=False):
         return False
 
 
-def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
-    """Switch de secuencia con la ventana principal congelada si el flag esta activo."""
+def switch_to_sequence_hybrid(target_sequence_name, target_project=None, force_cleanup=False):
+    """
+    Switch de secuencia con la ventana principal congelada si el flag esta activo.
+
+    force_cleanup: corre el switch completo aunque la secuencia ya este activa.
+    Lo usa la post-apertura de proyecto: Hiero deja activo el timeline guardado
+    pero sin top track, sin LUT y con restos del proyecto anterior abiertos.
+    """
     frozen_window = None
     if FREEZE_UI_DURING_SWITCH:
         try:
@@ -986,7 +993,7 @@ def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
         except Exception:
             frozen_window = None
     try:
-        return _switch_to_sequence_impl(target_sequence_name, target_project)
+        return _switch_to_sequence_impl(target_sequence_name, target_project, force_cleanup)
     finally:
         if frozen_window is not None:
             try:
@@ -997,7 +1004,7 @@ def switch_to_sequence_hybrid(target_sequence_name, target_project=None):
                 debug_print(f"   [Freeze] Error reactivando el repintado: {e}")
 
 
-def _switch_to_sequence_impl(target_sequence_name, target_project=None):
+def _switch_to_sequence_impl(target_sequence_name, target_project=None, force_cleanup=False):
     """
     Switch HÍBRIDO V3 PERFECTO: Mejor que v4 + LIMPIEZA TOTAL + CROSS-PROJECT
     - Velocidad del v2 + Estado completo del v1
@@ -1083,12 +1090,16 @@ def _switch_to_sequence_impl(target_sequence_name, target_project=None):
                         f"({active_project.name()} ≠ {target_project.name()}), continuando switch..."
                     )
                     # No retornar: el switch debe seguir adelante hacia el proyecto correcto
+                elif force_cleanup:
+                    debug_print("   ├── Ya activa, pero se fuerza el switch completo")
                 else:
                     debug_print("✅ Ya activa - sin cambios")
                     return True
             except Exception as _e:
                 debug_print(f"   ├── No se pudo comparar proyectos ({_e}), continuando switch...")
                 # En caso de error comparando, procedemos con el switch para no quedar bloqueados
+        elif force_cleanup:
+            debug_print("   ├── Ya activa, pero se fuerza el switch completo")
         else:
             debug_print("✅ Ya activa - sin cambios")
             return True
@@ -1365,5 +1376,11 @@ def _switch_to_sequence_impl(target_sequence_name, target_project=None):
         f"   [Summary] Post-event cleanup wait: {cleanup_wait_time:.3f}s | "
         f"ok={cleanup_wait_ok} | pending={len(cleanup_pending)}"
     )
+
+    # Ultimo timeline del proyecto: es a donde va el panel al volver a abrirlo
+    try:
+        timeline_memory.remember_last_sequence(new_active)
+    except Exception as e:
+        debug_print(f"   [Memoria] Error anotando el ultimo timeline: {e}")
 
     return True

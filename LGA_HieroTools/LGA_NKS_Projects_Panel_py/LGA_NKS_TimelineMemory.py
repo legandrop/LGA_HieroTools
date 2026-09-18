@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_TimelineMemory v1.03 | Lega
+  LGA_NKS_TimelineMemory v1.04 | Lega
 
   Memoria de vista por timeline para el Projects Panel.
 
@@ -27,6 +27,10 @@ ____________________________________________________________________
   sesion: que se guardo al salir de cada timeline y que se restauro al
   volver, con el valor pedido y el que quedo.
 
+  v1.04: Ultimo timeline por proyecto, persistente entre sesiones de NKS
+         (ProjectsPanel_LastTimelines.json): la clave es la carpeta del .hrox
+         + el nombre base sin version, asi vale para cualquier version. Lo usa
+         el Projects Panel para elegir a que timeline ir al abrir un proyecto.
   v1.03: El scroll vertical deja de guardarse y restaurarse: el switch siempre
          lleva el timeline al track superior, como el boton Top Track.
   v1.02: El zoom se reintenta en el lugar hasta que el slider acepta el
@@ -59,6 +63,10 @@ _LOGS_DIR = os.path.join(
 # haria que cada sesion descarte y pise la memoria de la otra.
 _MEMORY_PATH = os.path.join(_LOGS_DIR, f"ProjectsPanel_TimelineMemory_{os.getpid()}.json")
 _LOG_PATH = os.path.join(_LOGS_DIR, "DebugPy_TimelineMemory.log")
+# Ultimo timeline de cada proyecto. A diferencia de la memoria de vista, este
+# archivo NO es por sesion: sobrevive a reabrir NKS. Vive en logs/ porque guarda
+# nombres reales de proyectos y esa carpeta no se versiona en ningun repo.
+_LAST_SEQUENCES_PATH = os.path.join(_LOGS_DIR, "ProjectsPanel_LastTimelines.json")
 
 # Intentos de aplicar el zoom procesando eventos entre cada uno. Con el timeline
 # recien abierto el slider todavia no tiene su rango final y recorta el valor.
@@ -357,6 +365,80 @@ def restore_view(seq, attempt="principal"):
 
     _log(f"RESTAURADO ({attempt}) '{key}': pedido={state} | quedo={applied}")
     return True
+
+
+# =========================
+#  ULTIMO TIMELINE POR PROYECTO (persistente)
+# =========================
+
+
+def _project_family_key(project):
+    """
+    Clave de un proyecto que vale para TODAS sus versiones: carpeta del .hrox +
+    nombre base sin version (PROJA_SUP_v032 y PROJA_SUP_v033 dan la misma).
+    La carpeta separa ademas studio de client, que viven en roots distintos.
+    """
+    path = project.path()
+    base = None
+    try:
+        from LGA_NKS_CheckProjectVersions import obtener_nombre_base_proyecto
+
+        base = obtener_nombre_base_proyecto(path)
+    except Exception:
+        base = None
+    if not base:
+        stem = os.path.splitext(os.path.basename(path))[0]
+        base = stem.rsplit("_v", 1)[0] if "_v" in stem.lower() else stem
+    return f"{_norm_path(os.path.dirname(path))}::{str(base).lower()}"
+
+
+def _load_last_sequences():
+    try:
+        with open(_LAST_SEQUENCES_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+    except Exception as e:
+        _log(f"No se pudo leer {_LAST_SEQUENCES_PATH}: {e}", level="warning")
+        return {}
+
+
+def remember_last_sequence(seq):
+    """Anota `seq` como el ultimo timeline usado en su proyecto (todas las versiones)."""
+    try:
+        key = _project_family_key(seq.project())
+        data = _load_last_sequences()
+        if data.get(key) == seq.name():
+            return True
+        data[key] = seq.name()
+        os.makedirs(_LOGS_DIR, exist_ok=True)
+        with open(_LAST_SEQUENCES_PATH, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(data, f, indent=2)
+        _log(f"Ultimo timeline de '{key}': {seq.name()}")
+        return True
+    except Exception as e:
+        _log(f"No se pudo anotar el ultimo timeline: {e}", level="warning")
+        return False
+
+
+def recall_last_sequence(project):
+    """
+    Nombre del ultimo timeline usado en el proyecto, si existe en ESTA version.
+    Devuelve None si no hay nada anotado o si la secuencia no esta en el .hrox.
+    """
+    try:
+        key = _project_family_key(project)
+        name = _load_last_sequences().get(key)
+        if not name:
+            _log(f"Post-apertura: sin ultimo timeline anotado para '{key}'")
+            return None
+        if any(s.name() == name for s in project.sequences()):
+            _log(f"Post-apertura: ultimo timeline de '{key}' = {name}")
+            return name
+        _log(f"Post-apertura: '{name}' anotado para '{key}' no existe en esta version")
+    except Exception as e:
+        _log(f"Post-apertura: no se pudo leer el ultimo timeline: {e}", level="warning")
+    return None
 
 
 def remember_context(mode):

@@ -3,10 +3,12 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectHandler v1.04 | Lega
+  LGA_NKS_ProjectHandler v1.05 | Lega
 
   Gestor de manejo de proyectos para el panel de proyectos LGA.
 
+  v1.05: Abrir un proyecto (click o Update de version) dispara la post-apertura
+         del panel: ultimo timeline del proyecto y switch completo.
   v1.04: La lista se limpia con takeAt + hide + deleteLater en vez de
          setParent(None). Con dos displays seguidos, un item todavia sin
          mostrar quedaba huerfano y Qt lo abria como ventana suelta.
@@ -213,6 +215,9 @@ class ProjectHandler:
             debug_print(f"✅ Proyecto abierto exitosamente: {proyecto.name()}")
             debug_print("🔄 Iniciando re-escaneo automático...")
             panel.start_scan()
+            # Ultimo timeline del proyecto + switch completo, cuando Hiero termine
+            if hasattr(panel, "after_project_open"):
+                panel.after_project_open(proyecto)
         except Exception as e:
             show_warning(
                 panel,
@@ -265,6 +270,9 @@ class ProjectHandler:
 
                 # Iniciar re-escaneo automático para actualizar la UI
                 panel.start_scan()
+                # La version nueva vuelve al ultimo timeline usado en el proyecto
+                if hasattr(panel, "after_project_open"):
+                    panel.after_project_open(nuevo_proyecto)
             else:
                 print(f"Error al abrir el proyecto: {ruta_nueva_version}")
                 # Si no se pudo abrir la nueva versión, intentar reabrir la original

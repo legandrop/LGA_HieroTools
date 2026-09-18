@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.35 | Lega
+  LGA_NKS_Projects_Panel v2.36 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,11 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.36: Post-apertura de proyecto (after_project_open). Al abrir un proyecto
+         desde el panel se espera a que Hiero restaure su timeline y se corre el
+         switch completo hacia el ultimo timeline usado en ese proyecto (en
+         cualquier version), o al que abrio Hiero. Antes quedaban timelines de
+         mas, sin top track ni LUT.
   v2.35: El toggle larga un solo escaneo. El segundo, a los 150 ms, era trabajo
          doble: con los escaneos numerados solo se aplicaba el ultimo.
   v2.34: El toggle vuelve a largar el escaneo ANTES del switch, en paralelo, y
@@ -80,6 +85,7 @@ import os
 import importlib
 import sys
 import configparser
+import time
 from pathlib import Path
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 from LGA_NKS_Shared.LGA_NKS_ContextProfile import get_context_mode, find_context_ini
@@ -127,6 +133,14 @@ REIMPORT_BUTTON = True
 # El login habilitado para el switch vive en LGA_NKS_ContextSwitch, que es lo que
 # consultan los demas paneles para decidir si conectarse al bus de contexto.
 SWITCH_ALLOWED_LOGIN = SWITCH_USER_LOGIN
+
+# Post-apertura de proyecto. Medido con explore_project_open_timelines: Hiero
+# abre el timeline guardado ~0.16s despues de kAfterProjectLoad y despues no
+# cambia nada. Se espera a que la secuencia activa sea del proyecto nuevo y se
+# mantenga POST_OPEN_STABLE_MS; si no llega en POST_OPEN_TIMEOUT_MS, se sigue igual.
+POST_OPEN_POLL_MS = 50
+POST_OPEN_STABLE_MS = 150
+POST_OPEN_TIMEOUT_MS = 3000
 
 # Opciones de intervalo de auto-refresh (minutos)
 AUTO_REFRESH_OPTIONS = {
@@ -488,6 +502,63 @@ class ProjectsPanel(QtWidgets.QWidget):
             show_warning(
                 self, "Error al cambiar contexto", f"No se pudo cambiar el contexto:\n{e}"
             )
+
+    # =========================
+    #     POST-APERTURA
+    # =========================
+    def after_project_open(self, project):
+        """
+        Deja un proyecto recien abierto como si se hubiera llegado con el switch:
+        su ultimo timeline (o el que abrio Hiero), top track, LUT y sin restos
+        del proyecto anterior. Espera a que Hiero termine de restaurar su
+        timeline, porque limpiar antes lo haria reaparecer encima.
+        """
+        if project is None:
+            return
+        self._post_open = {"project": project, "start": time.time(), "last": None, "since": None}
+        QtCore.QTimer.singleShot(POST_OPEN_POLL_MS, self._poll_post_open)
+
+    def _poll_post_open(self):
+        state = getattr(self, "_post_open", None)
+        if not state:
+            return
+        project = state["project"]
+        now = time.time()
+        try:
+            seq = hiero.ui.activeSequence()
+            current = seq.name() if seq and seq.project() == project else None
+        except Exception:
+            current = None
+        if current != state["last"]:
+            state["last"], state["since"] = current, now
+        elapsed_ms = (now - state["start"]) * 1000
+        stable = current is not None and (now - state["since"]) * 1000 >= POST_OPEN_STABLE_MS
+        if not stable and elapsed_ms < POST_OPEN_TIMEOUT_MS:
+            QtCore.QTimer.singleShot(POST_OPEN_POLL_MS, self._poll_post_open)
+            return
+        self._post_open = None
+        self._finish_project_open(project, current, elapsed_ms)
+
+    def _finish_project_open(self, project, active_name, elapsed_ms):
+        """Elige el timeline de destino y corre el switch completo."""
+        try:
+            target, origin = timeline_memory.recall_last_sequence(project), "ultimo usado"
+            if not target:
+                target, origin = active_name, "el que abrio Hiero"
+            if not target:
+                sequences = project.sequences()
+                target, origin = (sequences[0].name(), "primera secuencia") if sequences else (None, "")
+            if not target:
+                debug_print(f"[Post-apertura] {project.name()} no tiene secuencias")
+                return
+            switch_to_sequence(target, target_project=project, force_cleanup=True)
+            # El switch reinicia el log: esta linea queda como primera traza visible.
+            debug_print(
+                f"[Post-apertura] {project.name()}: '{target}' ({origin}) | "
+                f"Hiero listo en {elapsed_ms:.0f} ms (activa al terminar la espera: {active_name})"
+            )
+        except Exception as e:
+            debug_print(f"[Post-apertura] Error: {e}")
 
     def _finish_context_switch(self, mode):
         """
