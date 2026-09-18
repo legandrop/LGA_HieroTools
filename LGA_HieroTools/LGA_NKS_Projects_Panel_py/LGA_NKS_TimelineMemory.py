@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_TimelineMemory v1.04 | Lega
+  LGA_NKS_TimelineMemory v1.05 | Lega
 
   Memoria de vista por timeline para el Projects Panel.
 
@@ -11,9 +11,15 @@ ____________________________________________________________________
   secuencia. Tambien recuerda el ultimo timeline de cada contexto
   (studio / client), para que el toggle vuelva a donde se estaba.
 
-  La memoria vive en un JSON dentro de logs/ con el PID del proceso en el
-  nombre, y dura una sesion de NKS: sobrevive al reimport del panel, no a
-  reabrir NKS, y dos NKS abiertos a la vez no se pisan.
+  Tres JSON en logs/, que ningun repo versiona porque guardan nombres reales
+  de proyectos:
+    - ProjectsPanel_TimelineViews.json: vista de cada timeline. PERSISTENTE,
+      con clave proyecto sin version + secuencia: todas las versiones de un
+      proyecto comparten la vista de cada timeline.
+    - ProjectsPanel_LastTimelines.json: ultimo timeline de cada proyecto.
+      Persistente, misma clave de proyecto.
+    - ProjectsPanel_TimelineMemory_<PID>.json: ultimo timeline de cada
+      contexto (studio / client) para el toggle. Dura la sesion de NKS.
 
   Lo que se guarda por timeline:
     - zoom: el slider del contenedor horizontal del TimelineView
@@ -27,6 +33,11 @@ ____________________________________________________________________
   sesion: que se guardo al salir de cada timeline y que se restauro al
   volver, con el valor pedido y el que quedo.
 
+  v1.05: La vista de cada timeline pasa a ser persistente entre sesiones de NKS
+         (ProjectsPanel_TimelineViews.json) y se comparte entre las versiones
+         del proyecto. Antes duraba la sesion y era por archivo .hrox: al abrir
+         un timeline nuevo el playhead quedaba lejos del contenido. El log propio
+         se reinicia por PID en su primera linea, no por el JSON de sesion.
   v1.04: Ultimo timeline por proyecto, persistente entre sesiones de NKS
          (ProjectsPanel_LastTimelines.json): la clave es la carpeta del .hrox
          + el nombre base sin version, asi vale para cualquier version. Lo usa
@@ -67,6 +78,10 @@ _LOG_PATH = os.path.join(_LOGS_DIR, "DebugPy_TimelineMemory.log")
 # archivo NO es por sesion: sobrevive a reabrir NKS. Vive en logs/ porque guarda
 # nombres reales de proyectos y esa carpeta no se versiona en ningun repo.
 _LAST_SEQUENCES_PATH = os.path.join(_LOGS_DIR, "ProjectsPanel_LastTimelines.json")
+# Vista de cada timeline (zoom, scroll horizontal, playhead). Persistente como el
+# anterior y con la misma clave de proyecto sin version, mas el nombre de la
+# secuencia: todas las versiones de un proyecto comparten la vista de cada timeline.
+_VIEWS_PATH = os.path.join(_LOGS_DIR, "ProjectsPanel_TimelineViews.json")
 
 # Intentos de aplicar el zoom procesando eventos entre cada uno. Con el timeline
 # recien abierto el slider todavia no tiene su rango final y recorta el valor.
@@ -83,9 +98,7 @@ def _log(message, level="info"):
     debug_print(f"[Memoria] {message}", level=level)
     try:
         os.makedirs(_LOGS_DIR, exist_ok=True)
-        # El log se reinicia la primera vez que escribe este proceso: si todavia
-        # no existe el JSON de este PID, es una sesion nueva de NKS.
-        mode = "a" if os.path.exists(_MEMORY_PATH) or _log.started else "w"
+        mode = "a" if _log.started or _log_is_this_session() else "w"
         _log.started = True
         with open(_LOG_PATH, mode, encoding="utf-8", newline="\n") as f:
             if mode == "w":
@@ -98,13 +111,27 @@ def _log(message, level="info"):
 _log.started = False
 
 
+def _log_is_this_session():
+    """
+    True si el log ya es de este proceso de NKS. El log se reinicia una vez por
+    sesion: la primera linea lleva el PID, asi que un reimport del modulo sigue
+    escribiendo al final en vez de pisarlo.
+    """
+    try:
+        with open(_LOG_PATH, "r", encoding="utf-8") as f:
+            return f"PID {os.getpid()} " in f.readline()
+    except Exception:
+        return False
+
+
 # =========================
 #       PERSISTENCIA
 # =========================
 
 
 def _empty_memory():
-    return {"pid": os.getpid(), "timelines": {}, "contexts": {}}
+    # Solo el ultimo timeline de cada contexto: las vistas viven en _VIEWS_PATH.
+    return {"pid": os.getpid(), "contexts": {}}
 
 
 def _load():
@@ -129,14 +156,45 @@ def _save(data):
         return False
 
 
+def _load_views():
+    try:
+        with open(_VIEWS_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+    except Exception as e:
+        _log(f"No se pudo leer {_VIEWS_PATH}: {e}", level="warning")
+        return {}
+
+
+def _save_view(key, state):
+    """
+    Relee el archivo antes de escribir: con dos NKS abiertos, cada uno solo pisa
+    las vistas que toco, no las que guardo el otro.
+    """
+    try:
+        views = _load_views()
+        views[key] = state
+        os.makedirs(_LOGS_DIR, exist_ok=True)
+        with open(_VIEWS_PATH, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(views, f, indent=2)
+        return True
+    except Exception as e:
+        _log(f"No se pudo escribir {_VIEWS_PATH}: {e}", level="error")
+        return False
+
+
 def _norm_path(path):
     return os.path.normcase(os.path.normpath(path or ""))
 
 
 def _sequence_key(seq):
-    """Clave estable de una secuencia: ruta del .hrox + nombre de la secuencia."""
+    """
+    Clave de la vista de una secuencia: proyecto SIN version + nombre de la
+    secuencia. El 101 de PROJA_SUP_v032 y el de v033 comparten vista.
+    """
     try:
-        return f"{_norm_path(seq.project().path())}::{seq.name()}"
+        return f"{_project_family_key(seq.project())}::{seq.name()}"
     except Exception:
         return None
 
@@ -295,7 +353,7 @@ def _apply_zoom(slider, value):
 def has_view(seq):
     """True si hay una vista guardada para `seq`."""
     key = _sequence_key(seq) if seq else None
-    return bool(key and _load()["timelines"].get(key))
+    return bool(key and _load_views().get(key))
 
 
 def capture_active():
@@ -328,9 +386,7 @@ def capture_active():
     else:
         _log(f"Guardar: '{key}' no tiene TimelineEditor", level="warning")
 
-    data = _load()
-    data["timelines"][key] = state
-    if _save(data):
+    if _save_view(key, state):
         _log(f"GUARDADO '{key}': {state}")
     return True
 
@@ -343,7 +399,7 @@ def restore_view(seq, attempt="principal"):
     aplicado antes quedaria recortado al rango viejo.
     """
     key = _sequence_key(seq) if seq else None
-    state = _load()["timelines"].get(key) if key else None
+    state = _load_views().get(key) if key else None
     if not state:
         _log(f"Restaurar ({attempt}): sin vista guardada para '{key}'")
         return False

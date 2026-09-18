@@ -10,6 +10,8 @@ v3.95:
 
 v3.94:
 
+        - La vista de cada timeline (zoom, scroll horizontal y playhead) se perdia al reabrir NKS y no se compartia entre versiones del proyecto (`LGA_NKS_TimelineMemory v1.05`): vivia en un JSON de sesion con clave por archivo `.hrox`, asi que un timeline recien abierto quedaba con el playhead lejos del contenido. Ahora es persistente y la clave es el proyecto sin version mas la secuencia. [ HieroTools - Vista de timelines persistente entre sesiones ]
+
         - La post-apertura de proyecto parpadeaba: se veia el timeline que abre Hiero y los restos del proyecto anterior, y despues el switch cerraba y reabria ese mismo timeline (`LGA_NKS_Projects_Panel v2.37`, `LGA_NKS_ProjectHandler v1.06`, `LGA_NKS_Projects_Panel_SwitchSequence v2.38`). Ahora el repintado se congela desde el click hasta el final, y si el destino ya esta activo el switch lo reusa y solo corre la limpieza. [ HieroTools - Post-apertura sin parpadeos ]
 
         - Abrir un proyecto desde el Projects Panel lo dejaba como lo dejaba Hiero: el timeline guardado, sin top track ni LUT, y el timeline y el viewer del proyecto anterior ocultos pero vivos (`LGA_NKS_Projects_Panel v2.36`, `LGA_NKS_ProjectHandler v1.05`, `LGA_NKS_Projects_Panel_SwitchSequence v2.37`, `LGA_NKS_TimelineMemory v1.04`). Ahora el panel espera a que Hiero restaure su timeline y corre el switch completo hacia el ultimo timeline usado en ese proyecto, en cualquier version, anotado en un JSON local que sobrevive a reabrir NKS. Vale para el click y para el boton Update. [ HieroTools - Abrir un proyecto vuelve a su ultimo timeline ]
