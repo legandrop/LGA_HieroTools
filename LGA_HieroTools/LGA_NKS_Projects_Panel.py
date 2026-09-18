@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.36 | Lega
+  LGA_NKS_Projects_Panel v2.37 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,9 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.37: La ventana principal no repinta desde el click en el proyecto hasta el
+         final de la post-apertura (FREEZE_DURING_PROJECT_OPEN): antes se veia
+         el timeline que abre Hiero y los restos del proyecto anterior.
   v2.36: Post-apertura de proyecto (after_project_open). Al abrir un proyecto
          desde el panel se espera a que Hiero restaure su timeline y se corre el
          switch completo hacia el ultimo timeline usado en ese proyecto (en
@@ -141,6 +144,11 @@ SWITCH_ALLOWED_LOGIN = SWITCH_USER_LOGIN
 POST_OPEN_POLL_MS = 50
 POST_OPEN_STABLE_MS = 150
 POST_OPEN_TIMEOUT_MS = 3000
+
+# Congela el repintado de la ventana principal desde el click en el proyecto
+# hasta el final de la post-apertura. Sin esto se ve el timeline que abre Hiero
+# y los restos del proyecto anterior antes de que arranque el switch.
+FREEZE_DURING_PROJECT_OPEN = True
 
 # Opciones de intervalo de auto-refresh (minutos)
 AUTO_REFRESH_OPTIONS = {
@@ -506,6 +514,27 @@ class ProjectsPanel(QtWidgets.QWidget):
     # =========================
     #     POST-APERTURA
     # =========================
+    def begin_project_open(self):
+        """Congela el repintado antes de openProject. Lo levanta end_project_open()."""
+        if not FREEZE_DURING_PROJECT_OPEN:
+            return
+        try:
+            hiero.ui.mainWindow().setUpdatesEnabled(False)
+            debug_print("[Post-apertura] Repintado congelado desde el click")
+        except Exception as e:
+            debug_print(f"[Post-apertura] No se pudo congelar el repintado: {e}")
+
+    def end_project_open(self):
+        """Levanta el congelado de begin_project_open(). Idempotente."""
+        try:
+            window = hiero.ui.mainWindow()
+            if not window.updatesEnabled():
+                window.setUpdatesEnabled(True)
+                window.update()
+                debug_print("[Post-apertura] Repintado reactivado")
+        except Exception as e:
+            debug_print(f"[Post-apertura] Error reactivando el repintado: {e}")
+
     def after_project_open(self, project):
         """
         Deja un proyecto recien abierto como si se hubiera llegado con el switch:
@@ -514,6 +543,7 @@ class ProjectsPanel(QtWidgets.QWidget):
         timeline, porque limpiar antes lo haria reaparecer encima.
         """
         if project is None:
+            self.end_project_open()
             return
         self._post_open = {"project": project, "start": time.time(), "last": None, "since": None}
         QtCore.QTimer.singleShot(POST_OPEN_POLL_MS, self._poll_post_open)
@@ -559,6 +589,10 @@ class ProjectsPanel(QtWidgets.QWidget):
             )
         except Exception as e:
             debug_print(f"[Post-apertura] Error: {e}")
+        finally:
+            # El switch ya reactiva el repintado al terminar; esto cubre los
+            # caminos sin switch (sin secuencias, error) para no dejar NKS congelado.
+            self.end_project_open()
 
     def _finish_context_switch(self, mode):
         """

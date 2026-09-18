@@ -3,10 +3,12 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectHandler v1.05 | Lega
+  LGA_NKS_ProjectHandler v1.06 | Lega
 
   Gestor de manejo de proyectos para el panel de proyectos LGA.
 
+  v1.06: El click en un proyecto congela el repintado antes de openProject; lo
+         levanta la post-apertura del panel, o este mismo handler si falla.
   v1.05: Abrir un proyecto (click o Update de version) dispara la post-apertura
          del panel: ultimo timeline del proyecto y switch completo.
   v1.04: La lista se limpia con takeAt + hide + deleteLater en vez de
@@ -209,6 +211,10 @@ class ProjectHandler:
         debug_print(f"   📄 Archivo: {os.path.basename(ruta_hrox) if ruta_hrox else 'N/A'}")
         debug_print(f"   🔢 Versión en UI: v{version}")
 
+        # Congela el repintado hasta que termine la post-apertura: sin esto se ve
+        # el timeline que abre Hiero y los restos del proyecto anterior.
+        if hasattr(panel, "begin_project_open"):
+            panel.begin_project_open()
         try:
             debug_print(f"📂 Abriendo proyecto desde: {ruta_hrox}")
             proyecto = hiero.core.openProject(ruta_hrox)
@@ -219,6 +225,8 @@ class ProjectHandler:
             if hasattr(panel, "after_project_open"):
                 panel.after_project_open(proyecto)
         except Exception as e:
+            if hasattr(panel, "end_project_open"):
+                panel.end_project_open()
             show_warning(
                 panel,
                 "Error al abrir proyecto",

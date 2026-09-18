@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel_SwitchSequence v2.37 | Lega
+  LGA_NKS_Projects_Panel_SwitchSequence v2.38 | Lega
 
   Hiero / Nuke Studio - Switch V3: HÍBRIDO OPTIMIZADO + LIMPIEZA TOTAL + CROSS-PROJECT
 
@@ -19,6 +19,7 @@ ____________________________________________________________________
   INTEGRACIÓN EN PANEL DE PROYECTOS:
   from switch_sequence_v3_final import switch_to_sequence_hybrid
 
+  v2.38: Con force_cleanup y el destino ya activo se reusa el timeline: no se cierra ni se reabre, solo corre la limpieza (cierre de restos, reduce, top track, LUT, Frame Number). Cerrar y reabrir el mismo timeline costaba ~1s y un parpadeo.
   v2.37: Parametro force_cleanup: corre el switch completo aunque la secuencia ya este activa, para la post-apertura de proyecto. Cada switch exitoso anota la secuencia como el ultimo timeline de su proyecto (persistente entre sesiones).
   v2.36: Con memoria temprana tambien se scrollea al top track despues de aplicar la vista guardada: el scroll vertical ya no forma parte de la memoria.
   v2.35: Switch mas rapido y sin saltos visibles, detras de flags para medir cada uno: diagnosticos de widgets y espera de limpieza apagados (~0.45s de snapshots), la vista guardada se aplica apenas se abre la secuencia en vez de heredar playhead + scroll al top y corregirlos al final, y la ventana principal no repinta durante el switch (FREEZE_UI_DURING_SWITCH).
@@ -1078,6 +1079,9 @@ def _switch_to_sequence_impl(target_sequence_name, target_project=None, force_cl
     except Exception:
         active_seq = None
 
+    # Con force_cleanup y el destino ya activo, se reusa ese timeline en vez de
+    # cerrarlo y reabrirlo: la post-apertura casi siempre cae en este caso.
+    reuse_active = False
     if active_seq and active_seq.name() == target_sequence_name:
         # Si hay un proyecto objetivo, verificar que la secuencia activa pertenece al mismo proyecto.
         # Dos proyectos distintos pueden tener secuencias con el mismo nombre (ej: "101" en PROJALT y en PROJA).
@@ -1091,7 +1095,8 @@ def _switch_to_sequence_impl(target_sequence_name, target_project=None, force_cl
                     )
                     # No retornar: el switch debe seguir adelante hacia el proyecto correcto
                 elif force_cleanup:
-                    debug_print("   ├── Ya activa, pero se fuerza el switch completo")
+                    debug_print("   ├── Ya activa, se reusa y se corre solo la limpieza")
+                    reuse_active = True
                 else:
                     debug_print("✅ Ya activa - sin cambios")
                     return True
@@ -1099,7 +1104,8 @@ def _switch_to_sequence_impl(target_sequence_name, target_project=None, force_cl
                 debug_print(f"   ├── No se pudo comparar proyectos ({_e}), continuando switch...")
                 # En caso de error comparando, procedemos con el switch para no quedar bloqueados
         elif force_cleanup:
-            debug_print("   ├── Ya activa, pero se fuerza el switch completo")
+            debug_print("   ├── Ya activa, se reusa y se corre solo la limpieza")
+            reuse_active = True
         else:
             debug_print("✅ Ya activa - sin cambios")
             return True
@@ -1177,7 +1183,14 @@ def _switch_to_sequence_impl(target_sequence_name, target_project=None, force_cl
     open_time = 0
     close_time = 0
 
-    if CLOSE_BEFORE_OPEN:
+    if reuse_active:
+        # El timeline destino ya esta abierto y activo: cerrarlo y reabrirlo
+        # costaba ~1s y un parpadeo sin cambiar nada. Los restos de otros
+        # proyectos los cierra el paso 12 (CLOSE_ALL_TIMELINES).
+        new_active = active_seq
+        closed_viewers, closed_timelines, scheduled_original_names = 0, 0, []
+        debug_print("   [Stage] Reuso del timeline activo: sin cerrar ni reabrir")
+    elif CLOSE_BEFORE_OPEN:
         # Playhead del viewer viejo, antes de destruirlo
         playhead_original = _get_current_playhead()
         debug_print(f"   [Playhead] Original: {playhead_original}")
