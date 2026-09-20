@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Clip_DisableCG v1.00 | Lega
+  LGA_NKS_Clip_DisableCG v1.01 | Lega
 
   Habilita o deshabilita el clip en el track _cg_ (solo contexto client).
   Wrapper de LGA_NKS_Clip_DisableEXR con track_name=_cg_.
@@ -14,6 +14,7 @@ ____________________________________________________________________
   TaskScope no importa hiero, así que el fallback literal deja de ser el
   camino normal fuera de NKS.
 
+  v1.01: Movido de Review al ViewerTL Panel con su toggle contextual de Client.
   v1.00: Versión inicial.
 ____________________________________________________________________
 

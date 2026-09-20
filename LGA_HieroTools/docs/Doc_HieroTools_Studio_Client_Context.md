@@ -198,14 +198,14 @@ Por eso nada arma el nombre de la carpeta con un literal:
   coincidan con cada nombre, no solo el primero, porque puede haber varios
   `_cg_` en el mismo timeline (uno por stream).
 
-## Impacto en Review Panel
+## Impacto en ViewerTL Panel
 
 - El segundo botón ON/OFF ya no es siempre `_roto_`: `_segunda_task()`
-  ([LGA_NKS_Review_Panel.py](../LGA_NKS_Review_Panel.py)) resuelve la
+  ([LGA_NKS_ViewerTL_Panel.py](../LGA_NKS_ViewerTL_Panel.py)) resuelve la
   segunda task activa desde `LGA_NKS_TaskScope.active_track_tasks()`. En
   `studio` sigue siendo `roto` (`LGA_NKS_Clip_DisableRoto.py`); en `client`
   es `cg`, con el wrapper nuevo
-  [LGA_NKS_Clip_DisableCG.py](../LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableCG.py)
+  [LGA_NKS_Clip_DisableCG.py](../LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableCG.py)
   (mismo patrón que `DisableRoto`: envuelve `LGA_NKS_Clip_DisableEXR` con
   `track_name=exr_track_for_task("cg")` y `enable_rev_fallback=False`). El
   atajo de teclado (`Ctrl+Shift+D`) es el mismo en los dos contextos.
@@ -257,10 +257,10 @@ Por eso nada arma el nombre de la carpeta con un literal:
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py`
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py`
 
-### Review Panel
+### ViewerTL Panel
 
-- `LGA_HieroTools/LGA_NKS_Review_Panel.py` (segundo botón ON/OFF por contexto)
-- `LGA_HieroTools/LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableCG.py` (wrapper nuevo)
+- `LGA_HieroTools/LGA_NKS_ViewerTL_Panel.py` (segundo botón ON/OFF por contexto)
+- `LGA_HieroTools/LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableCG.py` (wrapper contextual de Client)
 
 ## Archivos revisados que siguen parciales o con deuda
 

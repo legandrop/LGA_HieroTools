@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_GetClip v1.88 | Lega
+  LGA_NKS_GetClip v1.89 | Lega
 
   Usado por runtime activo:
   - LGA_NKS_Assignee_Panel.py
@@ -22,7 +22,7 @@ ____________________________________________________________________
   - LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py
   - LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py
   - LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_ReviewPic.py
-  - LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableEXR.py
+  - LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableEXR.py
   - LGA_NKS_Review_Panel_py/LGA_NKS_Compare_Versions.py
   - LGA_NKS_Review_Panel_py/LGA_NKS_Compare_Versions_OFF.py
   - LGA_NKS_Review_Panel_py/LGA_NKS_EXRTrack_Difference.py
@@ -31,6 +31,8 @@ ____________________________________________________________________
 
   Utilidades para obtener clips del timeline de Hiero/Nuke Studio.
 
+  v1.89: Actualiza la lista de consumidores tras mover los toggles de clips al
+         ViewerTL Panel; no cambia la logica de seleccion.
   v1.88: Actualiza la lista de consumidores tras mover las comparaciones al
          Review Panel; no cambia la logica de seleccion.
 

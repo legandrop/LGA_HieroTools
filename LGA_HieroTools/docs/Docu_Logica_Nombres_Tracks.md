@@ -135,7 +135,7 @@ Los pasos para sumar una task nueva son:
    así que sumar el track ahí alcanza para que el selector de task, el chequeo
    de mismatch y `registered_task_names()` lo reconozcan solos.
 4. Revisar filtros por nombre de archivo, regex y detección de task en los scripts que ya soportan multi-task.
-5. Revisar UI donde hay acciones específicas por task (ej. botones on/off del Review Panel).
+5. Revisar UI donde hay acciones específicas por task (ej. botones on/off del ViewerTL Panel).
 6. Actualizar la tabla de tasks vigentes de este documento.
 7. Revisar el estado en [Docu_MultiTask.md](Docu_MultiTask.md).
 
@@ -167,15 +167,15 @@ Los pasos para sumar una task nueva son:
 - **Pull multi-task:** [LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py)
   - Métodos: `HieroOperations.process_selected_clips()`, `HieroOperations.change_to_highest_version()`, `SGManager.find_highest_version_for_task()`
 
-- **Review on/off por track:** [LGA_NKS_Review_Panel.py](../LGA_NKS_Review_Panel.py)
-  - Métodos: `execute_DisableEXR()`, `execute_DisableRoto()`
+- **ViewerTL on/off por track:** [LGA_NKS_ViewerTL_Panel.py](../LGA_NKS_ViewerTL_Panel.py)
+  - Métodos: `toggle_comp_clip()`, `toggle_second_task_clip()`
 
-- **Script de toggle (escenario comp por default):** [LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableEXR.py](../LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableEXR.py)
+- **Script de toggle (escenario comp por default):** [LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableEXR.py](../LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableEXR.py)
   - Función: `main(track_name=None, enable_rev_fallback=True)`
   - Default `enable_rev_fallback=True`: trabaja exclusivamente sobre el playhead. Si `_comp_` está vacío en el playhead o tiene un clip v00/v000, busca un track `_compXXX_`. Si coincide con `TRACK_comp_REV` (case-insensitive) opera ahí; si no, ofrece renombrarlo al nombre canónico antes de operar.
   - `enable_rev_fallback=False`: comportamiento original (playhead con fallback a selección, sin lógica REV). Usado por wrappers de otras tasks.
 
-- **Wrapper roto:** [LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableRoto.py](../LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableRoto.py)
+- **Wrapper roto:** [LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableRoto.py](../LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableRoto.py)
   - Función: `main()` → llama a `disable_main(track_name=TRACK_roto_EXR, enable_rev_fallback=False)`
 
 - **Selección de task en playhead (single-task tools):** [LGA_NKS_Shared/LGA_NKS_TaskSelectionDialog.py](../LGA_NKS_Shared/LGA_NKS_TaskSelectionDialog.py)

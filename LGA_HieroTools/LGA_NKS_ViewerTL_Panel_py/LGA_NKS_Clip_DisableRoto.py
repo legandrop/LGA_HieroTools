@@ -1,14 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Clip_DisableRoto v1.10 | Lega
+  LGA_NKS_Clip_DisableRoto v1.11 | Lega
 
   Habilita o deshabilita el clip en el track _roto_.
   Wrapper de LGA_NKS_Clip_DisableEXR con track_name=TRACK_roto_EXR.
 
   Pasa explícitamente `enable_rev_fallback=False` porque el flujo de fallback al track
-  de review (compRev / similares) es exclusivo del botón ON OFF _comp_.
+  de review (compRev / similares) es exclusivo del botón TL | ON/OFF _comp_.
 
+  v1.11: Movido de Review al ViewerTL Panel con su toggle contextual de Studio.
   v1.10: Pasa `enable_rev_fallback=False` para mantener el comportamiento original (sin
          fallback al track REV). Necesario porque el default del script genérico es True.
   v1.00: Versión inicial

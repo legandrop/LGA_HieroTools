@@ -172,11 +172,17 @@ Hoy carga scripts desde:
 - `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_PrevNext_Rev.py`
 - `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_SnapShot.py`
 - `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_FrameNumber.py`
+- `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_ON_Clips_OFF_v00-Clips.py`
+- `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableEXR.py`
+- `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableRoto.py`
+- `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableCG.py`
 
 Tambien usa shareds:
 
 - `LGA_NKS_Shared/LGA_NKS_Timeline_PreCleanup.py`
 - `LGA_NKS_Shared/LGA_NKS_StyleUtils.py`
+- `LGA_NKS_Shared/LGA_NKS_TaskScope.py`
+- `LGA_NKS_Shared/LGA_NKS_MessageBox.py`
 - `LGA_NKS_Shared/SecureConfig_Reader.py`
 
 ### 5. Edit Panel
@@ -220,7 +226,6 @@ Panel:
 
 Hoy carga scripts desde:
 
-- `LGA_NKS_Review_Panel_py/LGA_NKS_ON_Clips_OFF_v00-Clips.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_EXRTrack_Difference.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_Compare_Versions.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_Compare_Versions_OFF.py`
@@ -232,9 +237,6 @@ Hoy carga scripts desde:
 - `LGA_NKS_Review_Panel_py/LGA_NKS_RevealNKS_Project.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_RevealNK_Script.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_OpenInNukeX.py`
-- `LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableEXR.py`
-- `LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableRoto.py`
-- `LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableCG.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_NextPrev_Annotation.py`
 
 Tambien usa shareds:
@@ -379,6 +381,13 @@ fuera de uso y no tienen boton visible.
 
 ### ViewerTL Panel
 
+El orden visible separa primero las acciones que ocurren en el Viewer y luego
+las que operan sobre el Timeline. Por eso sus etiquetas empiezan con
+`Viewer |` o `TL |`: el prefijo describe el ambito funcional, mientras que el
+color conserva la familia de cada herramienta. En particular, `Viewer | Frame
+Number` comparte el violeta de las otras acciones de Viewer y no el azul de
+los tres toggles de clips, que quedan juntos al final del panel.
+
 - `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Viewer_Mask.py`
 - `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Timeline_Refresh_Wrap.py`
 - `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Timeline_Refresh.py`
@@ -387,6 +396,10 @@ fuera de uso y no tienen boton visible.
 - `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_SnapShot.py`
 - `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_FrameNumber.py`
 - `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_FrameNumber_Create.py`
+- `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_ON_Clips_OFF_v00-Clips.py`
+- `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableEXR.py`
+- `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableRoto.py`
+- `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableCG.py`
 
 ### Edit Panel
 
@@ -408,13 +421,12 @@ fuera de uso y no tienen boton visible.
 
 ### Review Panel
 
-El orden visible prioriza el uso cotidiano: toggles, Difference/Compare,
-Contact Sheet y navegacion de anotaciones, Reveal/OpenInNukeX. Match Rev Ver,
+El orden visible prioriza Difference/Compare, Contact Sheet y navegacion de
+anotaciones, Reveal/OpenInNukeX. Match Rev Ver,
 Compare Rev EdRef y Compare EXR aPlate quedan al final porque son controles de
 uso ocasional. Contact Sheet y los dos botones de anotaciones comparten un azul
 petroleo propio para no confundirse con el bloque verde de Difference/Compare.
 
-- `LGA_NKS_Review_Panel_py/LGA_NKS_ON_Clips_OFF_v00-Clips.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_EXRTrack_Difference.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_Compare_Versions.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_Compare_Versions_OFF.py`
@@ -426,9 +438,6 @@ petroleo propio para no confundirse con el bloque verde de Difference/Compare.
 - `LGA_NKS_Review_Panel_py/LGA_NKS_RevealNKS_Project.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_RevealNK_Script.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_OpenInNukeX.py`
-- `LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableEXR.py`
-- `LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableRoto.py`
-- `LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableCG.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_NextPrev_Annotation.py`
 
 ### Projects Panel
@@ -569,6 +578,10 @@ Startup/
     LGA_NKS_SnapShot.py
     LGA_NKS_FrameNumber.py
     LGA_NKS_FrameNumber_Create.py
+    LGA_NKS_ON_Clips_OFF_v00-Clips.py
+    LGA_NKS_Clip_DisableEXR.py
+    LGA_NKS_Clip_DisableRoto.py
+    LGA_NKS_Clip_DisableCG.py
 
   LGA_NKS_Edit_Panel_py/
     LGA_NKS_ColorTransforms.py
@@ -581,7 +594,6 @@ Startup/
     LGA_NKS_mediaMissingFrames.py
 
   LGA_NKS_Review_Panel_py/
-    LGA_NKS_ON_Clips_OFF_v00-Clips.py
     LGA_NKS_EXRTrack_Difference.py
     LGA_NKS_Compare_Versions.py
     LGA_NKS_Compare_Versions_OFF.py
@@ -593,7 +605,6 @@ Startup/
     LGA_NKS_RevealNKS_Project.py
     LGA_NKS_RevealNK_Script.py
     LGA_NKS_OpenInNukeX.py
-    LGA_NKS_Clip_DisableEXR.py
 
   LGA_NKS_Shared/
     LGA_NKS_Delete_ClipTags.py
@@ -851,6 +862,18 @@ Esta seccion agrega el nivel fino: para cada `.py` relevante se indica si lo lla
 - `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_FrameNumber_Create.py`
   - Lo usa `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_FrameNumber.py` del `ViewerTL Panel`.
 
+- `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_ON_Clips_OFF_v00-Clips.py`
+  - Lo usa `LGA_NKS_ViewerTL_Panel.py`; click procesa todo el timeline y Shift+click solo la seleccion.
+
+- `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableEXR.py`
+  - Lo usa el toggle `TL | ON/OFF _comp_`.
+
+- `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableRoto.py`
+  - Lo usa el segundo toggle contextual del `ViewerTL Panel` en Studio.
+
+- `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableCG.py`
+  - Lo usa el segundo toggle contextual del `ViewerTL Panel` en Client.
+
 ### Edit Panel
 
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_ColorTransforms.py`
@@ -897,9 +920,6 @@ Esta seccion agrega el nivel fino: para cada `.py` relevante se indica si lo lla
 
 ### Review Panel
 
-- `LGA_NKS_Review_Panel_py/LGA_NKS_ON_Clips_OFF_v00-Clips.py`
-  - Lo usa `LGA_NKS_Review_Panel.py`.
-
 - `LGA_NKS_Review_Panel_py/LGA_NKS_EXRTrack_Difference.py`
   - Lo usa `LGA_NKS_Review_Panel.py`.
 
@@ -932,15 +952,6 @@ Esta seccion agrega el nivel fino: para cada `.py` relevante se indica si lo lla
 
 - `LGA_NKS_Review_Panel_py/LGA_NKS_OpenInNukeX.py`
   - Lo usa `LGA_NKS_Review_Panel.py`.
-
-- `LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableEXR.py`
-  - Lo usa `LGA_NKS_Review_Panel.py`.
-
-- `LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableRoto.py`
-  - Lo usa el segundo toggle contextual del `Review Panel` en Studio.
-
-- `LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableCG.py`
-  - Lo usa el segundo toggle contextual del `Review Panel` en Client.
 
 - `LGA_NKS_Review_Panel_py/LGA_NKS_NextPrev_Annotation.py`
   - Lo usan los botones Next Annotation y Previous Annotation.

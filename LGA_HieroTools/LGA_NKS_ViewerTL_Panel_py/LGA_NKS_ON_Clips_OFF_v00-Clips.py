@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ON_Clips_OFF_v00-Clips v1.21 | Lega
+  LGA_NKS_ON_Clips_OFF_v00-Clips v1.22 | Lega
 
   Activa todos los clips y desactiva clips v00/v000, contemplando todas las tasks.
 
@@ -12,6 +12,8 @@ ____________________________________________________________________
       SIEMPRE OFF, sin importar el numero de version.
   - Otros tracks (EditRef, aPlate, BurnIn, etc.): ON (comportamiento historico).
 
+  v1.22: Movido de Review al ViewerTL Panel junto con los controles de estado
+         de clips; la logica no cambia.
   v1.21: Reescrito para identificar el clip por su track (TASK_EXR_TRACKS / TASK_REV_TRACKS)
          en lugar del regex hardcodeado "_comp_v". Ahora contempla roto y cleanup, y apaga
          siempre los tracks Rev. La deteccion de version es generica (_v\\d{2,3}) y solo se

@@ -127,36 +127,46 @@ longer used. Its script remains in the repository as a documented legacy tool.
 
 ### ViewerTL Panel
 
-Viewer and timeline utilities focused on framing, navigation, review navigation, and quick snapshots.
+Viewer and timeline utilities. Every label declares its scope with `Viewer |`
+or `TL |`, so similarly colored controls do not imply an unrelated function.
 
-- **Viewer | Rec709**  
+- **Viewer | Rec.709**
   Changes the viewer LUT to ACES / Rec.709.  
   Shortcut: `Shift+V`.
-- **Viewer | 3:2**  
+- **Viewer | Mask 3:2**
   Sets the viewer overlay to 3:2 and cycles mask styles `(None, Half, Full)`, insetting the BurnIn track burn-ins so the side bars do not cover them.
-- **Refresh Timeline**  
-  Rebuilds the active timeline view when it becomes unstable: it preserves the
-  view state, cleans temporary `NukeVFX` tracks, refreshes the sequence and
-  restores zoom, scroll and track position.
-- **Top Track**  
-  Scrolls to the top track in the timeline.  
-  Shortcut: `Ctrl+Shift+T`.
-- **In Out Editref**  
-  Sets sequence In and Out from the closest clip on the `EditRef` or
-  `EditRefClean` track.
-  Shortcut: `Ctrl+Shift+U`.
-- **Prev Rev [User]**  
-  Searches for the previous clip with that user's review status and adjusts the view by setting In / Out from EditRef, selecting the clip, and fitting the zoom.
-- **Next Rev [User]**  
-  Searches for the next clip with that user's review status and adjusts the view by setting In / Out from EditRef, selecting the clip, and fitting the zoom.
-- **Frame Number**  
+- **Viewer | Frame Number**
   Toggles the frame-number burn-in and positions it in the visible bottom-left
   area of the viewer, creating the frame-only burn-in when needed.
   Shortcut: `Shift+F`.
-- **SnapShot**  
+- **Viewer | Snapshot**
   Click: creates a snapshot from the current viewer image, crops it to the
   sequence aspect ratio, and copies it to the clipboard. Shift+Click opens the
   same temporary capture in ShareX ImageEditor LGA without saving it.
+- **TL | Refresh**
+  Rebuilds the active timeline view when it becomes unstable: it preserves the
+  view state, cleans temporary `NukeVFX` tracks, refreshes the sequence and
+  restores zoom, scroll and track position.
+- **TL | Top Track**
+  Scrolls to the top track in the timeline.  
+  Shortcut: `Ctrl+Shift+T`.
+- **TL | In/Out EditRef**
+  Sets sequence In and Out from the closest clip on the `EditRef` or
+  `EditRefClean` track.
+  Shortcut: `Ctrl+Shift+U`.
+- **TL | Prev Rev [User]**
+  Searches for the previous clip with that user's review status and adjusts the view by setting In / Out from EditRef, selecting the clip, and fitting the zoom.
+- **TL | Next Rev [User]**
+  Searches for the next clip with that user's review status and adjusts the view by setting In / Out from EditRef, selecting the clip, and fitting the zoom.
+- **TL | ON Clips / OFF v00**
+  Click: enables all timeline clips and disables `v00`/`v000` task clips.
+  Shift+Click: applies only to selected clips.
+- **TL | ON/OFF _comp_**
+  Enables or disables the clip on the `_comp_` track.
+  Shortcut: `Shift+D`.
+- **TL | ON/OFF _roto_ / _cg_**
+  Enables or disables the second task track: `_roto_` in Studio and `_cg_` in
+  Client. Shortcut: `Ctrl+Shift+D`.
 
 ### Edit Panel
 
@@ -217,18 +227,9 @@ indicators.
 
 ### Review Panel
 
-Review and inspection tools for compare workflows, reveals, clip toggling, and opening related Nuke scripts.
+Review and inspection tools for compare workflows, reveals, annotations, and
+opening related Nuke scripts.
 
-- **ON Clips | OFF v00**  
-  Click: enables all clips in the timeline and disables `v00` clips.  
-  Shift+Click: applies only to selected clips.
-- **ON OFF _comp_**  
-  Enables or disables the clip on the `_comp_` track.  
-  Shortcut: `Shift+D`.
-- **ON OFF _roto_ / _cg_**
-  Enables or disables the clip on the second task track: `_roto_` in Studio,
-  `_cg_` in Client.
-  Shortcut: `Ctrl+Shift+D`.
 - **Difference Mode**  
   Toggles Difference mode on the `_comp_` track.
 - **Compare Versions**  

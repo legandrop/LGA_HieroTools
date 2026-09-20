@@ -717,7 +717,7 @@ C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\+Building_Blocks\Hiero\Time
 | `LGA_NKS_ViewerTL_Panel_py\LGA_NKS_InOut_Editref.py` | Referencia para `seq.setInTime()` y `seq.setOutTime()` |
 | `LGA_NKS_ViewerTL_Panel_py\LGA_NKS_PrevNext_Rev.py` | Referencia para mover playhead, enfocar timeline y ejecutar `Zoom to Fit` con `QTimer.singleShot()` |
 | `LGA_NKS_ClipColor_Panel.py` | Boton `v_00`, color `QtGui.QColor(138, 138, 138)` / `#8a8a8a` |
-| `LGA_NKS_Review_Panel_py\LGA_NKS_ON_Clips_OFF_v00-Clips.py` | Usa `TrackItem.setEnabled(False)` para desactivar clips v00/v000 |
+| `LGA_NKS_ViewerTL_Panel_py\LGA_NKS_ON_Clips_OFF_v00-Clips.py` | Usa `TrackItem.setEnabled(False)` para desactivar clips v00/v000 |
 | `LGA_NKS_Shared\LGA_NKS_TaskSelectionDialog.py` | `track_for_task()` |
 | `LGA_NKS_Shared\LGA_NKS_Flow_NamingUtils.py` | `clean_base_name()`, `extract_project_name()`, `extract_shot_code()` |
 | `LGA_NKS_Shared\LGA_NKS_Flow_Task_Config.py` | `get_task_color()` |

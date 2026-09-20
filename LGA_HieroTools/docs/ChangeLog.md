@@ -1,5 +1,7 @@
 v3.95:
 
+        - ViewerTL y Review quedan separados por ambito (`LGA_ViewerPanel v1.75`, `LGA_ReviewPanel v2.87`): los tres controles de estado de clips pasan a ViewerTL con sus scripts y conservan Shift+D, Ctrl+Shift+D, el tercer toggle contextual Studio/Client y el gesto Shift de seleccion. Todos los botones del panel declaran `Viewer |` o `TL |`; Frame Number adopta el violeta del Viewer y los tres toggles cierran el panel en azul. Snapshot y ON Clips procesan Shift desde la senal de click, por lo que tambien funcionan por teclado. [ ViewerTL - Separar Viewer y Timeline ]
+
         - Review Panel (`LGA_ReviewPanel v2.86`) deja las acciones ocasionales Match Rev Ver, Compare Rev EdRef y Compare EXR aPlate al final del panel. Contact Sheet y Previous/Next Annotation forman ahora un bloque intermedio azul petroleo propio, separado visualmente de Difference/Compare. [ Review Panel - Priorizar acciones frecuentes ]
 
         - El cierre del flujo Contact Sheet endurece la confirmacion extremo a extremo: OpenInNukeX ya no responde `successfully` cuando el clipboard no genero Reads, falta el toolset o no aparece el Group, de modo que el worker de Hiero puede mostrar el error real sin bloquear la UI. Los tres comparadores movidos registran tambien su nueva pertenencia en sus headers (`LGA_NKS_MatchVerToEXR v0.84`, `LGA_NKS_CompareVerToEditref v1.20`, `LGA_NKS_CompareEXR_to_aPlate v1.17`) sin cambiar su logica. [ Review - Confirmar Contact Sheet y versionar mudanza ]

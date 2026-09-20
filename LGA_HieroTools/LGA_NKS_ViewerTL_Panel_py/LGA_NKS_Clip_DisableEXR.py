@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Clip_DisableEXR v1.33 | Lega
+  LGA_NKS_Clip_DisableEXR v1.34 | Lega
 
   Habilita o deshabilita el clip en el track especificado (por defecto usa TRACK_comp_EXR del módulo LGA_NKS_GetClip).
 
@@ -10,7 +10,7 @@ ____________________________________________________________________
   2. Si no encuentra clip en playhead, usa el clip seleccionado como fallback
   3. Invierte el estado de habilitación del clip (enabled/disabled)
 
-  Modo `enable_rev_fallback=True` (default, escenario comp / botón "ON OFF _comp_"):
+  Modo `enable_rev_fallback=True` (default, escenario comp / botón "TL | ON/OFF _comp_"):
   - Trabaja exclusivamente sobre el playhead (sin fallback a selección).
   - Si el track _comp_ está vacío en el playhead o el clip ahí es v00/v000, busca un track
     de review (_compRev_, _compMOV_, _compMXF_, etc.) y opera sobre el clip de ese track.
@@ -20,6 +20,8 @@ ____________________________________________________________________
   Modo `enable_rev_fallback=False` (wrappers de otras tasks, ej: roto):
   - Comportamiento original: usa `get_clip_to_process` (playhead con fallback a selección).
 
+  v1.34: Movido de Review al ViewerTL Panel junto con los controles de estado
+         de tracks; la logica no cambia.
   v1.33: El debug por consola queda apagado por default.
   v1.32: El diálogo de renombrado de track pasa a ask_question del helper
          LGA_NKS_MessageBox (estilo del pack), adaptando el retorno a bool.

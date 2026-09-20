@@ -7,7 +7,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 EDIT_PANEL = ROOT / "LGA_NKS_Edit_Panel.py"
 REVIEW_PANEL = ROOT / "LGA_NKS_Review_Panel.py"
+VIEWER_PANEL = ROOT / "LGA_NKS_ViewerTL_Panel.py"
 REVIEW_DIR = ROOT / "LGA_NKS_Review_Panel_py"
+VIEWER_DIR = ROOT / "LGA_NKS_ViewerTL_Panel_py"
 EDIT_DIR = ROOT / "LGA_NKS_Edit_Panel_py"
 CONTACT_SHEET = REVIEW_DIR / "LGA_Contact_Sheet_OpenInNukeX.py"
 REVEAL_PROJECT = REVIEW_DIR / "LGA_NKS_RevealNKS_Project.py"
@@ -34,6 +36,26 @@ def _button_tuples(panel_path):
 def _tuple_text(item, index):
     value = item.elts[index]
     return value.value if isinstance(value, ast.Constant) else None
+
+
+def _local_button_list(panel_path, function_name, variable_name):
+    tree = ast.parse(panel_path.read_text(encoding="utf-8-sig"))
+    function = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == function_name
+    )
+    for node in ast.walk(function):
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            continue
+        target = node.targets[0]
+        if (
+            isinstance(target, ast.Name)
+            and target.id == variable_name
+            and isinstance(node.value, ast.List)
+        ):
+            return [item for item in node.value.elts if isinstance(item, ast.Tuple)]
+    raise AssertionError(f"No se encontro {variable_name} en {panel_path}")
 
 
 def _load_standalone_function(path, function_name, namespace):
@@ -93,6 +115,78 @@ class PanelReviewReorganizationTests(unittest.TestCase):
         self.assertEqual(colors["Next Annotation"], utility_color)
         self.assertNotEqual(utility_color, colors["Difference Mode"])
         self.assertNotEqual(utility_color, colors["Compare Versions"])
+
+        self.assertNotIn("ON Clips | OFF v00", names)
+        self.assertNotIn("ON OFF _comp_", names)
+
+    def test_viewertl_labels_and_groups_declare_their_scope(self):
+        viewer_buttons = _local_button_list(
+            VIEWER_PANEL, "create_dynamic_buttons", "viewer_buttons"
+        )
+        timeline_buttons = _local_button_list(
+            VIEWER_PANEL, "create_dynamic_buttons", "timeline_buttons"
+        )
+        toggle_buttons = _local_button_list(
+            VIEWER_PANEL, "create_dynamic_buttons", "toggle_buttons"
+        )
+
+        self.assertEqual(
+            [_tuple_text(item, 0) for item in viewer_buttons],
+            [
+                "&Viewer | Rec.709",
+                "Viewer | Mask 3:2",
+                "Viewer | Frame Number",
+                "Viewer | Snapshot",
+            ],
+        )
+        self.assertEqual(
+            [_tuple_text(item, 0) for item in timeline_buttons],
+            ["TL | Refresh", "TL | Top Track", "TL | In/Out EditRef"],
+        )
+        self.assertEqual(
+            [_tuple_text(item, 0) for item in toggle_buttons],
+            ["TL | ON Clips / OFF v00", "TL | ON/OFF _comp_"],
+        )
+
+        viewer_colors = {
+            _tuple_text(item, 0): _tuple_text(item, 2) for item in viewer_buttons
+        }
+        toggle_colors = {
+            _tuple_text(item, 0): _tuple_text(item, 2) for item in toggle_buttons
+        }
+        self.assertEqual(
+            viewer_colors["Viewer | Frame Number"],
+            viewer_colors["&Viewer | Rec.709"],
+        )
+        self.assertNotEqual(
+            viewer_colors["Viewer | Frame Number"],
+            toggle_colors["TL | ON/OFF _comp_"],
+        )
+
+        source = VIEWER_PANEL.read_text(encoding="utf-8-sig")
+        self.assertIn('f"TL | Prev Rev {config[\'nombre\']}"', source)
+        self.assertIn('f"TL | Next Rev {config[\'nombre\']}"', source)
+        self.assertIn('"TL | ON/OFF _%s_" % task', source)
+        self.assertIn(
+            "all_buttons = viewer_buttons + timeline_buttons + user_buttons + toggle_buttons",
+            source,
+        )
+
+    def test_timeline_toggle_scripts_live_only_with_viewertl_panel(self):
+        scripts = (
+            "LGA_NKS_ON_Clips_OFF_v00-Clips.py",
+            "LGA_NKS_Clip_DisableEXR.py",
+            "LGA_NKS_Clip_DisableRoto.py",
+            "LGA_NKS_Clip_DisableCG.py",
+        )
+        for script in scripts:
+            self.assertTrue((VIEWER_DIR / script).is_file())
+            self.assertFalse((REVIEW_DIR / script).exists())
+
+        source = VIEWER_PANEL.read_text(encoding="utf-8-sig")
+        self.assertIn('"LGA_NKS_ViewerTL_Panel_py", script_name', source)
+        self.assertIn("self.clicked.connect(self._dispatch_click)", source)
+        self.assertIn("QApplication.keyboardModifiers()", source)
 
     def test_comparison_scripts_live_only_with_review_panel(self):
         scripts = (

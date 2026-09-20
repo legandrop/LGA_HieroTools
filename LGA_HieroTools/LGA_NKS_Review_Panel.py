@@ -1,10 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_ReviewPanel v2.86 | Lega
+  LGA_ReviewPanel v2.87 | Lega
 
   Tools panel for Hiero / Nuke Studio
 
+  v2.87: Los tres toggles de clips/tracks pasan al ViewerTL Panel, donde
+         pertenecen por actuar sobre el timeline.
   v2.86: Mueve Match Rev Ver, Compare Rev EdRef y Compare EXR aPlate al final
          por ser acciones de uso ocasional, y separa Contact Sheet y la
          navegacion de anotaciones con un color propio.
@@ -209,9 +211,6 @@ class ReviewPanel(QtWidgets.QWidget):
 
         # Crear botones y agregarlos al layout
         self.buttons = [
-            ("ON Clips | OFF v00", self.execute_EnableOrDisableClips, "#0e1f3a", None, "Click: Activa todos los clips del timeline y desactiva los clips v00\nShift+Click: Solo en los clips seleccionados"),
-            ("ON OFF _comp_", self.execute_DisableEXR, "#0e1f3a", "Shift+D", "Shift+D\nHabilita/deshabilita el clip del track _comp_"),
-            self._second_task_button(),
             (
                 "Difference Mode",
                 self.execute_ToggleBlendModeForEXRTrack,
@@ -334,11 +333,7 @@ class ReviewPanel(QtWidgets.QWidget):
                 tooltip_stylesheet = tooltip_stylesheet.replace("QToolTip", f"#{button_object_name} QToolTip")
                 button_stylesheet += tooltip_stylesheet
 
-            if name == "ON Clips | OFF v00":
-                button = CustomButton(name)
-                button.setCustomClickHandler(self.execute_EnableOrDisableClips_all_clips)
-                button.setShiftClickHandler(handler)
-            elif name == "Match Rev Ver":
+            if name == "Match Rev Ver":
                 button = CustomButton(name)
                 button.setCustomClickHandler(self.match_rev_version)
                 button.setShiftClickHandler(self.match_rev_version_force_all)
@@ -486,36 +481,6 @@ class ReviewPanel(QtWidgets.QWidget):
         else:
             debug_print(f"Script no encontrado en la ruta: {script_path}")
 
-    # Handlers para cada boton que ejecutan scripts externos
-    def execute_EnableOrDisableClips(self):
-        self.execute_external_script("LGA_NKS_ON_Clips_OFF_v00-Clips.py")
-    
-    def execute_EnableOrDisableClips_all_clips(self):
-        """Versión que procesa todos los clips del timeline, no solo los seleccionados"""
-        script_path = os.path.join(
-            os.path.dirname(__file__),
-            "LGA_NKS_Review_Panel_py",
-            "LGA_NKS_ON_Clips_OFF_v00-Clips.py",
-        )
-        if os.path.exists(script_path):
-            try:
-                spec = importlib.util.spec_from_file_location(
-                    "LGA_NKS_ON_Clips_OFF_v00-Clips", script_path
-                )
-                if spec is not None and spec.loader is not None:
-                    module = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(module)
-                    # Llamar a main con force_all_clips=True
-                    module.main(force_all_clips=True)
-                else:
-                    debug_print(
-                        f"El módulo o loader no se encontraron para el script LGA_NKS_ON_Clips_OFF_v00-Clips.py"
-                    )
-            except Exception as e:
-                debug_print(f"Error ejecutando el script con todos los clips: {e}")
-        else:
-            debug_print(f"Script no encontrado en la ruta: {script_path}")
-
     def execute_ToggleBlendModeForEXRTrack(self):
         self.execute_external_script("LGA_NKS_EXRTrack_Difference.py")
 
@@ -586,58 +551,6 @@ class ReviewPanel(QtWidgets.QWidget):
 
     def execute_OpenInNukeX(self):
         self.execute_external_script("LGA_NKS_OpenInNukeX.py")
-
-    def execute_DisableEXR(self):
-        self.execute_external_script("LGA_NKS_Clip_DisableEXR.py")
-
-    # Script wrapper de ON/OFF por task. Comp tiene su propio boton fijo; esta
-    # tabla cubre la SEGUNDA task del contexto, que en studio es roto y en
-    # client es cg (ahi roto no existe).
-    # Cleanup NO esta aca a proposito: su wrapper todavia no existe (pendiente
-    # en el roadmap de Docu_MultiTask.md). Mapearlo apuntaria a un archivo
-    # inexistente y el boton fallaria en silencio.
-    _SEGUNDA_TASK_SCRIPTS = {
-        "roto": "LGA_NKS_Clip_DisableRoto.py",
-        "cg": "LGA_NKS_Clip_DisableCG.py",
-    }
-
-    def _segunda_task(self):
-        """Task del segundo boton ON/OFF segun el contexto activo.
-
-        studio -> roto, client -> cg. Ante cualquier falla de la cadena de
-        imports de contexto se mantiene el comportamiento historico (roto).
-        """
-        try:
-            from LGA_NKS_Shared.LGA_NKS_TaskScope import active_track_tasks
-
-            activas = active_track_tasks()
-            for task in activas[1:]:
-                if task in self._SEGUNDA_TASK_SCRIPTS:
-                    return task
-        except Exception:
-            pass
-        return "roto"
-
-    def _second_task_button(self):
-        """Fila de botones del ON/OFF de la segunda task del contexto."""
-        task = self._segunda_task()
-        etiqueta = "ON OFF _%s_" % task
-        tooltip = "Ctrl+Shift+D\nHabilita/deshabilita el clip del track _%s_" % task
-        return (
-            etiqueta,
-            self.execute_DisableSecondTask,
-            "#0e1f3a",
-            "Ctrl+Shift+D",
-            tooltip,
-        )
-
-    def execute_DisableSecondTask(self):
-        task = self._segunda_task()
-        script = self._SEGUNDA_TASK_SCRIPTS.get(task, "LGA_NKS_Clip_DisableRoto.py")
-        self.execute_external_script(script)
-
-    def execute_DisableRoto(self):
-        self.execute_external_script("LGA_NKS_Clip_DisableRoto.py")
 
     def execute_NextAnnotation(self):
         self.execute_external_script("LGA_NKS_NextPrev_Annotation.py")

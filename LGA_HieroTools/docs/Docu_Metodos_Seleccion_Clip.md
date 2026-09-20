@@ -47,7 +47,7 @@ Este método utiliza los clips que están actualmente seleccionados en el timeli
 - **`LGA_NKS/LGA_NKS_RevealNK_Script.py`** (línea 44) - `selected_clips = te.selection()`
 - **`LGA_NKS/LGA_NKS_SelfReplaceClip.py`** (línea 164) - `selected_clips = te.selection()`
 - **`LGA_NKS/LGA_NKS_Reconnect.py`** (línea 94) - `selected_clips = te.selection()`
-- **`LGA_NKS/LGA_NKS_ON_Clips_OFF_v00-Clips.py`** - Procesa clips seleccionados o todos
+- **`LGA_NKS_ViewerTL_Panel_py/LGA_NKS_ON_Clips_OFF_v00-Clips.py`** - Procesa clips seleccionados o todos
 
 #### Paneles de EditTools:
 - **`LGA_NKS_Edit_Panel.py`** - Múltiples funciones usan `selected_clips = te.selection()`
@@ -90,7 +90,7 @@ Este método obtiene la posición actual del playhead (`viewer.time()`) y busca 
 - [x] **`LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py`** - Usa módulo centralizado `LGA_NKS_GetClip` con `track_name=None` (permite selecciones múltiples)
 - [x] **`LGA_NKS_Assignee_Panel.py`** - Usa `get_clips_to_process()` del módulo `LGA_NKS_GetClip` con `prioritize_multiple_selection=True` (método híbrido: selección múltiple prioritaria, playhead para selección simple)
 - [x] **`LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_ReviewPic.py`** - Usa módulo centralizado `LGA_NKS_GetClip` con `track_name=None` (NO permite selecciones múltiples)
-- [x] **`LGA_NKS/LGA_NKS_Clip_DisableEXR.py`** - Usa módulo centralizado `LGA_NKS_GetClip` (NO permite selecciones múltiples)
+- [x] **`LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableEXR.py`** - Usa módulo centralizado `LGA_NKS_GetClip` (NO permite selecciones múltiples)
 - [x] **`LGA_NKS_Review_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py`** - Usa módulo centralizado `LGA_NKS_GetClip` (permite selecciones múltiples)
 - [x] **`LGA_NKS_Review_Panel_py/LGA_NKS_CompareVerToEditref.py`** - Usa módulo centralizado `LGA_NKS_GetClip` con método híbrido para buscar clip en track REV (playhead primero, luego selección como fallback)
 - [x] **`LGA_NKS/LGA_NKS_InOut_Editref.py`** - Usa módulo centralizado `LGA_NKS_GetClip` con método híbrido para buscar en track EditRef o EditRefClean
@@ -440,7 +440,7 @@ for clip in clips:
 
 - **`LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py`** - `track_name=None`, `prioritize_multiple_selection=False`
 - **`LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_ReviewPic.py`** - `track_name=None`, `prioritize_multiple_selection=False`
-- **`LGA_NKS/LGA_NKS_Clip_DisableEXR.py`** - `track_name=None`, `prioritize_multiple_selection=False`
+- **`LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableEXR.py`** - `track_name=None`, `prioritize_multiple_selection=False`
 - **`LGA_NKS/LGA_NKS_InOut_Editref.py`** - Método híbrido con track EditRef
 - **`LGA_NKS/LGA_NKS_PrevNext_Rev.py`** - Método híbrido con track EditRef
 - **`LGA_NKS_Review_Panel_py/LGA_NKS_CompareVerToEditref.py`** - Método híbrido con track REV
@@ -474,7 +474,7 @@ for clip in clips:
 - **`LGA_NKS/LGA_NKS_RevealNK_Script.py`** - `selected_clips = te.selection()`
 - **`LGA_NKS/LGA_NKS_SelfReplaceClip.py`** - `selected_clips = te.selection()`
 - **`LGA_NKS/LGA_NKS_Reconnect.py`** - `selected_clips = te.selection()`
-- **`LGA_NKS/LGA_NKS_ON_Clips_OFF_v00-Clips.py`** - Procesa clips seleccionados o todos
+- **`LGA_NKS_ViewerTL_Panel_py/LGA_NKS_ON_Clips_OFF_v00-Clips.py`** - Procesa clips seleccionados o todos
 - **`LGA_NKS_Edit_Panel.py`** - Múltiples funciones usan `selected_clips = te.selection()`
 
 ---

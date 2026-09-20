@@ -1,10 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_ViewerPanel v1.74 | Lega
+  LGA_ViewerPanel v1.75 | Lega
 
   Panel con herramientas para el viewer y el timeline de Hiero
 
+  v1.75: Separa nombres Viewer | y TL |, recibe los tres toggles de clips del
+         Review Panel y agrupa las acciones por ambito. Frame Number pasa al
+         violeta del Viewer y los gestos Shift funcionan tambien por teclado.
   v1.74: Se saca del panel el boton Viewer | 2:1. viewer_21 y viewer_235 quedan
          sin llamar para poder volver atras.
   v1.73: El boton Viewer | 2.35:1 pasa a ser Viewer | 3:2. El metodo viewer_235
@@ -41,6 +44,7 @@ import sys
 import logging
 import queue
 import time
+import importlib.util
 from logging.handlers import QueueHandler, QueueListener
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
 
@@ -78,22 +82,20 @@ class RelativeTimeFormatter(logging.Formatter):
 
 
 class ShiftClickButton(QtWidgets.QPushButton):
-    """Boton que conserva el click normal y ejecuta otra accion con Shift+Click."""
+    """Boton con accion normal y alternativa con Shift, tambien por teclado."""
 
-    def __init__(self, text, shift_click_handler):
+    def __init__(self, text, click_handler, shift_click_handler):
         super(ShiftClickButton, self).__init__(text)
+        self._click_handler = click_handler
         self._shift_click_handler = shift_click_handler
+        self.clicked.connect(self._dispatch_click)
 
-    def mousePressEvent(self, event):
-        if (
-            event.button() == QtCore.Qt.LeftButton
-            and event.modifiers() & QtCore.Qt.ShiftModifier
-        ):
+    def _dispatch_click(self):
+        modifiers = QtWidgets.QApplication.keyboardModifiers()
+        if modifiers & QtCore.Qt.ShiftModifier:
             self._shift_click_handler()
-            event.accept()
-            return
-
-        super(ShiftClickButton, self).mousePressEvent(event)
+        else:
+            self._click_handler()
 
 
 def setup_debug_logging(script_name="ViewerPanel"):
@@ -261,38 +263,57 @@ class ViewerPanel(QtWidgets.QWidget):
         Crea la lista de botones dinámicamente según el usuario actual.
         Solo muestra los botones de navegación del usuario actual.
         """
-        # Botones comunes (siempre visibles)
-        common_buttons = [
+        # Acciones que actuan directamente sobre el Viewer.
+        viewer_buttons = [
             (
-                "&Viewer | Rec709",
+                "&Viewer | Rec.709",
                 self.rec709_viewer,
                 "#311840",
                 "Shift+V",
                 "Shift+V\nCambia el LUT del viewer a ACES/Rec.709",
             ),
             (
-                "Viewer | 3:2 ",
+                "Viewer | Mask 3:2",
                 self.viewer_32,
                 "#311840",
                 None,
                 "Ajusta el overlay del viewer a 3:2 y alterna los estilos de máscara\n(None, Half, Full)",
             ),
             (
-                "Refresh Timeline",
+                "Viewer | Frame Number",
+                self.frame_number_position,
+                "#311840",
+                "Shift+F",
+                "Shift+F\nMueve el burnin de frame number al área visible\nabajo a la izquierda del viewer",
+            ),
+            (
+                "Viewer | Snapshot",
+                self.snapshot,
+                "#2d5a3d",
+                None,
+                "Click: copia un snapshot de la imagen actual del viewer al portapapeles.\nShift+Click: abre el snapshot en ShareX ImageEditor LGA sin guardarlo.\nLa captura se recorta al aspect ratio de la secuencia.",
+                self.snapshot_in_image_editor,
+            ),
+        ]
+
+        # Acciones generales del Timeline.
+        timeline_buttons = [
+            (
+                "TL | Refresh",
                 self.refresh_timeline,
                 "#4c4350",
                 None,
                 "Refresca el timeline manteniendo el nivel de zoom original\n(cuando el timeline funciona mal lo resetea)",
             ),
             (
-                "Top Track ",
+                "TL | Top Track",
                 self.top_track,
                 "#4c4350",
                 "Ctrl+Shift+T",
                 "Ctrl+Shift+T\nScrollea al track superior del timeline",
             ),
             (
-                "In Out Editref",
+                "TL | In/Out EditRef",
                 self.in_out_editref,
                 "#4d462b",
                 "Ctrl+Shift+U",
@@ -363,14 +384,14 @@ class ViewerPanel(QtWidgets.QWidget):
 
                 user_buttons.extend([
                     (
-                        f"Prev Rev {config['nombre']}",
+                        f"TL | Prev Rev {config['nombre']}",
                         getattr(self, f"prev_rev_{usuario_normalizado}"),
                         config['color'],
                         config['prev_shortcut'],
                         f"{config['prev_shortcut']}\nBusca el clip anterior con estado Rev {config['nombre']} y ajusta la vista\n(establece In/Out desde EditRef, selecciona clip, ajusta zoom)",
                     ),
                     (
-                        f"Next Rev {config['nombre']}",
+                        f"TL | Next Rev {config['nombre']}",
                         getattr(self, f"next_rev_{usuario_normalizado}"),
                         config['color'],
                         config['next_shortcut'],
@@ -383,26 +404,28 @@ class ViewerPanel(QtWidgets.QWidget):
         else:
             debug_print("No se pudo determinar usuario actual - no se mostrarán botones de usuario")
 
-        # Botones finales (siempre visibles)
-        final_buttons = [
+        # Estado de clips/tracks: bloque azul al final del panel.
+        toggle_buttons = [
             (
-                "Frame Number",
-                self.frame_number_position,
-                "#0e1f3b",
-                "Shift+F",
-                "Shift+F\nMueve el burnin de frame number al área visible\nabajo a la izquierda del viewer",
-            ),
-            (
-                "SnapShot",
-                self.snapshot,
-                "#2d5a3d",
+                "TL | ON Clips / OFF v00",
+                self.enable_or_disable_all_clips,
+                "#0e1f3a",
                 None,
-                "Click: copia un snapshot de la imagen actual del viewer al portapapeles.\nShift+Click: abre el snapshot en ShareX ImageEditor LGA sin guardarlo.\nLa captura se recorta al aspect ratio de la secuencia.",
+                "Click: Activa todos los clips del timeline y desactiva los clips v00\nShift+Click: Solo en los clips seleccionados",
+                self.enable_or_disable_selected_clips,
             ),
+            (
+                "TL | ON/OFF _comp_",
+                self.toggle_comp_clip,
+                "#0e1f3a",
+                "Shift+D",
+                "Shift+D\nHabilita/deshabilita el clip del track _comp_",
+            ),
+            self._second_task_button(),
         ]
 
         # Combinar todos los botones
-        all_buttons = common_buttons + user_buttons + final_buttons
+        all_buttons = viewer_buttons + timeline_buttons + user_buttons + toggle_buttons
 
         debug_print(f"Total de botones creados: {len(all_buttons)}")
         return all_buttons
@@ -422,6 +445,7 @@ class ViewerPanel(QtWidgets.QWidget):
             style = button_info[2]
             shortcut = button_info[3] if len(button_info) > 3 else None
             tooltip = button_info[4] if len(button_info) > 4 else None
+            shift_handler = button_info[5] if len(button_info) > 5 else None
 
             border_color = calculate_dynamic_border(style)
             hover_color = calculate_dynamic_hover(style)
@@ -449,13 +473,13 @@ class ViewerPanel(QtWidgets.QWidget):
                 tooltip_stylesheet = tooltip_stylesheet.replace("QToolTip", f"#{button_object_name} QToolTip")
                 button_stylesheet += tooltip_stylesheet
 
-            if name == "SnapShot":
-                button = ShiftClickButton(name, self.snapshot_in_image_editor)
+            if shift_handler:
+                button = ShiftClickButton(name, handler, shift_handler)
             else:
                 button = QtWidgets.QPushButton(name)
+                button.clicked.connect(handler)
             button.setObjectName(f"button_{index}")
             button.setStyleSheet(button_stylesheet)
-            button.clicked.connect(handler)
 
             if tooltip:
                 button.setToolTip(tooltip)
@@ -544,6 +568,70 @@ class ViewerPanel(QtWidgets.QWidget):
             f"scroll={scroll_width}px self={self_width}px available={available_width}px "
             f"button_width={button_width}px spacing={min_button_spacing}px cols={self.num_columns}"
         )
+
+    def execute_viewertl_script(self, script_name, *args, **kwargs):
+        """Carga un script del panel y ejecuta su main con argumentos opcionales."""
+        script_path = os.path.join(
+            os.path.dirname(__file__), "LGA_NKS_ViewerTL_Panel_py", script_name
+        )
+        if not os.path.exists(script_path):
+            debug_print(f"Script no encontrado en la ruta: {script_path}")
+            return
+        try:
+            module_name = os.path.splitext(script_name)[0].replace("-", "_")
+            spec = importlib.util.spec_from_file_location(module_name, script_path)
+            if spec is None or spec.loader is None:
+                raise RuntimeError("No se pudo crear el loader del modulo")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            module.main(*args, **kwargs)
+        except Exception as exc:
+            debug_print(f"Error ejecutando {script_name}: {exc}")
+
+    def enable_or_disable_selected_clips(self):
+        self.execute_viewertl_script("LGA_NKS_ON_Clips_OFF_v00-Clips.py")
+
+    def enable_or_disable_all_clips(self):
+        self.execute_viewertl_script(
+            "LGA_NKS_ON_Clips_OFF_v00-Clips.py", force_all_clips=True
+        )
+
+    def toggle_comp_clip(self):
+        self.execute_viewertl_script("LGA_NKS_Clip_DisableEXR.py")
+
+    # El tercer toggle cambia con el contexto: roto en Studio, CG en Client.
+    _SEGUNDA_TASK_SCRIPTS = {
+        "roto": "LGA_NKS_Clip_DisableRoto.py",
+        "cg": "LGA_NKS_Clip_DisableCG.py",
+    }
+
+    def _segunda_task(self):
+        try:
+            from LGA_NKS_Shared.LGA_NKS_TaskScope import active_track_tasks
+
+            for task in active_track_tasks()[1:]:
+                if task in self._SEGUNDA_TASK_SCRIPTS:
+                    return task
+        except Exception:
+            pass
+        return "roto"
+
+    def _second_task_button(self):
+        task = self._segunda_task()
+        return (
+            "TL | ON/OFF _%s_" % task,
+            self.toggle_second_task_clip,
+            "#0e1f3a",
+            "Ctrl+Shift+D",
+            "Ctrl+Shift+D\nHabilita/deshabilita el clip del track _%s_" % task,
+        )
+
+    def toggle_second_task_clip(self):
+        task = self._segunda_task()
+        script_name = self._SEGUNDA_TASK_SCRIPTS.get(
+            task, "LGA_NKS_Clip_DisableRoto.py"
+        )
+        self.execute_viewertl_script(script_name)
 
     def rec709_viewer(self):
 
