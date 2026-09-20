@@ -1,11 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_Contact_Sheet_OpenInNukeX v0.04 | Lega
+  LGA_Contact_Sheet_OpenInNukeX v0.05 | Lega
 
   Copia los clips seleccionados en Hiero/Nuke Studio y le pide a NukeX,
-  por el puerto de LGA_OpenInNukeX, que pegue el contenido del clipboard.
+  por el puerto de LGA_OpenInNukeX, que cree un LGA Contact Sheet con ellos.
 
+  v0.05 - La unica conexion TCP corre completa en background y devuelve los
+          errores al hilo principal mediante una senal Qt. Se elimina el ping
+          sincrono de hasta 10 segundos que congelaba la UI de Nuke Studio.
   v0.04 - show_message pasa al helper LGA_NKS_MessageBox con el estilo del pack
   v0.03 - Fix copy: key event Ctrl+C al QAbstractScrollArea del timeline
   v0.02 - Logging system + multiple approaches para trigger_hiero_copy
@@ -103,6 +106,7 @@ def setup_debug_logging(script_name="ContactSheet"):
 
 
 debug_logger = setup_debug_logging(script_name="ContactSheet")
+_active_paste_jobs = set()
 
 
 def debug_print(*message, level="info"):
@@ -155,18 +159,37 @@ def show_message(title, message):
     msg_box.exec_()
 
 
+class _PasteResultNotifier(QtCore.QObject):
+    """Entrega el resultado del socket en el hilo Qt que creo el objeto."""
+
+    result = QtCore.Signal(bool, str)
+
+    def __init__(self):
+        super(_PasteResultNotifier, self).__init__(QtWidgets.QApplication.instance())
+        self.result.connect(self._deliver_result)
+
+    @QtCore.Slot(bool, str)
+    def _deliver_result(self, success, message):
+        try:
+            if not success:
+                show_message("Contact Sheet", message)
+        finally:
+            _active_paste_jobs.discard(self)
+            self.deleteLater()
+
+
 def get_selected_clips():
     debug_print("=== get_selected_clips ===")
     seq = hiero.ui.activeSequence()
     if not seq:
         debug_print("No hay secuencia activa", level="warning")
-        show_message("Contact Sheet", "No hay una secuencia activa.")
+        show_message("Contact Sheet", "No active sequence.")
         return []
 
     timeline_editor = hiero.ui.getTimelineEditor(seq)
     if not timeline_editor:
         debug_print("No se pudo obtener el Timeline Editor", level="warning")
-        show_message("Contact Sheet", "No se pudo obtener el Timeline Editor.")
+        show_message("Contact Sheet", "Could not get the Timeline Editor.")
         return []
 
     selected_items = timeline_editor.selection()
@@ -180,7 +203,7 @@ def get_selected_clips():
 
     if not selected_clips:
         debug_print("No hay clips seleccionados", level="warning")
-        show_message("Contact Sheet", "No hay clips seleccionados.")
+        show_message("Contact Sheet", "No clips selected.")
         return []
 
     return selected_clips
@@ -273,42 +296,44 @@ def trigger_hiero_copy(timeline_editor):
     debug_print(f"Copy exitoso. Formatos Hiero en clipboard: {hiero_formats.intersection(formats_despues)}")
 
 
-def _ping_nukex():
-    """Verifica que NukeX este disponible. Bloquea hasta 10s. Lanza RuntimeError si falla."""
-    debug_print(f"Ping a {HOST}:{PORT}...")
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.settimeout(10)
-        s.connect((HOST, PORT))
-        s.sendall("ping".encode())
-        response = s.recv(1024).decode()
-    debug_print(f"Respuesta ping: '{response}'")
-    if "pong" not in response:
-        raise RuntimeError("NukeX no respondio al ping de OpenInNukeX.")
+def _send_paste_request():
+    """Envia el unico request TCP de la operacion y espera su confirmacion."""
+    debug_print("Thread paste: conectando...")
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(10)
+        sock.connect((HOST, PORT))
+        sock.settimeout(120)
+        sock.sendall(b"paste_clipboard")
+        response = sock.recv(4096).decode(errors="replace")
+    debug_print(f"Thread paste: respuesta recibida: '{response[:80]}'")
+    if "successfully" not in response.lower():
+        raise RuntimeError(
+            "NukeX did not confirm Contact Sheet creation: "
+            f"{response.strip() or 'empty response'}"
+        )
+    return response
 
 
 def _send_paste_in_thread():
-    """
-    Envia paste_clipboard a NukeX en un thread separado para no bloquear
-    el hilo principal de Hiero mientras NukeX ejecuta nodePaste (~10s+).
-    """
+    """Ejecuta red y nodePaste remoto sin bloquear el hilo principal de NKS."""
+    notifier = _PasteResultNotifier()
+    _active_paste_jobs.add(notifier)
+
     def _worker():
         try:
-            debug_print("Thread paste: conectando...")
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(120)
-                s.connect((HOST, PORT))
-                s.sendall("paste_clipboard".encode())
-                response = s.recv(4096).decode()
-            debug_print(f"Thread paste: respuesta recibida: '{response[:80]}'")
-            if "successfully" not in response.lower():
-                debug_print(f"Thread paste: NukeX no confirmo el paste: {response.strip()}", level="warning")
-            else:
-                debug_print("Thread paste: paste_clipboard completado exitosamente")
-        except (socket.timeout, ConnectionRefusedError) as e:
-            debug_print(f"Thread paste: error de conexion: {e}", level="error")
-        except Exception as e:
-            debug_print(f"Thread paste: error inesperado: {e}", level="error")
+            _send_paste_request()
+            debug_print("Thread paste: LGA Contact Sheet completado exitosamente")
+            notifier.result.emit(True, "")
+        except (socket.timeout, ConnectionRefusedError, OSError) as exc:
+            debug_print(f"Thread paste: error de conexion: {exc}", level="error")
+            notifier.result.emit(
+                False,
+                "Could not connect to NukeX through OpenInNukeX.",
+            )
+        except Exception as exc:
+            debug_print(f"Thread paste: error inesperado: {exc}", level="error")
             debug_print(traceback.format_exc(), level="error")
+            notifier.result.emit(False, f"Error creating Contact Sheet:\n{exc}")
         finally:
             _flush_log()
 
@@ -318,17 +343,16 @@ def _send_paste_in_thread():
 
 
 def main():
-    debug_print("=== LGA_Contact_Sheet_OpenInNukeX v0.03: main ===")
-    _flush_log()
+    debug_print("=== LGA_Contact_Sheet_OpenInNukeX v0.05: main ===")
 
     seq = hiero.ui.activeSequence()
     if not seq:
-        show_message("Contact Sheet", "No hay una secuencia activa.")
+        show_message("Contact Sheet", "No active sequence.")
         return
 
     timeline_editor = hiero.ui.getTimelineEditor(seq)
     if not timeline_editor:
-        show_message("Contact Sheet", "No se pudo obtener el Timeline Editor.")
+        show_message("Contact Sheet", "Could not get the Timeline Editor.")
         return
 
     selected_items = timeline_editor.selection()
@@ -340,30 +364,19 @@ def main():
     debug_print(f"Clips seleccionados: {len(selected_clips)}")
 
     if not selected_clips:
-        show_message("Contact Sheet", "No hay clips seleccionados.")
+        show_message("Contact Sheet", "No clips selected.")
         return
 
     try:
         trigger_hiero_copy(timeline_editor)
-        _flush_log()
-        # Ping en main thread (rapido, <10s) para validar que NukeX este disponible
-        # antes de soltar el thread, asi el error de "NukeX no disponible" se ve al usuario.
-        _ping_nukex()
-        # El paste bloquea ~10s en NukeX: lo mandamos en un thread para no freezar Hiero
+        # La conexion, el envio y la espera del trabajo de NukeX ocurren en el
+        # worker. El hilo principal solo hace la copia local, que requiere Qt.
         _send_paste_in_thread()
         debug_print("=== main: copy OK, paste enviado en background ===")
-    except (socket.timeout, ConnectionRefusedError) as e:
-        debug_print(f"Error de conexion TCP: {e}", level="error")
-        show_message(
-            "Contact Sheet",
-            "No se pudo conectar con NukeX en el puerto de OpenInNukeX.",
-        )
     except Exception as exc:
         debug_print(f"Error en main: {exc}", level="error")
         debug_print(traceback.format_exc(), level="error")
-        show_message("Contact Sheet", f"Error creando Contact Sheet:\n{exc}")
-    finally:
-        _flush_log()
+        show_message("Contact Sheet", f"Error creating Contact Sheet:\n{exc}")
 
 
 if __name__ == "__main__":

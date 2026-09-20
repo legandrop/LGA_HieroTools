@@ -15,12 +15,12 @@ Busca la versión actual de los clips del track `_comp_` (configurado en `TRACK_
 
 ## Archivos principales
 
-- **Script principal:** `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Edit\LGA_NKS_MatchVerToEXR.py`
-- **Panel de control:** `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Edit_Panel.py`
+- **Script principal:** `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_MatchVerToEXR.py`
+- **Panel de control:** `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel.py`
 
 ## Acceso
 
-**Botón del panel:** "Match Rev Ver" en EditTools Panel
+**Botón del panel:** "Match Rev Ver" en Review Panel
 - **Click normal:** Procesa clips usando método híbrido (prioriza selecciones múltiples, luego playhead, luego fallback a selección)
 - **Shift + Click:** Fuerza procesamiento de todos los clips independientemente de la selección
 

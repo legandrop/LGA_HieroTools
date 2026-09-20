@@ -1,10 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_EditToolsPanel v3.11 | Lega
+  LGA_EditToolsPanel v3.12 | Lega
 
   Tools panel for Hiero / Nuke Studio
 
+  v3.12: Las comparaciones de versiones pasan al Review Panel, Check Frames
+         queda junto a Fix Zombies y New Video Track comparte la familia
+         visual de las herramientas de montaje.
   v3.11: Se corrigen tooltips que habian quedado atras del runtime: Create
          EXR v000 admite varios shots/tasks, Self ReplaceClip reconstruye la
          relacion con el bin y las comparaciones usan el track _compRev_.
@@ -77,7 +80,6 @@ TOOLTIP_FIX_ZOMBIES = (
 )
 import importlib.util
 import importlib.machinery
-from pathlib import Path
 
 # Variable global para activar o desactivar los prints
 DEBUG = True
@@ -184,22 +186,6 @@ def debug_print(*message, level="info"):
 def debug_print_b(*message, level="info"):
     debug_print(*message, level=level)
 
-
-# Importar utilidades de naming centralizadas
-naming_utils_path = Path(__file__).parent / "LGA_NKS_Shared"
-if naming_utils_path.exists():
-    sys.path.insert(0, str(naming_utils_path))
-    try:
-        from LGA_NKS_Flow_NamingUtils import (
-            extract_shot_code,
-            clean_base_name,
-        )
-        HAS_NAMING_UTILS = True
-    except ImportError:
-        HAS_NAMING_UTILS = False
-        debug_print("Warning: No se pudo importar LGA_NKS_Flow_NamingUtils")
-else:
-    HAS_NAMING_UTILS = False
 
 # Importar funciones de utilidad de estilos
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "LGA_NKS_Shared"))
@@ -355,7 +341,7 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
             ("Set Shot Name", self.set_shot_name, "#2a4d3a", None, "Establece el nombre del shot basándose en la ruta del archivo"),
             ("Create EXR v000", self.create_v000, "#2a4d3a", None, "Abre el validador para preparar secuencias negras v000 para uno o varios shots/tasks"),
             ("Create NK v000", self.create_nk_script, "#2a4d3a", None, TOOLTIP_CREATE_NK_SCRIPT),
-            ("New Video Track", self.create_new_track, "#3a2a4d", None, "Crea un nuevo track de video encima del track seleccionado"),
+            ("New Video Track", self.create_new_track, "#453434", None, "Crea un nuevo track de video encima del track seleccionado"),
             ("Extend &Edit", self.extend_edit_to_playhead, "#453434", "Alt+E", "Alt+E\nExtiende el punto de salida del clip hasta el playhead (cambiando su velocidad)"),
             ("Trim &In", self.trim_in, "#453434", "Alt+[", "Alt+[\nTrimea el IN del clip a la posicion del playhead"),
             ("Trim &Out", self.trim_out, "#453434", "Alt+]", "Alt+]\nTrimea el OUT del clip a la posicion del playhead"),
@@ -370,6 +356,7 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
             ("Replace Clip", self.execute_ReplaceClip, "#4a4329", None, TOOLTIP_REPLACE_CLIP),
             ("Self ReplaceClip", self.execute_SelfReplaceClip, "#4a4329", None, "Reemplaza el clip seleccionado por su propio media para reconstruir su relacion con el bin, conservando trims y color"),
             ("Fix Zombies", self.execute_FixZombieClips, "#4a4329", None, TOOLTIP_FIX_ZOMBIES),
+            ("Check Frames", self.check_frames, "#4a4329", None, "Revisa los clips seleccionados para ver si tienen frames faltantes o corruptos"),
             (
                 "Clear Tag",
                 self.run_clear_tag_script,
@@ -377,28 +364,6 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
                 None,
                 "Elimina todos los tags de los clips seleccionados",
             ),
-            (
-                "Match Rev Ver",
-                self.match_rev_version,
-                "#3d2a47",
-                None,
-                "Click: Iguala la version de los clips del track _compRev_ (mov o mxf) con la version de los EXR correspondientes\nShift+Click: Procesa todos los clips del timeline",
-            ),
-            (
-                "Compare Rev EdRef",
-                self.compare_rev_editref,
-                "#3d2a47",
-                None,
-                "Click: Compara los rangos de frames entre clips del track _compRev_ (mov o mxf) y el track EditRef\nShift+Click: Compara todos los clips del timeline",
-            ),
-            (
-                "Compare EXR aPlate",
-                self.compare_exr_aplate,
-                "#3d2a47",
-                None,
-                "Click: Compara los rangos de frames entre clips del track _comp_ (exr) y el track aPlate\nShift+Click: Compara todos los clips del timeline",
-            ),
-            ("Check Frames", self.check_frames, "#4a4329", None, "Revisa los clips seleccionados para ver si tienen frames faltantes o corruptos"),
         ]
 
         self.reconnect_btn_ref = None
@@ -434,20 +399,7 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
             shortcut = button_info[3] if len(button_info) > 3 else None
             tooltip = button_info[4] if len(button_info) > 4 else None
 
-            # Usar CustomButton para el boton Match Rev Ver, Compare Rev EdRef, Compare EXR aPlate y Reconnect Win > Mac
-            if name == "Match Rev Ver":
-                button = CustomButton(name)
-                button.setCustomClickHandler(self.match_rev_version)
-                button.setShiftClickHandler(self.match_rev_version_force_all)
-            elif name == "Compare Rev EdRef":
-                button = CustomButton(name)
-                button.setCustomClickHandler(self.compare_rev_editref)
-                button.setShiftClickHandler(self.compare_rev_editref_force_all)
-            elif name == "Compare EXR aPlate":
-                button = CustomButton(name)
-                button.setCustomClickHandler(self.compare_exr_aplate)
-                button.setShiftClickHandler(self.compare_exr_aplate_force_all)
-            elif name == "Reconnect ▸":
+            if name == "Reconnect ▸":
                 button = QtWidgets.QPushButton(name)
                 button.clicked.connect(handler)
                 self.reconnect_btn_ref = button
@@ -1309,148 +1261,6 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
         else:
             debug_print("No active project found for Clear Tag.")
 
-    #### Match Rev Ver - Nuevo boton para EXR to REV Version Matcher
-    def match_rev_version(self):
-        """Ejecuta el script de match de versiones EXR to REV."""
-        debug_print_b("Ejecutando Match Rev Ver (modo normal)...")
-        self._execute_match_rev_version(force_all_clips=False)
-
-    def match_rev_version_force_all(self):
-        """Ejecuta el script de match de versiones EXR to REV forzando todos los clips."""
-        debug_print_b("Ejecutando Match Rev Ver (forzando todos los clips)...")
-        self._execute_match_rev_version(force_all_clips=True)
-
-    def _execute_match_rev_version(self, force_all_clips=False):
-        """Ejecuta el script de match de versiones con parametro force_all_clips."""
-        debug_print_b(f"DEBUG: Iniciando _execute_match_rev_version con force_all_clips={force_all_clips}")
-        try:
-            # Importar y ejecutar el script desde la carpeta LGA_NKS_Edit
-            script_path = os.path.join(
-                os.path.dirname(__file__),
-                "LGA_NKS_Edit_Panel_py",
-                "LGA_NKS_MatchVerToEXR.py",
-            )
-            debug_print_b(f"DEBUG: Script path: {script_path}")
-            debug_print_b(f"DEBUG: Script exists: {os.path.exists(script_path)}")
-            if os.path.exists(script_path):
-                try:
-                    spec = importlib.util.spec_from_file_location(
-                        "LGA_NKS_MatchVerToEXR", script_path
-                    )
-                    if spec is not None and spec.loader is not None:
-                        debug_print_b("DEBUG: Spec y loader válidos, ejecutando módulo...")
-                        module = importlib.util.module_from_spec(spec)
-                        spec.loader.exec_module(module)
-                        # Llamar a la funcion principal con el parametro
-                        module.match_exr_to_rev(force_all_clips=force_all_clips)
-                        debug_print_b("Match Rev Ver script ejecutado correctamente.")
-                    else:
-                        debug_print_b(
-                            f"DEBUG: Spec o loader inválidos. Spec: {spec}, Loader: {spec.loader if spec else None}"
-                        )
-                except Exception as e:
-                    debug_print_b(f"Error al ejecutar el script Match Rev Ver: {e}")
-            else:
-                debug_print_b(f"Script no encontrado en la ruta: {script_path}")
-        except Exception as e:
-            debug_print_b(f"Error general en _execute_match_rev_version: {e}")
-
-    #### Compare Rev EdRef - Nuevo boton para comparar REV con EditRef
-    def compare_rev_editref(self):
-        """Ejecuta el script de comparacion REV vs EditRef (modo playhead)."""
-        debug_print_b("Ejecutando Compare Rev EdRef (modo playhead)...")
-        self._execute_compare_rev_editref(force_all_clips=False)
-
-    def compare_rev_editref_force_all(self):
-        """Ejecuta el script de comparacion REV vs EditRef forzando todos los clips."""
-        debug_print_b("Ejecutando Compare Rev EdRef (forzando todos los clips)...")
-        self._execute_compare_rev_editref(force_all_clips=True)
-
-    def _execute_compare_rev_editref(self, force_all_clips=False):
-        """Ejecuta el script de comparacion con parametro force_all_clips."""
-        try:
-            # Importar y ejecutar el script desde la carpeta LGA_NKS_Edit
-            script_path = os.path.join(
-                os.path.dirname(__file__),
-                "LGA_NKS_Edit_Panel_py",
-                "LGA_NKS_CompareVerToEditref.py",
-            )
-            if os.path.exists(script_path):
-                try:
-                    spec = importlib.util.spec_from_file_location(
-                        "LGA_NKS_CompareVerToEditref", script_path
-                    )
-                    if spec is not None and isinstance(
-                        spec.loader,
-                        importlib.machinery.SourceFileLoader,
-                    ):
-                        module = importlib.util.module_from_spec(spec)
-                        spec.loader.exec_module(module)
-                        # Llamar a la funcion principal con el parametro
-                        module.compare_rev_to_editref(force_all_clips=force_all_clips)
-                        debug_print_b(
-                            "Compare Rev EdRef script ejecutado correctamente."
-                        )
-                    else:
-                        debug_print_b(
-                            f"No se pudo crear el spec o loader para el script: LGA_NKS_CompareVerToEditref.py"
-                        )
-                except Exception as e:
-                    debug_print_b(f"Error al ejecutar el script Compare Rev EdRef: {e}")
-            else:
-                debug_print_b(f"Script no encontrado en la ruta: {script_path}")
-        except Exception as e:
-            debug_print_b(f"Error general en _execute_compare_rev_editref: {e}")
-
-    #### Compare EXR aPlate - Nuevo boton para comparar EXR con aPlate
-    def compare_exr_aplate(self):
-        """Ejecuta el script de comparacion EXR vs aPlate (modo playhead)."""
-        debug_print_b("Ejecutando Compare EXR aPlate (modo playhead)...")
-        self._execute_compare_exr_aplate(force_all_clips=False)
-
-    def compare_exr_aplate_force_all(self):
-        """Ejecuta el script de comparacion EXR vs aPlate forzando todos los clips."""
-        debug_print_b("Ejecutando Compare EXR aPlate (forzando todos los clips)...")
-        self._execute_compare_exr_aplate(force_all_clips=True)
-
-    def _execute_compare_exr_aplate(self, force_all_clips=False):
-        """Ejecuta el script de comparacion EXR vs aPlate con parametro force_all_clips."""
-        debug_print_b(f"DEBUG: Iniciando _execute_compare_exr_aplate con force_all_clips={force_all_clips}")
-        try:
-            # Importar y ejecutar el script desde la carpeta LGA_NKS_Edit
-            script_path = os.path.join(
-                os.path.dirname(__file__),
-                "LGA_NKS_Edit_Panel_py",
-                "LGA_NKS_CompareEXR_to_aPlate.py",
-            )
-            debug_print_b(f"DEBUG: Script path: {script_path}")
-            debug_print_b(f"DEBUG: Script exists: {os.path.exists(script_path)}")
-            if os.path.exists(script_path):
-                try:
-                    spec = importlib.util.spec_from_file_location(
-                        "LGA_NKS_CompareEXR_to_aPlate", script_path
-                    )
-                    if spec is not None and spec.loader is not None:
-                        debug_print_b("DEBUG: Spec y loader válidos, ejecutando módulo...")
-                        module = importlib.util.module_from_spec(spec)
-                        spec.loader.exec_module(module)
-                        # Llamar a la funcion principal con el parametro
-                        module.compare_exr_to_aplate(force_all_clips=force_all_clips)
-                        debug_print_b(
-                            "Compare EXR aPlate script ejecutado correctamente."
-                        )
-                    else:
-                        debug_print_b(
-                            f"DEBUG: Spec o loader inválidos. Spec: {spec}, Loader: {spec.loader if spec else None}"
-                        )
-                except Exception as e:
-                    debug_print_b(
-                        f"Error al ejecutar el script Compare EXR aPlate: {e}"
-                    )
-            else:
-                debug_print_b(f"Script no encontrado en la ruta: {script_path}")
-        except Exception as e:
-            debug_print_b(f"Error general en _execute_compare_exr_aplate: {e}")
 def get_active_project():
     """
     Obtiene el proyecto activo en Hiero.

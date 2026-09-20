@@ -1,11 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CompareEXR_to_aPlate v1.16 | Lega
+  LGA_NKS_CompareEXR_to_aPlate v1.17 | Lega
 
   Compara los rangos de frames de los clips del track especificado (por defecto _comp_) con
   los clips correspondientes del track aPlate para verificar coincidencias.
 
+  v1.17: Pasa de la carpeta privada de Edit a la de Review, junto con el
+         boton que la ejecuta. La logica de comparacion no cambia.
   v1.16: La ventana de resultados migra al modulo de estilo
          LGA_UI_Style_HieroTools: fondo Style.WINDOW y marco/header/
          scrollbars de la tabla con tokens. Los colores de CELDA por

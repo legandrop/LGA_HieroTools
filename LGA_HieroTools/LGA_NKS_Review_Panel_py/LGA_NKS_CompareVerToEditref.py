@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CompareVerToEditref v1.19 | Lega
+  LGA_NKS_CompareVerToEditref v1.20 | Lega
 
   Compara los rangos de frames de los clips del track _compRev_ (TRACK_comp_REV) con
   los clips correspondientes del track EditRef para verificar coincidencias.
@@ -9,6 +9,8 @@ ____________________________________________________________________
   Track utilizado:
   - TRACK_comp_REV = "_compRev_": Track que contiene los archivos MOV o MXF con el render de COMP
 
+  v1.20: Pasa de la carpeta privada de Edit a la de Review, junto con el
+         boton que la ejecuta. La logica de comparacion no cambia.
   v1.19: La ventana de resultados migra al modulo de estilo
          LGA_UI_Style_HieroTools: fondo Style.WINDOW y marco/header/
          scrollbars de la tabla con tokens. Los colores de CELDA por

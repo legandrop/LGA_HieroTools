@@ -1,9 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_RevealNKS_Project v1.00 | Lega
+  LGA_NKS_RevealNKS_Project v1.01 | Lega
 
   Revela el proyecto NKS activo en el explorador de archivos
+
+  v1.01: Resuelve el proyecto desde la secuencia activa. Si no hay secuencia,
+         solo usa fallback cuando existe un unico proyecto abierto.
 ____________________________________________________________________
 
 """
@@ -12,6 +15,7 @@ import hiero.core
 import hiero.ui
 import os
 import subprocess
+import sys
 
 DEBUG = False
 
@@ -20,12 +24,13 @@ def debug_print(*message):
         print(*message)
 
 def open_file_explorer(path):
-    if os.name == 'nt':  # Windows
-        os.startfile(os.path.dirname(path))
-    elif os.name == 'posix':  # macOS
-        subprocess.Popen(['open', os.path.dirname(path)])
+    folder = os.path.dirname(path)
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", folder])
+    elif os.name == "nt":
+        os.startfile(folder)
     else:
-        debug_print("Sistema operativo no soportado para abrir el explorador de archivos.")
+        subprocess.Popen(["xdg-open", folder])
 
 def get_active_project():
     """
@@ -34,11 +39,15 @@ def get_active_project():
     Returns:
     - hiero.core.Project o None: El proyecto activo, o None si no se encuentra ningun proyecto activo.
     """
+    try:
+        sequence = hiero.ui.activeSequence()
+        if sequence is not None:
+            return sequence.project()
+    except Exception as exc:
+        debug_print(f"No se pudo resolver el proyecto de la secuencia activa: {exc}")
+
     projects = hiero.core.projects()
-    if projects:
-        return projects[0]  # Devuelve el primer proyecto en la lista
-    else:
-        return None
+    return projects[0] if len(projects) == 1 else None
 
 def main():
     try:
@@ -47,6 +56,9 @@ def main():
         if project:
             # Obtener el directorio del proyecto activo
             project_path = project.path()
+            if not project_path:
+                debug_print("El proyecto activo todavia no fue guardado.")
+                return
 
             # Imprimir el directorio del proyecto activo
             debug_print(f"El directorio del proyecto activo es: {project_path}")

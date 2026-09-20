@@ -210,19 +210,10 @@ indicators.
   color, rebuilding a damaged relationship with its bin item.
 - **Fix Zombies**  
   Scans every clip in the timeline and repairs the broken ones (no Properties, no metadata, Reconnect Media does nothing) with a self replace. Offline ones are listed so you can fix them with Replace Clip.
-- **Clear Tag**  
-  Removes all tags from the selected clips.
-- **Match Rev Ver**  
-  Click: matches the version of clips on the `_compRev_` track `(mov or mxf)` to the corresponding EXR version.  
-  Shift+Click: processes the whole timeline.
-- **Compare Rev EdRef**  
-  Click: compares frame ranges between clips on the `_compRev_` track `(mov or mxf)` and the `EditRef` track.  
-  Shift+Click: compares the whole timeline.
-- **Compare EXR aPlate**  
-  Click: compares frame ranges between clips on the `_comp_` track `(exr)` and the `aPlate` track.  
-  Shift+Click: compares the whole timeline.
 - **Check Frames**  
   Checks selected clips for missing or corrupted frames.
+- **Clear Tag**
+  Removes all tags from the selected clips.
 
 ### Review Panel
 
@@ -244,25 +235,36 @@ Review and inspection tools for compare workflows, reveals, clip toggling, and o
   Creates a new `COMPARE` track with a previous version of the selected clip and puts the track into Difference mode.
 - **Compare OFF**  
   Removes the `COMPARE` track and disables Difference mode.
+- **Match Rev Ver**
+  Click: matches the version of clips on the `_compRev_` track `(mov or mxf)` to the corresponding EXR version.
+  Shift+Click: processes the whole timeline.
+- **Compare Rev EdRef**
+  Click: compares frame ranges between clips on the `_compRev_` track `(mov or mxf)` and the `EditRef` track.
+  Shift+Click: compares the whole timeline.
+- **Compare EXR aPlate**
+  Click: compares frame ranges between clips on the `_comp_` track `(exr)` and the `aPlate` track.
+  Shift+Click: compares the whole timeline.
 - **Contact Sheet**
-  Copies the selected timeline clips and pastes them as Reads into the script
-  currently open in NukeX. It does not build a contact-sheet template.
+  Sends the selected timeline clips to the script currently open in NukeX,
+  creates an `LGA_ContactSheet` from their Reads, and connects the Viewer. The
+  network request and the NukeX operation run without blocking Nuke Studio.
+- **Previous Annotation**
+  Jumps to the previous annotation on the selected clip and wraps to the last.
+- **Next Annotation**
+  Jumps to the next annotation on the selected clip and wraps to the first.
 - **Reveal in Explorer**  
   Opens the selected clips' folders in the default file manager; without a
   selection it opens the first open project's folder.
   Shortcut: `Shift+E`.
 - **Reveal NKS Project**  
-  Opens the first open NKS project's folder in the default file manager.
+  Opens the folder of the project that owns the active sequence in the default
+  file manager. With no active sequence, it only falls back when one project is open.
 - **Reveal NK Script**  
   Opens the selected shot's `Comp/1_projects` folder in the default file manager.
   Shortcut: `Shift+R`.
 - **OpenInNukeX**  
   Finds and opens a Comp script for the selected shot in NukeX.
   Shortcut: `Shift+X`.
-- **Next Annotation**
-  Jumps to the next annotation on the selected clip and wraps to the first.
-- **Previous Annotation**
-  Jumps to the previous annotation on the selected clip and wraps to the last.
 
 ### Projects Panel
 

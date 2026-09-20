@@ -199,4 +199,4 @@ Leyenda:
 
 | Script | Estado |
 |--------|--------|
-| `LGA_NKS_Edit_Panel_py/LGA_NKS_MatchVerToEXR.py` | ✅ Actualizado v0.81 — filtro `_comp_` expandido con aliases de `TASK_NAME_ALIASES` para no descartar clips `_Compo_` del track _comp_ |
+| `LGA_NKS_Review_Panel_py/LGA_NKS_MatchVerToEXR.py` | ✅ Actualizado v0.81 — filtro `_comp_` expandido con aliases de `TASK_NAME_ALIASES` para no descartar clips `_Compo_` del track _comp_ |

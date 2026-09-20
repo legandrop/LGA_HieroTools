@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_GetClip v1.87 | Lega
+  LGA_NKS_GetClip v1.88 | Lega
 
   Usado por runtime activo:
   - LGA_NKS_Assignee_Panel.py
@@ -14,9 +14,9 @@ ____________________________________________________________________
   - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py
   - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_CreatePsync.py
   - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_OpenPath.py
-  - LGA_NKS_Edit_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py
-  - LGA_NKS_Edit_Panel_py/LGA_NKS_CompareVerToEditref.py
-  - LGA_NKS_Edit_Panel_py/LGA_NKS_MatchVerToEXR.py
+  - LGA_NKS_Review_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py
+  - LGA_NKS_Review_Panel_py/LGA_NKS_CompareVerToEditref.py
+  - LGA_NKS_Review_Panel_py/LGA_NKS_MatchVerToEXR.py
   - LGA_NKS_Flow_Panel.py
   - LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py
   - LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py
@@ -30,6 +30,9 @@ ____________________________________________________________________
   - LGA_NKS_ViewerTL_Panel_py/LGA_NKS_PrevNext_Rev.py
 
   Utilidades para obtener clips del timeline de Hiero/Nuke Studio.
+
+  v1.88: Actualiza la lista de consumidores tras mover las comparaciones al
+         Review Panel; no cambia la logica de seleccion.
 
   Método híbrido inteligente completo:
   1. LÓGICA INTELIGENTE SIMPLE: Si hay un clip seleccionado fuera del

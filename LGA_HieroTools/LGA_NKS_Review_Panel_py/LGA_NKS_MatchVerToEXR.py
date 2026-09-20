@@ -1,11 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_MatchVerToEXR v0.83 | Lega
+  LGA_NKS_MatchVerToEXR v0.84 | Lega
 
   Busca la version actual de los clips del track _comp_ (TRACK_comp_EXR) e
   intenta subir la versión de los clips correspondientes del track _compRev_ (TRACK_comp_REV) a la misma versión.
 
+  v0.84: Pasa de la carpeta privada de Edit a la de Review, junto con el
+         boton que la ejecuta. La logica de matching no cambia.
   v0.83: La ventana de resultados migra al modulo de estilo
          LGA_UI_Style_HieroTools: fondo Style.WINDOW y marco/header/
          scrollbars de la tabla con tokens. Los colores de CELDA por

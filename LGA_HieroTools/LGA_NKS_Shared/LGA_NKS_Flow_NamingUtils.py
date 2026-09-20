@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_NamingUtils v1.19 | Lega
+  LGA_NKS_Flow_NamingUtils v1.20 | Lega
 
   Utilidades para detectar y extraer información de nombres de archivos/shots
   Compatible con sistemas de nomenclatura actuales y series:
@@ -16,7 +16,6 @@ ____________________________________________________________________
   - LGA_NKS_Flow_Panel.py
   - LGA_NKS_Assignee_Panel.py
   - LGA_NKS_Coordination_Panel.py
-  - LGA_NKS_Edit_Panel.py
   - LGA_NKS_Shared/LGA_NKS_GetClip.py
   - LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py
   - LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py
@@ -35,12 +34,14 @@ ____________________________________________________________________
   - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_OpenPath.py
   - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_CreatePsync.py
   - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_OpenPath.py
-  - LGA_NKS_Edit_Panel_py/LGA_NKS_MatchVerToEXR.py
+  - LGA_NKS_Review_Panel_py/LGA_NKS_MatchVerToEXR.py
   - LGA_NKS_Edit_Panel_py/LGA_NKS_SetShotName.py
-  - LGA_NKS_Edit_Panel_py/LGA_NKS_CompareVerToEditref.py
-  - LGA_NKS_Edit_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py
+  - LGA_NKS_Review_Panel_py/LGA_NKS_CompareVerToEditref.py
+  - LGA_NKS_Review_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py
   - LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py
 
+  v1.20: Actualiza la lista de consumidores tras mover las comparaciones al
+         Review Panel; no cambia la logica de nombres.
   v1.19: SUP sigue resolviendo la task pero se omite del shot_code de Flow.
   v1.18: SUP es un token interno de naming, separado del catálogo de vendors.
          Se normaliza sin distinguir mayúsculas y nunca depende de PipeSync.

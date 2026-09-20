@@ -1,13 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_ReviewPanel v2.84 | Lega
+  LGA_ReviewPanel v2.85 | Lega
 
   Tools panel for Hiero / Nuke Studio
 
-  v2.84: Tooltips alineados con el comportamiento real: Contact Sheet copia
-         la seleccion a NukeX sin construir una plantilla, y Reveal abre las
-         carpetas con el gestor de archivos predeterminado.
+  v2.85: Recibe las tres comparaciones de versiones del Edit Panel, ordena
+         anotaciones y acciones Reveal, corrige el proyecto activo y permite
+         activar con teclado los botones con gesto Shift.
+  v2.84: Tooltips alineados con el comportamiento real de las acciones Reveal.
   v2.83: El segundo boton ON/OFF sigue el contexto: en studio es _roto_ y
          en client es _cg_ (ahi roto no existe y el boton no servia para
          nada). El atajo Ctrl+Shift+D es el mismo en los dos.
@@ -55,6 +56,7 @@ class CustomButton(QtWidgets.QPushButton):
         super(CustomButton, self).__init__(text)
         self._custom_click_handler = None
         self._shift_click_handler = None
+        self.clicked.connect(self._dispatch_click)
 
     def setCustomClickHandler(self, handler):
         self._custom_click_handler = handler
@@ -62,15 +64,12 @@ class CustomButton(QtWidgets.QPushButton):
     def setShiftClickHandler(self, handler):
         self._shift_click_handler = handler
 
-    def mousePressEvent(self, event):
-        if self._custom_click_handler and self._shift_click_handler:
-            modifiers = event.modifiers()
-            if modifiers & QtCore.Qt.ShiftModifier:
-                self._shift_click_handler()
-            else:
-                self._custom_click_handler()
-        else:
-            super(CustomButton, self).mousePressEvent(event)
+    def _dispatch_click(self):
+        modifiers = QtWidgets.QApplication.keyboardModifiers()
+        if modifiers & QtCore.Qt.ShiftModifier and self._shift_click_handler:
+            self._shift_click_handler()
+        elif self._custom_click_handler:
+            self._custom_click_handler()
 
 # Variable global para activar o desactivar los prints
 DEBUG = True
@@ -219,23 +218,35 @@ class ReviewPanel(QtWidgets.QWidget):
             ),
             ("Compare Versions", self.execute_CompareVersions, "#273c24", None, "Crea un nuevo track 'COMPARE' con una versión anterior del clip seleccionado y pone al track en modo difference"),
             ("Compare OFF", self.execute_CompareVersionsOff, "#273c24", None, "Remueve el track 'COMPARE' y desactiva el modo Difference"),
-            ("Contact Sheet", self.execute_ContactSheet, "#273c24", None, "Copia los clips seleccionados y los pega como Reads en el script abierto de NukeX; no crea una plantilla de contact sheet"),
             (
-                "Reveal in &Explorer",
-                self.execute_RevealInExplorer,
-                "#321a1a",
-                "Shift+E",
-                "Shift+E\nAbre las carpetas de los clips seleccionados en el gestor de archivos predeterminado; sin seleccion abre la carpeta del primer proyecto abierto",
+                "Match Rev Ver",
+                self.match_rev_version,
+                "#3d2a47",
+                None,
+                "Click: Iguala la version de los clips del track _compRev_ (mov o mxf) con la version de los EXR correspondientes\nShift+Click: Procesa todos los clips del timeline",
             ),
-            ("Reveal NKS Project", self.execute_RevealNKSProject, "#321a1a", None, "Abre la carpeta del primer proyecto NKS abierto en el gestor de archivos predeterminado"),
             (
-                "Reveal NK Sc&ript",
-                self.execute_RevealNKScript,
-                "#321a1a",
-                "Shift+R",
-                "Shift+R\nAbre en el gestor de archivos predeterminado la carpeta Comp/1_projects del shot seleccionado",
+                "Compare Rev EdRef",
+                self.compare_rev_editref,
+                "#3d2a47",
+                None,
+                "Click: Compara los rangos de frames entre clips del track _compRev_ (mov o mxf) y el track EditRef\nShift+Click: Compara todos los clips del timeline",
             ),
-            ("OpenInNuke&X", self.execute_OpenInNukeX, "#493800", "Shift+X", "Shift+X\nBusca y abre en NukeX un script de Comp del shot seleccionado"),
+            (
+                "Compare EXR aPlate",
+                self.compare_exr_aplate,
+                "#3d2a47",
+                None,
+                "Click: Compara los rangos de frames entre clips del track _comp_ (exr) y el track aPlate\nShift+Click: Compara todos los clips del timeline",
+            ),
+            ("Contact Sheet", self.execute_ContactSheet, "#273c24", None, "Envia los clips seleccionados a NukeX, crea un LGA Contact Sheet con sus Reads y conecta el Viewer; el envio se hace en segundo plano"),
+            (
+                "Previous Annotation",
+                self.execute_PreviousAnnotation,
+                "#283526",
+                None,
+                "Salta a la anotacion anterior del clip seleccionado. Al llegar al inicio vuelve a la ultima.",
+            ),
             (
                 "Next Annotation",
                 self.execute_NextAnnotation,
@@ -244,12 +255,21 @@ class ReviewPanel(QtWidgets.QWidget):
                 "Salta a la proxima anotacion del clip seleccionado. Al llegar al final vuelve a la primera.",
             ),
             (
-                "Previous Annotation",
-                self.execute_PreviousAnnotation,
-                "#283526",
-                None,
-                "Salta a la anotacion anterior del clip seleccionado. Al llegar al inicio vuelve a la ultima.",
+                "Reveal in &Explorer",
+                self.execute_RevealInExplorer,
+                "#321a1a",
+                "Shift+E",
+                "Shift+E\nAbre las carpetas de los clips seleccionados en el gestor de archivos predeterminado; sin seleccion abre la carpeta del primer proyecto abierto",
             ),
+            ("Reveal NKS Project", self.execute_RevealNKSProject, "#321a1a", None, "Abre la carpeta del proyecto que contiene la secuencia activa en el gestor de archivos predeterminado"),
+            (
+                "Reveal NK Sc&ript",
+                self.execute_RevealNKScript,
+                "#321a1a",
+                "Shift+R",
+                "Shift+R\nAbre en el gestor de archivos predeterminado la carpeta Comp/1_projects del shot seleccionado",
+            ),
+            ("OpenInNuke&X", self.execute_OpenInNukeX, "#493800", "Shift+X", "Shift+X\nBusca y abre en NukeX un script de Comp del shot seleccionado"),
         ]
 
         self.num_columns = 1  # Inicialmente una columna
@@ -315,6 +335,18 @@ class ReviewPanel(QtWidgets.QWidget):
                 button = CustomButton(name)
                 button.setCustomClickHandler(self.execute_EnableOrDisableClips_all_clips)
                 button.setShiftClickHandler(handler)
+            elif name == "Match Rev Ver":
+                button = CustomButton(name)
+                button.setCustomClickHandler(self.match_rev_version)
+                button.setShiftClickHandler(self.match_rev_version_force_all)
+            elif name == "Compare Rev EdRef":
+                button = CustomButton(name)
+                button.setCustomClickHandler(self.compare_rev_editref)
+                button.setShiftClickHandler(self.compare_rev_editref_force_all)
+            elif name == "Compare EXR aPlate":
+                button = CustomButton(name)
+                button.setCustomClickHandler(self.compare_exr_aplate)
+                button.setShiftClickHandler(self.compare_exr_aplate_force_all)
             else:
                 button = QtWidgets.QPushButton(name)
                 button.clicked.connect(handler)
@@ -489,6 +521,53 @@ class ReviewPanel(QtWidgets.QWidget):
 
     def execute_CompareVersionsOff(self):
         self.execute_external_script("LGA_NKS_Compare_Versions_OFF.py")
+
+    def _execute_review_function(self, script_name, function_name, force_all_clips):
+        script_path = os.path.join(
+            os.path.dirname(__file__), "LGA_NKS_Review_Panel_py", script_name
+        )
+        if not os.path.exists(script_path):
+            debug_print(f"Script no encontrado en la ruta: {script_path}", level="error")
+            return
+        try:
+            spec = importlib.util.spec_from_file_location(script_name[:-3], script_path)
+            if spec is None or spec.loader is None:
+                raise RuntimeError("No se pudo crear el loader del modulo")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            getattr(module, function_name)(force_all_clips=force_all_clips)
+        except Exception as exc:
+            debug_print(f"Error ejecutando {script_name}: {exc}", level="error")
+
+    def match_rev_version(self):
+        self._execute_review_function(
+            "LGA_NKS_MatchVerToEXR.py", "match_exr_to_rev", False
+        )
+
+    def match_rev_version_force_all(self):
+        self._execute_review_function(
+            "LGA_NKS_MatchVerToEXR.py", "match_exr_to_rev", True
+        )
+
+    def compare_rev_editref(self):
+        self._execute_review_function(
+            "LGA_NKS_CompareVerToEditref.py", "compare_rev_to_editref", False
+        )
+
+    def compare_rev_editref_force_all(self):
+        self._execute_review_function(
+            "LGA_NKS_CompareVerToEditref.py", "compare_rev_to_editref", True
+        )
+
+    def compare_exr_aplate(self):
+        self._execute_review_function(
+            "LGA_NKS_CompareEXR_to_aPlate.py", "compare_exr_to_aplate", False
+        )
+
+    def compare_exr_aplate_force_all(self):
+        self._execute_review_function(
+            "LGA_NKS_CompareEXR_to_aPlate.py", "compare_exr_to_aplate", True
+        )
 
     def execute_ContactSheet(self):
         self.execute_external_script("LGA_Contact_Sheet_OpenInNukeX.py")

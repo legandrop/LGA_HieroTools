@@ -209,19 +209,19 @@ roto no existe ahí.
 - Decidir si las herramientas de diferencia/comparación deben operar por task o solo sobre comp.
 - Reemplazar regex hardcodeados por patrón que use `TASK_EXR_TRACKS`.
 
-### 5.4. Edit Panel
+### 5.4. Review comparisons and Edit creation/import
 
 | Script | comp EXR | roto EXR | cleanup EXR | comp Rev | roto Rev | cleanup Rev |
 |---|---|---|---|---|---|---|
-| [LGA_NKS_MatchVerToEXR.py](../LGA_NKS_Edit_Panel_py/LGA_NKS_MatchVerToEXR.py) | ✅ | ❌ | ❌ | ✅ | ❌ | ❌ |
-| [LGA_NKS_CompareVerToEditref.py](../LGA_NKS_Edit_Panel_py/LGA_NKS_CompareVerToEditref.py) | — | — | — | ✅ | ❌ | ❌ |
-| [LGA_NKS_CompareEXR_to_aPlate.py](../LGA_NKS_Edit_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py) | ✅ | ❌ | ❌ | — | — | — |
+| [LGA_NKS_MatchVerToEXR.py](../LGA_NKS_Review_Panel_py/LGA_NKS_MatchVerToEXR.py) | ✅ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| [LGA_NKS_CompareVerToEditref.py](../LGA_NKS_Review_Panel_py/LGA_NKS_CompareVerToEditref.py) | — | — | — | ✅ | ❌ | ❌ |
+| [LGA_NKS_CompareEXR_to_aPlate.py](../LGA_NKS_Review_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py) | ✅ | ❌ | ❌ | — | — | — |
 
-**Pendiente en Edit Panel:**
+**Pendiente en Review Panel:**
 - MatchVerToEXR: hoy matchea la versión de `_comp_` con `_compRev_`. Cuando roto/cleanup tengan review, extender para operar por task iterando las listas.
 - CompareVerToEditref: hoy compara rangos solo del track `_compRev_` contra EditRef. Evaluar si debe operar también sobre `_rotoRev_` y `_cleanupRev_`.
 
-**Create v000 e Import Shots — soporte de tasks por contexto (scope, no review de track):**
+**Edit Panel: Create v000 e Import Shots — soporte de tasks por contexto (scope, no review de track):**
 
 | Script | comp | roto (studio) | cleanup (studio) | cg (client) | Notas |
 |---|---|---|---|---|---|
@@ -309,7 +309,7 @@ Lista de pendientes concretos, en orden sugerido:
 2. **Flow Push** — migrar `_show_task_selection_dialog` interno al helper compartido `LGA_NKS_TaskSelectionDialog`.
 3. **Flow Push** — decidir política del assignee del shot (`get_comp_assignee`) y ajustar si corresponde.
 4. **Flow ReviewPic** — auditar hardcodes a comp e integrar `LGA_NKS_TaskSelectionDialog`.
-5. **Edit Panel** — extender MatchVerToEXR y CompareVerToEditref a operar por task iterando `TASK_EXR_TRACKS` / `TASK_REV_TRACKS`.
+5. **Review Panel** — extender MatchVerToEXR y CompareVerToEditref a operar por task iterando `TASK_EXR_TRACKS` / `TASK_REV_TRACKS`.
 6. **Review Panel** — evaluar si EXRTrack_Difference y Compare_Versions deben trabajar por task o seguir siendo comp-only.
 7. **Scripts no auditados** — pasar el filtro de hardcodes por Assignee, ViewerTL. (Flow S3 Panel — Create Shot, Show in Flow, Check Shots — ya se auditó para el scope de CG, ver sección 5.5.)
 
@@ -365,7 +365,7 @@ con `PROJA_1013_0800_layout_v003` y otro `_cg_` con
 - **Review Panel (panel):** [LGA_NKS_Review_Panel.py](../LGA_NKS_Review_Panel.py)
   - Métodos: `execute_DisableEXR()`, `execute_DisableRoto()`, `_segunda_task()`, `_second_task_button()`, `execute_DisableSecondTask()`
 - **Review Panel (wrappers):** [LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableEXR.py](../LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableEXR.py), [LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableRoto.py](../LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableRoto.py), [LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableCG.py](../LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableCG.py)
-- **Edit Panel:** [LGA_NKS_Edit_Panel_py/LGA_NKS_MatchVerToEXR.py](../LGA_NKS_Edit_Panel_py/LGA_NKS_MatchVerToEXR.py), [LGA_NKS_Edit_Panel_py/LGA_NKS_CompareVerToEditref.py](../LGA_NKS_Edit_Panel_py/LGA_NKS_CompareVerToEditref.py)
+- **Review Panel (comparaciones):** [LGA_NKS_Review_Panel_py/LGA_NKS_MatchVerToEXR.py](../LGA_NKS_Review_Panel_py/LGA_NKS_MatchVerToEXR.py), [LGA_NKS_Review_Panel_py/LGA_NKS_CompareVerToEditref.py](../LGA_NKS_Review_Panel_py/LGA_NKS_CompareVerToEditref.py), [LGA_NKS_Review_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py](../LGA_NKS_Review_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py)
 - **Create v000:** [LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py](../LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py)
   - Funciones: `_active_tasks()`, `_task_folder_map()`, `_tasks_human_list()`
   - Clase: `CreateV000Dialog` (`_build_task_box()`, `_selected_tasks()`, `available_task_count()`)

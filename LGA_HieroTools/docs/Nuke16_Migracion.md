@@ -34,17 +34,19 @@
 - [x] `LGA_NKS_OpenInNukeX.py` — Abrir en NukeX (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton)
 - [x] `LGA_NKS_Compare_Versions.py` — Comparar versiones (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton)
 
-### LGA_NKS_Edit/ - Scripts de edición
+### LGA_NKS_Edit_Panel_py/ - Scripts de edición
 - [x] `LGA_NKS_Reconnect.py` — Reconexión de media (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QProgressBar)
 - [x] `LGA_NKS_SelfReplaceClip.py` — Reemplazo de clips (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton)
-- [x] `LGA_NKS_MatchVerToEXR.py` — Matching de versiones (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton)
-- [x] `LGA_NKS_CompareVerToEditref.py` — Comparación con EditRef (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QProgressBar)
-- [x] `LGA_NKS_CompareEXR_to_aPlate.py` — Comparación EXR aPlate (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QProgressBar)
 - [x] `LGA_NKS_CreateNewTrack.py` — Creación de tracks (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton)
 - [x] `LGA_NKS_mediaMissingFrames.py` — Frames faltantes (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton)
 - [x] `LGA_NKS_Trim_In.py` — Recorte IN (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton)
 - [x] `LGA_NKS_Trim_Out.py` — Recorte OUT (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton)
 - [x] `LGA_NKS_FixColorspaces.py` — Corrección de colorspaces (sin Qt directo)
+
+### LGA_NKS_Review_Panel_py/ - Scripts de review
+- [x] `LGA_NKS_MatchVerToEXR.py` — Matching de versiones (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton)
+- [x] `LGA_NKS_CompareVerToEditref.py` — Comparación con EditRef (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QProgressBar)
+- [x] `LGA_NKS_CompareEXR_to_aPlate.py` — Comparación EXR aPlate (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QProgressBar)
 
 ### Scripts de Flow (Flow Rev, Assignees y Flow S3)
 - [x] `LGA_NKS_Flow_Pull.py` — Pull de tasks Flow (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QProgressBar, QRunnable, QThreadPool)
@@ -126,7 +128,7 @@
 - [x] `LGA_NKS_Wasabi/verify_policy_created.py` — Script de verificación (sin Qt)
 - [x] `LGA_NKS_Wasabi/verify_updated_policy.py` — Script de verificación (sin Qt)
 - [x] `LGA_NKS_Wasabi/wasabi_policy_utils.py` — Utilidades Wasabi (sin Qt)
-- [x] `LGA_NKS_Edit/LGA_NKS_MatchVerToEXR.md` — Documentación
+- [x] `LGA_NKS_Review_Panel_py/LGA_NKS_MatchVerToEXR.md` — Documentación
 
 ### Archivos adicionales migrados durante testing
 - [x] `LGA_NKS_Utils/LGA_NKS_GetClip.py` — Utilidades de clips (migrado Qt + fix IndexError cuando no hay clips seleccionados)

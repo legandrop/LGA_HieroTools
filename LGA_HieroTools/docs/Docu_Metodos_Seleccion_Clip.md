@@ -91,8 +91,8 @@ Este método obtiene la posición actual del playhead (`viewer.time()`) y busca 
 - [x] **`LGA_NKS_Assignee_Panel.py`** - Usa `get_clips_to_process()` del módulo `LGA_NKS_GetClip` con `prioritize_multiple_selection=True` (método híbrido: selección múltiple prioritaria, playhead para selección simple)
 - [x] **`LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_ReviewPic.py`** - Usa módulo centralizado `LGA_NKS_GetClip` con `track_name=None` (NO permite selecciones múltiples)
 - [x] **`LGA_NKS/LGA_NKS_Clip_DisableEXR.py`** - Usa módulo centralizado `LGA_NKS_GetClip` (NO permite selecciones múltiples)
-- [x] **`LGA_NKS_Edit/LGA_NKS_CompareEXR_to_aPlate.py`** - Usa módulo centralizado `LGA_NKS_GetClip` (permite selecciones múltiples)
-- [x] **`LGA_NKS_Edit/LGA_NKS_CompareVerToEditref.py`** - Usa módulo centralizado `LGA_NKS_GetClip` con método híbrido para buscar clip en track REV (playhead primero, luego selección como fallback)
+- [x] **`LGA_NKS_Review_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py`** - Usa módulo centralizado `LGA_NKS_GetClip` (permite selecciones múltiples)
+- [x] **`LGA_NKS_Review_Panel_py/LGA_NKS_CompareVerToEditref.py`** - Usa módulo centralizado `LGA_NKS_GetClip` con método híbrido para buscar clip en track REV (playhead primero, luego selección como fallback)
 - [x] **`LGA_NKS/LGA_NKS_InOut_Editref.py`** - Usa módulo centralizado `LGA_NKS_GetClip` con método híbrido para buscar en track EditRef o EditRefClean
 - [x] **`LGA_NKS/LGA_NKS_PrevNext_Rev.py`** - Usa módulo centralizado `LGA_NKS_GetClip` con método híbrido para buscar clips EditRef cuando la posición coincide con el playhead
 
@@ -443,7 +443,7 @@ for clip in clips:
 - **`LGA_NKS/LGA_NKS_Clip_DisableEXR.py`** - `track_name=None`, `prioritize_multiple_selection=False`
 - **`LGA_NKS/LGA_NKS_InOut_Editref.py`** - Método híbrido con track EditRef
 - **`LGA_NKS/LGA_NKS_PrevNext_Rev.py`** - Método híbrido con track EditRef
-- **`LGA_NKS_Edit/LGA_NKS_CompareVerToEditref.py`** - Método híbrido con track REV
+- **`LGA_NKS_Review_Panel_py/LGA_NKS_CompareVerToEditref.py`** - Método híbrido con track REV
 
 #### `get_clips_to_process(track_name=None, prioritize_multiple_selection=False)`
 **Procesamiento de múltiples clips (siempre devuelve lista)**
@@ -451,7 +451,7 @@ for clip in clips:
 - **`LGA_NKS_Assignee_Panel.py`** - `track_name=None`, `prioritize_multiple_selection=True` (método híbrido prioritario)
 - **`LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py`** - `track_name=None`, `prioritize_multiple_selection=True`
 - **`LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py`** - `push_from_selected_clips()` usa `track_name=None`, `prioritize_multiple_selection=True`
-- **`LGA_NKS_Edit/LGA_NKS_CompareEXR_to_aPlate.py`** - `track_name=None`, permite selecciones múltiples
+- **`LGA_NKS_Review_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py`** - `track_name=None`, permite selecciones múltiples
 
 ### Scripts que importan TRACK_comp_EXR directamente:
 **Usan el módulo solo para la variable centralizada, no las funciones:**

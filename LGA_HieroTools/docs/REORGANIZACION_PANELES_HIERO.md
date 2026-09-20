@@ -201,9 +201,6 @@ Hoy carga scripts desde:
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_ReplaceClip.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_FixZombieClips.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_mediaMissingFrames.py`
-- `LGA_NKS_Edit_Panel_py/LGA_NKS_MatchVerToEXR.py`
-- `LGA_NKS_Edit_Panel_py/LGA_NKS_CompareVerToEditref.py`
-- `LGA_NKS_Edit_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py`
 
 Tambien carga shareds fuera de esa carpeta:
 
@@ -227,6 +224,9 @@ Hoy carga scripts desde:
 - `LGA_NKS_Review_Panel_py/LGA_NKS_EXRTrack_Difference.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_Compare_Versions.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_Compare_Versions_OFF.py`
+- `LGA_NKS_Review_Panel_py/LGA_NKS_MatchVerToEXR.py`
+- `LGA_NKS_Review_Panel_py/LGA_NKS_CompareVerToEditref.py`
+- `LGA_NKS_Review_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py`
 - `LGA_NKS_Review_Panel_py/LGA_Contact_Sheet_OpenInNukeX.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_RevealInExplorer.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_RevealNKS_Project.py`
@@ -405,9 +405,6 @@ fuera de uso y no tienen boton visible.
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_ReplaceClip.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_FixZombieClips.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_mediaMissingFrames.py`
-- `LGA_NKS_Edit_Panel_py/LGA_NKS_MatchVerToEXR.py`
-- `LGA_NKS_Edit_Panel_py/LGA_NKS_CompareVerToEditref.py`
-- `LGA_NKS_Edit_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py`
 
 ### Review Panel
 
@@ -415,6 +412,9 @@ fuera de uso y no tienen boton visible.
 - `LGA_NKS_Review_Panel_py/LGA_NKS_EXRTrack_Difference.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_Compare_Versions.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_Compare_Versions_OFF.py`
+- `LGA_NKS_Review_Panel_py/LGA_NKS_MatchVerToEXR.py`
+- `LGA_NKS_Review_Panel_py/LGA_NKS_CompareVerToEditref.py`
+- `LGA_NKS_Review_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py`
 - `LGA_NKS_Review_Panel_py/LGA_Contact_Sheet_OpenInNukeX.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_RevealInExplorer.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_RevealNKS_Project.py`
@@ -573,15 +573,16 @@ Startup/
     LGA_NKS_Trim_Out.py
     LGA_NKS_Reconnect.py
     LGA_NKS_mediaMissingFrames.py
-    LGA_NKS_MatchVerToEXR.py
-    LGA_NKS_CompareVerToEditref.py
-    LGA_NKS_CompareEXR_to_aPlate.py
 
   LGA_NKS_Review_Panel_py/
     LGA_NKS_ON_Clips_OFF_v00-Clips.py
     LGA_NKS_EXRTrack_Difference.py
     LGA_NKS_Compare_Versions.py
     LGA_NKS_Compare_Versions_OFF.py
+    LGA_NKS_MatchVerToEXR.py
+    LGA_NKS_CompareVerToEditref.py
+    LGA_NKS_CompareEXR_to_aPlate.py
+    LGA_Contact_Sheet_OpenInNukeX.py
     LGA_NKS_RevealInExplorer.py
     LGA_NKS_RevealNKS_Project.py
     LGA_NKS_RevealNK_Script.py
@@ -888,15 +889,6 @@ Esta seccion agrega el nivel fino: para cada `.py` relevante se indica si lo lla
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_mediaMissingFrames.py`
   - Lo usa `LGA_NKS_Edit_Panel.py`.
 
-- `LGA_NKS_Edit_Panel_py/LGA_NKS_MatchVerToEXR.py`
-  - Lo usa `LGA_NKS_Edit_Panel.py`.
-
-- `LGA_NKS_Edit_Panel_py/LGA_NKS_CompareVerToEditref.py`
-  - Lo usa `LGA_NKS_Edit_Panel.py`.
-
-- `LGA_NKS_Edit_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py`
-  - Lo usa `LGA_NKS_Edit_Panel.py`.
-
 ### Review Panel
 
 - `LGA_NKS_Review_Panel_py/LGA_NKS_ON_Clips_OFF_v00-Clips.py`
@@ -911,14 +903,23 @@ Esta seccion agrega el nivel fino: para cada `.py` relevante se indica si lo lla
 - `LGA_NKS_Review_Panel_py/LGA_NKS_Compare_Versions_OFF.py`
   - Lo usa `LGA_NKS_Review_Panel.py`.
 
+- `LGA_NKS_Review_Panel_py/LGA_NKS_MatchVerToEXR.py`
+  - Lo usa `LGA_NKS_Review_Panel.py`.
+
+- `LGA_NKS_Review_Panel_py/LGA_NKS_CompareVerToEditref.py`
+  - Lo usa `LGA_NKS_Review_Panel.py`.
+
+- `LGA_NKS_Review_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py`
+  - Lo usa `LGA_NKS_Review_Panel.py`.
+
 - `LGA_NKS_Review_Panel_py/LGA_Contact_Sheet_OpenInNukeX.py`
-  - Lo usa `LGA_NKS_Review_Panel.py` para copiar/pegar la seleccion en NukeX; no construye una plantilla.
+  - Lo usa `LGA_NKS_Review_Panel.py` para copiar la seleccion y pedir a NukeX que cree un `LGA_ContactSheet` con los Reads, sin bloquear la UI de Nuke Studio.
 
 - `LGA_NKS_Review_Panel_py/LGA_NKS_RevealInExplorer.py`
   - Lo usa `LGA_NKS_Review_Panel.py`.
 
 - `LGA_NKS_Review_Panel_py/LGA_NKS_RevealNKS_Project.py`
-  - Lo usa `LGA_NKS_Review_Panel.py`.
+  - Lo usa `LGA_NKS_Review_Panel.py`; resuelve el proyecto desde `activeSequence().project()` para no revelar otro proyecto cuando hay varios abiertos.
 
 - `LGA_NKS_Review_Panel_py/LGA_NKS_RevealNK_Script.py`
   - Lo usa `LGA_NKS_Review_Panel.py`.
