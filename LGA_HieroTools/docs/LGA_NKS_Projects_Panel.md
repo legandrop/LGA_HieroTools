@@ -97,7 +97,7 @@
 
 ## UI del panel
 - Titulo centrado `Projects`.
-- Toolbar derecha: `Refresh`, `Reload Panel` (opcional), `Settings`; separador; `Organize Project` (carpeta con flecha) y `Clean Project` (papelera). Refresh usa la silueta bold derivada del asset de PipeSync y Reload Panel la opcion aprobada de dos flechas llenas. Todos los tooltips salen del diccionario `TOOLTIPS` y el panel instala `Style.TOOLTIP`, la misma hoja compartida que usan las otras interfaces del pack.
+- Toolbar derecha: `Refresh`, `Reload Panel` (opcional), `Settings`; separador; `Organize Project` (carpeta con flecha) y `Clean Project` (papelera). Refresh usa la silueta bold derivada del asset de PipeSync y Reload Panel la opcion aprobada de dos flechas llenas. Los cinco botones conservan una caja de icono comun de 20 px; el aire interno se corrige en los `viewBox` de Refresh y Reload para igualar su tamano optico sin cambiar alineacion ni area clickeable. Todos los tooltips salen del diccionario `TOOLTIPS` y el panel instala `Style.TOOLTIP`, la misma hoja compartida que usan las otras interfaces del pack.
 - Lista con scroll: proyectos cerrados/abiertos y boton `Update` cuando corresponde.
 - Etiqueta inferior con resumen de conteos.
 - Toggle de contexto (pill) en una fila propia arriba de la lista, solo visible para el login habilitado (`SWITCH_ALLOWED_LOGIN`). Orden visual: **`studio` a la izquierda, `client` a la derecha**. El activo se pinta violeta.

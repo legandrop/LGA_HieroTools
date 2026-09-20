@@ -8,7 +8,8 @@ ____________________________________________________________________
 
   v1.08: Reordenado el rail a Refresh, Reload Panel y Settings; Refresh usa
          la variante bold de PipeSync, Reload Panel una silueta llena de
-         reinicio y todos los tooltips usan la hoja compartida del pack.
+         reinicio y todos los tooltips usan la hoja compartida del pack. Sus
+         encuadres SVG quedan normalizados opticamente con los otros iconos.
   v1.07: Agregados Organize Project y Clean Project como botones de icono
          separados de Refresh, Settings y Reimport; conservan sus tooltips.
   v1.06: El toggle de contexto arranca alineado con los nombres de proyecto
