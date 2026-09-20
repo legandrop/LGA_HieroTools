@@ -80,7 +80,7 @@ Tools for assigning artists to Flow tasks and managing related Wasabi access pol
 ### Flow S3 Panel
 
 Production-facing tools split into two visual blocks. The first six actions
-belong to Flow; the final six belong to PipeSync/FileManagerS3. The runtime
+belong to Flow; the final five belong to FileManagerS3/Wasabi S3. The runtime
 module and dock id remain `LGA_NKS_Coordination_Panel` /
 `com.lega.FlowProdPanel` for layout compatibility.
 
@@ -112,8 +112,6 @@ Internal reference: [Flow S3 Panel](LGA_HieroTools/docs/LGA_NKS_Flow_S3_Panel_RE
 - **Reveal in Flow** — Click opens the preferred context task in Flow (Comp;
   CG fallback in Client); Shift+Click opens the full shot. Shortcut:
   `Ctrl+Shift+F`. Its green/gray gradient closes the Flow block.
-- **.Psync**  
-  Generates a `.psync` file for sharing.
 - **FileManagerS3**  
   Opens the shot folder in FileManagerS3.
 - **Download Shot**  
@@ -123,6 +121,9 @@ Internal reference: [Flow S3 Panel](LGA_HieroTools/docs/LGA_NKS_Flow_S3_Panel_RE
 - **Download Clip** — Click downloads the latest available version;
   Shift+Click: downloads the selected version.
 - **Download AMF** — Downloads the selected shot's `_input/Look_Files` folder.
+
+The former **.Psync** button is intentionally hidden because that handoff is no
+longer used. Its script remains in the repository as a documented legacy tool.
 
 ### ViewerTL Panel
 
@@ -134,26 +135,35 @@ Viewer and timeline utilities focused on framing, navigation, review navigation,
 - **Viewer | 3:2**  
   Sets the viewer overlay to 3:2 and cycles mask styles `(None, Half, Full)`, insetting the BurnIn track burn-ins so the side bars do not cover them.
 - **Refresh Timeline**  
-  Refreshes the timeline while preserving the current zoom level. Useful when the timeline starts behaving incorrectly.
+  Rebuilds the active timeline view when it becomes unstable: it preserves the
+  view state, cleans temporary `NukeVFX` tracks, refreshes the sequence and
+  restores zoom, scroll and track position.
 - **Top Track**  
   Scrolls to the top track in the timeline.  
   Shortcut: `Ctrl+Shift+T`.
 - **In Out Editref**  
-  Sets sequence In and Out based on the closest clip on the `EditRef` or `EditRefClean` track.  
+  Sets sequence In and Out from the closest clip on the `EditRef` or
+  `EditRefClean` track.
   Shortcut: `Ctrl+Shift+U`.
 - **Prev Rev [User]**  
   Searches for the previous clip with that user's review status and adjusts the view by setting In / Out from EditRef, selecting the clip, and fitting the zoom.
 - **Next Rev [User]**  
   Searches for the next clip with that user's review status and adjusts the view by setting In / Out from EditRef, selecting the clip, and fitting the zoom.
 - **Frame Number**  
-  Moves the frame-number burn-in into the visible bottom-left area of the viewer.  
+  Toggles the frame-number burn-in and positions it in the visible bottom-left
+  area of the viewer, creating the frame-only burn-in when needed.
   Shortcut: `Shift+F`.
 - **SnapShot**  
-  Creates a snapshot from the current viewer image, crops it to the sequence aspect ratio, and copies it to the clipboard. Intended for quick notes or messaging.
+  Click: creates a snapshot from the current viewer image, crops it to the
+  sequence aspect ratio, and copies it to the clipboard. Shift+Click opens the
+  same temporary capture in ShareX ImageEditor LGA without saving it.
 
 ### Edit Panel
 
-Timeline editing, reconnect, colorspace, and validation utilities.
+Timeline editing, shot setup, reconnect, media repair, colorspace, and validation
+utilities. Button colors identify those functional groups; they are not status
+indicators.
+
 - **Rec709 | Clip**  
   Sets the selected clips' color transform to Rec.709.
 - **Default | Clip**  
@@ -161,17 +171,21 @@ Timeline editing, reconnect, colorspace, and validation utilities.
 - **Compositing Log | Clip**  
   Sets the selected clips' color transform to `compositing_log`.
 - **Fix Colorspaces**  
-  Detects and fixes clips using `rec709` or `gamma2.2`.
-- **New Video Track**  
-  Creates a new video track above the selected track.
-- **Set Shot Name**  
-  Sets the shot name based on the file path.
+  Uses the project's PipeSync color-management settings when enabled; otherwise
+  detects and fixes clips using `rec709` or `gamma2.2`.
+- **Apply AMF**
+  Adds or removes the shot's CDL/CLF effects on selected EXRs, or on EXRs under
+  the playhead when fewer than two clips are selected. Shortcut: `Shift+L`.
 - **Import shot**  
   Imports shots into the project: plates and references into the shot bin and onto their tracks.
+- **Set Shot Name**
+  Sets the shot name based on the file path.
+- **Create EXR v000**
+  Opens the validator that prepares black EXR `v000` sequences for one or more shots/tasks.
 - **Create NK v000**  
   Builds the shot's Nuke comp script from the project template. See [Docu_CreateNKScript.md](LGA_HieroTools/docs/Docu_CreateNKScript.md).
-- **Apply AMF**  
-  Builds the shot's color chain (CDL + CLF) on the selected clips, driven by the shot's `.amf`. Click again to remove it. Shortcut: `Shift+L`.
+- **New Video Track**
+  Creates a new video track above the selected track.
 - **Extend &Edit**  
   Extends the clip out point to the playhead by retiming the clip.  
   Shortcut: `Alt+E`.
@@ -181,20 +195,19 @@ Timeline editing, reconnect, colorspace, and validation utilities.
 - **Trim &Out**  
   Trims the clip Out point to the playhead.  
   Shortcut: `Alt+]`.
-- **Reconnect T > N**  
-  Reconnects clips by changing paths from `t:` to `n:`.
-- **Reconnect N > T**  
-  Reconnects clips by changing paths from `n:` to `t:`.
-- **Reconnect Win > Mac**  
-  Click: reconnects all timeline clips.  
-  Shift+Click: reconnects only the selected clips.
+- **Reconnect ▸**
+  Opens the compact reconnect menu: `T > N`, `N > T`, and `Win > Mac`.
+  The first two swap their corresponding path roots. `Win > Mac` reconnects
+  the whole timeline on click and only selected clips on Shift+Click, then
+  performs a self-replace to rebuild their media/bin relationships.
 - **Reconnect Media**  
   Opens a dialog for manual media reconnection.  
   Shortcut: `Alt+M`.
 - **Replace Clip**  
   Replaces the media of the selected clip with a file you choose, even if it has a different name or folder. Pick any frame of a sequence. Frame range and resolution are checked before replacing, and trims, color and bin are kept. See [Docu_Clips_Zombie.md](LGA_HieroTools/docs/Docu_Clips_Zombie.md).
 - **Self ReplaceClip**  
-  Replaces the selected clip with its own media, which rebuilds its bin entry. Fixes clips that stopped showing Properties or metadata.
+  Replaces the selected clip with its own media while preserving trims and
+  color, rebuilding a damaged relationship with its bin item.
 - **Fix Zombies**  
   Scans every clip in the timeline and repairs the broken ones (no Properties, no metadata, Reconnect Media does nothing) with a self replace. Offline ones are listed so you can fix them with Replace Clip.
 - **Clear Tag**  
@@ -221,8 +234,9 @@ Review and inspection tools for compare workflows, reveals, clip toggling, and o
 - **ON OFF _comp_**  
   Enables or disables the clip on the `_comp_` track.  
   Shortcut: `Shift+D`.
-- **ON OFF _roto_**  
-  Enables or disables the clip on the `_roto_` track.  
+- **ON OFF _roto_ / _cg_**
+  Enables or disables the clip on the second task track: `_roto_` in Studio,
+  `_cg_` in Client.
   Shortcut: `Ctrl+Shift+D`.
 - **Difference Mode**  
   Toggles Difference mode on the `_comp_` track.
@@ -230,17 +244,25 @@ Review and inspection tools for compare workflows, reveals, clip toggling, and o
   Creates a new `COMPARE` track with a previous version of the selected clip and puts the track into Difference mode.
 - **Compare OFF**  
   Removes the `COMPARE` track and disables Difference mode.
+- **Contact Sheet**
+  Copies the selected timeline clips and pastes them as Reads into the script
+  currently open in NukeX. It does not build a contact-sheet template.
 - **Reveal in Explorer**  
-  Reveals the selected clips' files in Windows Explorer.  
+  Opens the selected clips' folders in the default file manager; without a
+  selection it opens the first open project's folder.
   Shortcut: `Shift+E`.
 - **Reveal NKS Project**  
-  Reveals the active NKS project in Windows Explorer.
+  Opens the first open NKS project's folder in the default file manager.
 - **Reveal NK Script**  
-  Opens the folder that contains the Nuke script associated with the selected clip.  
+  Opens the selected shot's `Comp/1_projects` folder in the default file manager.
   Shortcut: `Shift+R`.
 - **OpenInNukeX**  
-  Opens the Nuke script associated with the selected clip in NukeX.  
+  Finds and opens a Comp script for the selected shot in NukeX.
   Shortcut: `Shift+X`.
+- **Next Annotation**
+  Jumps to the next annotation on the selected clip and wraps to the first.
+- **Previous Annotation**
+  Jumps to the previous annotation on the selected clip and wraps to the last.
 
 ### Projects Panel
 

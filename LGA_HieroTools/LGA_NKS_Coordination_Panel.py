@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_FlowProd_Panel v1.29 | Lega
+  LGA_NKS_Flow_FlowProd_Panel v1.30 | Lega
   Panel Flow S3 para operaciones de produccion con Flow y almacenamiento S3:
   - Revelar clips en Flow
   - Crear shots automáticamente
@@ -9,6 +9,9 @@ ________________________________________________________________________________
   - Cambiar prioridad de shots
   - Integración con FileManagerS3 (Open, Download, Upload)
 
+  v1.30: Se oculta el boton .Psync porque su flujo quedo fuera de uso. El
+         metodo y el script se conservan como referencia, pero ya no forman
+         parte de la interfaz ni del bloque visible de S3.
   v1.29: La etiqueta visible pasa de Coordination a Flow S3. Reveal in Flow
          queda sexto, cerrando el bloque verde de Flow antes del bloque violeta
          de S3. Shot Priority mezcla verde/rojo y Reveal mezcla verde/gris.
@@ -241,7 +244,9 @@ class FlowProdPanel(QtWidgets.QWidget):
         self.scroll_widget.setLayout(self.layout)
         self.scroll_area.setWidget(self.scroll_widget)
 
-        # Los seis primeros pertenecen a Flow; los seis restantes, a S3.
+        # Los seis primeros pertenecen a Flow; los cinco restantes, a S3.
+        # .Psync esta fuera de uso y se conserva solamente como codigo legado:
+        # LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_CreatePsync.py.
         # Se conserva el objectName historico del dock para no romper layouts.
         self.fixed_buttons = [
             (
@@ -286,13 +291,6 @@ class FlowProdPanel(QtWidgets.QWidget):
                 "gradient_flow_reveal",
                 "Ctrl+Shift+F",
                 "Click: Abrir task preferida en Flow (Comp; CG en Client si no existe Comp)\nShift+Click: Abrir Shot completo en Flow (Ctrl+Shift+F)",
-            ),
-            (
-                ".Psync",
-                self.create_pipesync_token_file,
-                "gradient_magenta_violet",
-                None,
-                "Generar archivo .psync para compartir",
             ),
             (
                 "FileManagerS3",

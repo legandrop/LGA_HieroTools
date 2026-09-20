@@ -1,6 +1,10 @@
 v3.95:
 
+        - Los inventarios del README se alinean con los paneles actuales y con su comportamiento real (`LGA_EditToolsPanel v3.11`, `LGA_ReviewPanel v2.84`): suma Create EXR v000, Contact Sheet, navegacion de anotaciones, el segundo toggle contextual y los gestos faltantes de ViewerTL; documenta los grupos y el submenu Reconnect. Tambien corrige tooltips desactualizados: Create EXR admite varios shots/tasks, Self Replace reconstruye el bin, las comparaciones usan `_compRev_`, Contact Sheet solo copia/pega en NukeX y Reveal usa el gestor de archivos predeterminado. [ Paneles - Actualizar inventarios y tooltips ]
+
         - Los cinco iconos del rail del Projects Panel conservan la misma caja de 20 px, pero Refresh ocupaba los 20 px completos y Reload Panel solo 16 px, por lo que se veian de tamanos distintos. Se normaliza el aire interno de ambos SVG: Refresh baja a 18 x 19 px visibles y Reload sube a 18 x 18 px, sin tocar Settings, Organize ni Clean ni cambiar el area clickeable (`LGA_NKS_UIManager v1.08`). [ Projects Panel - Igualar tamano optico de iconos ]
+
+        - Flow S3 oculta el boton `.Psync`, ya fuera de uso (`LGA_NKS_Flow_FlowProd_Panel v1.30`), sin borrar su metodo ni `LGA_NKS_PipeSync_CreatePsync.py`: quedan documentados como referencia del intercambio anterior. El bloque visible conserva seis acciones Flow y pasa a cinco acciones FileManagerS3/Wasabi, con tests que impiden reexponer el boton o perder el script legado. [ Flow S3 - Ocultar Psync fuera de uso ]
 
         - La documentacion de Flow Rev y Flow S3 deja de arrastrar contratos anteriores a la reorganizacion: Check Shots Exists queda descripto con Comp en Studio y Comp/CG en Client, Reveal documenta su fallback CG, Shot Info deja de figurar como Comp-only, el inventario de Flow S3 cubre sus 16 scripts Python y la fuente de usuarios vuelve a ser `pipesync_stats.db` mediante `LGA_NKS_Flow_Users_Config`, sin recrear el JSON eliminado. Tambien se corrigen rutas legacy en la guia de seleccion de clips y se evita publicar listas nominales de reviewers en la doc nueva. [ Paneles - Completar documentacion Flow Rev y Flow S3 ]
 

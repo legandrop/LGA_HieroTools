@@ -145,6 +145,9 @@ Hoy carga scripts desde:
 - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_DownloadAmf.py`
 - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_DownloadClip_Watcher.py`
 - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py`
+
+Fuera de uso, conservados como referencia pero sin boton visible:
+
 - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_OpenPath.py`
 - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_CreatePsync.py`
 
@@ -186,11 +189,17 @@ Hoy carga scripts desde:
 
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_ColorTransforms.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_FixColorspaces.py`
+- `LGA_NKS_Edit_Panel_py/LGA_NKS_ApplyAMF.py`
+- `LGA_NKS_Edit_Panel_py/LGA_import_shots.py` y sus modulos auxiliares `LGA_import_shots_*`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_CreateNewTrack.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_SetShotName.py`
+- `LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py`
+- `LGA_NKS_Edit_Panel_py/LGA_NKS_CreateNKScript.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_Trim_In.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_Trim_Out.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_Reconnect.py`
+- `LGA_NKS_Edit_Panel_py/LGA_NKS_ReplaceClip.py`
+- `LGA_NKS_Edit_Panel_py/LGA_NKS_FixZombieClips.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_mediaMissingFrames.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_MatchVerToEXR.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_CompareVerToEditref.py`
@@ -218,19 +227,22 @@ Hoy carga scripts desde:
 - `LGA_NKS_Review_Panel_py/LGA_NKS_EXRTrack_Difference.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_Compare_Versions.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_Compare_Versions_OFF.py`
+- `LGA_NKS_Review_Panel_py/LGA_Contact_Sheet_OpenInNukeX.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_RevealInExplorer.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_RevealNKS_Project.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_RevealNK_Script.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_OpenInNukeX.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableEXR.py`
-
-Tambien carga:
-
-- `LGA_NKS_Shared/LGA_NKS_SelfReplaceClip.py`
+- `LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableRoto.py`
+- `LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableCG.py`
+- `LGA_NKS_Review_Panel_py/LGA_NKS_NextPrev_Annotation.py`
 
 Tambien usa shareds:
 
 - `LGA_NKS_Shared/LGA_NKS_StyleUtils.py`
+- `LGA_NKS_Shared/LGA_NKS_TaskScope.py`
+- `LGA_NKS_Shared/LGA_NKS_MessageBox.py`
+- `LGA_NKS_Shared/LGA_UI_Style_HieroTools.py`
 
 ### 7. Projects Panel
 
@@ -362,6 +374,9 @@ Conclusion:
 - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_CreatePsync.py`
 - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py`
 
+Los dos scripts `PipeSync_*` siguen siendo privados de esta familia, pero estan
+fuera de uso y no tienen boton visible.
+
 ### ViewerTL Panel
 
 - `LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Viewer_Mask.py`
@@ -377,11 +392,18 @@ Conclusion:
 
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_ColorTransforms.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_FixColorspaces.py`
+- `LGA_NKS_Edit_Panel_py/LGA_NKS_ApplyAMF.py`
+- `LGA_NKS_Edit_Panel_py/LGA_NKS_ToggleAMF.py` (legado oculto)
+- `LGA_NKS_Edit_Panel_py/LGA_import_shots.py` y sus modulos auxiliares `LGA_import_shots_*`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_CreateNewTrack.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_SetShotName.py`
+- `LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py`
+- `LGA_NKS_Edit_Panel_py/LGA_NKS_CreateNKScript.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_Trim_In.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_Trim_Out.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_Reconnect.py`
+- `LGA_NKS_Edit_Panel_py/LGA_NKS_ReplaceClip.py`
+- `LGA_NKS_Edit_Panel_py/LGA_NKS_FixZombieClips.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_mediaMissingFrames.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_MatchVerToEXR.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_CompareVerToEditref.py`
@@ -393,11 +415,15 @@ Conclusion:
 - `LGA_NKS_Review_Panel_py/LGA_NKS_EXRTrack_Difference.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_Compare_Versions.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_Compare_Versions_OFF.py`
+- `LGA_NKS_Review_Panel_py/LGA_Contact_Sheet_OpenInNukeX.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_RevealInExplorer.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_RevealNKS_Project.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_RevealNK_Script.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_OpenInNukeX.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableEXR.py`
+- `LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableRoto.py`
+- `LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableCG.py`
+- `LGA_NKS_Review_Panel_py/LGA_NKS_NextPrev_Annotation.py`
 
 ### Projects Panel
 
@@ -772,10 +798,10 @@ Esta seccion agrega el nivel fino: para cada `.py` relevante se indica si lo lla
   - Lo usa `LGA_NKS_Coordination_Panel.py`.
 
 - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_OpenPath.py`
-  - Lo usa `LGA_NKS_Coordination_Panel.py`.
+  - Conservado como legado; no tiene boton visible.
 
 - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_CreatePsync.py`
-  - Lo usa `LGA_NKS_Coordination_Panel.py`.
+  - Conservado como legado; el boton `.Psync` esta oculto.
 
 ### ViewerTL Panel
 
@@ -826,10 +852,22 @@ Esta seccion agrega el nivel fino: para cada `.py` relevante se indica si lo lla
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_FixColorspaces.py`
   - Lo usa `LGA_NKS_Edit_Panel.py`.
 
+- `LGA_NKS_Edit_Panel_py/LGA_NKS_ApplyAMF.py`
+  - Lo usa `LGA_NKS_Edit_Panel.py`.
+
+- `LGA_NKS_Edit_Panel_py/LGA_import_shots.py`
+  - Lo usa `LGA_NKS_Edit_Panel.py`; coordina los modulos `LGA_import_shots_*`.
+
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_CreateNewTrack.py`
   - Lo usa `LGA_NKS_Edit_Panel.py`.
 
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_SetShotName.py`
+  - Lo usa `LGA_NKS_Edit_Panel.py`.
+
+- `LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py`
+  - Lo usa `LGA_NKS_Edit_Panel.py`.
+
+- `LGA_NKS_Edit_Panel_py/LGA_NKS_CreateNKScript.py`
   - Lo usa `LGA_NKS_Edit_Panel.py`.
 
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_Trim_In.py`
@@ -839,6 +877,12 @@ Esta seccion agrega el nivel fino: para cada `.py` relevante se indica si lo lla
   - Lo usa `LGA_NKS_Edit_Panel.py`.
 
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_Reconnect.py`
+  - Lo usa `LGA_NKS_Edit_Panel.py`.
+
+- `LGA_NKS_Edit_Panel_py/LGA_NKS_ReplaceClip.py`
+  - Lo usa `LGA_NKS_Edit_Panel.py`.
+
+- `LGA_NKS_Edit_Panel_py/LGA_NKS_FixZombieClips.py`
   - Lo usa `LGA_NKS_Edit_Panel.py`.
 
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_mediaMissingFrames.py`
@@ -867,6 +911,9 @@ Esta seccion agrega el nivel fino: para cada `.py` relevante se indica si lo lla
 - `LGA_NKS_Review_Panel_py/LGA_NKS_Compare_Versions_OFF.py`
   - Lo usa `LGA_NKS_Review_Panel.py`.
 
+- `LGA_NKS_Review_Panel_py/LGA_Contact_Sheet_OpenInNukeX.py`
+  - Lo usa `LGA_NKS_Review_Panel.py` para copiar/pegar la seleccion en NukeX; no construye una plantilla.
+
 - `LGA_NKS_Review_Panel_py/LGA_NKS_RevealInExplorer.py`
   - Lo usa `LGA_NKS_Review_Panel.py`.
 
@@ -881,6 +928,15 @@ Esta seccion agrega el nivel fino: para cada `.py` relevante se indica si lo lla
 
 - `LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableEXR.py`
   - Lo usa `LGA_NKS_Review_Panel.py`.
+
+- `LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableRoto.py`
+  - Lo usa el segundo toggle contextual del `Review Panel` en Studio.
+
+- `LGA_NKS_Review_Panel_py/LGA_NKS_Clip_DisableCG.py`
+  - Lo usa el segundo toggle contextual del `Review Panel` en Client.
+
+- `LGA_NKS_Review_Panel_py/LGA_NKS_NextPrev_Annotation.py`
+  - Lo usan los botones Next Annotation y Previous Annotation.
 
 ### Projects Panel
 

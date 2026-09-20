@@ -36,7 +36,7 @@ class CoordinationPanelLayoutTests(unittest.TestCase):
         names = [item.elts[0].value for item in buttons]
 
         self.assertEqual(
-            names[:6],
+            names,
             [
                 "Create Shot",
                 "Modify Shot",
@@ -44,6 +44,11 @@ class CoordinationPanelLayoutTests(unittest.TestCase):
                 "Thumbnail",
                 "Shot Priority",
                 "Reveal in Flow",
+                "FileManagerS3",
+                "Download Shot",
+                "Upload Shot",
+                "Download Clip",
+                "Download AMF",
             ],
         )
         self.assertEqual(
@@ -54,8 +59,20 @@ class CoordinationPanelLayoutTests(unittest.TestCase):
         self.assertEqual(buttons[5].elts[2].value, "gradient_flow_reveal")
         self.assertEqual(
             [item.elts[2].value for item in buttons[6:]],
-            ["gradient_magenta_violet"] * 6,
+            ["gradient_magenta_violet"] * 5,
         )
+        self.assertNotIn(".Psync", names)
+
+    def test_psync_tool_is_retained_but_not_exposed(self):
+        source = PANEL_PATH.read_text(encoding="utf-8")
+        legacy_script = (
+            PANEL_PATH.parent
+            / "LGA_NKS_Flow_S3_Panel_py"
+            / "LGA_NKS_PipeSync_CreatePsync.py"
+        )
+
+        self.assertIn("def create_pipesync_token_file", source)
+        self.assertTrue(legacy_script.is_file())
 
     def test_visible_titles_change_without_renaming_dock_ids(self):
         flow_tree = ast.parse(FLOW_PANEL_PATH.read_text(encoding="utf-8"))

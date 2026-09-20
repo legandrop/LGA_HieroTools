@@ -5,8 +5,8 @@
 
 ## Descripción
 Flow S3 separa en un solo dock dos etapas contiguas del trabajo de producción:
-las primeras seis acciones operan sobre Flow Production Tracking y las seis
-restantes preparan o transfieren datos mediante PipeSync/FileManagerS3. El
+las primeras seis acciones operan sobre Flow Production Tracking y las cinco
+restantes preparan o transfieren datos mediante FileManagerS3/Wasabi S3. El
 nombre visible describe esa frontera; el módulo, la clase y el `objectName`
 históricos no cambian para conservar compatibilidad con layouts guardados.
 
@@ -54,28 +54,29 @@ La carpeta privada del panel es `LGA_NKS_Flow_S3_Panel_py/`. El nombre viejo
 - **Comportamiento**: Click normal busca el shot y la task preferida correspondiente al clip seleccionado. Shift+Click o Ctrl+Shift+F abre directamente la URL del shot completo sin especificar una task.
 - **Presentación**: Gradiente verde/gris. Cierra el bloque Flow conservando el gris histórico de Reveal in Flow.
 
-### 7. .Psync
-- **Función**: Genera un archivo `<SHOT>.psync` en el escritorio para compartir y arrastrar dentro de PipeSync
-- **Script utilizado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_CreatePsync.py`
+### Herramienta retirada: .Psync
+- **Estado**: Fuera de uso y oculta en la interfaz. No forma parte del listado de botones visibles.
+- **Motivo de conservarla**: El script queda como referencia histórica por si fuera necesario inspeccionar el formato de intercambio anterior; no debe interpretarse como un flujo activo.
+- **Script conservado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_CreatePsync.py`
 
-### 8. FileManagerS3
+### 7. FileManagerS3
 - **Función**: Abre la carpeta del shot en FileManagerS3
 - **Script utilizado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_OpenPath.py`
 
-### 9. Download Shot
+### 8. Download Shot
 - **Función**: Descarga el shot desde Wasabi S3
 - **Script utilizado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_Download.py`
 
-### 10. Upload Shot
+### 9. Upload Shot
 - **Función**: Sube el shot a Wasabi S3
 - **Script utilizado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_Upload.py`
 
-### 11. Download Clip
+### 10. Download Clip
 - **Click normal**: Descarga la última versión disponible del clip
 - **Shift+Click**: Descarga exactamente la versión seleccionada
 - **Script utilizado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_DownloadClip.py`
 
-### 12. Download AMF
+### 11. Download AMF
 - **Función**: Descarga la carpeta `_input/Look_Files` del shot del clip seleccionado desde Wasabi S3 (los `.amf`/`.cdl`/`.clf` necesarios para ver bien los renders de comp)
 - **Script utilizado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_DownloadAmf.py`
 - **Comportamiento**: No chequea si la carpeta existe localmente; siempre dispara la descarga vía FileManagerS3 CLI sobre `<shot>/_input/Look_Files`
@@ -103,7 +104,7 @@ El sistema detecta automáticamente el formato utilizado sin necesidad de config
 La lectura visual es intencional:
 
 - **Flow:** cuatro botones verdes, Shot Priority verde/rojo y Reveal in Flow verde/gris.
-- **S3:** los seis botones siguientes comparten el gradiente violeta.
+- **S3:** los cinco botones siguientes comparten el gradiente violeta.
 - El color refuerza el grupo, pero cada acción conserva un label explícito; no se depende solo del color.
 
 ### Botones Disponibles
@@ -113,12 +114,11 @@ La lectura visual es intencional:
 4. **Thumbnail** - Reemplaza el thumbnail en Flow; con Shift guarda el snapshot local
 5. **Shot Priority** - Cambia la prioridad del shot (alta ↔ normal)
 6. **Reveal in Flow** - `Ctrl+Shift+F` - Abre la task preferida o el Shot en Flow
-7. **.Psync** - Genera un archivo `.psync` portable para compartir
-8. **FileManagerS3** - Abre carpeta del shot en FileManagerS3
-9. **Download Shot** - Descarga el shot desde Wasabi S3
-10. **Upload Shot** - Sube el shot a Wasabi S3
-11. **Download Clip** - Descarga la última versión; con Shift descarga el clip seleccionado
-12. **Download AMF** - Descarga la carpeta `_input/Look_Files` del shot del clip seleccionado
+7. **FileManagerS3** - Abre carpeta del shot en FileManagerS3
+8. **Download Shot** - Descarga el shot desde Wasabi S3
+9. **Upload Shot** - Sube el shot a Wasabi S3
+10. **Download Clip** - Descarga la última versión; con Shift descarga el clip seleccionado
+11. **Download AMF** - Descarga la carpeta `_input/Look_Files` del shot del clip seleccionado
 
 ## Requisitos
 

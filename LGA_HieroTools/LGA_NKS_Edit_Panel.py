@@ -1,10 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_EditToolsPanel v3.10 | Lega
+  LGA_EditToolsPanel v3.11 | Lega
 
   Tools panel for Hiero / Nuke Studio
 
+  v3.11: Se corrigen tooltips que habian quedado atras del runtime: Create
+         EXR v000 admite varios shots/tasks, Self ReplaceClip reconstruye la
+         relacion con el bin y las comparaciones usan el track _compRev_.
   v3.10: Organize Project y Clean Project se movieron al Projects Panel,
          porque actuan sobre el proyecto completo y no sobre la edicion.
   v3.09: Nuevo boton Fix Zombies, debajo de Self ReplaceClip, que llama a
@@ -350,7 +353,7 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
             # ("Toggle AMF", self.toggle_amf, "#434c41", None, "Habilita o deshabilita los soft effects de Apply AMF que esten bajo el playhead, en todos los tracks"),
             ("Import shot", self.import_shot, "#2a4d3a", None, "Importa shots al proyecto"),
             ("Set Shot Name", self.set_shot_name, "#2a4d3a", None, "Establece el nombre del shot basándose en la ruta del archivo"),
-            ("Create EXR v000", self.create_v000, "#2a4d3a", None, "Abre el validador para preparar una secuencia negra v000 del shot activo"),
+            ("Create EXR v000", self.create_v000, "#2a4d3a", None, "Abre el validador para preparar secuencias negras v000 para uno o varios shots/tasks"),
             ("Create NK v000", self.create_nk_script, "#2a4d3a", None, TOOLTIP_CREATE_NK_SCRIPT),
             ("New Video Track", self.create_new_track, "#3a2a4d", None, "Crea un nuevo track de video encima del track seleccionado"),
             ("Extend &Edit", self.extend_edit_to_playhead, "#453434", "Alt+E", "Alt+E\nExtiende el punto de salida del clip hasta el playhead (cambiando su velocidad)"),
@@ -365,7 +368,7 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
                 "Alt+M\nAbre un diálogo para reconectar media manualmente",
             ),
             ("Replace Clip", self.execute_ReplaceClip, "#4a4329", None, TOOLTIP_REPLACE_CLIP),
-            ("Self ReplaceClip", self.execute_SelfReplaceClip, "#4a4329", None, "Crea una nueva versión duplicada del clip seleccionado para que sea única (a veces arregla problemas)"),
+            ("Self ReplaceClip", self.execute_SelfReplaceClip, "#4a4329", None, "Reemplaza el clip seleccionado por su propio media para reconstruir su relacion con el bin, conservando trims y color"),
             ("Fix Zombies", self.execute_FixZombieClips, "#4a4329", None, TOOLTIP_FIX_ZOMBIES),
             (
                 "Clear Tag",
@@ -379,14 +382,14 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
                 self.match_rev_version,
                 "#3d2a47",
                 None,
-                "Click: Iguala la versión de los clips del track _rev_ (mov o mxf) con la versión de los EXR correspondientes\nShift+Click: Procesa todos los clips del timeline",
+                "Click: Iguala la version de los clips del track _compRev_ (mov o mxf) con la version de los EXR correspondientes\nShift+Click: Procesa todos los clips del timeline",
             ),
             (
                 "Compare Rev EdRef",
                 self.compare_rev_editref,
                 "#3d2a47",
                 None,
-                "Click: Compara los rangos de frames entre clips del track _rev_ (mov o mxf) y el track EditRef\nShift+Click: Compara todos los clips del timeline",
+                "Click: Compara los rangos de frames entre clips del track _compRev_ (mov o mxf) y el track EditRef\nShift+Click: Compara todos los clips del timeline",
             ),
             (
                 "Compare EXR aPlate",

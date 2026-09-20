@@ -1,10 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_ReviewPanel v2.83 | Lega
+  LGA_ReviewPanel v2.84 | Lega
 
   Tools panel for Hiero / Nuke Studio
 
+  v2.84: Tooltips alineados con el comportamiento real: Contact Sheet copia
+         la seleccion a NukeX sin construir una plantilla, y Reveal abre las
+         carpetas con el gestor de archivos predeterminado.
   v2.83: El segundo boton ON/OFF sigue el contexto: en studio es _roto_ y
          en client es _cg_ (ahi roto no existe y el boton no servia para
          nada). El atajo Ctrl+Shift+D es el mismo en los dos.
@@ -216,23 +219,23 @@ class ReviewPanel(QtWidgets.QWidget):
             ),
             ("Compare Versions", self.execute_CompareVersions, "#273c24", None, "Crea un nuevo track 'COMPARE' con una versión anterior del clip seleccionado y pone al track en modo difference"),
             ("Compare OFF", self.execute_CompareVersionsOff, "#273c24", None, "Remueve el track 'COMPARE' y desactiva el modo Difference"),
-            ("Contact Sheet", self.execute_ContactSheet, "#273c24", None, "Crear en NukeX un LGA_Contact_Sheet con los clips seleccionados"),
+            ("Contact Sheet", self.execute_ContactSheet, "#273c24", None, "Copia los clips seleccionados y los pega como Reads en el script abierto de NukeX; no crea una plantilla de contact sheet"),
             (
                 "Reveal in &Explorer",
                 self.execute_RevealInExplorer,
                 "#321a1a",
                 "Shift+E",
-                "Shift+E\nRevela los archivos de los clips seleccionados en el explorer",
+                "Shift+E\nAbre las carpetas de los clips seleccionados en el gestor de archivos predeterminado; sin seleccion abre la carpeta del primer proyecto abierto",
             ),
-            ("Reveal NKS Project", self.execute_RevealNKSProject, "#321a1a", None, "Revela el proyecto NKS activo en el explorer"),
+            ("Reveal NKS Project", self.execute_RevealNKSProject, "#321a1a", None, "Abre la carpeta del primer proyecto NKS abierto en el gestor de archivos predeterminado"),
             (
                 "Reveal NK Sc&ript",
                 self.execute_RevealNKScript,
                 "#321a1a",
                 "Shift+R",
-                "Shift+R\nAbre la carpeta que contiene al script de Nuke asociado al clip seleccionado",
+                "Shift+R\nAbre en el gestor de archivos predeterminado la carpeta Comp/1_projects del shot seleccionado",
             ),
-            ("OpenInNuke&X", self.execute_OpenInNukeX, "#493800", "Shift+X", "Shift+X\nAbre en Nuke el script asociado al clip seleccionado"),
+            ("OpenInNuke&X", self.execute_OpenInNukeX, "#493800", "Shift+X", "Shift+X\nBusca y abre en NukeX un script de Comp del shot seleccionado"),
             (
                 "Next Annotation",
                 self.execute_NextAnnotation,
