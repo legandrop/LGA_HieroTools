@@ -65,15 +65,13 @@ class PanelReviewReorganizationTests(unittest.TestCase):
         self.assertEqual(colors["New Video Track"], "#453434")
         self.assertEqual(colors["Extend &Edit"], "#453434")
 
-    def test_review_order_keeps_comparisons_annotations_and_reveals_together(self):
-        names = [_tuple_text(item, 0) for item in _button_tuples(REVIEW_PANEL)]
+    def test_review_order_keeps_frequent_actions_first_and_rare_comparisons_last(self):
+        buttons = _button_tuples(REVIEW_PANEL)
+        names = [_tuple_text(item, 0) for item in buttons]
         expected = [
             "Difference Mode",
             "Compare Versions",
             "Compare OFF",
-            "Match Rev Ver",
-            "Compare Rev EdRef",
-            "Compare EXR aPlate",
             "Contact Sheet",
             "Previous Annotation",
             "Next Annotation",
@@ -81,9 +79,20 @@ class PanelReviewReorganizationTests(unittest.TestCase):
             "Reveal NKS Project",
             "Reveal NK Sc&ript",
             "OpenInNuke&X",
+            "Match Rev Ver",
+            "Compare Rev EdRef",
+            "Compare EXR aPlate",
         ]
         start = names.index("Difference Mode")
         self.assertEqual(names[start : start + len(expected)], expected)
+
+        colors = {_tuple_text(item, 0): _tuple_text(item, 2) for item in buttons}
+        utility_color = colors["Contact Sheet"]
+        self.assertEqual(utility_color, "#263d43")
+        self.assertEqual(colors["Previous Annotation"], utility_color)
+        self.assertEqual(colors["Next Annotation"], utility_color)
+        self.assertNotEqual(utility_color, colors["Difference Mode"])
+        self.assertNotEqual(utility_color, colors["Compare Versions"])
 
     def test_comparison_scripts_live_only_with_review_panel(self):
         scripts = (

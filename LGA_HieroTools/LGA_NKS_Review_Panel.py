@@ -1,10 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_ReviewPanel v2.85 | Lega
+  LGA_ReviewPanel v2.86 | Lega
 
   Tools panel for Hiero / Nuke Studio
 
+  v2.86: Mueve Match Rev Ver, Compare Rev EdRef y Compare EXR aPlate al final
+         por ser acciones de uso ocasional, y separa Contact Sheet y la
+         navegacion de anotaciones con un color propio.
   v2.85: Recibe las tres comparaciones de versiones del Edit Panel, ordena
          anotaciones y acciones Reveal, corrige el proyecto activo y permite
          activar con teclado los botones con gesto Shift.
@@ -218,6 +221,37 @@ class ReviewPanel(QtWidgets.QWidget):
             ),
             ("Compare Versions", self.execute_CompareVersions, "#273c24", None, "Crea un nuevo track 'COMPARE' con una versión anterior del clip seleccionado y pone al track en modo difference"),
             ("Compare OFF", self.execute_CompareVersionsOff, "#273c24", None, "Remueve el track 'COMPARE' y desactiva el modo Difference"),
+            ("Contact Sheet", self.execute_ContactSheet, "#263d43", None, "Envia los clips seleccionados a NukeX, crea un LGA Contact Sheet con sus Reads y conecta el Viewer; el envio se hace en segundo plano"),
+            (
+                "Previous Annotation",
+                self.execute_PreviousAnnotation,
+                "#263d43",
+                None,
+                "Salta a la anotacion anterior del clip seleccionado. Al llegar al inicio vuelve a la ultima.",
+            ),
+            (
+                "Next Annotation",
+                self.execute_NextAnnotation,
+                "#263d43",
+                None,
+                "Salta a la proxima anotacion del clip seleccionado. Al llegar al final vuelve a la primera.",
+            ),
+            (
+                "Reveal in &Explorer",
+                self.execute_RevealInExplorer,
+                "#321a1a",
+                "Shift+E",
+                "Shift+E\nAbre las carpetas de los clips seleccionados en el gestor de archivos predeterminado; sin seleccion abre la carpeta del primer proyecto abierto",
+            ),
+            ("Reveal NKS Project", self.execute_RevealNKSProject, "#321a1a", None, "Abre la carpeta del proyecto que contiene la secuencia activa en el gestor de archivos predeterminado"),
+            (
+                "Reveal NK Sc&ript",
+                self.execute_RevealNKScript,
+                "#321a1a",
+                "Shift+R",
+                "Shift+R\nAbre en el gestor de archivos predeterminado la carpeta Comp/1_projects del shot seleccionado",
+            ),
+            ("OpenInNuke&X", self.execute_OpenInNukeX, "#493800", "Shift+X", "Shift+X\nBusca y abre en NukeX un script de Comp del shot seleccionado"),
             (
                 "Match Rev Ver",
                 self.match_rev_version,
@@ -239,37 +273,6 @@ class ReviewPanel(QtWidgets.QWidget):
                 None,
                 "Click: Compara los rangos de frames entre clips del track _comp_ (exr) y el track aPlate\nShift+Click: Compara todos los clips del timeline",
             ),
-            ("Contact Sheet", self.execute_ContactSheet, "#273c24", None, "Envia los clips seleccionados a NukeX, crea un LGA Contact Sheet con sus Reads y conecta el Viewer; el envio se hace en segundo plano"),
-            (
-                "Previous Annotation",
-                self.execute_PreviousAnnotation,
-                "#283526",
-                None,
-                "Salta a la anotacion anterior del clip seleccionado. Al llegar al inicio vuelve a la ultima.",
-            ),
-            (
-                "Next Annotation",
-                self.execute_NextAnnotation,
-                "#283526",
-                None,
-                "Salta a la proxima anotacion del clip seleccionado. Al llegar al final vuelve a la primera.",
-            ),
-            (
-                "Reveal in &Explorer",
-                self.execute_RevealInExplorer,
-                "#321a1a",
-                "Shift+E",
-                "Shift+E\nAbre las carpetas de los clips seleccionados en el gestor de archivos predeterminado; sin seleccion abre la carpeta del primer proyecto abierto",
-            ),
-            ("Reveal NKS Project", self.execute_RevealNKSProject, "#321a1a", None, "Abre la carpeta del proyecto que contiene la secuencia activa en el gestor de archivos predeterminado"),
-            (
-                "Reveal NK Sc&ript",
-                self.execute_RevealNKScript,
-                "#321a1a",
-                "Shift+R",
-                "Shift+R\nAbre en el gestor de archivos predeterminado la carpeta Comp/1_projects del shot seleccionado",
-            ),
-            ("OpenInNuke&X", self.execute_OpenInNukeX, "#493800", "Shift+X", "Shift+X\nBusca y abre en NukeX un script de Comp del shot seleccionado"),
         ]
 
         self.num_columns = 1  # Inicialmente una columna

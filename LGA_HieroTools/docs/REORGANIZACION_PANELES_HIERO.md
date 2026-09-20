@@ -408,6 +408,12 @@ fuera de uso y no tienen boton visible.
 
 ### Review Panel
 
+El orden visible prioriza el uso cotidiano: toggles, Difference/Compare,
+Contact Sheet y navegacion de anotaciones, Reveal/OpenInNukeX. Match Rev Ver,
+Compare Rev EdRef y Compare EXR aPlate quedan al final porque son controles de
+uso ocasional. Contact Sheet y los dos botones de anotaciones comparten un azul
+petroleo propio para no confundirse con el bloque verde de Difference/Compare.
+
 - `LGA_NKS_Review_Panel_py/LGA_NKS_ON_Clips_OFF_v00-Clips.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_EXRTrack_Difference.py`
 - `LGA_NKS_Review_Panel_py/LGA_NKS_Compare_Versions.py`

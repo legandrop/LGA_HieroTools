@@ -235,15 +235,6 @@ Review and inspection tools for compare workflows, reveals, clip toggling, and o
   Creates a new `COMPARE` track with a previous version of the selected clip and puts the track into Difference mode.
 - **Compare OFF**  
   Removes the `COMPARE` track and disables Difference mode.
-- **Match Rev Ver**
-  Click: matches the version of clips on the `_compRev_` track `(mov or mxf)` to the corresponding EXR version.
-  Shift+Click: processes the whole timeline.
-- **Compare Rev EdRef**
-  Click: compares frame ranges between clips on the `_compRev_` track `(mov or mxf)` and the `EditRef` track.
-  Shift+Click: compares the whole timeline.
-- **Compare EXR aPlate**
-  Click: compares frame ranges between clips on the `_comp_` track `(exr)` and the `aPlate` track.
-  Shift+Click: compares the whole timeline.
 - **Contact Sheet**
   Sends the selected timeline clips to the script currently open in NukeX,
   creates an `LGA_ContactSheet` from their Reads, and connects the Viewer. The
@@ -265,6 +256,15 @@ Review and inspection tools for compare workflows, reveals, clip toggling, and o
 - **OpenInNukeX**  
   Finds and opens a Comp script for the selected shot in NukeX.
   Shortcut: `Shift+X`.
+- **Match Rev Ver**
+  Click: matches the version of clips on the `_compRev_` track `(mov or mxf)` to the corresponding EXR version.
+  Shift+Click: processes the whole timeline.
+- **Compare Rev EdRef**
+  Click: compares frame ranges between clips on the `_compRev_` track `(mov or mxf)` and the `EditRef` track.
+  Shift+Click: compares the whole timeline.
+- **Compare EXR aPlate**
+  Click: compares frame ranges between clips on the `_comp_` track `(exr)` and the `aPlate` track.
+  Shift+Click: compares the whole timeline.
 
 ### Projects Panel
 
