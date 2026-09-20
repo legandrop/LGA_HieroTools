@@ -249,6 +249,7 @@ Tambien usa shareds:
 
 - `LGA_NKS_Shared/LGA_NKS_Timeline_PreCleanup.py`
 - `LGA_NKS_Shared/LGA_NKS_StyleUtils.py`
+- `LGA_NKS_Shared/LGA_UI_Style_HieroTools.py`
 - `LGA_NKS_Projects_Panel.ini`
 
 ### 8. ClipColor Panel

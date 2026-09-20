@@ -1,13 +1,14 @@
 # Organize Project y Clean Project
 
-Estas dos acciones viven en la barra lateral derecha del **Projects Panel** porque operan sobre el proyecto activo completo, no sobre una seleccion ni sobre una edicion puntual del timeline. Separarlas de Refresh, Settings y Reimport con un divisor permite conservar la barra compacta sin mezclar controles del panel con operaciones destructivas o estructurales del proyecto.
+Estas dos acciones viven en la barra lateral derecha del **Projects Panel** porque operan sobre el proyecto activo completo, no sobre una seleccion ni sobre una edicion puntual del timeline. Separarlas de Refresh, Reload Panel y Settings con un divisor permite conservar la barra compacta sin mezclar controles del panel con operaciones destructivas o estructurales del proyecto.
 
 ## Interfaz
 
 - **Organize Project** usa un icono de carpeta con flecha de entrada. Tooltip: `Organiza los clips en bins basándose en su ruta de archivo`.
 - **Clean Project** usa el icono de papelera compartido por el pack. Tooltip: `Elimina clips no usados del proyecto`.
 - Ambos son botones directos de icono, de 20 x 20 px, con la misma huella y estados normal/hover que la barra existente.
-- Los tooltips se declaran como constantes en `LGA_NKS_UIManager.py`; no quedan hardcodeados en cada widget, para facilitar la futura migracion bilingue.
+- El rail completo sigue el orden `Refresh`, `Reload Panel`, `Settings`, separador, `Organize Project`, `Clean Project`.
+- Los tooltips se declaran en el diccionario `TOOLTIPS` de `LGA_NKS_UIManager.py`; no quedan hardcodeados en cada widget, para facilitar la futura migracion bilingue. La apariencia sale de `Style.TOOLTIP`, no del tooltip nativo de Qt.
 
 `ProjectsPanel._run_project_tool()` carga el script desde `LGA_NKS_Projects_Panel_py`, exige un `main()` invocable, registra el resultado en el log del panel y muestra un aviso si el archivo no existe o la ejecucion falla.
 

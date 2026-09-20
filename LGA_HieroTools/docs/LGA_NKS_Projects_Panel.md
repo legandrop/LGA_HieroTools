@@ -5,7 +5,7 @@
 
 ## Concepto rapido
 - Panel `com.lega.ProjectsPanel` para Hiero/Nuke Studio que escanea `T:\` (`VFX-*/*_SUP`), detecta la ultima version `.hrox` de cada proyecto, y permite abrir proyectos y sus secuencias.
-- Barra lateral derecha: `Refresh` reescanea en background; `Settings` abre la configuracion; `Reimport` ejecuta el smart reload. Debajo de un separador, `Organize Project` y `Clean Project` actuan sobre el proyecto completo con botones de icono y tooltip.
+- Barra lateral derecha, en orden: `Refresh` reescanea en background; `Reload Panel` ejecuta el smart reload; `Settings` abre la configuracion. Debajo de un separador, `Organize Project` y `Clean Project` actuan sobre el proyecto completo con botones de icono y tooltip.
 - Click en proyecto lo abre; click en secuencia la abre en timeline (cross-project) preservando ajustes de viewer y dejando apagado el Frame Number del ViewerTL.
 - Boton `Update`: aparece al lado de proyectos abiertos cuando existe version mas nueva en disco y permite actualizar automaticamente.
 
@@ -37,7 +37,7 @@
 - Colores: cada item lleva `project_key`, el proyecto de trabajo tomado de la carpeta `VFX-<proyecto>` de la ruta, asi que todos los `.hrox` de una misma carpeta VFX comparten color aunque tengan nombres base distintos.
 - El color de cada proyecto sale de PipeSync, no de este repo. La fuente de verdad es Flow (`Project.sg_pipesync_project_settings_json`, campo `project_color`) y PipeSync lo cachea en la tabla `project_settings_cache` de `pipesync_stats.db`; los nombres salen de la tabla `projects`. Se lee la DB del contexto activo (`cache/` en studio, `cacheClient/` en client), read-only.
 - Si PipeSync no sincronizo ese contexto, o el proyecto no figura en la DB, el item usa el color por defecto `#cccccc`. No hay fallback local: los colores se editan en PipeSync > Project Settings para que sean iguales en todas las maquinas.
-- El color de Flow se elige como color IDENTITARIO del proyecto, no como color de texto, asi que los oscuros no se leen contra el panel. Antes de pintarlos, `ensure_min_luminance()` (en `LGA_NKS_Shared/LGA_NKS_StyleUtils.py`) les aplica un piso de luminancia de `MIN_TEXT_LUMINANCE = 150` (Rec. 709, escala 0-255). La funcion es compartida porque el Assignee Panel y el Flow Panel usan la inversa, `ensure_max_luminance()`: ahi el color va de FONDO con texto claro encima, asi que lo que molesta son los colores demasiado brillantes. El aclarado va en dos etapas para no lavar el color: primero sube el brillo al maximo manteniendo tono y saturacion, y solo si no alcanza mezcla hacia blanco lo justo y necesario. Los grises van directo al gris del piso, porque escalarles el brillo los mandaria a blanco puro. Esto es solo presentacion: no toca ni Flow ni la DB, y la lista read-only del panel de settings sigue mostrando el hex original.
+- El color de Flow se elige como color IDENTITARIO del proyecto, no como color de texto, asi que los oscuros no se leen contra el panel. Antes de pintarlos, `ensure_min_luminance()` (en `LGA_NKS_Shared/LGA_NKS_StyleUtils.py`) les aplica un piso de luminancia de `MIN_TEXT_LUMINANCE = 150` (Rec. 709, escala 0-255). La funcion es compartida porque el Assignee Panel y el Flow Rev Panel usan la inversa, `ensure_max_luminance()`: ahi el color va de FONDO con texto claro encima, asi que lo que molesta son los colores demasiado brillantes. El aclarado va en dos etapas para no lavar el color: primero sube el brillo al maximo manteniendo tono y saturacion, y solo si no alcanza mezcla hacia blanco lo justo y necesario. Los grises van directo al gris del piso, porque escalarles el brillo los mandaria a blanco puro. Esto es solo presentacion: no toca ni Flow ni la DB, y la lista read-only del panel de settings sigue mostrando el hex original.
 - Update automatico: proyectos abiertos muestran boton `Update` cuando existe version mas nueva en disco. La version mas alta se busca SOLO entre archivos del mismo proyecto: `encontrar_version_mas_alta()` filtra por `obtener_clave_proyecto_archivo()`, la misma clave con la que agrupa el escaneo. No usar globs por prefijo aca — `PROJB*` tambien matchea `PROJB_BREAKDOWN_*` y termina ofreciendo la version de otro proyecto.
 - Proyectos abiertos: solo se listan los que cuelgan del root del contexto activo (`T:\` en studio, `N:\` en client). Un proyecto abierto desde el otro contexto queda fuera de la lista, del chequeo de versiones nuevas y del match de "ya esta abierto". El filtro lo hace `is_path_under_root()` comparando por componentes, no por prefijo de texto.
 - Post-apertura de proyecto (`after_project_open()`): al abrir un proyecto con un click o con `Update`, el panel lo deja como si se hubiera llegado con el switch. `openProject()` sola deja el timeline que el `.hrox` tenia activo, sin top track ni LUT, y el timeline y el viewer del proyecto anterior quedan ocultos pero vivos.
@@ -63,7 +63,7 @@
 - En el cambio de secuencia se ejecuta un pre-cleanup sobre el timeline nuevo antes de los ajustes finales de UI: elimina tracks NukeVFX y extiende BurnIn hasta el ultimo clip visible.
 - Al final de cada cambio de secuencia, `disable_frame_number_on_active_sequence()` busca `Frame_Only` en el track `BurnIn` de la secuencia activa y lo deshabilita si estaba activo. No llama al toggle de posicionamiento, por lo que no crea el efecto ni lo enciende por accidente.
 - Contadores: etiqueta inferior muestra totales de proyectos encontrados y abiertos.
-- Reimport: ejecuta el smart reload externo para probar cambios sin reiniciar Hiero.
+- Reload Panel: ejecuta el smart reload externo para probar cambios sin reiniciar Hiero. Su tooltip dice `Recargar panel`; el mecanismo interno no forma parte del nombre visible.
 - Acciones de proyecto: los iconos debajo del separador llaman `ProjectsPanel.organize_project()` y `ProjectsPanel.clean_project()`. El loader comun `_run_project_tool()` valida ruta, loader y `main()` antes de ejecutar, y avisa si falla.
 
 ## Logging y debug
@@ -97,7 +97,7 @@
 
 ## UI del panel
 - Titulo centrado `Projects`.
-- Toolbar derecha: `Refresh`, `Settings`, `Reimport` (opcional); separador; `Organize Project` (carpeta con flecha) y `Clean Project` (papelera). Las dos acciones nuevas conservan los tooltips en castellano y reutilizan la huella visual del boton Refresh.
+- Toolbar derecha: `Refresh`, `Reload Panel` (opcional), `Settings`; separador; `Organize Project` (carpeta con flecha) y `Clean Project` (papelera). Refresh usa la silueta bold derivada del asset de PipeSync y Reload Panel la opcion aprobada de dos flechas llenas. Todos los tooltips salen del diccionario `TOOLTIPS` y el panel instala `Style.TOOLTIP`, la misma hoja compartida que usan las otras interfaces del pack.
 - Lista con scroll: proyectos cerrados/abiertos y boton `Update` cuando corresponde.
 - Etiqueta inferior con resumen de conteos.
 - Toggle de contexto (pill) en una fila propia arriba de la lista, solo visible para el login habilitado (`SWITCH_ALLOWED_LOGIN`). Orden visual: **`studio` a la izquierda, `client` a la derecha**. El activo se pinta violeta.

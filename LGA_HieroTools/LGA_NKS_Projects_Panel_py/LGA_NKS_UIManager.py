@@ -1,11 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_UIManager v1.07 | Lega
+  LGA_NKS_UIManager v1.08 | Lega
 
   Gestor de interfaz de usuario para el panel de proyectos LGA.
   Centraliza creación de widgets, conexión de señales, y manejo de eventos.
 
+  v1.08: Reordenado el rail a Refresh, Reload Panel y Settings; Refresh usa
+         la variante bold de PipeSync, Reload Panel una silueta llena de
+         reinicio y todos los tooltips usan la hoja compartida del pack.
   v1.07: Agregados Organize Project y Clean Project como botones de icono
          separados de Refresh, Settings y Reimport; conservan sus tooltips.
   v1.06: El toggle de contexto arranca alineado con los nombres de proyecto
@@ -35,6 +38,7 @@ import os
 import configparser
 from pathlib import Path
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color, Style
 
 # Importar variable global
 # Esta será importada desde el archivo principal cuando se importe este módulo
@@ -55,8 +59,13 @@ PROJECT_ITEM_TOP_MARGIN = 2
 TOGGLE_ROW_BOTTOM_MARGIN = 4
 TOGGLE_GAP_REDUCTION = 0.35
 
-TOOLTIP_ORGANIZE_PROJECT = "Organiza los clips en bins basándose en su ruta de archivo"
-TOOLTIP_CLEAN_PROJECT = "Elimina clips no usados del proyecto"
+TOOLTIPS = {
+    "refresh": "Re-escanear proyectos",
+    "reload": "Recargar panel",
+    "settings": "Configuración",
+    "organize": "Organiza los clips en bins basándose en su ruta de archivo",
+    "clean": "Elimina clips no usados del proyecto",
+}
 
 
 def initialize_ui_dependencies(reimport_flag, switch_login=None, get_context_fn=None, find_ini_fn=None, get_login_fn=None):
@@ -73,8 +82,24 @@ class UIManager:
     """Clase para manejar la configuración y gestión de la interfaz de usuario"""
 
     @staticmethod
+    def _new_toolbar_button(tooltip):
+        """Crea un boton compacto del rail sin rehacer el estilo con QSS."""
+        button = QtWidgets.QToolButton()
+        button.setAutoRaise(True)
+        button.setFixedSize(30, 30)
+        button.setIconSize(QtCore.QSize(20, 20))
+        button.setToolTip(tooltip)
+        button.setAccessibleName(tooltip)
+        return button
+
+    @staticmethod
     def setup_ui(panel):
         """Configurar la interfaz de usuario del panel"""
+        # QToolTip es un popup separado: si el panel no instala la hoja
+        # compartida, Qt cae al tooltip nativo del host. Se concatena para no
+        # pisar una hoja que el contenedor pudiera traer en el futuro.
+        panel.setStyleSheet("\n".join(filter(None, (panel.styleSheet(), Style.TOOLTIP))))
+
         # Layout principal horizontal para dividir en dos columnas
         panel.main_layout = QtWidgets.QHBoxLayout(panel)
 
@@ -122,7 +147,9 @@ class UIManager:
         info_row.setSpacing(6)
 
         panel.info_label = QtWidgets.QLabel("")
-        panel.info_label.setStyleSheet("color: #666; font-size: 11px; margin-top: 6px;")
+        panel.info_label.setStyleSheet(
+            "color: %s; margin-top: 6px;" % Color.TEXT_DIM
+        )
         panel.info_label.setAlignment(QtCore.Qt.AlignCenter)
         info_row.addWidget(panel.info_label, 1)
 
@@ -143,15 +170,7 @@ class UIManager:
         refresh_icon_path = os.path.join(os.path.dirname(__file__), "..", "LGA_NKS_Projects_Panel_py", "refresh.svg")
         refresh_hover_icon_path = os.path.join(os.path.dirname(__file__), "..", "LGA_NKS_Projects_Panel_py", "refresh_white.svg")
 
-        panel.refresh_button = QtWidgets.QPushButton()
-        panel.refresh_button.setToolTip("Re-escanear proyectos")
-        panel.refresh_button.setStyleSheet("""
-            QPushButton {
-                border: none;
-                padding: 5px;
-                background: transparent;
-            }
-        """)
+        panel.refresh_button = UIManager._new_toolbar_button(TOOLTIPS["refresh"])
 
         # Cargar iconos SVG si existen
         if os.path.exists(refresh_icon_path) and os.path.exists(refresh_hover_icon_path):
@@ -169,46 +188,13 @@ class UIManager:
         # Añadir botón refresh a la columna derecha
         right_column.addWidget(panel.refresh_button)
 
-        # Botón Settings
-        settings_icon_path = os.path.join(os.path.dirname(__file__), "..", "LGA_NKS_Projects_Panel_py", "settings.svg")
-        settings_hover_icon_path = os.path.join(os.path.dirname(__file__), "..", "LGA_NKS_Projects_Panel_py", "settings_white.svg")
-
-        panel.settings_button = QtWidgets.QPushButton()
-        panel.settings_button.setToolTip("Settings")
-        panel.settings_button.setStyleSheet("""
-            QPushButton {
-                border: none;
-                padding: 5px;
-                background: transparent;
-            }
-        """)
-
-        if os.path.exists(settings_icon_path) and os.path.exists(settings_hover_icon_path):
-            panel.settings_icon_normal = QtGui.QIcon(settings_icon_path)
-            panel.settings_icon_hover = QtGui.QIcon(settings_hover_icon_path)
-            panel.settings_button.setIcon(panel.settings_icon_normal)
-            panel.settings_button.setIconSize(QtCore.QSize(20, 20))
-            panel.settings_button.installEventFilter(panel)
-        else:
-            panel.settings_button.setText("⚙ Settings")
-
-        right_column.addWidget(panel.settings_button)
-
-        # Configurar iconos para el botón reimport
-        reimport_icon_path = os.path.join(os.path.dirname(__file__), "..", "LGA_NKS_Projects_Panel_py", "recargar_script.svg")
-        reimport_hover_icon_path = os.path.join(os.path.dirname(__file__), "..", "LGA_NKS_Projects_Panel_py", "recargar_script_white.svg")
+        # Configurar iconos para Reload Panel
+        reimport_icon_path = os.path.join(os.path.dirname(__file__), "..", "LGA_NKS_Projects_Panel_py", "reload_panel.svg")
+        reimport_hover_icon_path = os.path.join(os.path.dirname(__file__), "..", "LGA_NKS_Projects_Panel_py", "reload_panel_white.svg")
 
         # Botón de reimport con iconos SVG (solo si la flag está activada)
         if REIMPORT_BUTTON:
-            panel.reimport_button = QtWidgets.QPushButton()
-            panel.reimport_button.setToolTip("Recarga y redockea el panel con el script externo")
-            panel.reimport_button.setStyleSheet("""
-                QPushButton {
-                    border: none;
-                    padding: 5px;
-                    background: transparent;
-                }
-            """)
+            panel.reimport_button = UIManager._new_toolbar_button(TOOLTIPS["reload"])
 
             # Cargar iconos SVG si existen
             if os.path.exists(reimport_icon_path) and os.path.exists(reimport_hover_icon_path):
@@ -221,13 +207,31 @@ class UIManager:
                 panel.reimport_button.installEventFilter(panel)
             else:
                 # Fallback si no se encuentran los iconos
-                panel.reimport_button.setText("♻")
+                panel.reimport_button.setText("Reload")
 
             right_column.addWidget(panel.reimport_button)
 
+        # Settings va despues de Reload Panel para que el orden del rail siga
+        # el recorrido: actualizar datos, reconstruir panel, configurar.
+        settings_icon_path = os.path.join(os.path.dirname(__file__), "..", "LGA_NKS_Projects_Panel_py", "settings.svg")
+        settings_hover_icon_path = os.path.join(os.path.dirname(__file__), "..", "LGA_NKS_Projects_Panel_py", "settings_white.svg")
+
+        panel.settings_button = UIManager._new_toolbar_button(TOOLTIPS["settings"])
+
+        if os.path.exists(settings_icon_path) and os.path.exists(settings_hover_icon_path):
+            panel.settings_icon_normal = QtGui.QIcon(settings_icon_path)
+            panel.settings_icon_hover = QtGui.QIcon(settings_hover_icon_path)
+            panel.settings_button.setIcon(panel.settings_icon_normal)
+            panel.settings_button.setIconSize(QtCore.QSize(20, 20))
+            panel.settings_button.installEventFilter(panel)
+        else:
+            panel.settings_button.setText("Settings")
+
+        right_column.addWidget(panel.settings_button)
+
         # Las acciones que afectan al proyecto completo viven separadas de los
-        # controles propios del panel. Reutilizan exactamente la hoja del
-        # boton Refresh para conservar la misma huella visual.
+        # controles propios del panel. Reutilizan el mismo constructor de
+        # QToolButton que Refresh para conservar la misma huella visual.
         project_actions_separator = QtWidgets.QFrame()
         project_actions_separator.setFrameShape(QtWidgets.QFrame.HLine)
         project_actions_separator.setFrameShadow(QtWidgets.QFrame.Sunken)
@@ -246,7 +250,7 @@ class UIManager:
             panel,
             right_column,
             "organize",
-            TOOLTIP_ORGANIZE_PROJECT,
+            TOOLTIPS["organize"],
             os.path.join(icons_dir, "organize_project.svg"),
             os.path.join(icons_dir, "organize_project_white.svg"),
             "Organize",
@@ -255,7 +259,7 @@ class UIManager:
             panel,
             right_column,
             "clean",
-            TOOLTIP_CLEAN_PROJECT,
+            TOOLTIPS["clean"],
             os.path.join(shared_icons_dir, "trash.svg"),
             os.path.join(shared_icons_dir, "trash_hover.svg"),
             "Clean",
@@ -269,9 +273,7 @@ class UIManager:
         panel, layout, name, tooltip, normal_icon_path, hover_icon_path, fallback_text
     ):
         """Agrega una accion de proyecto con el mismo estilo del rail existente."""
-        button = QtWidgets.QPushButton()
-        button.setToolTip(tooltip)
-        button.setStyleSheet(panel.refresh_button.styleSheet())
+        button = UIManager._new_toolbar_button(tooltip)
 
         if os.path.exists(normal_icon_path) and os.path.exists(hover_icon_path):
             normal_icon = QtGui.QIcon(normal_icon_path)
@@ -340,11 +342,11 @@ class UIManager:
         container.setObjectName("ctxToggle")
         container.setStyleSheet("""
             QWidget#ctxToggle {
-                background: #1c1c1c;
+                background: %s;
                 border: none;
                 border-radius: 13px;
             }
-        """)
+        """ % Color.WINDOW)
         h = QtWidgets.QHBoxLayout(container)
         h.setContentsMargins(2, 2, 2, 2)
         h.setSpacing(2)
@@ -450,21 +452,11 @@ class UIManager:
                     # Cambiar a color hover usando las propiedades guardadas
                     hover_color = obj.property("hover_color")
                     if hover_color:
-                        if obj.property("is_project_label"):
-                            # Project label: mantener font-size
-                            obj.setStyleSheet(f"font-size: 13px; color: {hover_color};")
-                        else:
-                            # Sequence label: solo color
-                            obj.setStyleSheet(f"color: {hover_color};")
+                        obj.setStyleSheet(f"color: {hover_color};")
                 elif event.type() == QtCore.QEvent.Leave:
                     # Volver a color base usando las propiedades guardadas
                     base_color = obj.property("base_color")
                     if base_color:
-                        if obj.property("is_project_label"):
-                            # Project label: mantener font-size
-                            obj.setStyleSheet(f"font-size: 13px; color: {base_color};")
-                        else:
-                            # Sequence label: solo color
-                            obj.setStyleSheet(f"color: {base_color};")
+                        obj.setStyleSheet(f"color: {base_color};")
 
         return super(panel.__class__, panel).eventFilter(obj, event)
