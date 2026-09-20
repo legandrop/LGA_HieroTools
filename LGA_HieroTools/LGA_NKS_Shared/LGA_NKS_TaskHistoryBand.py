@@ -11,7 +11,7 @@ ____________________________________________________________________
   header, indentada bajo los chips).
 
   Usado por:
-  - LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Shot_info.py
+  - LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py
 
   v1.01: Los chips y los nodos llevan la fuente del pack (apply_ui_font);
          sin eso salian con la del host. El elidido del nombre se mide

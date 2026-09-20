@@ -36,8 +36,8 @@ Esta guía documenta cómo implementar un sistema de logging robusto que escribe
   - `LGA_NKS_Assignee_Panel.py`
   - `LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py` (log: `debugPy_CreateV000.log`)
   - `LGA_NKS_Edit_Panel_py/LGA_import_shots.py` (log: `debugPy_ImportShots.log`)
-  - `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py`
-  - `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ModifyShot.py`
+  - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py`
+  - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ModifyShot.py`
   - `LGA_NKS_Projects_Panel_py/LGA_NKS_OrganizeProject.py`
   - `LGA_NKS_Projects_Panel_py/LGA_NKS_CleanProject.py`
   - `+Building_Blocks/LGA_NKS_Flow_Pull_DoScan.py`
@@ -58,9 +58,9 @@ Esta guía documenta cómo implementar un sistema de logging robusto que escribe
 - **Limpieza**: si el log es del día actual, agrega; si es de otro día, lo borra
 - **Scripts que lo usan**:
   - `LGA_NKS_Flow/LGA_NKS_Flow_Push.py` (log: `debugPy_FlowPush.log`)
-  - `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_OpenPath.py`
-  - `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Download.py`
-  - `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Upload.py`
+  - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_OpenPath.py`
+  - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_Download.py`
+  - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_Upload.py`
   - `LGA_NKS_Edit/LGA_NKS_Reconnect.py`
   - `LGA_NKS_Edit/LGA_NKS_SelfReplaceClip.py`
 

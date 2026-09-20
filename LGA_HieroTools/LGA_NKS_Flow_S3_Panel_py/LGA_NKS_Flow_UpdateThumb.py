@@ -5,7 +5,7 @@ ____________________________________________________________________
 
   Reemplaza el thumbnail de un shot existente en Flow (ShotGrid) con un snapshot
   del viewer actual de Hiero. Pensado para el Shift+Click del boton "Thumbnail"
-  del Coordination Panel.
+  del Flow S3 Panel.
 
   v1.04: La ventana lleva la fuente del pack (apply_ui_font); sin
          eso salia con la fuente del host.

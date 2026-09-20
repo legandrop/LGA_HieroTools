@@ -55,7 +55,7 @@ Los colores del catalogo se eligen para identificar el estado, no pensando en
 que arriba va texto. Cada lugar donde se pintan resuelve la legibilidad a su
 manera, y son criterios distintos a proposito:
 
-- **Botones del Flow Panel y del Assignee Panel:** el texto es fijo (`#d8d8d8`),
+- **Botones del Flow Rev Panel y del Assignee Panel:** el texto es fijo (`#d8d8d8`),
   asi que lo que se ajusta es el FONDO. `ensure_max_luminance()` (en
   `LGA_NKS_Shared/LGA_NKS_StyleUtils.py`) le pone un techo de luminancia de 135
   bajando el brillo pero manteniendo el tono. Se topea **solo el fondo del
@@ -114,7 +114,7 @@ blanco. Se usa `#8CBF3F`, el mismo ajuste que ya hizo PipeSync.
 
 **Default en Create Shot:** `ready` (Ready to start), shot y task.
 
-## Botones de push del Flow Panel
+## Botones de push del Flow Rev Panel
 
 Salen de `PUSH_BUTTONS` y se filtran con `get_push_buttons(mode)`. El **label es
 la clave** con la que viaja el push hasta el conector, asi que el label y el
@@ -130,7 +130,7 @@ el nombre completo del estado esta en el catalogo.
 
 ## Que se filtra por contexto y que no
 
-- **Se filtra** todo lo que ESCRIBE estado: botones del Flow Panel y dropdowns
+- **Se filtra** todo lo que ESCRIBE estado: botones del Flow Rev Panel y dropdowns
   de Create Shot. Ofrecer un codigo que el sitio no tiene es un error garantizado.
 - **NO se filtra** el catalogo que solo MUESTRA o pinta (`TASK_STATUS_CATALOG`).
   La DB local puede tener codigos sincronizados del otro sitio; filtrarlos los
@@ -164,7 +164,7 @@ En contexto client no hay assignees: ver
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_Flow_Status_Config.py` — **fuente unica**.
   - `TASK_STATUS_CATALOG` — code -> (nombre, color de clip, tag XYplorer). Superset, sin filtrar.
   - `TASK_STATUS_CODES_BY_MODE`, `SHOT_STATUS_CODES_BY_MODE` — espejo del `sg_status_list` de cada sitio.
-  - `PUSH_BUTTONS`, `get_push_buttons(mode)` — botones del Flow Panel por contexto.
+  - `PUSH_BUTTONS`, `get_push_buttons(mode)` — botones del Flow Rev Panel por contexto.
   - `get_status_translation(mode=None)` — label -> codigo, para Push y conector.
   - `get_task_status_dict()`, `get_status_info()`, `get_status_color()` — catalogo para mostrar y pintar.
   - `filter_states_for_mode(states, mode, entity)` — filtra listas `(label, code, color)`.
@@ -172,13 +172,13 @@ En contexto client no hay assignees: ver
 - `LGA_HieroTools/LGA_NKS_Flow_Panel.py`
   - `ColorChangeWidget.build_buttons()` — botones fijos + los del contexto.
   - `ColorChangeWidget.on_context_changed()` — rearmado al cambiar de contexto.
-- `LGA_HieroTools/LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py`
+- `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py`
   - `ShotGridManager.__init__` — `task_status_dict` desde el catalogo compartido.
   - `_status_display_from_code()` — nombre visible; `_LEGACY_STATUS_DISPLAY` para codigos de sistemas viejos.
   - `enable_or_disable_clips()` — usa `get_personal_review_colors()`.
-- `LGA_HieroTools/LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py` y
+- `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py` y
   `LGA_NKS_Flow_Push_connector.py` — `status_translation` desde el modulo compartido.
-- `LGA_HieroTools/LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py`
+- `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py`
   - `ALL_SHOT_STATES`, `ALL_TASK_STATES` — paleta de dropdown (distinta de la de clips).
   - `get_shot_states()`, `get_task_states()` — filtradas por contexto activo.
   - `ColoredStatusComboBox` — combo con items coloreados.

@@ -2,7 +2,7 @@
 
 Muestra la informacion del shot y las versiones de la task seleccionada en el playhead, leyendo de `pipesync.db`.
 
-Archivo: [LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Shot_info.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Shot_info.py)
+Archivo: [LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py)
 
 ## Flujo general
 
@@ -17,7 +17,7 @@ Tablas usadas en `pipesync.db`: `projects`, `shots`, `tasks`, `task_assignments`
 
 Historial de artistas (Task history / Assigned then): `task_assignment_history` (+ assignees actuales en `task_assignments`/`users`) de `pipesync_stats.db`, via `LGA_NKS_Shared/LGA_NKS_TaskAssignmentHistory.py`. La clave es `tasks.task_id` de la main DB (id de Flow), no el `id` local.
 
-Detalle de la main DB en [Documentacion_DB PipeSync.md](../LGA_NKS_Flow_Panel_py/Documentacion_DB%20PipeSync.md).
+Detalle de la main DB en [Documentacion_DB PipeSync.md](../LGA_NKS_Flow_Rev_Panel_py/Documentacion_DB%20PipeSync.md).
 
 Mapeo:
 

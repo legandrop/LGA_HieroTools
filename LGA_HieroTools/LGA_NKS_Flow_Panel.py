@@ -1,14 +1,17 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Panel v2.59 | Lega
+  LGA_NKS_Flow_Panel v2.60 | Lega
 
-  Panel con herramientas que interactuan con las tasks de Flow Production Tracking
-  que fueron descargadas previamente con la app LGA_NKS_Flow_Downloader
+  Panel Flow Rev con herramientas de review que interactuan con las tasks de
+  Flow Production Tracking descargadas previamente con LGA_NKS_Flow_Downloader.
   Actualizado para ser compatible con ambos sistemas de nomenclatura:
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v2.60: La etiqueta visible pasa de Flow a Flow Rev y la carpeta privada pasa
+         a LGA_NKS_Flow_Rev_Panel_py. Se conservan modulo, clase y objectName
+         para mantener compatibles los docks y layouts guardados.
   v2.59: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
          estilo del pack.
 
@@ -229,7 +232,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
         super(ColorChangeWidget, self).__init__()
 
         self.setObjectName("com.lega.FPTPanel")
-        self.setWindowTitle("Flow")
+        self.setWindowTitle("Flow Rev")
         debug_print("=== FlowPanel init ===")
 
         self.root_layout = QtWidgets.QVBoxLayout()
@@ -495,7 +498,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
             project.beginUndo("Run External Script")
             try:
                 script_path = os.path.join(
-                    os.path.dirname(__file__), "LGA_NKS_Flow_Panel_py", "LGA_NKS_Flow_Pull.py"
+                    os.path.dirname(__file__), "LGA_NKS_Flow_Rev_Panel_py", "LGA_NKS_Flow_Pull.py"
                 )
                 if os.path.exists(script_path):
                     try:
@@ -530,7 +533,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
             try:
                 # Importar y ejecutar el script de la subcarpeta
                 script_path = os.path.join(
-                    os.path.dirname(__file__), "LGA_NKS_Flow_Panel_py", "LGA_NKS_Flow_Pull.py"
+                    os.path.dirname(__file__), "LGA_NKS_Flow_Rev_Panel_py", "LGA_NKS_Flow_Pull.py"
                 )
                 if os.path.exists(script_path):
                     try:
@@ -559,7 +562,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
             try:
                 script_path = os.path.join(
                     os.path.dirname(__file__),
-                    "LGA_NKS_Flow_Panel_py",
+                    "LGA_NKS_Flow_Rev_Panel_py",
                     "LGA_NKS_Flow_Shot_info.py",
                 )
                 if os.path.exists(script_path):
@@ -634,7 +637,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
     def run_review_pic_script(self):
         try:
             script_path = os.path.join(
-                    os.path.dirname(__file__), "LGA_NKS_Flow_Panel_py", "LGA_NKS_ReviewPic.py"
+                    os.path.dirname(__file__), "LGA_NKS_Flow_Rev_Panel_py", "LGA_NKS_ReviewPic.py"
             )
             if os.path.exists(script_path):
                 import importlib.util
@@ -731,7 +734,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
         try:
             # Importar y ejecutar el script de push
             script_path = os.path.join(
-                os.path.dirname(__file__), "LGA_NKS_Flow_Panel_py", "LGA_NKS_Flow_Push.py"
+                os.path.dirname(__file__), "LGA_NKS_Flow_Rev_Panel_py", "LGA_NKS_Flow_Push.py"
             )
             if os.path.exists(script_path):
                 try:
@@ -779,7 +782,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
 
             # Importar el módulo Push para usar el método centralizado
             script_path = os.path.join(
-                os.path.dirname(__file__), "LGA_NKS_Flow_Panel_py", "LGA_NKS_Flow_Push.py"
+                os.path.dirname(__file__), "LGA_NKS_Flow_Rev_Panel_py", "LGA_NKS_Flow_Push.py"
             )
             if not os.path.exists(script_path):
                 debug_print(f"Script no encontrado en la ruta: {script_path}")

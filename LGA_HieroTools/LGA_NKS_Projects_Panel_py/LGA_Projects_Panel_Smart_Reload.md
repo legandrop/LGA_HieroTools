@@ -101,7 +101,7 @@ result = wm.showWindow(panel)  # ← Método correcto
 Estado Inicial (movido manualmente):
 ├── QStackedWidget Count: 3
 │   ├── [0] ClipColor
-│   ├── [1] Coordination
+│   ├── [1] Flow S3
 │   └── [2] Projects ← ¡Fuera de lugar!
 
 Después de wm.showWindow():

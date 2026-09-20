@@ -208,7 +208,7 @@ def _check_imports_coordination_panel():
     import ast
 
     panel_dir = os.path.join(
-        os.path.dirname(SHARED_DIR), "LGA_NKS_Coordination_Panel_py"
+        os.path.dirname(SHARED_DIR), "LGA_NKS_Flow_S3_Panel_py"
     )
     archivos = [
         "LGA_NKS_FileManagerS3_Upload.py",

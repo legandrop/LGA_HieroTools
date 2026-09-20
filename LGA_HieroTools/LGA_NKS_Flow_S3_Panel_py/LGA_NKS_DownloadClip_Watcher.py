@@ -13,7 +13,7 @@ ____________________________________________________________________
   Watcher de finalizacion de descargas del boton "Download Clip"
   (LGA_NKS_FileManagerS3_DownloadClip.py).
 
-  Lo arranca el Coordination Panel (LGA_NKS_Coordination_Panel.py) al
+  Lo arranca el Flow S3 Panel (LGA_NKS_Coordination_Panel.py) al
   cargarse en el arranque de Hiero. Cada pocos segundos revisa la carpeta
   de marcadores (logs/download_clip_done/) donde FileManagerS3 escribe un
   .json al terminar cada descarga CLI lanzada con --notify-completion.

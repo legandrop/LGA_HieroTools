@@ -530,7 +530,7 @@ def run_if_color_managed(seq=None):
     ("El undo lo maneja el propio script, para no anidar bloques",
     LGA_NKS_Edit_Panel.py). Los dos llamadores ya vienen dentro de uno: el boton por
     `fix_colorspaces()` del Edit Panel, y el pull por `run_FPT_pull()` /
-    `run_FPT_pull_with_deselect()` del Flow Panel, que envuelven `FPT_Hiero()` en
+    `run_FPT_pull_with_deselect()` del Flow Rev Panel, que envuelven `FPT_Hiero()` en
     `project.beginUndo("Run External Script")`. Una version anterior de esto abria su
     propio `beginUndo` para el pull, creyendo que el pull no tenia: lo tiene, pero lo
     abre el panel, no el archivo del pull. Anidarlos fusiona los macros y el Ctrl+Z

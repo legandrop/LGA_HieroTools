@@ -9,7 +9,7 @@ ____________________________________________________________________
 
   Antes esto vivia duplicado en cuatro lugares (`status_translation` en
   Flow_Push y en Flow_Push_connector, `task_status_dict` en Flow_Push y en
-  Flow_Pull) mas la lista de botones del Flow Panel. Las copias se
+  Flow_Pull) mas la lista de botones del Flow Rev Panel. Las copias se
   desincronizaron: colores distintos para el mismo estado y botones que
   empujaban codigos que el sitio de Flow del contexto activo no acepta.
 
@@ -67,7 +67,7 @@ TASK_STATUS_CATALOG = {
     "wts": ("Waiting to start", "#000000", None),
     "ready": ("Ready to start", "#8a8a8a", None),
     "progre": ("In progress", "#7d4cff", None),
-    # Estado de SHOT, no de task. Nunca lo empuja el Flow Panel, pero aparece en
+    # Estado de SHOT, no de task. Nunca lo empuja el Flow Rev Panel, pero aparece en
     # la DB y sin entrada se mostraba el codigo crudo.
     "plylst": ("In playlist", "#99c153", None),
     "corr": ("Corrections", "#2e77d4", "Corrections"),
@@ -102,7 +102,7 @@ TASK_STATUS_CATALOG = {
 
 
 # ---------------------------------------------------------------------------
-# Botones de push del Flow Panel
+# Botones de push del Flow Rev Panel
 # ---------------------------------------------------------------------------
 # (label, code, color de clip, contextos)
 #

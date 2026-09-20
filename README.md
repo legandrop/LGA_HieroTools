@@ -35,42 +35,32 @@ Current persisted settings:
 ## Reusability
 
 - **Broadly reusable:** several tools in `ViewerTL`, parts of `Edit`, parts of `Review`, and `ClipColor`
-- **Reusable with adaptation:** `Projects`, some `Flow` utilities, and some comparison / reconnect tools
-- **Strongly pipeline-specific:** most of `Flow`, `Assignee`, and `Coordination`, plus anything tied to Flow Production Tracking, Wasabi, PipeSync, or studio naming rules
+- **Reusable with adaptation:** `Projects`, some `Flow Rev` utilities, and some comparison / reconnect tools
+- **Strongly pipeline-specific:** most of `Flow Rev`, `Flow S3`, and `Assignee`, plus anything tied to Flow Production Tracking, Wasabi, PipeSync, or studio naming rules
 
 ## Panels Overview
 
-### Flow Panel
+### Flow Rev Panel
 
-Tools for review color coding, Flow pulls, shot info checks, and review snapshots.
+Tools for the Flow review cycle: pull current data, inspect shots, create review
+snapshots, and push context-valid review/delivery states. The runtime module and
+dock id remain `LGA_NKS_Flow_Panel` / `com.lega.FPTPanel`; only the visible title
+and private folder changed.
+
+Internal reference: [Flow Rev Panel](LGA_HieroTools/docs/LGA_NKS_Flow_Rev_Panel_README.md).
 
 - **Flow Pull**  
   Click: pull all shots from the timeline.  
   Shift+Click: pull only the selected shot.
 - **Shot Info**  
-  Shows shot information and version comments for the comp task.
+  Shows shot information and version comments for the task resolved from the
+  active context (Comp, Roto, Cleanup, or another enabled task scope).
 - **Review Pic**  
   Creates a viewer snapshot and saves it with its frame number so it can be sent together with review notes.
-- **Corrections**  
-  Sets the clip color to the Corrections status color.
-- **Rev Sebas**  
-  Sets the clip color to the review status used for Sebas.
-- **Rev Juano**  
-  Sets the clip color to the review status used for Juano.
-- **Rev Javi**  
-  Sets the clip color to the review status used for Javi.
-- **Rev Lega**  
-  Sets the clip color to the review status used for Lega.
-- **Rev Hold**  
-  Sets the clip color to the hold status color.
-- **Rev Dir**  
-  Sets the clip color to the director review status color.
-- **Approved**  
-  Sets the clip color to the approved status color.
-- **Delivery Ok**  
-  Sets the clip color to the delivery-approved status color.
-- **Rev Dir Den**  
-  Sets the clip color to the denied-by-director status color.
+- **Review / delivery state buttons**
+
+  Generated from Flow's context policy rather than a duplicated list. Studio
+  and Client expose only their valid review/delivery states, in Flow order.
 
 ### Assignee Panel
 
@@ -87,9 +77,14 @@ Tools for assigning artists to Flow tasks and managing related Wasabi access pol
   Shift+Click: runs the same canonical PipeSync grant engine for that user. In Client, the Wasabi step is always skipped.
   Ctrl+Shift+Click: opens a window to manage the shots currently assigned to that user's Wasabi policy.
 
-### Coordination Panel
+### Flow S3 Panel
 
-Production-facing tools for Flow, FileManagerS3, PipeSync, and shot creation / update workflows.
+Production-facing tools split into two visual blocks. The first six actions
+belong to Flow; the final six belong to PipeSync/FileManagerS3. The runtime
+module and dock id remain `LGA_NKS_Coordination_Panel` /
+`com.lega.FlowProdPanel` for layout compatibility.
+
+Internal reference: [Flow S3 Panel](LGA_HieroTools/docs/LGA_NKS_Flow_S3_Panel_README.md).
 
 - **Create Shot**  
   Creates a shot in Flow based on the selected clip. In Client, external vendor
@@ -101,7 +96,8 @@ Production-facing tools for Flow, FileManagerS3, PipeSync, and shot creation / u
 - **Modify Shot**  
   Modifies an existing shot in Flow. One clip at a time.
 - **Check Shots Exist**  
-  Checks whether the shots from the comp track exist in Flow.
+  Checks whether shots from the context task tracks exist in Flow: Comp in
+  Studio, and Comp plus every CG track in Client.
 - **Thumbnail**
 
   Click: replaces the shot's thumbnail in Flow with a viewer snapshot, after a
@@ -111,7 +107,11 @@ Production-facing tools for Flow, FileManagerS3, PipeSync, and shot creation / u
   Shift+Click: saves the same zoom-to-fill snapshot, cropped to the sequence
   aspect, to `N:/<project>/Thumbs`.
 - **Shot Priority**  
-  Toggles shot priority between high and normal.
+  Toggles shot priority between high and normal. Its green/red gradient keeps
+  it in the Flow block while signalling priority.
+- **Reveal in Flow** — Click opens the preferred context task in Flow (Comp;
+  CG fallback in Client); Shift+Click opens the full shot. Shortcut:
+  `Ctrl+Shift+F`. Its green/gray gradient closes the Flow block.
 - **.Psync**  
   Generates a `.psync` file for sharing.
 - **FileManagerS3**  
@@ -120,10 +120,9 @@ Production-facing tools for Flow, FileManagerS3, PipeSync, and shot creation / u
   Downloads the shot from Wasabi S3.
 - **Upload Shot**  
   Uploads the shot to Wasabi S3.
-- **Reveal in Flow**  
-  Click: open the comp task in Flow.  
-  Shift+Click: open the full shot in Flow.  
-  Shortcut: `Ctrl+Shift+F`.
+- **Download Clip** — Click downloads the latest available version;
+  Shift+Click: downloads the selected version.
+- **Download AMF** — Downloads the selected shot's `_input/Look_Files` folder.
 
 ### ViewerTL Panel
 

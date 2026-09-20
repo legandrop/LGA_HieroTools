@@ -15,12 +15,12 @@ ____________________________________________________________________
   - LGA_NKS_Assignee_Panel_py/LGA_NKS_Wasabi_PolicyUnassign_CompletedShots.py
   - LGA_NKS_ClipColor_Panel.py
   - LGA_NKS_Coordination_Panel.py
-  - LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py
-  - LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py
-  - LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ModifyShot.py
-  - LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShotPriority.py
-  - LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShowInFlow.py
-  - LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_Thumbs.py
+  - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py
+  - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py
+  - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ModifyShot.py
+  - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShotPriority.py
+  - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py
+  - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_Thumbs.py
   - LGA_NKS_Edit_Panel.py
   - LGA_NKS_Flow_Panel.py
   - LGA_NKS_Projects_Panel.py

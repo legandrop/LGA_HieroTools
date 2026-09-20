@@ -154,26 +154,26 @@ Leyenda:
 
 Nada pendiente.
 
-### 5.2. Flow Panel
+### 5.2. Flow Rev Panel
 
 | Script | comp EXR | roto EXR | cleanup EXR | cg EXR (client) | comp Rev | roto Rev | cleanup Rev |
 |---|---|---|---|---|---|---|---|
-| [LGA_NKS_Flow_Pull.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py) | ✅ | ✅ | ✅ | ✅ | — | — | — |
-| [LGA_NKS_Flow_Push.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py) | ✅ | ✅ | 🟡 | ✅ | — | — | — |
-| [LGA_NKS_Flow_Shot_info.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Shot_info.py) | ✅ | ✅ | ✅ | ❓ | — | — | — |
-| [LGA_NKS_ReviewPic.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_ReviewPic.py) | ✅ | ❓ | ❓ | ❓ | — | — | — |
+| [LGA_NKS_Flow_Pull.py](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py) | ✅ | ✅ | ✅ | ✅ | — | — | — |
+| [LGA_NKS_Flow_Push.py](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py) | ✅ | ✅ | 🟡 | ✅ | — | — | — |
+| [LGA_NKS_Flow_Shot_info.py](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py) | ✅ | ✅ | ✅ | ❓ | — | — | — |
+| [LGA_NKS_ReviewPic.py](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_ReviewPic.py) | ✅ | ❓ | ❓ | ❓ | — | — | — |
 
 **Flow Pull — notas:**
 - Multi-task completo (v3.41). El filtro de filename acepta cualquier task de `TASK_EXR_TRACKS` (`_comp_`, `_roto_`, `_cleanup_`, `_cg_`); antes hardcodeaba `_comp_` y descartaba roto/cleanup.
-- Comparación de versión SG vs NKS por task: `find_highest_version_for_task(shot, task, task_name)` ([Flow_Pull.py:312](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py:312)) recorre solo `task["versions"]` de la task detectada y devuelve el string como `_{task}_v{n}`. Antes mezclaba todas las tasks del shot y rotulaba como `_comp_`, lo que producía falsos mismatches (ej: comp v9 en NKS comparado contra roto v33 en SG).
+- Comparación de versión SG vs NKS por task: `find_highest_version_for_task(shot, task, task_name)` ([Flow_Pull.py:312](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py:312)) recorre solo `task["versions"]` de la task detectada y devuelve el string como `_{task}_v{n}`. Antes mezclaba todas las tasks del shot y rotulaba como `_comp_`, lo que producía falsos mismatches (ej: comp v9 en NKS comparado contra roto v33 en SG).
 - Tabla de cambios incluye columna `Task` (la detectada del filename), para distinguir a qué task corresponden la versión y el status mostrados.
 - v3.58: los clips que viven en un track `_cg_` se procesan aunque el filename no traiga un token de task conocido (ahi el filename lleva el stream y no "cg"); los demas tracks conservan el filtro historico por filename. Para CG, `find_highest_version_for_task()` recibe además `stream_token` (helper `_stream_token_from_code()`) y compara la versión más alta **por stream**, usando la columna `version_code` de la DB de PipeSync — no alcanza con el número de versión porque cada stream tiene su propia numeración. Al terminar el pull, si la DB tiene streams de CG sin clip en ningún track `_cg_` del timeline, se muestra un aviso listando shot/stream/código.
 
 **Flow Push — notas:**
-- v3.97 implementó multi-task correctamente: itera `TASK_EXR_TRACKS`, detecta la task del filename y, cuando hay clips de varias tasks seleccionadas, muestra un diálogo para elegir a cuál aplicar el status (`_show_task_selection_dialog`, [Flow_Push.py:2325](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py:2325)).
+- v3.97 implementó multi-task correctamente: itera `TASK_EXR_TRACKS`, detecta la task del filename y, cuando hay clips de varias tasks seleccionadas, muestra un diálogo para elegir a cuál aplicar el status (`_show_task_selection_dialog`, [Flow_Push.py:2325](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py:2325)).
 - Para cleanup: apenas se agregue a `TASK_EXR_TRACKS` (ya hecho), Push lo detecta automáticamente. Pendiente validar con timeline real.
 - v4.07: mismo bypass de filtro que Pull, limitado al track `_cg_` (procesa clips de CG aunque el filename no tenga token de task; los demas tracks conservan el filtro historico). `find_version_by_number`, `find_latest_version` y `update_version_status` del DBManager aceptan `stream_token` y discriminan por `version_code` entre versiones que comparten número dentro de la task CG.
-- [Flow_Push.py:839](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py:839) tiene `get_comp_assignee()` que busca siempre la task "comp" del shot para decidir el assignee. → **Pendiente revisar:** definir si el assignee del shot debe venir siempre de comp o depender de la task activa.
+- [Flow_Push.py:839](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py:839) tiene `get_comp_assignee()` que busca siempre la task "comp" del shot para decidir el assignee. → **Pendiente revisar:** definir si el assignee del shot debe venir siempre de comp o depender de la task activa.
 
 **Flow Shot_info — notas:**
 - v1.86 resolvió el hardcode a `comp`. Antes llamaba siempre a `find_task(shot, "comp")`.
@@ -229,14 +229,14 @@ roto no existe ahí.
 | [LGA_import_shots.py](../LGA_NKS_Edit_Panel_py/LGA_import_shots.py) | ✅ | ✅ | ✅ | ✅ | CG es task de primera clase en el import: color (`_CLR_CG`), orden de track (`_cg_` bajo `_comp_`), carpeta de publish (`_task_folders_for_context()`) y "última versión" calculada **por stream** (`_stream_token()`), porque una sola carpeta CG agrupa disciplinas con numeración independiente |
 | [LGA_import_shots_preview.py](../LGA_NKS_Edit_Panel_py/LGA_import_shots_preview.py) | ✅ | ✅ | ✅ | ✅ | `classify_track_type()` reconoce `_cg_` vía `exr_track_for_task(CG_TASK_NAME)`; devuelve el tipo `"cg"` |
 
-### 5.5. Coordination Panel
+### 5.5. Flow S3 Panel
 
 | Script | comp | roto (studio) | cleanup (studio) | cg (client) | Notas |
 |---|---|---|---|---|---|
-| [LGA_NKS_Flow_CreateShot.py](../LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py) | ✅ | ✅ | ✅ | ✅ | El diálogo genera una sección por task con `get_available_tasks()` (filtra `AVAILABLE_TASKS` por contexto); antes iteraba `AVAILABLE_TASKS` completo y ofrecía Roto/Cleanup/DMP/3D también en client, sitio de Flow donde esas tasks no existen |
-| [LGA_NKS_Flow_CreateShot_Folders.py](../LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py) | ✅ | ✅ | ✅ | ✅ | Suma `TASK_FOLDER_STRUCTURE["CG"]`: una sola carpeta (`cg/0_assets` … `cg/4_publish`) para todas las disciplinas, sin subdividir por stream |
-| [LGA_NKS_Flow_ShowInFlow.py](../LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShowInFlow.py) | ✅ | — | — | ✅ (fallback) | `_task_preferida()` / `_nombres_preferidos()`: en studio abre solo la task Comp (`("Comp",)`, igual que antes); en client intenta Comp y, si el shot no la tiene, cae a CG. Antes el literal `"Comp"` estaba repetido en cuatro lugares y un shot solo-CG abría la URL del shot pelado |
-| [LGA_NKS_Flow_CheckTimelineShots.py](../LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py) | ✅ | — | — | ✅ | `_tracks_de_tasks_activas()`: en studio revisa solo `_comp_` (igual que antes); en client suma `_cg_` y `_collect_shots_from_track()` recorre TODOS los tracks que coincidan con cada nombre — antes tomaba solo el primer track `_comp_` |
+| [LGA_NKS_Flow_CreateShot.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py) | ✅ | ✅ | ✅ | ✅ | El diálogo genera una sección por task con `get_available_tasks()` (filtra `AVAILABLE_TASKS` por contexto); antes iteraba `AVAILABLE_TASKS` completo y ofrecía Roto/Cleanup/DMP/3D también en client, sitio de Flow donde esas tasks no existen |
+| [LGA_NKS_Flow_CreateShot_Folders.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py) | ✅ | ✅ | ✅ | ✅ | Suma `TASK_FOLDER_STRUCTURE["CG"]`: una sola carpeta (`cg/0_assets` … `cg/4_publish`) para todas las disciplinas, sin subdividir por stream |
+| [LGA_NKS_Flow_ShowInFlow.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py) | ✅ | — | — | ✅ (fallback) | `_task_preferida()` / `_nombres_preferidos()`: en studio abre solo la task Comp (`("Comp",)`, igual que antes); en client intenta Comp y, si el shot no la tiene, cae a CG. Antes el literal `"Comp"` estaba repetido en cuatro lugares y un shot solo-CG abría la URL del shot pelado |
+| [LGA_NKS_Flow_CheckTimelineShots.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py) | ✅ | — | — | ✅ | `_tracks_de_tasks_activas()`: en studio revisa solo `_comp_` (igual que antes); en client suma `_cg_` y `_collect_shots_from_track()` recorre TODOS los tracks que coincidan con cada nombre — antes tomaba solo el primer track `_comp_` |
 
 **Assignee Panel, ViewerTL:** siguen sin auditar para este documento. El assignee por task ya funciona en parte porque Flow/SG devuelve assignees por task, pero hay lugares (ej. el `get_comp_assignee()` del Push) donde la task está hardcodeada a comp. Revisar caso por caso.
 
@@ -267,9 +267,9 @@ Estado de adopción:
 
 | Herramienta | Usa el helper |
 |---|---|
-| [Flow_Shot_info.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Shot_info.py) | ✅ |
-| [Flow_Push.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py) | ❌ (tiene su propio `_show_task_selection_dialog`; pendiente migrar) |
-| [ReviewPic.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_ReviewPic.py) | ❌ (pendiente) |
+| [Flow_Shot_info.py](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py) | ✅ |
+| [Flow_Push.py](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py) | ❌ (tiene su propio `_show_task_selection_dialog`; pendiente migrar) |
+| [ReviewPic.py](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_ReviewPic.py) | ❌ (pendiente) |
 
 ## 6. Advertencia de Task / Track Mismatch
 
@@ -299,7 +299,7 @@ Una fila por clip con tres columnas: **Clip**, **Task (filename)**, **Track**.
 - Helper compartido: [LGA_NKS_Shared/LGA_NKS_TaskMismatchDialog.py](../LGA_NKS_Shared/LGA_NKS_TaskMismatchDialog.py)
   - `collect_task_mismatches(...)`: arma la lista de mismatches.
   - `show_task_mismatch_warning(...)`: muestra la ventana modal.
-- Usado por [Flow_Pull.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py) y [Flow_Push.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py).
+- Usado por [Flow_Pull.py](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py) y [Flow_Push.py](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py).
 
 ## 7. Roadmap resumido
 
@@ -311,7 +311,7 @@ Lista de pendientes concretos, en orden sugerido:
 4. **Flow ReviewPic** — auditar hardcodes a comp e integrar `LGA_NKS_TaskSelectionDialog`.
 5. **Edit Panel** — extender MatchVerToEXR y CompareVerToEditref a operar por task iterando `TASK_EXR_TRACKS` / `TASK_REV_TRACKS`.
 6. **Review Panel** — evaluar si EXRTrack_Difference y Compare_Versions deben trabajar por task o seguir siendo comp-only.
-7. **Scripts no auditados** — pasar el filtro de hardcodes por Assignee, ViewerTL. (Coordination Panel — Create Shot, Show in Flow, Check Shots — ya se auditó para el scope de CG, ver sección 5.5.)
+7. **Scripts no auditados** — pasar el filtro de hardcodes por Assignee, ViewerTL. (Flow S3 Panel — Create Shot, Show in Flow, Check Shots — ya se auditó para el scope de CG, ver sección 5.5.)
 
 ## 8. Tests manuales sugeridos
 
@@ -358,9 +358,9 @@ con `PROJA_1013_0800_layout_v003` y otro `_cg_` con
 - **Catálogo de tasks (Flow):** [LGA_NKS_Shared/LGA_NKS_Flow_Task_Config.py](../LGA_NKS_Shared/LGA_NKS_Flow_Task_Config.py)
   - Datos: `AVAILABLE_TASKS` (cada entrada declara `contexts`)
   - Funciones: `get_available_tasks()`, `get_available_task_names()`, `get_task_color()`
-- **Flow Pull:** [LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py)
+- **Flow Pull:** [LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py)
   - Métodos: `HieroOperations.process_selected_clips()`, `HieroOperations.enable_or_disable_clips()`, `SGManager.find_highest_version_for_task()`
-- **Flow Push:** [LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py)
+- **Flow Push:** [LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py)
   - Funciones: `push_from_selected_clips()`, `_show_task_selection_dialog()`, `get_comp_assignee()`
 - **Review Panel (panel):** [LGA_NKS_Review_Panel.py](../LGA_NKS_Review_Panel.py)
   - Métodos: `execute_DisableEXR()`, `execute_DisableRoto()`, `_segunda_task()`, `_second_task_button()`, `execute_DisableSecondTask()`
@@ -373,16 +373,16 @@ con `PROJA_1013_0800_layout_v003` y otro `_cg_` con
   - Funciones: `_task_folders_for_context()`, `_stream_token()`, `_scan_publish_folders()`
 - **Import Shots (preview):** [LGA_NKS_Edit_Panel_py/LGA_import_shots_preview.py](../LGA_NKS_Edit_Panel_py/LGA_import_shots_preview.py)
   - Función: `classify_track_type()`
-- **Create Shot:** [LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py](../LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py)
+- **Create Shot:** [LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py)
   - Clase: `ShotConfigDialog` (genera secciones desde `get_available_tasks()`)
-  - Carpetas: [LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py](../LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py) (`TASK_FOLDER_STRUCTURE`)
-- **Show in Flow:** [LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShowInFlow.py](../LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShowInFlow.py)
+  - Carpetas: [LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py) (`TASK_FOLDER_STRUCTURE`)
+- **Show in Flow:** [LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py)
   - Funciones: `_nombres_preferidos()`, `_task_preferida()`
-- **Check Shots:** [LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py](../LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py)
+- **Check Shots:** [LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py)
   - Funciones: `_tracks_de_tasks_activas()`, `_collect_shots_from_track()`
 - **Advertencia Task/Track Mismatch:** [LGA_NKS_Shared/LGA_NKS_TaskMismatchDialog.py](../LGA_NKS_Shared/LGA_NKS_TaskMismatchDialog.py)
   - Funciones: `collect_task_mismatches()`, `show_task_mismatch_warning()`
 - **Selección de task en playhead:** [LGA_NKS_Shared/LGA_NKS_TaskSelectionDialog.py](../LGA_NKS_Shared/LGA_NKS_TaskSelectionDialog.py)
   - Funciones: `get_tasks_at_playhead()`, `track_for_task()`, `prompt_task_selection()`, `resolve_task_at_playhead()`
-- **Flow Shot_info:** [LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Shot_info.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Shot_info.py)
+- **Flow Shot_info:** [LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py)
   - Métodos: `HieroOperations.process_selected_clips()`

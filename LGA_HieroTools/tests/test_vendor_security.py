@@ -347,7 +347,7 @@ class VendorSecurityTests(unittest.TestCase):
             ROOT / "LGA_NKS_Assignee_Panel_py" / "LGA_NKS_Flow_Assign_Assignee.py": {
                 "AssignSelectedTasksWorker",
             },
-            ROOT / "LGA_NKS_Coordination_Panel_py" / "LGA_NKS_Flow_CreateShot.py": {
+            ROOT / "LGA_NKS_Flow_S3_Panel_py" / "LGA_NKS_Flow_CreateShot.py": {
                 "CreateShotWorker", "ShotExistenceCheckWorker",
             },
         }

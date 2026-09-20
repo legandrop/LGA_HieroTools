@@ -18,7 +18,7 @@ ____________________________________________________________________
   Usado por runtime activo:
   - LGA_NKS_ViewerTL_Panel.py
   - LGA_NKS_Projects_Panel_py/LGA_Projects_Panel_ScanProjects.py
-  - LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py
+  - LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py
   - LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Assignee.py
   - LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Assign_Assignee.py
   - LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Clear_Assignees.py
@@ -26,9 +26,9 @@ ____________________________________________________________________
   - LGA_NKS_Assignee_Panel_py/LGA_NKS_Wasabi_PolicyUnassign.py
   - LGA_NKS_Assignee_Panel_py/LGA_NKS_Wasabi_PolicyUnassign_CompletedShots.py
   - LGA_NKS_Assignee_Panel_py/wasabi_policy_utils.py
-  - LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShowInFlow.py
-  - LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py
-  - LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShotPriority.py
+  - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py
+  - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py
+  - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShotPriority.py
 ____________________________________________________________________
 """
 

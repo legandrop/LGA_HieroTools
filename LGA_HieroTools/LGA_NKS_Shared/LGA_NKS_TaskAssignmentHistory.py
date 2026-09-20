@@ -11,7 +11,7 @@ ____________________________________________________________________
   vacia (estado normal: maquina recien instalada o sync pendiente).
 
   Usado por:
-  - LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Shot_info.py
+  - LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py
 ____________________________________________________________________
 
 """

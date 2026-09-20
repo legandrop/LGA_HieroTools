@@ -61,7 +61,7 @@ def open_in_image_editor(qimage):
         os.path.join(
             os.path.dirname(__file__),
             "..",
-            "LGA_NKS_Flow_Panel_py",
+            "LGA_NKS_Flow_Rev_Panel_py",
             "ShareX_ImageEditor_LGA",
             "ShareX_ImageEditor_LGA.exe",
         )

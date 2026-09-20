@@ -53,7 +53,7 @@ ____________________________________________________________________
          deshacia la correccion. Reusa `run_if_color_managed()` del Edit Panel,
          con import diferido y a prueba de fallos: si algo se rompe, el Pull
          sigue igual. No abre grupo de undo propio: ya corre dentro del que abre
-         el Flow Panel, y anidarlos rompe el Ctrl+Z.
+         el Flow Rev Panel, y anidarlos rompe el Ctrl+Z.
   v3.61: "Keep this window on top" lleva lgaLabeled: sin la propiedad la
          hoja del pack deja el texto pegado al cuadrito (spacing 0).
   v3.60: La ventana de resultados (GUI_Table) migra al modulo de estilo

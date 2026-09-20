@@ -73,13 +73,13 @@ toda la maquinaria dinamica esta detras de un gate:
   emite **despues** de escribir el INI, porque los suscriptos releen el contexto
   y tienen que ver el valor nuevo.
 
-Paneles suscriptos: Flow Panel (`on_context_changed` -> `build_buttons`) y
+Paneles suscriptos: Flow Rev Panel (`on_context_changed` -> `build_buttons`) y
 Assignee Panel (`on_context_changed` -> `build_buttons`).
 
 ### Estados de Flow por contexto
 
 Los dos sitios de Flow no tienen la misma lista de `sg_status_list`, asi que los
-botones del Flow Panel y los dropdowns de Create Shot se filtran por contexto.
+botones del Flow Rev Panel y los dropdowns de Create Shot se filtran por contexto.
 Detalle completo en [Docu_Flow_Estados_Colores.md](Docu_Flow_Estados_Colores.md).
 
 ### Assignee Panel en client
@@ -169,9 +169,9 @@ Por eso nada arma el nombre de la carpeta con un literal:
   respeta el caso de los segmentos que ya existan, así un shot histórico no
   queda partido en dos carpetas.
 
-## Impacto en Coordination Panel
+## Impacto en Flow S3 Panel
 
-- `Create Shot` ([LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py](../LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py)):
+- `Create Shot` ([LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py)):
   el diálogo de creación genera una sección por task con
   `get_available_tasks()` de `LGA_NKS_Flow_Task_Config` en vez de iterar
   `AVAILABLE_TASKS` completo. En `client` eso ofrece únicamente `Comp` y
@@ -183,16 +183,16 @@ Por eso nada arma el nombre de la carpeta con un literal:
   `sg_vendor_groups`, las Tasks con `task_assignees` y `Project.users` se amplía
   sin quitar miembros. Ver
   [Docu_Vendor_Access_CreateShot.md](Docu_Vendor_Access_CreateShot.md).
-  ([LGA_NKS_Flow_CreateShot_Folders.py](../LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py)
+  ([LGA_NKS_Flow_CreateShot_Folders.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py)
   suma la estructura de carpetas de `CG` — una sola carpeta para todas las
   disciplinas, sin subdividir por stream.)
-- `Show in Flow` ([LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShowInFlow.py](../LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShowInFlow.py)):
+- `Show in Flow` ([LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py)):
   la task a abrir sale de `_task_preferida()` / `_nombres_preferidos()`. En
   `studio` el orden de preferencia sigue siendo únicamente `("Comp",)`,
   idéntico al comportamiento histórico. En `client` es `("Comp", "CG")`: si
   el shot no tiene task Comp, cae a CG en vez de abrir la URL del shot
   pelado.
-- `Check Shots` ([LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py](../LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py)):
+- `Check Shots` ([LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py)):
   en `studio` sigue revisando solo el track `_comp_`. En `client` suma
   `_cg_` (`_tracks_de_tasks_activas()`) y recorre TODOS los tracks que
   coincidan con cada nombre, no solo el primero, porque puede haber varios
@@ -227,9 +227,9 @@ Por eso nada arma el nombre de la carpeta con un literal:
 ### Flow Pull / Push
 
 - `LGA_HieroTools/LGA_NKS_Flow_Panel.py`
-- `LGA_HieroTools/LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py`
-- `LGA_HieroTools/LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py`
-- `LGA_HieroTools/LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Shot_info.py`
+- `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py`
+- `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py`
+- `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py`
 
 ### Projects
 
@@ -250,12 +250,12 @@ Por eso nada arma el nombre de la carpeta con un literal:
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_Flow_Task_Config.py` (`contexts` por task, `get_available_tasks()`)
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_Flow_NamingUtils.py` (familia CG lee `all_track_task_names()` de TaskScope)
 
-### Coordination Panel (Create Shot / Show in Flow / Check Shots)
+### Flow S3 Panel (Create Shot / Show in Flow / Check Shots)
 
-- `LGA_HieroTools/LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py`
-- `LGA_HieroTools/LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py`
-- `LGA_HieroTools/LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShowInFlow.py`
-- `LGA_HieroTools/LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py`
+- `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py`
+- `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py`
+- `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py`
+- `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py`
 
 ### Review Panel
 
@@ -264,13 +264,13 @@ Por eso nada arma el nombre de la carpeta con un literal:
 
 ## Archivos revisados que siguen parciales o con deuda
 
-- `LGA_HieroTools/LGA_NKS_Coordination_Panel_py/LGA_NKS_PipeSync_OpenPath.py`
+- `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_OpenPath.py`
   - usa rutas hardcodeadas de instalación (no completamente context-aware).
-- `LGA_HieroTools/LGA_NKS_Coordination_Panel_py/LGA_NKS_PipeSync_CreatePsync.py`
+- `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_CreatePsync.py`
   - requiere confirmar matriz Studio/Client en entorno deploy.
 - `LGA_HieroTools/+Building_Blocks/PipeSync_Usuario_Actual.md`
   - documentación desactualizada respecto a estructura actual shared/contexto.
-- `LGA_HieroTools/LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull_README.md`
+- `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull_README.md`
   - referencias históricas y ejemplos con paths legacy.
 
 ## Packaging (release generator)
@@ -310,7 +310,7 @@ Por eso nada arma el nombre de la carpeta con un literal:
 
 ## Gaps detectados (seguimiento)
 
-- Unificar paths de runtime/ejecutable de PipeSync en módulos de Coordination.
+- Unificar paths de runtime/ejecutable de PipeSync en módulos de Flow S3.
 - Revisar documentación auxiliar para eliminar ejemplos studio-only.
 - Validar en QA que todos los paneles abiertos en sesión refrescan contexto sin
   reinicio en escenarios edge.

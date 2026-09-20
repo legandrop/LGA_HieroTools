@@ -61,7 +61,7 @@ ____________________________________________________________________
          estilo del pack.
 
   v2.28: ensure_min_luminance() se movio a LGA_NKS_StyleUtils, porque el
-         Assignee y el Flow Panel necesitan la operacion inversa (techo) sobre
+         Assignee y el Flow Rev Panel necesitan la operacion inversa (techo) sobre
          los mismos colores de Flow. Aca queda solo la constante del piso.
 
   v2.27: Piso de luminancia para los colores de proyecto (ensure_min_luminance).
@@ -206,7 +206,7 @@ def load_project_colors():
 # Piso de luminancia para que el color del proyecto se lea como texto sobre el
 # panel oscuro. Los colores salen de Flow pensados como color identitario del
 # proyecto, no como color de texto, asi que los oscuros quedaban ilegibles.
-# La funcion vive en StyleUtils porque el Assignee y el Flow Panel usan la
+# La funcion vive en StyleUtils porque el Assignee y el Flow Rev Panel usan la
 # operacion inversa (techo) sobre los colores de usuario.
 MIN_TEXT_LUMINANCE = 150
 

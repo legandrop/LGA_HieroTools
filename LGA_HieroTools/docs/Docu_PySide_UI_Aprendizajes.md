@@ -376,7 +376,7 @@ overlay.setAttribute(Qt.WA_TransparentForMouseEvents, True)
   `url.isLocalFile()` — un drag desde un navegador trae URLs remotas.
 
 Ejemplo aplicado: `InputDialog` en
-[LGA_NKS_Flow_Push.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py), el
+[LGA_NKS_Flow_Push.py](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py), el
 dialogo de notas del Push, que acepta png/jpg arrastrados y los adjunta a la
 nota de Flow.
 
@@ -390,6 +390,6 @@ nota de Flow.
   de estilos de paneles (colores, fuentes, bordes).
 - [GUI_Windows_Reference.md](GUI_Windows_Reference.md) — referencias de
   ventanas y widgets utilizados en el proyecto.
-- [LGA_NKS_Flow_Push.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py) — clase
+- [LGA_NKS_Flow_Push.py](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py) — clase
   `InputDialog`, metodos `_create_drop_overlay`, `_media_paths_from_mime`,
   `dropEvent`, `add_dropped_images`.

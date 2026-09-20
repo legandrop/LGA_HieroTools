@@ -6,7 +6,7 @@ from pathlib import Path
 
 SOURCE_PATH = (
     Path(__file__).resolve().parents[1]
-    / "LGA_NKS_Coordination_Panel_py"
+    / "LGA_NKS_Flow_S3_Panel_py"
     / "LGA_NKS_Flow_CreateShot.py"
 )
 

@@ -1256,7 +1256,7 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
     def check_frames(self):
         self.execute_external_script("LGA_NKS_mediaMissingFrames.py")
 
-    #### Clear Tag - Movido desde Flow Panel
+    #### Clear Tag - Movido desde Flow Rev Panel
     def run_clear_tag_script(self):
         project = get_active_project()
         if project:

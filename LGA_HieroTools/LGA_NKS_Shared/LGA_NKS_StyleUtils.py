@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_StyleUtils v1.01 | Lega
+  LGA_NKS_StyleUtils v1.02 | Lega
 
   Utilidades para estilos dinámicos de botones en paneles Hiero.
   Incluye funciones para conversión de colores, cálculo de bordes
@@ -17,16 +17,28 @@ ____________________________________________________________________
   - LGA_NKS_Review_Panel.py
   - LGA_NKS_ViewerTL_Panel.py
 
+  v1.02: Los gradientes pasan a un catalogo semantico reutilizable. Suma los
+         cruces Flow-Priority y Flow-Reveal del panel Flow S3.
   v1.01: Agregadas luminance(), ensure_min_luminance() y ensure_max_luminance().
          Piso y techo de luminancia para que los colores de Flow se lean tanto
          cuando van como texto sobre fondo oscuro (Projects Panel) como cuando
-         van de fondo con texto claro encima (Assignee Panel, Flow Panel).
+         van de fondo con texto claro encima (Assignee Panel, Flow Rev Panel).
   v1.00: Versión inicial
 ____________________________________________________________________
 
 """
 
 import re
+
+
+# Colores de categoria del panel Flow S3. Son informacion visual: el verde
+# identifica acciones de Flow, el violeta acciones S3 y los dos gradientes
+# mixtos conservan el verde para indicar que siguen perteneciendo a Flow.
+GRADIENT_COLORS = {
+    "gradient_magenta_violet": ("#443a91", "#543a91", "#5b3a91"),
+    "gradient_flow_priority": ("#2a4d3a", "#450101"),
+    "gradient_flow_reveal": ("#2a4d3a", "#1f1f1f"),
+}
 
 
 # Funciones de conversión de colores
@@ -104,7 +116,7 @@ def hsv_to_rgb(h, s, v):
 #
 #   - Como COLOR DE TEXTO sobre el panel oscuro (Projects Panel): los colores
 #     oscuros no se leen -> hace falta un PISO de luminancia.
-#   - Como COLOR DE FONDO con texto claro encima (Assignee Panel, Flow Panel):
+#   - Como COLOR DE FONDO con texto claro encima (Assignee Panel, Flow Rev Panel):
 #     los colores claros no se leen -> hace falta un TECHO.
 #
 # Las dos funciones son la misma operacion espejada, por eso viven juntas: si
@@ -261,9 +273,7 @@ def calculate_dynamic_border(style):
     """
     if style.startswith("gradient_"):
         # Para gradientes, extraer colores y usar el más brillante
-        gradient_colors = []
-        if style == "gradient_magenta_violet":
-            gradient_colors = ["#443a91", "#543a91", "#5b3a91"]
+        gradient_colors = GRADIENT_COLORS.get(style, ())
 
         if not gradient_colors:
             return "#616161"  # Color fallback
@@ -304,25 +314,24 @@ def calculate_dynamic_hover(style):
     """
     if style.startswith("gradient_"):
         # Para gradientes, crear versión más brillante de todo el gradiente
-        if style == "gradient_magenta_violet":
-            # Colores base del gradiente
-            base_colors = ["#443a91", "#543a91", "#5b3a91"]
-            hover_colors = []
+        base_colors = GRADIENT_COLORS.get(style)
+        if not base_colors:
+            return None
 
-            for color in base_colors:
-                r, g, b = hex_to_rgb(color)
-                h, s, v = rgb_to_hsv(r, g, b)
-                # Aumentar brillo más que el borde (26% en lugar de 20%)
-                new_v = min(100, v + 26)
-                new_r, new_g, new_b = hsv_to_rgb(h, s, new_v)
-                hover_colors.append(rgb_to_hex((new_r, new_g, new_b)))
+        hover_colors = []
+        for color in base_colors:
+            r, g, b = hex_to_rgb(color)
+            h, s, v = rgb_to_hsv(r, g, b)
+            # Aumentar brillo más que el borde (26% en lugar de 20%)
+            new_v = min(100, v + 26)
+            new_r, new_g, new_b = hsv_to_rgb(h, s, new_v)
+            hover_colors.append(rgb_to_hex((new_r, new_g, new_b)))
 
-            return {
-                "inicio": hover_colors[0],
-                "fin": hover_colors[1]
-            }
-
-        return None  # Gradiente no reconocido
+        return {
+            "inicio": hover_colors[0],
+            "medio": hover_colors[len(hover_colors) // 2],
+            "fin": hover_colors[-1],
+        }
 
     else:
         # Para colores sólidos, hacer hover aún más brillante que el borde
@@ -344,10 +353,13 @@ def calculate_dynamic_tooltip(style):
     """
     if style.startswith("gradient_"):
         # Para gradientes, usar el color más brillante como base
-        if style == "gradient_magenta_violet":
-            base_color = "#5b3a91"  # Color más brillante del gradiente
-        else:
-            base_color = "#5b3a91"  # Fallback
+        gradient_colors = GRADIENT_COLORS.get(
+            style, GRADIENT_COLORS["gradient_magenta_violet"]
+        )
+        base_color = max(
+            gradient_colors,
+            key=lambda color: rgb_to_hsv(*hex_to_rgb(color))[2],
+        )
     else:
         # Para colores sólidos, usar el color del botón
         base_color = style
@@ -396,56 +408,76 @@ def create_gradient_style(gradient_type, include_hover=True):
     Crea un estilo CSS completo para un gradiente específico.
     Útil para reutilizar en múltiples paneles.
     """
-    gradients = {
-        "gradient_magenta_violet": {
-            "inicio": "#443a91",
-            "fin": "#5b3a91"
-        }
-        # Agregar más gradientes aquí según se necesiten
-    }
-
-    if gradient_type not in gradients:
+    colors = GRADIENT_COLORS.get(gradient_type)
+    if not colors:
         return None
 
-    config = gradients[gradient_type]
     border_color = calculate_dynamic_border(gradient_type)
+
+    def gradient_stops(gradient_colors):
+        if len(gradient_colors) == 1:
+            positions = [0.0]
+        else:
+            positions = [
+                index / float(len(gradient_colors) - 1)
+                for index in range(len(gradient_colors))
+            ]
+        return ",\n                ".join(
+            "stop: {:.3g} {}".format(position, color)
+            for position, color in zip(positions, gradient_colors)
+        )
+
+    base_stops = gradient_stops(colors)
 
     style = f"""
         QPushButton {{
             background-color: qlineargradient(
                 x1: 0, y1: 0, x2: 1, y2: 0,
-                stop: 0 {config['inicio']},
-                stop: 1 {config['fin']}
+                {base_stops}
             );
             border: 1px solid {border_color};
             border-radius: 3px;
             color: #d8d8d8;
-            padding: 2px 3px;
+            padding: 0px 0px;
+            min-height: 20px;
         }}
     """
 
     if include_hover:
-        hover_colors = calculate_dynamic_hover(gradient_type)
-        if hover_colors:
+        hover_map = calculate_dynamic_hover(gradient_type)
+        if hover_map:
+            hover_colors = []
+            for color in colors:
+                r, g, b = hex_to_rgb(color)
+                h, s, v = rgb_to_hsv(r, g, b)
+                new_r, new_g, new_b = hsv_to_rgb(h, s, min(100, v + 26))
+                hover_colors.append(rgb_to_hex((new_r, new_g, new_b)))
+            hover_stops = gradient_stops(hover_colors)
             style += f"""
         QPushButton:hover {{
             background-color: qlineargradient(
                 x1: 0, y1: 0, x2: 1, y2: 0,
-                stop: 0 {hover_colors['inicio']},
-                stop: 1 {hover_colors['fin']}
+                {hover_stops}
             );
         }}
             """
 
-    style += """
-        QPushButton:pressed {
+    # El estado pressed conserva la direccion semantica. Invertirla haria que
+    # Priority dejara de anclar Flow a la izquierda durante el click.
+    pressed_colors = []
+    for color in colors:
+        r, g, b = hex_to_rgb(color)
+        h, s, v = rgb_to_hsv(r, g, b)
+        new_r, new_g, new_b = hsv_to_rgb(h, s, max(0, v - 8))
+        pressed_colors.append(rgb_to_hex((new_r, new_g, new_b)))
+    pressed_stops = gradient_stops(pressed_colors)
+    style += f"""
+        QPushButton:pressed {{
             background-color: qlineargradient(
                 x1: 0, y1: 1, x2: 1, y2: 0,
-                stop: 0 #5145ac,
-                stop: 0.5 #6a49b5,
-                stop: 1 #5b3a91
+                {pressed_stops}
             );
-        }
+        }}
     """
 
     return style

@@ -221,7 +221,7 @@ Esta sincronización bidireccional asegura consistencia entre ambas fuentes de d
 2. Evaluar caching de consultas cuando se procesan muchos shots consecutivos para reducir llamadas repetidas a Flow.
 3. Extender la UI para recordar la última selección de tasks por sesión si el flujo de trabajo lo requiere.
 
-**Referencia**: Lista completa de tasks en `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.md` sección "Tasks Disponibles".
+**Referencia**: Lista completa de tasks en `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.md` sección "Tasks Disponibles".
 
 ## Notas Técnicas
 - Los usuarios se leen de `pipesync_stats.db` (tabla `flow_users`) en modo read-only. La
@@ -259,7 +259,7 @@ Esta sincronización bidireccional asegura consistencia entre ambas fuentes de d
 - `LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Assign_Assignee.py`, `…_Flow_Assignee.py`,
   `…_Flow_Clear_Assignees.py`
   - `get_user_info_from_config(user_name)`: nombre y color por nombre de Flow.
-- `LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Shot_info.py`
+- `LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py`
   - `_load_user_colors()` / `_get_user_text_color()`: colores de autor en las notas.
 
 ### En el repo de PipeSync (`LGA_PipeSync_2`)

@@ -33,7 +33,7 @@ capturado al abrir el diálogo.
 
 ## Referencias tecnicas
 
-- `LGA_HieroTools/LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py`
+- `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py`
   - `TASK_STATES` - lista de estados de task visibles en Create/Modify Shot.
   - `REVIEWER_NAME_BY_KEY` - mapeo de checkbox interno a usuario real de Flow.
   - `resolve_reviewer_ids()` - convierte reviewers de UI a `HumanUser`.
@@ -43,15 +43,15 @@ capturado al abrir el diálogo.
   - `REVIEWERS` - catálogo único con nombre visible, nombre de Flow y contextos.
   - `get_available_reviewers()` - limita Client a Lega y conserva el catálogo
     completo en Studio.
-- `LGA_HieroTools/LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ModifyShot.py`
+- `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ModifyShot.py`
   - `ModifyShotWorker` - aplica cambios de estado y reviewers a tasks existentes.
 - `LGA_HieroTools/LGA_NKS_Flow_Panel.py`
-  - Configuracion de botones de Flow Panel, incluyendo botones `Rev <Reviewer>`.
-- `LGA_HieroTools/LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py`
+  - Configuracion de botones de Flow Rev Panel, incluyendo botones `Rev <Reviewer>`.
+- `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py`
   - `status_translation` - traduce labels de botones a codigos SG.
   - `task_status_dict` - colores/tags asociados a estados.
   - Bloques de decision que detectan estados de review para mensajes/tags.
-- `LGA_HieroTools/LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py`
+- `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py`
   - `ShotGridManager.task_status_dict` - colores de clips y tags para pull.
   - `_normalize_flow_login()` - aliases de login del usuario actual.
   - `_current_user_review_status_codes()` - estados que fuerzan filas de review en la tabla.

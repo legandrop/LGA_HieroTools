@@ -162,11 +162,11 @@ Leyenda:
 
 | Script | Estado |
 |--------|--------|
-| `LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py` | ✅ Actualizado v3.43 |
-| `LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py` | ✅ Actualizado v4.01 |
-| `LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push_connector.py` | ✅ Actualizado v1.01 — proceso separado; normaliza task y agrega aliases inversos en task_tokens de búsqueda de versiones en Flow |
-| `LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Shot_info.py` | 🔵 Analizado · no necesitaba cambio — task resuelta por track, no por filename |
-| `LGA_NKS_Flow_Panel_py/LGA_NKS_ReviewPic.py` | ✅ Actualizado v1.21 — `_extract_task_normalized` wrapper en `resolve_task_with_mismatch_check` |
+| `LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py` | ✅ Actualizado v3.43 |
+| `LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py` | ✅ Actualizado v4.01 |
+| `LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push_connector.py` | ✅ Actualizado v1.01 — proceso separado; normaliza task y agrega aliases inversos en task_tokens de búsqueda de versiones en Flow |
+| `LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py` | 🔵 Analizado · no necesitaba cambio — task resuelta por track, no por filename |
+| `LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_ReviewPic.py` | ✅ Actualizado v1.21 — `_extract_task_normalized` wrapper en `resolve_task_with_mismatch_check` |
 
 ### Assignee Panel
 
@@ -176,24 +176,24 @@ Leyenda:
 | `LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Assign_Assignee.py` | ✅ Actualizado v1.25 — ídem |
 | `LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Clear_Assignees.py` | ✅ Actualizado v1.25 — ídem |
 
-### Coordination Panel
+### Flow S3 Panel
 
 | Script | Estado |
 |--------|--------|
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShowInFlow.py` | 🔵 Analizado · no necesitaba cambio — resuelve la task por contexto con `_task_preferida()`, no desde el filename |
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_Thumbs.py` | 🔵 Analizado · no necesitaba cambio — no interactúa con task names |
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py` | 🔵 Analizado · no necesitaba cambio — no filtra clips por task name ni busca en DB por task |
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ModifyShot.py` | 🔵 Analizado · no necesitaba cambio — ídem CreateShot |
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py` | 🔵 Analizado · no necesitaba cambio — no usa task name en absoluto |
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShotPriority.py` | 🔵 Analizado · no necesitaba cambio — no filtra clips por task name del filename |
+| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py` | 🔵 Analizado · no necesitaba cambio — resuelve la task por contexto con `_task_preferida()`, no desde el filename |
+| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_Thumbs.py` | 🔵 Analizado · no necesitaba cambio — no interactúa con task names |
+| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py` | 🔵 Analizado · no necesitaba cambio — no filtra clips por task name ni busca en DB por task |
+| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ModifyShot.py` | 🔵 Analizado · no necesitaba cambio — ídem CreateShot |
+| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py` | 🔵 Analizado · no necesitaba cambio — no usa task name en absoluto |
+| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShotPriority.py` | 🔵 Analizado · no necesitaba cambio — no filtra clips por task name del filename |
 
 ### FileManagerS3 Panel
 
 | Script | Estado |
 |--------|--------|
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Download.py` | 🔵 Analizado · no aplica — no usa task names |
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Upload.py` | 🔵 Analizado · no aplica — no usa task names |
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_DownloadClip.py` | 🔵 Analizado · no aplica — descarga el archivo tal cual, sin interpretar task name |
+| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_Download.py` | 🔵 Analizado · no aplica — no usa task names |
+| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_Upload.py` | 🔵 Analizado · no aplica — no usa task names |
+| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_DownloadClip.py` | 🔵 Analizado · no aplica — descarga el archivo tal cual, sin interpretar task name |
 
 ### Edit Panel
 

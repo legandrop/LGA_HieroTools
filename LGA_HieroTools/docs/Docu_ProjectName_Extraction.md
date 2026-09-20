@@ -155,11 +155,11 @@ Leyenda:
 
 | Script | Estado |
 |--------|--------|
-| `LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py` | ✅ Actualizado v3.57 — prioriza la carpeta de shot validada contra los vendors de PipeSync y compara el proyecto sin distinguir mayúsculas/minúsculas |
-| `LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py` | ✅ Actualizado v4.01 |
-| `LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push_connector.py` | ✅ Actualizado v1.01 — proceso separado; recibe file_path vía JSON |
-| `LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Shot_info.py` | ✅ Actualizado v1.92 — fix en `process_selected_clips()` |
-| `LGA_NKS_Flow_Panel_py/LGA_NKS_ReviewPic.py` | 🔵 Analizado · no necesitaba cambio — solo cache local, no extrae project_name |
+| `LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py` | ✅ Actualizado v3.57 — prioriza la carpeta de shot validada contra los vendors de PipeSync y compara el proyecto sin distinguir mayúsculas/minúsculas |
+| `LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py` | ✅ Actualizado v4.01 |
+| `LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push_connector.py` | ✅ Actualizado v1.01 — proceso separado; recibe file_path vía JSON |
+| `LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py` | ✅ Actualizado v1.92 — fix en `process_selected_clips()` |
+| `LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_ReviewPic.py` | 🔵 Analizado · no necesitaba cambio — solo cache local, no extrae project_name |
 
 ### Assignee Panel
 
@@ -169,24 +169,24 @@ Leyenda:
 | `LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Assign_Assignee.py` | ✅ Actualizado v1.25 — ídem |
 | `LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Clear_Assignees.py` | ✅ Actualizado v1.25 — ídem |
 
-### Coordination Panel
+### Flow S3 Panel
 
 | Script | Estado |
 |--------|--------|
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShowInFlow.py` | ✅ Actualizado v1.29 — 3 call sites: `HieroOperations.process_clip()`, `ShowInFlowWorker.run()`, `ShowShotInFlowWorker.run()` |
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_Thumbs.py` | ✅ Actualizado v1.02 — fix en `get_project_name_from_clip()` |
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py` | ✅ project_name v1.36 (`get_selected_clips_info()`); **sequence v1.37** — `create_shot()` toma `sg_sequence` del segmento post-`VFX-` por clip (`get_active_sequence_name(file_path)` para el default del diálogo) |
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ModifyShot.py` | ✅ project_name hereda de CreateShot v1.36; **sequence v1.36** — `get_active_sequence_name(clip_info["file_path"])` |
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py` | ✅ Actualizado v1.01 — fix en `_collect_shots_from_track()` |
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ShotPriority.py` | ✅ Actualizado v1.01 — fix en `get_selected_clips_info()` |
+| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py` | ✅ Actualizado v1.29 — 3 call sites: `HieroOperations.process_clip()`, `ShowInFlowWorker.run()`, `ShowShotInFlowWorker.run()` |
+| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_Thumbs.py` | ✅ Actualizado v1.02 — fix en `get_project_name_from_clip()` |
+| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py` | ✅ project_name v1.36 (`get_selected_clips_info()`); **sequence v1.37** — `create_shot()` toma `sg_sequence` del segmento post-`VFX-` por clip (`get_active_sequence_name(file_path)` para el default del diálogo) |
+| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ModifyShot.py` | ✅ project_name hereda de CreateShot v1.36; **sequence v1.36** — `get_active_sequence_name(clip_info["file_path"])` |
+| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py` | ✅ Actualizado v1.01 — fix en `_collect_shots_from_track()` |
+| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShotPriority.py` | ✅ Actualizado v1.01 — fix en `get_selected_clips_info()` |
 
 ### FileManagerS3 Panel
 
 | Script | Estado |
 |--------|--------|
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Download.py` | 🔵 Analizado · no aplica — pasa shot_path directo al CLI de FileManagerS3 |
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_Upload.py` | 🔵 Analizado · no aplica — ídem |
-| `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3_DownloadClip.py` | 🔵 Analizado · no aplica — pasa file_path directo al CLI |
+| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_Download.py` | 🔵 Analizado · no aplica — pasa shot_path directo al CLI de FileManagerS3 |
+| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_Upload.py` | 🔵 Analizado · no aplica — ídem |
+| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_DownloadClip.py` | 🔵 Analizado · no aplica — pasa file_path directo al CLI |
 
 ### Edit Panel
 

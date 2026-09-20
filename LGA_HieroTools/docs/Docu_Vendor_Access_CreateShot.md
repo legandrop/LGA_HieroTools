@@ -46,7 +46,7 @@ o `failed` para poder reparar sin perder datos.
 - `LGA_NKS_Shared/LGA_NKS_ClientVendorAccess.py`:
   `resolve_client_vendor_access()`, `resolve_selected_reviewers()`,
   `shot_vendor_fields()`, `task_vendor_fields()` y `add_project_users()`.
-- `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py`:
+- `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py`:
   `ShotGridManager.create_shot()` y `CreateShotWorker.run()`.
 - `LGA_NKS_Shared/LGA_NKS_AssignmentSaga.py`: resultado parcial, espejo de
   assignees y carga sensible bajo un contexto estable.

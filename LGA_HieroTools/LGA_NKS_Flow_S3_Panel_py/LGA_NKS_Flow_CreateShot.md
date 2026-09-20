@@ -5,7 +5,7 @@
 
 Script para crear shots en ShotGrid/Flow Production Tracking basado en clips seleccionados en Hiero/Nuke Studio.
 
-**v1.34:** Creación automática de estructura de carpetas por task. Integración con módulo `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py` que crea automáticamente todas las subcarpetas necesarias para cada task habilitada (2D y 3D) siguiendo la jerarquía definida del pipeline.
+**v1.34:** Creación automática de estructura de carpetas por task. Integración con módulo `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py` que crea automáticamente todas las subcarpetas necesarias para cada task habilitada (2D y 3D) siguiendo la jerarquía definida del pipeline.
 
 ## Descripción General
 
@@ -128,7 +128,7 @@ Para cada clip seleccionado:
 
 ## Modify Shot
 
-**Archivo:** `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ModifyShot.py`
+**Archivo:** `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ModifyShot.py`
 
 Complementa a Create Shot y permite ajustar un shot existente conservando sus estados actuales:
 
@@ -325,8 +325,8 @@ SHOTNAME/
 - **Normalización de paths:** Maneja rutas de forma consistente (Windows/Unix compatible)
 - **Creación recursiva:** Crea automáticamente todos los directorios padre necesarios con `os.makedirs(exist_ok=True)`
 - **Integración automática:** 
-- En `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py`: Se ejecuta después de crear el shot y las tasks
-- En `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ModifyShot.py`: Se ejecuta cuando se agregan nuevas tasks a shots existentes
+- En `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py`: Se ejecuta después de crear el shot y las tasks
+- En `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ModifyShot.py`: Se ejecuta cuando se agregan nuevas tasks a shots existentes
 - **Cálculo de path base:** El `shot_base_path` se calcula como 4 niveles arriba del archivo EXR del clip usando `HieroOperations.calculate_shot_base_path()`
 
 ### Ejemplo de Output en Logs
@@ -349,7 +349,7 @@ SHOTNAME/
 
 ### Estructura Principal
 
-**Archivo principal:** `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py`
+**Archivo principal:** `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py`
 
 ```
 LGA_NKS_Flow_CreateShot.py
@@ -362,7 +362,7 @@ LGA_NKS_Flow_CreateShot.py
 ├── HieroOperations (operaciones en Hiero)
 │   └── calculate_shot_base_path() - Calcula path base del shot (4 niveles arriba del archivo)
 ├── Worker (procesamiento en background)
-└── Integración con LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py
+└── Integración con LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py
     └── create_folders_for_shot_tasks() - Crea estructura de carpetas automáticamente
 ```
 
@@ -370,9 +370,9 @@ LGA_NKS_Flow_CreateShot.py
 
 ### Módulo de Carpetas
 
-**Archivo:** `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py`
+**Archivo:** `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py`
 
-Módulo dedicado a la creación automática de estructura de carpetas. Se integra automáticamente con `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py` y `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ModifyShot.py`.
+Módulo dedicado a la creación automática de estructura de carpetas. Se integra automáticamente con `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py` y `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ModifyShot.py`.
 
 **Funciones principales:**
 - `create_folders_for_shot_tasks(shot_path, enabled_tasks)` - Función principal de integración, devuelve `(dict, list)` con resumen y logs
@@ -548,7 +548,7 @@ El script utiliza un sistema de logging seguro para entornos multi-hilo que evit
 ## Historial de Versiones
 
 ### v1.34 - Creación Automática de Carpetas Implementada ⭐
-- ✅ **Módulo de carpetas:** `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py` implementado
+- ✅ **Módulo de carpetas:** `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py` implementado
 - ✅ **Integración completa:** Creación automática de estructura de carpetas en CreateShot y ModifyShot
 - ✅ **Soporte completo:** Todas las tasks 2D y 3D con sus subcarpetas (0_assets, 1_projects, 2_prerenders, 3_review, 4_publish)
 - ✅ **Logging detallado:** Muestra carpetas creadas vs existentes usando sistema de debug_print
@@ -694,7 +694,7 @@ El script utiliza un sistema de logging seguro para entornos multi-hilo que evit
 - **LGA_NKS_Flow_Pull.py:** Descarga de datos
 - **LGA_NKS_Flow_NamingUtils.py:** Utilidades de naming
 - **LGA_NKS_Utils/LGA_NKS_GetClip.py:** Módulo centralizado para selección de clips (método híbrido)
-- **LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ModifyShot.py:** Modificación segura de shots ya existentes
+- **LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ModifyShot.py:** Modificación segura de shots ya existentes
 
 ## Conclusión
 
@@ -745,7 +745,7 @@ El script utiliza un sistema de logging seguro para entornos multi-hilo que evit
 
 #### v1.34 ⭐⭐⭐⭐⭐⭐
 - **Creación automática de carpetas** por task
-- **Módulo modular** `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py`
+- **Módulo modular** `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py`
 - **Integración completa** con CreateShot y ModifyShot
 - **Estructura completa** para todas las tasks 2D y 3D
 

@@ -16,8 +16,8 @@
 - [x] `LGA_NKS_ClipColor_Panel.py` — Panel de colores de clips (PySide2.QtWidgets, PySide2.QtGui)
 - [x] `LGA_NKS_Edit_Panel.py` — Panel de herramientas de edición (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
 - [x] `LGA_NKS_Assignee_Panel.py` — Panel de asignación de usuarios Flow (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
-- [x] `LGA_NKS_Coordination_Panel.py` — Panel de producción Flow (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
-- [x] `LGA_NKS_Flow_Panel.py` — Panel principal Flow (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
+- [x] `LGA_NKS_Coordination_Panel.py` — Panel visible Flow S3 (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
+- [x] `LGA_NKS_Flow_Panel.py` — Panel visible Flow Rev (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
 - [x] `LGA_NKS_Review_Panel.py` — Panel de revisión (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
 - [x] `LGA_NKS_ViewerTL_Panel.py` — Panel de viewer (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
 - [x] `LGA_NKS_NoFPT_Panel.py` — Panel Flow alternativo (PySide2.QtWidgets, PySide2.QtGui)
@@ -46,7 +46,7 @@
 - [x] `LGA_NKS_Trim_Out.py` — Recorte OUT (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton)
 - [x] `LGA_NKS_FixColorspaces.py` — Corrección de colorspaces (sin Qt directo)
 
-### LGA_NKS_Flow/ - Scripts de Flow
+### Scripts de Flow (Flow Rev, Assignees y Flow S3)
 - [x] `LGA_NKS_Flow_Pull.py` — Pull de tasks Flow (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QProgressBar, QRunnable, QThreadPool)
 - [x] `LGA_NKS_Flow_Push.py` — Push de estados Flow (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QProgressBar)
 - [x] `LGA_NKS_Flow_Assign_Assignee.py` — Asignación de usuarios (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QProgressBar)
@@ -57,26 +57,42 @@
 - [x] `LGA_NKS_Flow_NamingUtils.py` — Utilidades de naming (sin Qt)
 - [x] `LGA_NKS_Flow_CreateShot_Thumbs.py` — Creación de thumbnails (migrado Qt)
 
-### LGA_NKS_Coordination_Panel_py/ - Scripts de producción Flow
+### LGA_NKS_Flow_S3_Panel_py/ - Scripts de producción Flow
 - [x] `LGA_NKS_Flow_CreateShot.py` — Crear shots Flow (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QProgressBar)
 - [x] `LGA_NKS_Flow_ModifyShot.py` — Modificar shots Flow (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton)
 - [x] `LGA_NKS_Flow_ShowInFlow.py` — Mostrar en Flow (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QProgressBar, QRunnable, QThreadPool)
 - [x] `LGA_NKS_Flow_Thumbs.py` — Thumbnails Flow (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QProgressBar)
+- [x] `LGA_NKS_Flow_UpdateThumb.py` — Comparación y reemplazo de thumbnail (QDialog, QRunnable, QThreadPool)
+- [x] `LGA_NKS_Flow_CheckTimelineShots.py` — Verificación de shots del contexto (QDialog, QListWidget, QRunnable, QThreadPool)
 - [x] `LGA_NKS_Flow_ShotPriority.py` — Prioridad de shots (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton)
+- [x] `LGA_NKS_DownloadClip_Watcher.py` — Watcher de descargas (QtCore/QTimer mediante adapter, con fallback de compatibilidad)
 - [x] `LGA_NKS_FileManagerS3_Download.py` — Descarga FileManagerS3 (sin Qt - solo subprocess)
 - [x] `LGA_NKS_FileManagerS3_Upload.py` — Subida FileManagerS3 (sin Qt - solo subprocess)
 - [x] `LGA_NKS_FileManagerS3_OpenPath.py` — Abrir ruta FileManagerS3 (sin Qt - solo subprocess)
+- [x] `LGA_NKS_FileManagerS3_DownloadClip.py` — Descarga de clip (sin Qt directo)
+- [x] `LGA_NKS_FileManagerS3_DownloadAmf.py` — Descarga de Look Files (sin Qt directo)
+- [x] `LGA_NKS_Flow_CreateShot_Folders.py` — Creación de carpetas de shot (sin Qt directo)
+- [x] `LGA_NKS_PipeSync_OpenPath.py` — Apertura en PipeSync (sin Qt directo)
+- [x] `LGA_NKS_PipeSync_CreatePsync.py` — Archivo `.psync` (sin Qt directo)
 
-## ✅ **MIGRACIÓN COMPLETA - LGA_NKS_Coordination_Panel_py**
-**8/8 archivos completamente migrados:**
+## ✅ **MIGRACIÓN COMPLETA - LGA_NKS_Flow_S3_Panel_py**
+**16/16 archivos Python inventariados:**
 - `LGA_NKS_Flow_CreateShot.py` ✅
 - `LGA_NKS_Flow_ModifyShot.py` ✅
 - `LGA_NKS_Flow_ShowInFlow.py` ✅
 - `LGA_NKS_Flow_Thumbs.py` ✅
+- `LGA_NKS_Flow_UpdateThumb.py` ✅
+- `LGA_NKS_Flow_CheckTimelineShots.py` ✅
 - `LGA_NKS_Flow_ShotPriority.py` ✅
+- `LGA_NKS_DownloadClip_Watcher.py` ✅
 - `LGA_NKS_FileManagerS3_Download.py` ✅ (sin Qt - solo subprocess)
 - `LGA_NKS_FileManagerS3_Upload.py` ✅ (sin Qt - solo subprocess)
 - `LGA_NKS_FileManagerS3_OpenPath.py` ✅ (sin Qt - solo subprocess)
+- `LGA_NKS_FileManagerS3_DownloadClip.py` ✅ (sin Qt directo)
+- `LGA_NKS_FileManagerS3_DownloadAmf.py` ✅ (sin Qt directo)
+- `LGA_NKS_Flow_CreateShot_Folders.py` ✅ (sin Qt directo)
+- `LGA_NKS_PipeSync_OpenPath.py` ✅ (sin Qt directo)
+- `LGA_NKS_PipeSync_CreatePsync.py` ✅ (sin Qt directo)
 
 ### LGA_NKS_ViewerTL/ - Scripts de timeline/viewer
 - [x] `LGA_NKS_Timeline_Refresh_Wrap.py` — Refresh timeline (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton)
@@ -98,13 +114,13 @@
 - [x] `LGA_NKS_Utils/LGA_NKS_GetClip.py` — Utilidades de clips (migrado Qt + fix IndexError)
 - [x] `LGA_NKS_Utils/README_StyleUtils.md` — Documentación
 - [x] `LGA_NKS_Flow_Task_Config.py` — Configuración de tasks Flow (sin Qt)
-- [x] `LGA_NKS_Flow_Users.json` — Configuración de usuarios (JSON)
+- [x] `LGA_NKS_Shared/LGA_NKS_Flow_Users_Config.py` — Lee usuarios desde `pipesync_stats.db`; no existe JSON local
 - [x] `LGA_NKS_Panel_Style_Guide.md` — Guía de estilos
 - [x] `LGA_NKS_Hilos_Hiero.md` — Documentación de hilos
 
 ### Scripts sin Qt
-- [x] `LGA_NKS_Coordination_Panel_py/LGA_NKS_FileManagerS3.md` — Documentación
-- [x] `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.md` — Documentación
+- [x] `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3.md` — Documentación
+- [x] `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.md` — Documentación
 - [x] `LGA_NKS_Wasabi/LGA_NKS_Wasabi_README.md` — Documentación
 - [x] `LGA_NKS_Wasabi/verify_policy_assign.py` — Script de verificación (sin Qt)
 - [x] `LGA_NKS_Wasabi/verify_policy_created.py` — Script de verificación (sin Qt)

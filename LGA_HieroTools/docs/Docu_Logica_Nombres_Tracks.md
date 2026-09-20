@@ -161,10 +161,10 @@ Los pasos para sumar una task nueva son:
 
 - **Selección de clips:** [Docu_Metodos_Seleccion_Clip.md](Docu_Metodos_Seleccion_Clip.md)
 
-- **Push multi-task:** [LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Push.py)
+- **Push multi-task:** [LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py)
   - Funciones: `push_from_selected_clips()`, `_show_task_selection_dialog()`
 
-- **Pull multi-task:** [LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py](../LGA_NKS_Flow_Panel_py/LGA_NKS_Flow_Pull.py)
+- **Pull multi-task:** [LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py)
   - Métodos: `HieroOperations.process_selected_clips()`, `HieroOperations.change_to_highest_version()`, `SGManager.find_highest_version_for_task()`
 
 - **Review on/off por track:** [LGA_NKS_Review_Panel.py](../LGA_NKS_Review_Panel.py)

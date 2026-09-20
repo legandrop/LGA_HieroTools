@@ -1,14 +1,19 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_FlowProd_Panel v1.28 | Lega
-  Panel para operaciones de producción con Flow:
+  LGA_NKS_Flow_FlowProd_Panel v1.29 | Lega
+  Panel Flow S3 para operaciones de produccion con Flow y almacenamiento S3:
   - Revelar clips en Flow
   - Crear shots automáticamente
   - Crear thumbnails
   - Cambiar prioridad de shots
   - Integración con FileManagerS3 (Open, Download, Upload)
 
+  v1.29: La etiqueta visible pasa de Coordination a Flow S3. Reveal in Flow
+         queda sexto, cerrando el bloque verde de Flow antes del bloque violeta
+         de S3. Shot Priority mezcla verde/rojo y Reveal mezcla verde/gris.
+         La carpeta privada pasa a LGA_NKS_Flow_S3_Panel_py sin cambiar el
+         nombre del modulo, la clase ni el objectName del dock.
   v1.28: Thumbnail pasa al cuarto lugar, junto a Create Shot, Modify Shot y
          Check Shots Exist, y comparte el mismo color de ese grupo.
   v1.27: Agregado boton "Download AMF" para descargar la carpeta
@@ -21,7 +26,7 @@ ________________________________________________________________________________
   v1.24: El boton "Thumbnail" ahora soporta Shift+Click: reemplaza el thumbnail
          del shot en Flow con un snapshot del viewer, mostrando una ventana de
          comparacion (actual vs nuevo) y subiendo en un hilo separado.
-         Ver LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_UpdateThumb.py.
+         Ver LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_UpdateThumb.py.
          Tooltip del boton actualizado (Click vs Shift+Click).
   v1.23: Agregado sistema de scroll, logging a archivo y gap vertical
   v1.22: Boton Check Shots Exist para chequear si los shots del track comp existen en Flow
@@ -202,7 +207,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "LGA_NKS_Shared"))
 from LGA_NKS_Shared.LGA_NKS_StyleUtils import (
     calculate_dynamic_border,
     calculate_dynamic_hover,
-    create_tooltip_stylesheet
+    create_gradient_style,
+    create_tooltip_stylesheet,
 )
 
 
@@ -210,7 +216,7 @@ class FlowProdPanel(QtWidgets.QWidget):
     def __init__(self):
         super(FlowProdPanel, self).__init__()
         self.setObjectName("com.lega.FlowProdPanel")
-        self.setWindowTitle("Coordination")
+        self.setWindowTitle("Flow S3")
         debug_print("=== FlowProdPanel init ===")
         self.root_layout = QtWidgets.QVBoxLayout()
         self.root_layout.setContentsMargins(0, 0, 0, 0)
@@ -235,7 +241,8 @@ class FlowProdPanel(QtWidgets.QWidget):
         self.scroll_widget.setLayout(self.layout)
         self.scroll_area.setWidget(self.scroll_widget)
 
-        # Definir los botones fijos y sus colores/estilos
+        # Los seis primeros pertenecen a Flow; los seis restantes, a S3.
+        # Se conserva el objectName historico del dock para no romper layouts.
         self.fixed_buttons = [
             (
                 "Create Shot",
@@ -256,7 +263,7 @@ class FlowProdPanel(QtWidgets.QWidget):
                 self.check_timeline_shots,
                 SHOT_WORKFLOW_COLOR,
                 None,
-                "Chequear si los shots del track comp existen en Flow",
+                "Chequear si los shots de los tracks activos (Comp; CG en Client) existen en Flow",
             ),
             (
                 "Thumbnail",
@@ -269,9 +276,16 @@ class FlowProdPanel(QtWidgets.QWidget):
             (
                 "Shot Priority",
                 self.toggle_shot_priority_for_selected_clip,
-                "#450101",
+                "gradient_flow_priority",
                 None,
                 "Cambiar prioridad del shot (alta ↔ normal)",
+            ),
+            (
+                "Reveal in Flow",
+                self.show_in_flow_for_selected_clip,
+                "gradient_flow_reveal",
+                "Ctrl+Shift+F",
+                "Click: Abrir task preferida en Flow (Comp; CG en Client si no existe Comp)\nShift+Click: Abrir Shot completo en Flow (Ctrl+Shift+F)",
             ),
             (
                 ".Psync",
@@ -315,13 +329,6 @@ class FlowProdPanel(QtWidgets.QWidget):
                 None,
                 "Descargar la carpeta Look_Files del shot (los .amf para ver bien los renders)",
             ),
-            (
-                "Reveal in Flow",
-                self.show_in_flow_for_selected_clip,
-                "#1f1f1f",
-                "Ctrl+Shift+F",
-                "Click: Abrir task comp en Flow\nShift+Click: Abrir Shot completo en Flow (Ctrl+Shift+F)",
-            ),
         ]
 
         # Solo botones fijos para este panel
@@ -361,41 +368,10 @@ class FlowProdPanel(QtWidgets.QWidget):
             tooltip = button_info[4] if len(button_info) > 4 else None
 
             # Determinar el estilo del bot?n
-            if style == "gradient_magenta_violet":
-                border_color = calculate_dynamic_border(style)
-                hover_colors = calculate_dynamic_hover(style)
-
-                button_stylesheet = f"""
-                    QPushButton {{
-                        background-color: qlineargradient(
-                            x1: 0, y1: 0, x2: 1, y2: 0,
-                            stop: 0 #443a91,
-                            stop: 0.5 #543a91,
-                            stop: 1 #5b3a91
-                        );
-                        border: 1px solid {border_color};
-                        border-radius: 3px;
-                        color: #d8d8d8;
-                        padding: 0px 0px;
-                        min-height: 20px;
-                    }}
-                    QPushButton:hover {{
-                        background-color: qlineargradient(
-                            x1: 0, y1: 1, x2: 1, y2: 0,
-                            stop: 0 {hover_colors['inicio']},
-                            stop: 0.5 #9a6cd8,
-                            stop: 1 {hover_colors['fin']}
-                        );
-                    }}
-                    QPushButton:pressed {{
-                        background-color: qlineargradient(
-                            x1: 0, y1: 1, x2: 1, y2: 0,
-                            stop: 0 #5145ac,
-                            stop: 0.5 #6a49b5,
-                            stop: 1 #5b3a91
-                        );
-                    }}
-                """
+            if style.startswith("gradient_"):
+                button_stylesheet = create_gradient_style(style)
+                if button_stylesheet is None:
+                    raise ValueError(f"Gradiente de boton desconocido: {style}")
             else:
                 border_color = calculate_dynamic_border(style)
                 hover_color = calculate_dynamic_hover(style)
@@ -557,10 +533,10 @@ class FlowProdPanel(QtWidgets.QWidget):
         return base_name
 
     def show_in_flow_for_selected_clip(self):
-        """Llama al script Show in Flow para abrir la task comp en Chrome"""
-        debug_print("=== CLICK NORMAL: Show in Flow (Task Comp) ===")
+        """Abre la task preferida del contexto en el navegador predeterminado."""
+        debug_print("=== CLICK NORMAL: Show in Flow (task preferida) ===")
         script_path = os.path.join(
-            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_Flow_ShowInFlow.py"
+            os.path.dirname(__file__), "LGA_NKS_Flow_S3_Panel_py", "LGA_NKS_Flow_ShowInFlow.py"
         )
         if not os.path.exists(script_path):
             show_warning(
@@ -589,10 +565,10 @@ class FlowProdPanel(QtWidgets.QWidget):
             show_warning(self, "Error al ejecutar", str(e))
 
     def show_shot_in_flow_for_selected_clip(self):
-        """Llama al script Show in Flow para abrir el Shot completo en Chrome (Shift+Click)"""
+        """Abre el Shot completo en el navegador predeterminado (Shift+Click)."""
         debug_print("=== SHIFT+CLICK: Show Shot in Flow (Shot completo) ===")
         script_path = os.path.join(
-            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_Flow_ShowInFlow.py"
+            os.path.dirname(__file__), "LGA_NKS_Flow_S3_Panel_py", "LGA_NKS_Flow_ShowInFlow.py"
         )
         if not os.path.exists(script_path):
             show_warning(
@@ -623,7 +599,7 @@ class FlowProdPanel(QtWidgets.QWidget):
     def create_thumbnail_for_selected_clip(self):
         """Llama al script Thumbnail para crear un thumbnail del clip seleccionado"""
         script_path = os.path.join(
-            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_Flow_Thumbs.py"
+            os.path.dirname(__file__), "LGA_NKS_Flow_S3_Panel_py", "LGA_NKS_Flow_Thumbs.py"
         )
         if not os.path.exists(script_path):
             show_warning(
@@ -652,7 +628,7 @@ class FlowProdPanel(QtWidgets.QWidget):
         con un snapshot del viewer (abre ventana de confirmacion)."""
         script_path = os.path.join(
             os.path.dirname(__file__),
-            "LGA_NKS_Coordination_Panel_py",
+            "LGA_NKS_Flow_S3_Panel_py",
             "LGA_NKS_Flow_UpdateThumb.py",
         )
         if not os.path.exists(script_path):
@@ -681,7 +657,7 @@ class FlowProdPanel(QtWidgets.QWidget):
     def create_shot_for_selected_clip(self):
         """Llama al script Create Shot para crear shots basado en el clip seleccionado"""
         script_path = os.path.join(
-            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_Flow_CreateShot.py"
+            os.path.dirname(__file__), "LGA_NKS_Flow_S3_Panel_py", "LGA_NKS_Flow_CreateShot.py"
         )
         if not os.path.exists(script_path):
             show_warning(
@@ -710,7 +686,7 @@ class FlowProdPanel(QtWidgets.QWidget):
     def modify_shot_for_selected_clip(self):
         """Llama al script Modify Shot para ajustar shots existentes"""
         script_path = os.path.join(
-            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_Flow_ModifyShot.py"
+            os.path.dirname(__file__), "LGA_NKS_Flow_S3_Panel_py", "LGA_NKS_Flow_ModifyShot.py"
         )
         if not os.path.exists(script_path):
             show_warning(
@@ -738,7 +714,7 @@ class FlowProdPanel(QtWidgets.QWidget):
     def toggle_shot_priority_for_selected_clip(self):
         """Llama al script Shot Priority para cambiar la prioridad del shot seleccionado"""
         script_path = os.path.join(
-            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_Flow_ShotPriority.py"
+            os.path.dirname(__file__), "LGA_NKS_Flow_S3_Panel_py", "LGA_NKS_Flow_ShotPriority.py"
         )
         if not os.path.exists(script_path):
             show_warning(
@@ -767,7 +743,7 @@ class FlowProdPanel(QtWidgets.QWidget):
     def open_shot_in_pipesync(self):
         """Llama al script PipeSync para abrir la carpeta del shot seleccionado"""
         script_path = os.path.join(
-            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_PipeSync_OpenPath.py"
+            os.path.dirname(__file__), "LGA_NKS_Flow_S3_Panel_py", "LGA_NKS_PipeSync_OpenPath.py"
         )
         if not os.path.exists(script_path):
             show_warning(
@@ -795,7 +771,7 @@ class FlowProdPanel(QtWidgets.QWidget):
     def create_pipesync_token_file(self):
         """Genera un archivo .psync para compartir el shot"""
         script_path = os.path.join(
-            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_PipeSync_CreatePsync.py"
+            os.path.dirname(__file__), "LGA_NKS_Flow_S3_Panel_py", "LGA_NKS_PipeSync_CreatePsync.py"
         )
         if not os.path.exists(script_path):
             show_warning(
@@ -823,7 +799,7 @@ class FlowProdPanel(QtWidgets.QWidget):
     def open_shot_in_filemanagers3(self):
         """Llama al script FileManagerS3 para abrir la carpeta del shot seleccionado"""
         script_path = os.path.join(
-            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_FileManagerS3_OpenPath.py"
+            os.path.dirname(__file__), "LGA_NKS_Flow_S3_Panel_py", "LGA_NKS_FileManagerS3_OpenPath.py"
         )
         if not os.path.exists(script_path):
             show_warning(
@@ -852,7 +828,7 @@ class FlowProdPanel(QtWidgets.QWidget):
     def download_shot_from_filemanagers3(self):
         """Llama al script FileManagerS3 para descargar el shot seleccionado"""
         script_path = os.path.join(
-            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_FileManagerS3_Download.py"
+            os.path.dirname(__file__), "LGA_NKS_Flow_S3_Panel_py", "LGA_NKS_FileManagerS3_Download.py"
         )
         if not os.path.exists(script_path):
             show_warning(
@@ -881,7 +857,7 @@ class FlowProdPanel(QtWidgets.QWidget):
     def upload_shot_to_filemanagers3(self):
         """Llama al script FileManagerS3 para subir el shot seleccionado"""
         script_path = os.path.join(
-            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_FileManagerS3_Upload.py"
+            os.path.dirname(__file__), "LGA_NKS_Flow_S3_Panel_py", "LGA_NKS_FileManagerS3_Upload.py"
         )
         if not os.path.exists(script_path):
             show_warning(
@@ -910,7 +886,7 @@ class FlowProdPanel(QtWidgets.QWidget):
     def download_amf_from_filemanagers3(self):
         """Llama al script FileManagerS3 para descargar la carpeta Look_Files del shot seleccionado"""
         script_path = os.path.join(
-            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_FileManagerS3_DownloadAmf.py"
+            os.path.dirname(__file__), "LGA_NKS_Flow_S3_Panel_py", "LGA_NKS_FileManagerS3_DownloadAmf.py"
         )
         if not os.path.exists(script_path):
             show_warning(
@@ -939,7 +915,7 @@ class FlowProdPanel(QtWidgets.QWidget):
     def _run_download_clip_from_filemanagers3(self, download_latest=False):
         """Llama al script FileManagerS3 para descargar clip(s) seleccionado(s)."""
         script_path = os.path.join(
-            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_FileManagerS3_DownloadClip.py"
+            os.path.dirname(__file__), "LGA_NKS_Flow_S3_Panel_py", "LGA_NKS_FileManagerS3_DownloadClip.py"
         )
         if not os.path.exists(script_path):
             show_warning(
@@ -975,7 +951,7 @@ class FlowProdPanel(QtWidgets.QWidget):
     def check_timeline_shots(self):
         """Llama al script de chequeo de shots en el timeline."""
         script_path = os.path.join(
-            os.path.dirname(__file__), "LGA_NKS_Coordination_Panel_py", "LGA_NKS_Flow_CheckTimelineShots.py"
+            os.path.dirname(__file__), "LGA_NKS_Flow_S3_Panel_py", "LGA_NKS_Flow_CheckTimelineShots.py"
         )
         if not os.path.exists(script_path):
             show_warning(
@@ -1017,7 +993,7 @@ try:
 
     _watcher_path = os.path.join(
         os.path.dirname(__file__),
-        "LGA_NKS_Coordination_Panel_py",
+        "LGA_NKS_Flow_S3_Panel_py",
         "LGA_NKS_DownloadClip_Watcher.py",
     )
     if os.path.exists(_watcher_path):
