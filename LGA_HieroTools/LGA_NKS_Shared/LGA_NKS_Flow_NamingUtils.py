@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_NamingUtils v1.17 | Lega
+  LGA_NKS_Flow_NamingUtils v1.19 | Lega
 
   Utilidades para detectar y extraer información de nombres de archivos/shots
   Compatible con sistemas de nomenclatura actuales y series:
@@ -41,6 +41,9 @@ ____________________________________________________________________
   - LGA_NKS_Edit_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py
   - LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py
 
+  v1.19: SUP sigue resolviendo la task pero se omite del shot_code de Flow.
+  v1.18: SUP es un token interno de naming, separado del catálogo de vendors.
+         Se normaliza sin distinguir mayúsculas y nunca depende de PipeSync.
   v1.17: la familia CG lee las tasks registradas de LGA_NKS_TaskScope en vez
          de LGA_NKS_GetClip. GetClip importa hiero, asi que fuera de NKS el
          import fallaba, el except lo tapaba y la regla no se aplicaba nunca
@@ -83,6 +86,20 @@ _VERSION_RE = re.compile(r"^v\d+$", re.IGNORECASE)
 TASK_NAME_ALIASES = {
     "compo": "comp",
 }
+
+# Token reservado para planos internos del supervisor. No representa un vendor
+# externo y por eso nunca debe recibir grupos ni usuarios de vendor.
+INTERNAL_VENDOR_TOKEN = "SUP"
+
+
+def normalize_vendor_token(value):
+    """Normaliza un token de vendor o naming para comparaciones seguras."""
+    return str(value or "").strip().upper()
+
+
+def is_internal_vendor_token(value):
+    """True únicamente para el token interno SUP, sin distinguir el caso."""
+    return normalize_vendor_token(value) == INTERNAL_VENDOR_TOKEN
 
 
 def _apply_cg_family(name):
@@ -208,6 +225,8 @@ def _is_known_vendor_code(block, project_name):
     La lista sale de la DB de PipeSync. Si no se puede resolver, devuelve False
     y el naming se comporta como antes de v1.14.
     """
+    if is_internal_vendor_token(block):
+        return True
     if not block or not block.isalpha():
         return False
 
@@ -292,10 +311,61 @@ def extract_shot_code(base_name):
     desc_count = 2 if has_description else 0
     target_count = base_count + desc_count
 
-    if len(core_parts) >= target_count:
-        return "_".join(core_parts[:target_count])
+    selected = list(core_parts[:target_count]) if len(core_parts) >= target_count else list(core_parts)
+    internal_index = base_count - 1
+    if 0 <= internal_index < len(selected) and is_internal_vendor_token(
+        selected[internal_index]
+    ):
+        del selected[internal_index]
+    return "_".join(selected)
 
-    return "_".join(core_parts)
+
+def extract_vendor_token(base_name, project_name=None):
+    """Devuelve SUP o el vendor externo reconocido al final del bloque base."""
+    parts = _strip_version_suffix((base_name or "").split("_"))
+    if not parts:
+        return ""
+    original_base = 4 if (_is_series_format(parts) or _is_vendor_format(parts)) else 3
+    if len(parts) <= original_base:
+        return ""
+    candidate = parts[original_base]
+    if is_internal_vendor_token(candidate) or _is_known_vendor_code(candidate, project_name or parts[0]):
+        return normalize_vendor_token(candidate)
+    return ""
+
+
+def find_unknown_vendor_slot(
+    base_name, known_tasks, project_name=None, client_cg_by_exclusion=False
+):
+    """Detecta `..._X_task` cuando X no es vendor ni SUP.
+
+    En Client el último token puede ser cualquier disciplina de la familia CG,
+    que se resuelve por exclusión y por eso no depende de una lista finita.
+    """
+    parts = _strip_version_suffix((base_name or "").split("_"))
+    if not parts:
+        return ""
+    base_count = 4 if (_is_series_format(parts) or _is_vendor_format(parts)) else 3
+    if len(parts) != base_count + 2:
+        return ""
+    candidate, task = parts[base_count], parts[base_count + 1]
+    known = {str(item or "").strip().lower() for item in (known_tasks or [])}
+    if not client_cg_by_exclusion and str(task).strip().lower() not in known:
+        return ""
+    if is_internal_vendor_token(candidate) or _is_known_vendor_code(candidate, project_name or parts[0]):
+        return ""
+    return candidate
+
+
+def extract_shot_code_with_vendor_candidate(base_name, candidate):
+    """Forma el shot code con un candidato que todavía debe validar Flow."""
+    parts = _strip_version_suffix((base_name or "").split("_"))
+    if not parts or not candidate:
+        return extract_shot_code(base_name)
+    base_count = 4 if (_is_series_format(parts) or _is_vendor_format(parts)) else 3
+    if len(parts) > base_count and normalize_vendor_token(parts[base_count]) == normalize_vendor_token(candidate):
+        return "_".join(parts[:base_count + 1])
+    return extract_shot_code(base_name)
 
 
 _SHOT_FOLDER_RE = re.compile(

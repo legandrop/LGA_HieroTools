@@ -26,6 +26,8 @@ El panel de Coordination proporciona herramientas esenciales para operaciones de
 - **Script utilizado**: `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py`
 - **Comportamiento**: Analiza los clips seleccionados, extrae información del shotname y crea los shots correspondientes en Flow si no existen
 - **Pre-chequeo v1.33**: Antes de mostrar la UI verifica si ya existen; si hay múltiples y alguno existe se cancela mostrando la lista, si es un único shot existente lanza Modify Shot automáticamente
+- **Acceso Client v1.52**: `SUP` es interno y se omite del nombre del Shot en Flow (`PROJA_010_020_SUP_comp` crea `PROJA_010_020` + Task `comp`). Un vendor externo conserva su código y se valida completo antes de escribir; el Shot nace con `sg_vendor_groups`, sus Tasks con `task_assignees` y `Project.users` suma los usuarios prevalidos sin quitar miembros existentes. Una colisión `SUP`/`vendors[]`, un Group incompleto o un token inequívoco desconocido abortan sin crear un shot largo.
+- **Resultado**: las etapas se clasifican como `complete`, `partial` o `failed`; una Task, membresía o carga secundaria fallida no se anuncia como éxito total y no se hace rollback destructivo.
 
 ### 4. Modify Shot
 - **Función**: Modifica un shot ya existente en Flow (agregar o quitar tasks, actualizar descripciones) sin tocar estados actuales

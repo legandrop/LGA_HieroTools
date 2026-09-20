@@ -22,8 +22,11 @@ pipesync_stats.db  ->  tabla flow_users        (la escribe el sync de PipeSync)
         +--> ESTE PANEL (botones de usuario, y los scripts de policies de Wasabi)
 ```
 
-La fuente de verdad es **Flow**. La DB es solo un cache que PipeSync reescribe entero en
-cada sync, y HieroTools la lee en **modo read-only**: nunca escribe ahi.
+La fuente de verdad es **Flow**. La tabla `flow_users` es un cache que PipeSync
+reescribe entero en cada sync y HieroTools la lee en **modo read-only**. La única
+escritura deliberada en `pipesync_stats.db` ocurre después de asignar una Task:
+se espeja el rol `assignee` para que el reconciliador canónico de Wasabi vea el
+estado confirmado de Flow; las filas `reviewer` se preservan.
 
 ### Consecuencias practicas
 
@@ -57,7 +60,8 @@ aparece como boton, pero los scripts de Wasabi lo siguen encontrando, porque bus
 ## Funcionalidades Principales
 
 ### 2. Funcionalidad Triple de Botones de Usuario
-- **Click normal**: Asigna el usuario a la task comp en Flow Production Tracking y actualiza la base de datos local pipesync.db
+- **Click normal**: Asigna el usuario en Flow, espeja `pipesync.db` y
+  `pipesync_stats.db`, y en Studio ejecuta el grant canónico de Wasabi.
 - **Shift+Click**: Crea/actualiza políticas IAM de Wasabi para el usuario seleccionado
 - **Ctrl+Shift+Click**: Abre ventana de gestión de shots asignados en policy de Wasabi
 
@@ -92,12 +96,14 @@ desactivarlo en Flow — no hace falta borrar nada.
 
 ## Integración con Wasabi
 
-### Asignación de Políticas (Shift+Click)
-Al hacer Shift+Click en un botón de usuario, el panel llama al script de asignación:
-- **Función**: `create_wasabi_policy_for_user(wasabi_user)` 
-- **Script llamado**: `Python/Startup/LGA_NKS_Wasabi/LGA_NKS_Wasabi_PolicyAssign.py`
-- **Parámetro**: El `wasabi_user` configurado en el JSON para ese usuario
-- **Interfaz**: El script maneja toda la interfaz (ventana de estado, hilos, etc.)
+### Asignación de Políticas (normal y Shift+Click)
+Después de escribir Flow, la asignación normal espeja `pipesync.db` y
+`pipesync_stats.db`; solo con stats confirmado ejecuta el motor canónico instalado
+`wasabi_policy_sync.py --apply --grant-only --user <Flow name>`. Shift+Click usa
+exactamente el mismo wrapper, nunca el escritor IAM histórico del pack. Un fallo de
+stats impide el grant; un fallo de main con stats correcto permite el grant pero se
+reporta como parcial. `skip_wasabi_policy` y un `wasabi_user` vacío son no-op exitosos.
+En contexto Client hay una guarda runtime y no se invoca Wasabi.
 
 ### Gestión de Shots (Ctrl+Shift+Click)
 Al hacer Ctrl+Shift+Click en un botón de usuario, el panel llama al script de gestión:
@@ -127,10 +133,10 @@ Los scripts llamados por los botones principales ahora actualizan tanto Flow Pro
 - Busca coincidencias en policies IAM de Wasabi (`*_policy`)
 - Permite limpiar en lote las líneas de policy para shots seleccionados
 
-### `create_wasabi_policy_for_user(wasabi_user)`
-- Llama al script de asignación de políticas de Wasabi para usuario específico
-- Pasa el parámetro `wasabi_user` al script
-- El script se encarga de mostrar ventana de estado y procesamiento
+### `create_wasabi_policy_for_user(flow_user_name)`
+- Ejecuta en background el wrapper canónico de PipeSync para el usuario de Flow.
+- Resuelve runtime y script desde rutas absolutas de la instalación, sin PATH.
+- Muestra el resultado completo, parcial o no-op en el panel.
 - Ubicación: `Python/Startup/LGA_NKS_Assignee_Panel.py`
 
 ### `unassign_wasabi_policy_for_user(wasabi_user)`
@@ -195,7 +201,9 @@ El panel mantiene sincronizada la información entre Flow Production Tracking y 
 
 - **Get Assignees**: Consulta asignados desde Flow (fuente de verdad absoluta)
 - **Clear Assignees**: Elimina asignados en Flow y limpia tabla `task_assignments` en DB local
-- **Assign User**: Añade asignado en Flow y actualiza tabla `task_assignments` en DB local
+- **Assign User**: Añade el asignado en Flow, espeja ambas DB locales y sólo
+  después sincroniza el grant de Wasabi en Studio. En Client la guarda runtime
+  convierte ese último paso en un no-op.
 
 Esta sincronización bidireccional asegura consistencia entre ambas fuentes de datos.
 
@@ -243,7 +251,10 @@ Esta sincronización bidireccional asegura consistencia entre ambas fuentes de d
 - `LGA_NKS_Assignee_Panel.py`
   - `load_users_from_config()`: carga los usuarios; sin datos devuelve lista vacia.
   - `create_user_buttons()` / `reload_config()`.
-- `LGA_NKS_Assignee_Panel_py/LGA_NKS_Wasabi_PolicyAssign.py` y `…_PolicyUnassign.py`
+- `LGA_NKS_Assignee_Panel_py/LGA_NKS_Wasabi_PolicyAssign.py`
+  - Escritor histórico conservado para uso manual; el panel ya no tiene callsites
+    hacia él.
+- `LGA_NKS_Assignee_Panel_py/LGA_NKS_Wasabi_PolicyUnassign.py`
   - `get_user_info_from_config(wasabi_user)`: nombre y color por `wasabi_user`.
 - `LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Assign_Assignee.py`, `…_Flow_Assignee.py`,
   `…_Flow_Clear_Assignees.py`

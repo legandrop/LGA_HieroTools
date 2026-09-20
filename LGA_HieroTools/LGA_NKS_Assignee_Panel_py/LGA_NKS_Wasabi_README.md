@@ -8,7 +8,10 @@ Este módulo automatiza la creación y gestión de políticas de acceso IAM en W
 ## Scripts Principales
 
 ### `LGA_NKS_Wasabi_PolicyAssign.py`
-**Script de asignación** que se ejecuta desde Hiero para crear/actualizar políticas IAM automáticamente.
+**Implementación histórica de asignación directa.** Se conserva para uso manual y
+diagnóstico, pero el Assignee Panel ya no la invoca. Tanto el click normal como
+Shift+Click pasan por el motor canónico instalado de PipeSync para evitar dos
+escritores con políticas diferentes.
 
 **Funcionalidad:**
 - Obtiene rutas de clips seleccionados en el timeline de Hiero
@@ -57,11 +60,13 @@ Este módulo automatiza la creación y gestión de políticas de acceso IAM en W
 3. Hacer click en "✕" junto a cualquier shot para eliminarlo de la policy
 4. La policy se actualiza automáticamente sin necesidad de reiniciar
 
-**Uso desde PolicyAssign:**
-1. Seleccionar clips en el timeline de Hiero
-2. Hacer **Shift+Click** en el botón del usuario deseado en el panel LGA_NKS_Flow_Assignee_Panel
-3. Se abrirá una ventana de estado mostrando el progreso
-4. El script procesará automáticamente las rutas y creará/actualizará los permisos
+**Uso desde el panel:**
+1. El click normal asigna primero en Flow y espeja `pipesync.db` y
+   `pipesync_stats.db`.
+2. Si stats quedó confirmado, ejecuta
+   `wasabi_policy_sync.py --apply --grant-only --user <Flow name>`.
+3. Shift+Click llama al mismo wrapper canónico sin pasar por el escritor histórico.
+4. En Client la guarda runtime devuelve un no-op y no inicia Wasabi.
 
 **Uso directo:**
 - `module.main(username)`: Llamada programática con usuario específico
@@ -89,8 +94,8 @@ Este módulo automatiza la creación y gestión de políticas de acceso IAM en W
 
 **Ejemplo de procesamiento:**
 ```
-Ruta: T:\VFX-ETDM\103\ETDM_3003_0100_DeAging_Cocina\_input\archivo.exr
-Resultado: Acceso al bucket 'vfx-etdm' carpeta '103/ETDM_3003_0100_DeAging_Cocina'
+Ruta: T:\VFX-PROJA\010\PROJA_010_020\_input\archivo.exr
+Resultado: Acceso al bucket configurado para PROJA, carpeta '010/PROJA_010_020'
 ```
 
 ### `verify_policy_assign.py`
@@ -115,30 +120,19 @@ python verify_policy_assign.py
 
 ## Integración con Panel de Assignees
 
-### Ventana de Estado y Procesamiento en Hilos
-Cuando se ejecuta desde el panel (Shift+Click), el script muestra automáticamente una ventana de estado:
-- **Mensaje inicial**: "Habilitando rutas en la policy del usuario [NOMBRE]" (colores múltiples)
-- **Rutas procesadas**: Muestra las rutas reales de buckets que se están habilitando (ej: `vfx-etdm/105/ETDM_5027_0200_Chroma_Camioneta`)
-- **Éxito**: Mensaje verde confirmando asignación exitosa
-- **Error**: Mensaje rojo con detalles del error (ej: límite de 5 versiones de policy)
-- **Botón Close**: Permite cerrar la ventana manualmente después de completar la operación
-- **Procesamiento**: Se ejecuta en hilo separado (`WasabiWorker`) para no bloquear la interfaz de Hiero
+### Resultado y procesamiento en hilos
+El panel ejecuta el wrapper canónico en un `QRunnable`, fuera del hilo de UI. El
+resultado distingue éxito, no-op y fallo parcial. Un fallo de stats bloquea el
+grant; un fallo de `pipesync.db` con stats correcto permite el grant pero mantiene
+el resultado parcial. El contexto Studio/Client queda fijado desde el inicio de la
+operación.
 
 ### Configuración de Usuarios
-Los usuarios se cargan desde `Python/Startup/LGA_NKS_Flow_Users.json`:
-```json
-{
-    "users": [
-        {
-            "name": "Lega Pugliese",
-            "color": "#69135e",
-            "wasabi_user": "lega"
-        }
-    ]
-}
-```
+Los usuarios salen de `pipesync_stats.db`, tabla `flow_users`, sincronizada desde
+Flow por PipeSync. No existe fallback JSON local. Los perfiles con
+`skip_wasabi_policy` o sin `wasabi_user` producen un no-op exitoso.
 
-**Clases implementadas en este script:**
+**Clases de la implementación histórica:**
 - `WasabiStatusWindow` - Ventana de estado con formato HTML y botón Close
 - `WasabiWorker` - Procesamiento en hilo separado (QRunnable)
 - `WasabiWorkerSignals` - Señales para comunicación entre hilos
@@ -179,6 +173,9 @@ Las credenciales se leen desde:
 - **macOS**: `~/Library/Application Support/LGA/PipeSync/config.secure`
 - **Linux**: `~/.config/LGA/PipeSync/config.secure`
 
+El panel no lee ni transporta las credenciales IAM: resuelve por ruta absoluta el
+runtime instalado y delega el grant al motor de PipeSync.
+
 ## Endpoints Utilizados
 
 - **IAM**: `https://iam.wasabisys.com`
@@ -217,3 +214,15 @@ Las credenciales se leen desde:
   ]
 }
 ```
+
+## Referencias técnicas
+
+- `LGA_NKS_Assignee_Panel.py`: `CanonicalGrantWorker` y
+  `create_wasabi_policy_for_user()` implementan Shift+Click no bloqueante.
+- `LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Assign_Assignee.py`:
+  `AssignSelectedTasksWorker.run()` ordena Flow, mirrors y grant.
+- `LGA_NKS_Shared/LGA_NKS_AssignmentSaga.py`:
+  `run_post_flow_saga()`, `mirror_stats_assignees()` y
+  `run_canonical_wasabi_grant()`.
+- `LGA_NKS_Shared/LGA_NKS_PipeSyncPaths.py`:
+  `get_pipesync_runtime_paths()` resuelve binario y script sin depender de PATH.

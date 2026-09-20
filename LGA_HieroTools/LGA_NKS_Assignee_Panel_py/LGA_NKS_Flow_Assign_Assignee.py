@@ -1,10 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Assign_Assignee v1.28 | Lega
+  LGA_NKS_Flow_Assign_Assignee v1.29 | Lega
 
   Asigna un usuario a una tarea en ShotGrid (Flow) a partir del base_name y nombre de usuario
 
+  v1.29: La asignación espeja main/stats y recién después ejecuta el grant
+         canónico de PipeSync; las fallas parciales ya no se informan como éxito.
   v1.28: La ventana lleva la fuente del pack (apply_ui_font), al
          armarla y de nuevo al sumar las filas de task; sin eso
          salia con la fuente del host.
@@ -79,6 +81,14 @@ from LGA_NKS_Shared.LGA_NKS_Flow_Task_Config import (
     sort_tasks_by_pipeline,
 )
 from LGA_NKS_Shared.LGA_NKS_PipeSyncPaths import get_pipesync_db_path
+from LGA_NKS_Shared.LGA_NKS_ContextProfile import get_context_mode
+from LGA_NKS_Shared.LGA_NKS_AssignmentSaga import (
+    ContextChangedError,
+    load_in_stable_context,
+    mirror_stats_assignees,
+    run_canonical_wasabi_grant,
+    run_post_flow_saga,
+)
 
 DEBUG = False
 debug_messages = []
@@ -87,8 +97,8 @@ debug_messages = []
 class DBManager:
     """Clase simplificada para manejar operaciones con la base de datos SQLite local."""
 
-    def __init__(self):
-        self.db_path = get_pipesync_db_path("pipesync.db")
+    def __init__(self, context_mode=None):
+        self.db_path = get_pipesync_db_path("pipesync.db", mode=context_mode)
 
         if self.db_path and os.path.exists(self.db_path):
             try:
@@ -725,23 +735,23 @@ class ShotGridManager:
     def add_assignee_to_task(self, task_id, current_assignees, user):
         if not self.sg:
             debug_print("Conexion a ShotGrid no esta inicializada")
-            return False, "Conexion a ShotGrid no inicializada"
+            return False, "Conexion a ShotGrid no inicializada", current_assignees or []
         try:
             assignees = current_assignees or []
             if any(u["id"] == user["id"] for u in assignees):
                 debug_print(f"El usuario ya es asignado de la tarea.")
-                return True, "El usuario ya estaba asignado a la tarea."
+                return True, "El usuario ya estaba asignado a la tarea.", assignees
             new_assignees = assignees + [user]
             result = self.sg.update("Task", task_id, {"task_assignees": new_assignees})
             if result:
                 debug_print(f"Usuario asignado exitosamente a la tarea {task_id}")
-                return True, f"Usuario asignado exitosamente."
+                return True, f"Usuario asignado exitosamente.", new_assignees
             else:
                 debug_print(f"Fallo al asignar usuario a la tarea {task_id}")
-                return False, f"Fallo al actualizar la tarea."
+                return False, f"Fallo al actualizar la tarea.", assignees
         except Exception as e:
             debug_print(f"Error al asignar usuario: {e}")
-            return False, f"Error al asignar usuario: {e}"
+            return False, f"Error al asignar usuario: {e}", current_assignees or []
 
 
 class TaskFetchSignals(QObject):
@@ -759,13 +769,15 @@ class ShotTaskDiscoveryWorker(QRunnable):
     @Slot()
     def run(self):
         try:
-            sg_url, sg_login, sg_password = get_flow_credentials_secure()
+            operation_mode, credentials = load_in_stable_context(
+                get_context_mode, get_flow_credentials_secure
+            )
+            sg_url, sg_login, sg_password = credentials
             if not all([sg_url, sg_login, sg_password]):
                 self.signals.error.emit(
                     "No se pudieron obtener las credenciales de Flow desde SecureConfig."
                 )
                 return
-
             project_name = extract_project_name_from_path(self.file_path)
             if project_name:
                 debug_print(f"Project name (from path): {project_name}")
@@ -796,6 +808,7 @@ class ShotTaskDiscoveryWorker(QRunnable):
                     "shot_exists": False,
                     "tasks": [],
                     "default_task": default_task,
+                    "context_mode": operation_mode,
                 }
                 self.signals.ready.emit(payload)
                 return
@@ -808,8 +821,11 @@ class ShotTaskDiscoveryWorker(QRunnable):
                 "shot_exists": True,
                 "tasks": prepare_tasks_for_selection(tasks),
                 "default_task": default_task,
+                "context_mode": operation_mode,
             }
             self.signals.ready.emit(payload)
+        except ContextChangedError as exc:
+            self.signals.error.emit(str(exc))
         except Exception as exc:
             debug_print(f"Error en ShotTaskDiscoveryWorker: {exc}")
             self.signals.error.emit(f"Error verificando shot en Flow: {exc}")
@@ -822,18 +838,23 @@ class AssignmentSignals(QObject):
 
 
 class AssignSelectedTasksWorker(QRunnable):
-    def __init__(self, project_name, shot_name, user_name, tasks):
+    def __init__(self, project_name, shot_name, user_name, tasks, context_mode):
         super(AssignSelectedTasksWorker, self).__init__()
         self.project_name = project_name
         self.shot_name = shot_name
         self.user_name = user_name
         self.tasks = tasks
+        self.context_mode = context_mode
         self.signals = AssignmentSignals()
 
     @Slot()
     def run(self):
         try:
-            sg_url, sg_login, sg_password = get_flow_credentials_secure()
+            operation_mode, credentials = load_in_stable_context(
+                get_context_mode, get_flow_credentials_secure,
+                expected_mode=self.context_mode,
+            )
+            sg_url, sg_login, sg_password = credentials
             if not all([sg_url, sg_login, sg_password]):
                 self.signals.error.emit(
                     "No se pudieron obtener las credenciales de Flow desde SecureConfig."
@@ -861,6 +882,12 @@ class AssignSelectedTasksWorker(QRunnable):
                 )
                 return
 
+            _, profile = load_in_stable_context(
+                get_context_mode,
+                lambda: find_user_by_name(self.user_name) or {},
+                expected_mode=operation_mode,
+            )
+
             has_project, project_id = sg_manager.check_user_has_project(
                 user_with_projects, self.project_name
             )
@@ -869,20 +896,44 @@ class AssignSelectedTasksWorker(QRunnable):
                 project_assigned = sg_manager.assign_project_to_user(
                     user_with_projects["id"], project_id
                 )
+                if not project_assigned:
+                    self.signals.error.emit(
+                        "The project could not be assigned to the user in Flow."
+                    )
+                    return
 
             for task in self.tasks:
                 task_name = task["name"]
                 self.signals.task_started.emit(task_name)
                 current_assignees = task.get("assignees", [])
-                success, message = sg_manager.add_assignee_to_task(
+                success, message, full_assignees = sg_manager.add_assignee_to_task(
                     task["id"], current_assignees, user
                 )
                 if not success:
                     self.signals.error.emit(f"{task_name}: {message}")
                     return
-                self.update_local_database(
-                    self.project_name, self.shot_name, task_name, self.user_name
+                saga = run_post_flow_saga(
+                    lambda: self.update_local_database(
+                        self.project_name, self.shot_name, task_name, self.user_name,
+                        context_mode=operation_mode,
+                    ),
+                    lambda task_id=task["id"], users=full_assignees: mirror_stats_assignees(
+                        get_pipesync_db_path("pipesync_stats.db", mode=operation_mode), task_id, users
+                    ),
+                    lambda: run_canonical_wasabi_grant(
+                        self.user_name,
+                        is_client=operation_mode == "client",
+                        profile=profile,
+                    ),
                 )
+                if saga["status"] != "complete":
+                    self.signals.finished.emit(
+                        False,
+                        "The Flow assignment completed with a partial result: {0}".format(
+                            "; ".join(saga.get("errors") or [saga.get("wasabi", {}).get("error", "Error Wasabi")])
+                        ),
+                    )
+                    return
 
             tasks_list = ", ".join(task["name"] for task in self.tasks)
             success_message = (
@@ -894,16 +945,18 @@ class AssignSelectedTasksWorker(QRunnable):
                 )
             self.signals.finished.emit(True, success_message)
 
+        except ContextChangedError as exc:
+            self.signals.error.emit(str(exc))
         except Exception as exc:
             debug_print(f"Error en AssignSelectedTasksWorker: {exc}")
             self.signals.error.emit(f"Error asignando usuario: {exc}")
 
-    def update_local_database(self, project_name, shot_name, task_name, user_name):
+    def update_local_database(self, project_name, shot_name, task_name, user_name, context_mode=None):
         try:
-            db_manager = DBManager()
+            db_manager = DBManager(context_mode=context_mode)
             if not db_manager.conn:
                 debug_print("No se pudo conectar a la base de datos local")
-                return
+                return False
 
             db_shot = db_manager.find_shot(project_name, shot_name)
             if not db_shot:
@@ -911,7 +964,7 @@ class AssignSelectedTasksWorker(QRunnable):
                     f"No se encontró el shot {shot_name} en la base de datos local"
                 )
                 db_manager.close()
-                return
+                return False
 
             db_task = db_manager.find_task(db_shot["id"], task_name)
             if not db_task:
@@ -919,15 +972,17 @@ class AssignSelectedTasksWorker(QRunnable):
                     f"No se encontró la tarea {task_name} en la base de datos local"
                 )
                 db_manager.close()
-                return
+                return False
 
             debug_print(
                 f"Añadiendo asignación a la tarea local (ID: {db_task['id']}) para: {user_name}"
             )
-            db_manager.add_task_assignment(db_task["id"], user_name)
+            success = db_manager.add_task_assignment(db_task["id"], user_name)
             db_manager.close()
+            return success
         except Exception as exc:
             debug_print(f"Error actualizando base de datos local: {exc}")
+            return False
 
 
 def get_flow_credentials_secure():
@@ -1003,7 +1058,8 @@ def assign_assignee_to_task(base_name, user_name, file_path=None):
             )
             _status_window.set_close_enabled(False)
             worker = AssignSelectedTasksWorker(
-                payload["project_name"], shot_name, user_name, selected_tasks
+                payload["project_name"], shot_name, user_name, selected_tasks,
+                payload["context_mode"],
             )
             worker.signals.task_started.connect(
                 lambda task_name, window=_status_window, shot=shot_name: window.update_shot_info(
@@ -1011,8 +1067,8 @@ def assign_assignee_to_task(base_name, user_name, file_path=None):
                 )
             )
             worker.signals.finished.connect(
-                lambda success, message, window=_status_window: window.show_success(
-                    message
+                lambda success, message, window=_status_window: (
+                    window.show_success(message) if success else window.show_error(message)
                 )
             )
             worker.signals.error.connect(

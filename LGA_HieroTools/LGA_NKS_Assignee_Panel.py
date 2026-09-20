@@ -1,11 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Assignee_Panel v1.60 | Lega
+  LGA_NKS_Flow_Assignee_Panel v1.61 | Lega
 
   Panel para obtener los asignados de la tarea del clip seleccionado en Flow,
   limpiarlos o sumar asignados a la tarea comp.
 
+  v1.61: Shift+Click usa el mismo motor canónico instalado de PipeSync que la
+         asignación normal; se elimina el acceso al escritor IAM divergente.
   v1.60: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
          estilo del pack.
 
@@ -56,12 +58,18 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "LGA_NKS_Shared"))
 from LGA_NKS_Shared.LGA_NKS_GetClip import get_clips_to_process
 from LGA_NKS_Shared import LGA_NKS_GetClip as clip_utils
 from LGA_NKS_Shared.LGA_NKS_Flow_Users_Config import (
+    find_user_by_name,
     get_flow_users_db_path,
     load_flow_users,
 )
 from LGA_NKS_Shared.LGA_NKS_ContextProfile import MODE_CLIENT, get_context_mode
+from LGA_NKS_Shared.LGA_NKS_AssignmentSaga import (
+    ContextChangedError,
+    load_in_stable_context,
+    run_canonical_wasabi_grant,
+)
 from LGA_NKS_Shared.LGA_NKS_ContextSwitch import subscribe as subscribe_context_change
-from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
+from LGA_NKS_Shared.LGA_NKS_MessageBox import show_info, show_warning
 
 # Importar funciones de utilidad de estilos
 from LGA_NKS_Shared.LGA_NKS_StyleUtils import (
@@ -83,6 +91,38 @@ from LGA_NKS_Shared.LGA_NKS_StyleUtils import (
 # Es la operacion inversa a la del Projects Panel, que usa un PISO porque ahi el
 # color va como texto sobre fondo oscuro. Las dos viven en StyleUtils.
 MAX_USER_BG_LUMINANCE = 135
+
+
+class CanonicalGrantSignals(QtCore.QObject):
+    finished = QtCore.Signal(dict)
+
+
+class CanonicalGrantWorker(QtCore.QRunnable):
+    def __init__(self, flow_user_name, context_mode):
+        super(CanonicalGrantWorker, self).__init__()
+        self.flow_user_name = flow_user_name
+        self.context_mode = context_mode
+        self.signals = CanonicalGrantSignals()
+
+    def run(self):
+        try:
+            operation_mode, profile = load_in_stable_context(
+                get_context_mode,
+                lambda: find_user_by_name(self.flow_user_name) or {},
+                expected_mode=self.context_mode,
+            )
+        except ContextChangedError as exc:
+            self.signals.finished.emit({
+                "status": "partial",
+                "error": str(exc),
+            })
+            return
+        result = run_canonical_wasabi_grant(
+            self.flow_user_name,
+            is_client=operation_mode == MODE_CLIENT,
+            profile=profile,
+        )
+        self.signals.finished.emit(result)
 
 
 # Clase de botón personalizada que maneja el Shift+Click y Ctrl+Shift+Click
@@ -410,7 +450,7 @@ class AssigneePanel(QtWidgets.QWidget):
             debug_print(
                 f"Shift+Click presionado para usuario: {user_name} (Wasabi: {wasabi_user})"
             )
-            self.create_wasabi_policy_for_user(wasabi_user)
+            self.create_wasabi_policy_for_user(user_name)
 
         def ctrl_shift_callback():
             debug_print(
@@ -860,41 +900,20 @@ class AssigneePanel(QtWidgets.QWidget):
             debug_print(f"Error ejecutando script: {e}")
             show_warning(self, "Error al ejecutar", str(e))
 
-    def create_wasabi_policy_for_user(self, wasabi_user):
-        """Llama al script de Wasabi Policy Assign para crear/actualizar políticas IAM para un usuario específico"""
-        debug_print(
-            f"=== create_wasabi_policy_for_user llamado con wasabi_user: {wasabi_user} ==="
-        )
-        script_path = os.path.join(
-            os.path.dirname(__file__),
-            "LGA_NKS_Assignee_Panel_py",
-            "LGA_NKS_Wasabi_PolicyAssign.py",
-        )
-        if not os.path.exists(script_path):
-            show_warning(
-                self,
-                "Script no encontrado",
-                f"No se encontró el script en la ruta: {script_path}",
-            )
-            return
-        try:
-            import importlib.util
+    def create_wasabi_policy_for_user(self, flow_user_name):
+        """Ejecuta fuera del hilo UI el grant canónico instalado de PipeSync."""
+        worker = CanonicalGrantWorker(flow_user_name, self.context_mode)
 
-            spec = importlib.util.spec_from_file_location(
-                "LGA_NKS_Wasabi_PolicyAssign", script_path
-            )
-            if spec is None or spec.loader is None:
-                raise ImportError(
-                    "No se pudo cargar el módulo LGA_NKS_Wasabi_PolicyAssign.py"
-                )
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            # Llamar a la función principal pasando el usuario de Wasabi
-            debug_print(f"Llamando module.main con usuario: {wasabi_user}")
-            module.main(wasabi_user)
-        except Exception as e:
-            debug_print(f"Error ejecutando script de Wasabi: {e}")
-            show_warning(self, "Error al ejecutar", str(e))
+        def show_result(result):
+            if result.get("status") == "complete":
+                message = "No action was required." if result.get("skipped") else "Wasabi access was synchronized."
+                show_info(self, "Wasabi Access", message)
+            else:
+                show_warning(self, "Wasabi Access", result.get("error") or "Wasabi access could not be synchronized.")
+
+        worker.signals.finished.connect(show_result)
+        self._canonical_grant_worker = worker
+        QtCore.QThreadPool.globalInstance().start(worker)
 
     def unassign_wasabi_policy_for_user(self, wasabi_user):
         """Llama al script de Wasabi Policy Unassign para mostrar y gestionar shots asignados"""

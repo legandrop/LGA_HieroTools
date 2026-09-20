@@ -1,11 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CreateShot v1.50 | Lega
+  LGA_NKS_Flow_CreateShot v1.52 | Lega
 
   Script para crear shots en ShotGrid basado en el nombre del clip seleccionado en Hiero.
   SIN usar templates predefinidos - crea tasks manualmente para mayor control.
 
+  v1.52: SUP se reconoce como naming interno pero no forma parte del Shot en Flow.
+  v1.51: Create Shot client hace preflight fail-closed del acceso vendor,
+         crea Shot/Task con sus grupos/asignados y reporta resultados parciales.
   v1.50: El catalogo de tasks se filtra por contexto con
          get_available_tasks(): en client ofrecia Roto/Cleanup/DMP y toda
          la familia 3D, que en ese sitio de Flow no existen, y no ofrecia
@@ -159,6 +162,10 @@ from LGA_NKS_Flow_NamingUtils import (
     extract_project_name_from_path,
     extract_sequence_name_from_path,
     clean_base_name,
+    extract_vendor_token,
+    extract_shot_code_with_vendor_candidate,
+    find_unknown_vendor_slot,
+    TASK_NAME_ALIASES,
 )
 
 # Importar módulo centralizado para obtener clips
@@ -175,6 +182,18 @@ from LGA_NKS_Shared.LGA_NKS_Flow_Task_Config import (
     get_available_tasks,
 )
 from LGA_NKS_Shared.LGA_NKS_ContextProfile import get_context_mode
+from LGA_NKS_Shared.LGA_NKS_ClientVendorAccess import (
+    VendorAccessError,
+    add_project_users,
+    resolve_client_vendor_access,
+    resolve_selected_reviewers,
+    shot_vendor_fields,
+    task_vendor_fields,
+)
+from LGA_NKS_Shared.LGA_NKS_AssignmentSaga import (
+    ContextChangedError,
+    load_in_stable_context,
+)
 from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import filter_states_for_mode
 
 # Importar módulo de creación de carpetas
@@ -1760,7 +1779,7 @@ class FlowStatusWindow(QDialog):
 class ShotGridManager:
     """Clase para manejar operaciones en ShotGrid."""
 
-    def __init__(self, url, login, password):
+    def __init__(self, url, login, password, context_mode=None):
         debug_print("Inicializando conexion a ShotGrid para crear shot")
         try:
             self.sg = shotgun_api3.Shotgun(url, login=login, password=password)
@@ -1769,6 +1788,8 @@ class ShotGridManager:
             debug_print(f"Error al inicializar la conexion a ShotGrid: {e}")
             self.sg = None
         self.project_cache = {}
+        self.last_create_result = None
+        self.context_mode = context_mode or get_context_mode()
 
     def upload_thumbnail(self, entity_type, entity_id, thumbnail_path):
         """Sube un thumbnail a una entidad en ShotGrid."""
@@ -1861,6 +1882,7 @@ class ShotGridManager:
     ):
         """Encuentra el shot en ShotGrid y sus tareas asociadas. Si no existe, lo crea.
         Retorna: (shot, tasks, was_created) donde was_created es True si se creó nuevo."""
+        self.last_create_result = None
         if not self.sg:
             debug_print("Conexion a ShotGrid no esta inicializada")
             return None, None, False
@@ -1930,6 +1952,11 @@ class ShotGridManager:
                         # Loguear todos los mensajes del proceso de carpetas
                         for log_msg in folder_logs:
                             debug_print(log_msg)
+                        if not folder_result and self.last_create_result:
+                            self.last_create_result["errors"].append(
+                                "Task folders could not be created."
+                            )
+                            self.last_create_result["status"] = "partial"
                     else:
                         debug_print("No hay tasks habilitadas para crear carpetas")
                 else:
@@ -2054,8 +2081,19 @@ class ShotGridManager:
         self, project_id, shot_code, shot_config, thumbnail_path=None, file_path=None
     ):
         """Crea un shot en ShotGrid SIN usar templates - crea tasks manualmente."""
+        self.last_create_result = {
+            "status": "failed", "shot_id": None, "task_ids": [],
+            "project_users_added": [], "errors": [],
+            "flags": {
+                "preflight": False, "project_users": False, "shot": False,
+                "tasks": False, "thumbnail": not bool(thumbnail_path),
+                "project_users_write_attempted": False,
+                "shot_write_attempted": False,
+            },
+        }
         if not self.sg:
             debug_print("Conexion a ShotGrid no esta inicializada")
+            self.last_create_result["errors"].append("Flow is not connected.")
             return None
 
         # Secuencia: primario desde la ruta del clip (segmento despues de
@@ -2077,10 +2115,75 @@ class ShotGridManager:
         sequences = self.sg.find("Sequence", sequence_filters, ["id", "code"])
         if not sequences:
             debug_print(f"ERROR: No se encontro la secuencia '{sequence_name}'")
+            self.last_create_result["errors"].append(
+                "Sequence '{0}' was not found.".format(sequence_name)
+            )
             return None
 
         sequence_id = sequences[0]["id"]
         debug_print(f"Secuencia encontrada: {sequences[0]['code']} (ID: {sequence_id})")
+
+        mode = self.context_mode
+        self.last_create_result["flags"]["project_users"] = mode != "client"
+        vendor_plan = None
+        if mode == "client":
+            try:
+                vendor_plan = resolve_client_vendor_access(
+                    self.sg, project_id, [shot_config.get("_vendor_token")]
+                    if shot_config.get("_vendor_token") else []
+                )
+            except VendorAccessError as exc:
+                self.last_create_result["errors"].append(str(exc))
+                debug_print("Preflight vendor abortado: {0}".format(exc))
+                return None
+
+            # Todas las lecturas necesarias para las tasks ocurren antes de la
+            # primera mutación. Así un Step o reviewer inválido no deja medio
+            # acceso creado.
+        task_preflight = {}
+        try:
+            for task_name, task_cfg in (
+                (shot_config.get("tasks") or {}).items() if mode == "client" else []
+            ):
+                if not task_cfg.get("enabled", False):
+                    continue
+                pipeline_step_name = next(
+                    (cfg["pipeline_step"] for cfg in AVAILABLE_TASKS if cfg["name"] == task_name),
+                    None,
+                )
+                if not pipeline_step_name:
+                    raise ValueError("No configuration exists for task '{0}'.".format(task_name))
+                steps = self.sg.find("Step", [["code", "is", pipeline_step_name]], ["id", "code"])
+                if not steps:
+                    raise ValueError("Pipeline step '{0}' does not exist.".format(pipeline_step_name))
+                task_preflight[task_name] = {
+                    "step": {"type": "Step", "id": steps[0]["id"]},
+                    "reviewers": resolve_selected_reviewers(
+                        self.sg, task_cfg.get("reviewers", {}), REVIEWER_KEY_TO_NAME
+                    ),
+                }
+        except Exception as exc:
+            self.last_create_result["errors"].append("Task preflight: {0}".format(exc))
+            return None
+
+        self.last_create_result["flags"]["preflight"] = True
+
+        if mode == "client":
+            try:
+                self.last_create_result["flags"]["project_users_write_attempted"] = bool(
+                    (vendor_plan or {}).get("project_users_to_add")
+                )
+                self.last_create_result["project_users_added"] = add_project_users(
+                    self.sg, project_id, vendor_plan
+                )
+                self.last_create_result["flags"]["project_users"] = True
+            except Exception as exc:
+                self.last_create_result["errors"].append(
+                    "Project.users could not be completed: {0}".format(exc)
+                )
+                if self.last_create_result["flags"]["project_users_write_attempted"]:
+                    self.last_create_result["status"] = "partial"
+                return None
 
         # Crear el shot SIN template
         shot_data = {
@@ -2090,6 +2193,7 @@ class ShotGridManager:
             "sg_sequence": {"type": "Sequence", "id": sequence_id},
             # NOTA: No se incluye "task_template" para evitar usar templates predefinidos
         }
+        shot_data.update(shot_vendor_fields(vendor_plan))
 
         # Estado del shot desde el dropdown (default: ready)
         shot_data["sg_status_list"] = shot_config.get("shot_status", DEFAULT_STATE_CODE)
@@ -2099,7 +2203,10 @@ class ShotGridManager:
             shot_data["sg_prioridad"] = "high"
 
         try:
+            self.last_create_result["flags"]["shot_write_attempted"] = True
             new_shot = self.sg.create("Shot", shot_data)
+            self.last_create_result["shot_id"] = new_shot.get("id")
+            self.last_create_result["flags"]["shot"] = True
             debug_print(
                 f"Shot creado exitosamente: {new_shot['code']} (ID: {new_shot['id']})"
             )
@@ -2121,13 +2228,24 @@ class ShotGridManager:
                     shot_id=new_shot["id"],
                     task_name=task_name,
                     task_config=task_cfg,
-                    shot_description=shot_config["description"]
+                    shot_description=shot_config["description"],
+                    vendor_plan=vendor_plan,
+                    task_preflight=task_preflight.get(task_name) if mode == "client" else None,
                 )
                 
                 if success:
+                    self.last_create_result["task_ids"].append(success.get("id"))
                     debug_print(f"Task '{task_name}' creada exitosamente")
                 else:
+                    self.last_create_result["errors"].append(
+                        "Task '{0}' could not be created.".format(task_name)
+                    )
                     debug_print(f"Error creando task '{task_name}'")
+
+            self.last_create_result["flags"]["tasks"] = not any(
+                error.startswith("Task '")
+                for error in self.last_create_result["errors"]
+            )
 
             # Subir thumbnail si se proporciono
             if thumbnail_path:
@@ -2137,18 +2255,26 @@ class ShotGridManager:
                     "Shot", new_shot["id"], thumbnail_path
                 )
                 if upload_success:
+                    self.last_create_result["flags"]["thumbnail"] = True
                     debug_print(f"Thumbnail subido exitosamente para shot: {shot_code}")
                 else:
                     debug_print(f"Error subiendo thumbnail para shot: {shot_code}")
+                    self.last_create_result["errors"].append("The thumbnail could not be uploaded.")
             else:
                 debug_print(f"No se proporciono thumbnail_path para shot: {shot_code}")
 
+            self.last_create_result["status"] = (
+                "complete" if not self.last_create_result["errors"] else "partial"
+            )
             return new_shot
         except Exception as e:
             debug_print(f"ERROR al crear el shot: {e}")
+            self.last_create_result["errors"].append(str(e))
+            if self.last_create_result["flags"].get("shot_write_attempted"):
+                self.last_create_result["status"] = "partial"
             return None
 
-    def create_task_for_shot(self, project_id, shot_id, task_name, task_config, shot_description):
+    def create_task_for_shot(self, project_id, shot_id, task_name, task_config, shot_description, vendor_plan=None, task_preflight=None):
         """
         Crea una task para un shot de forma genérica.
         
@@ -2160,35 +2286,26 @@ class ShotGridManager:
             shot_description (str): Descripción del shot (para copiar si está habilitado)
             
         Returns:
-            bool: True si se creó exitosamente, False si hubo error
+            dict | bool: Entidad Task si se creó; False si hubo error.
         """
         if not self.sg:
             debug_print("Conexion a ShotGrid no esta inicializada")
             return False
         
         try:
-            # Buscar el pipeline step correspondiente
-            # NOTA: Para encontrar el pipeline step, buscamos por el nombre de la task
-            # que debe coincidir con el código del step en ShotGrid
-            pipeline_step_name = None
-            for task_cfg in AVAILABLE_TASKS:
-                if task_cfg["name"] == task_name:
-                    pipeline_step_name = task_cfg["pipeline_step"]
-                    break
-            
-            if not pipeline_step_name:
-                debug_print(f"ADVERTENCIA: No se encontró configuración para task '{task_name}'")
-                pipeline_step_name = task_name  # Usar el nombre de la task como fallback
-            
-            step_filters = [["code", "is", pipeline_step_name]]
-            steps = self.sg.find("Step", step_filters, ["id", "code"])
-            step_id = None
-            if steps:
-                step_id = steps[0]["id"]
-                debug_print(f"Pipeline step '{pipeline_step_name}' encontrado (ID: {step_id})")
+            # En Client el Step y los reviewers ya fueron resueltos en el
+            # preflight. Studio conserva la resolución histórica en este punto.
+            if task_preflight:
+                step_ref = task_preflight.get("step")
+                selected_reviewer_ids = list(task_preflight.get("reviewers") or [])
             else:
-                debug_print(f"ADVERTENCIA: No se encontró el pipeline step '{pipeline_step_name}'")
-            
+                pipeline_step_name = next(
+                    (cfg["pipeline_step"] for cfg in AVAILABLE_TASKS if cfg["name"] == task_name),
+                    task_name,
+                )
+                steps = self.sg.find("Step", [["code", "is", pipeline_step_name]], ["id", "code"])
+                step_ref = {"type": "Step", "id": steps[0]["id"]} if steps else None
+                selected_reviewer_ids = None
             # Crear data de la task
             task_data = {
                 "content": task_name,
@@ -2196,10 +2313,13 @@ class ShotGridManager:
                 "sg_status_list": "noread",  # Estado inicial por defecto
                 "project": {"type": "Project", "id": project_id},
             }
+            task_data.update(task_vendor_fields(vendor_plan))
             
             # Asignar pipeline step si se encontró
-            if step_id:
-                task_data["step"] = {"type": "Step", "id": step_id}
+            if step_ref:
+                task_data["step"] = step_ref
+            if task_preflight and selected_reviewer_ids:
+                task_data["task_reviewers"] = selected_reviewer_ids
             
             # Estado de la task desde el dropdown (default: noread)
             task_data["sg_status_list"] = task_config.get("task_status", "noread")
@@ -2221,22 +2341,19 @@ class ShotGridManager:
             new_task = self.sg.create("Task", task_data)
             debug_print(f"Task '{task_name}' creada exitosamente (ID: {new_task['id']})")
             
-            # Asignar reviewers (resuelve nombres -> HumanUser ids con el helper compartido)
-            selected_reviewer_ids = resolve_reviewer_ids(
-                self.sg, task_config.get("reviewers", {})
-            )
-
-            # Asignar todos los reviewers a la task usando task_reviewers
-            if selected_reviewer_ids:
-                try:
-                    self.sg.update("Task", new_task["id"], {"task_reviewers": selected_reviewer_ids})
-                    debug_print(f"Asignados {len(selected_reviewer_ids)} reviewers a task {task_name}")
-                except Exception as e:
-                    debug_print(f"Error asignando reviewers a task: {e}")
-            else:
+            if selected_reviewer_ids is None:
+                selected_reviewer_ids = resolve_reviewer_ids(
+                    self.sg, task_config.get("reviewers", {})
+                )
+                if selected_reviewer_ids:
+                    try:
+                        self.sg.update("Task", new_task["id"], {"task_reviewers": selected_reviewer_ids})
+                    except Exception as exc:
+                        debug_print(f"Error asignando reviewers a task: {exc}")
+            if not selected_reviewer_ids:
                 debug_print(f"No se seleccionaron reviewers para task '{task_name}'")
             
-            return True
+            return new_task
             
         except Exception as e:
             debug_print(f"ERROR al crear task '{task_name}': {e}")
@@ -2256,7 +2373,7 @@ class HieroOperations:
         version_number = version_match.group(1) if version_match else "Unknown"
         return base_name, version_number
 
-    def get_selected_clips_info(self):
+    def get_selected_clips_info(self, context_mode=None):
         """Obtiene informacion de los clips usando el método híbrido centralizado.
         Permite selección múltiple: si hay múltiples clips seleccionados en el track,
         procesa todos ellos. Si no, usa el clip del playhead."""
@@ -2274,6 +2391,7 @@ class HieroOperations:
             return []
         
         clips_info = []
+        context_mode = context_mode or get_context_mode()
         for clip in clips:
             try:
                 file_path = clip.source().mediaSource().fileinfos()[0].filename()
@@ -2288,11 +2406,28 @@ class HieroOperations:
                     project_name = extract_project_name(base_name)
                     debug_print(f"Project name (from filename fallback): {project_name}")
                 shot_code = extract_shot_code(base_name)
+                known_tasks = [cfg["name"] for cfg in AVAILABLE_TASKS]
+                known_tasks.extend(TASK_NAME_ALIASES)
+                known_tasks.extend(TASK_NAME_ALIASES.values())
+                unknown_vendor = (
+                    find_unknown_vendor_slot(
+                        base_name, known_tasks, project_name,
+                        client_cg_by_exclusion=True,
+                    )
+                    if context_mode == "client" else ""
+                )
+                vendor_token = extract_vendor_token(base_name, project_name) or unknown_vendor
+                if unknown_vendor:
+                    shot_code = extract_shot_code_with_vendor_candidate(
+                        base_name, unknown_vendor
+                    )
 
                 clips_info.append(
                     {
                         "base_name": base_name,
                         "project_name": project_name,
+                        "vendor_token": vendor_token,
+                        "unknown_vendor_token": unknown_vendor,
                         "shot_code": shot_code,
                         "version_number": version_number,
                         "file_path": file_path,
@@ -2397,12 +2532,13 @@ class ShotExistenceSignals(QObject):
 
 
 class CreateShotWorker(QRunnable):
-    def __init__(self, status_window, shot_config, clips_info, thumbnail_path=None):
+    def __init__(self, status_window, shot_config, clips_info, thumbnail_path=None, context_mode=None):
         super(CreateShotWorker, self).__init__()
         self.status_window = status_window
         self.shot_config = shot_config
         self.clips_info = clips_info  # Clips obtenidos en el hilo principal
         self.thumbnail_path = thumbnail_path
+        self.context_mode = context_mode
         self.signals = WorkerSignals()
 
     @Slot()
@@ -2412,17 +2548,22 @@ class CreateShotWorker(QRunnable):
 
             # Obtener credenciales de Flow DENTRO del worker
             self.signals.step_update.emit("Obteniendo credenciales...")
-            sg_url, sg_login, sg_password = get_flow_credentials_secure()
+            operation_mode, credentials = load_in_stable_context(
+                get_context_mode, get_flow_credentials_secure,
+                expected_mode=self.context_mode,
+            )
+            sg_url, sg_login, sg_password = credentials
             if not all([sg_url, sg_login, sg_password]):
                 self.signals.debug_output.emit()
                 self.signals.error.emit(
                     "No se pudieron obtener las credenciales de Flow desde SecureConfig."
                 )
                 return
-
             # Crear manager ShotGrid DENTRO del worker
             self.signals.step_update.emit("Conectando a ShotGrid...")
-            sg_manager = ShotGridManager(sg_url, sg_login, sg_password)
+            sg_manager = ShotGridManager(
+                sg_url, sg_login, sg_password, context_mode=operation_mode
+            )
             if not sg_manager.sg:
                 self.signals.debug_output.emit()
                 self.signals.error.emit(
@@ -2444,6 +2585,9 @@ class CreateShotWorker(QRunnable):
             # Procesar cada clip
             total_clips = len(clips_info)
             success_count = 0
+            partial_count = 0
+            failed_count = 0
+            issue_messages = []
 
             for i, clip_info in enumerate(clips_info, 1):
                 # Emitir información del shot
@@ -2456,18 +2600,30 @@ class CreateShotWorker(QRunnable):
                 )
 
                 # Procesar shot
+                clip_config = dict(self.shot_config)
+                clip_config["_vendor_token"] = clip_info.get("vendor_token") or ""
                 shot, tasks, was_created = sg_manager.find_shot_and_tasks(
                     clip_info["project_name"],
                     clip_info["shot_code"],
-                    self.shot_config,
+                    clip_config,
                     self.thumbnail_path,
                     file_path=clip_info.get("file_path"),
                 )
 
-                if shot and was_created:
+                create_result = sg_manager.last_create_result or {}
+                if shot and was_created and create_result.get("status") == "complete":
                     # Shot creado exitosamente
                     success_count += 1
                     debug_print(f"Shot creado exitosamente: {shot['code']}")
+                elif shot and was_created:
+                    partial_count += 1
+                    issue_messages.extend(create_result.get("errors") or [])
+                    debug_print("Creación parcial: {0}".format(create_result))
+                    self.signals.step_update.emit(
+                        "PARTIAL: Shot '{0}' was created with errors: {1}".format(
+                            clip_info["shot_code"], "; ".join(create_result.get("errors") or [])
+                        )
+                    )
                 elif shot and not was_created:
                     # Shot ya existía
                     debug_print(f"Shot ya existe: {clip_info['shot_code']}")
@@ -2475,30 +2631,50 @@ class CreateShotWorker(QRunnable):
                         f"Shot '{clip_info['shot_code']}' ya existía en ShotGrid. No se realizaron modificaciones."
                     )
                     # No incrementar success_count, será tratado como error
+                    failed_count += 1
+                    issue_messages.append("Shot '{0}' already exists.".format(clip_info["shot_code"]))
+                elif create_result.get("status") == "partial":
+                    partial_count += 1
+                    issue_messages.extend(create_result.get("errors") or [])
+                    debug_print("Creación parcial sin Shot utilizable: {0}".format(create_result))
+                    self.signals.step_update.emit(
+                        "PARTIAL: Flow was modified but shot creation did not finish: {0}".format(
+                            "; ".join(create_result.get("errors") or [])
+                        )
+                    )
                 else:
                     # Error al procesar shot
+                    failed_count += 1
+                    issue_messages.extend(create_result.get("errors") or [])
                     debug_print(f"Error procesando shot: {clip_info['shot_code']}")
                     self.signals.step_update.emit(
-                        f"ERROR: No se pudo procesar el shot '{clip_info['shot_code']}'"
+                        "ERROR: Shot '{0}' could not be processed: {1}".format(
+                            clip_info["shot_code"], "; ".join(create_result.get("errors") or ["Unknown error."])
+                        )
                     )
 
             # Emitir señal para imprimir logs al final
             self.signals.debug_output.emit()
 
             # Mensaje final
-            if success_count == total_clips:
+            if partial_count or failed_count:
+                self.signals.finished.emit(
+                    False,
+                    "Create Shot did not finish completely: {0} complete, {1} partial, {2} failed. {3}".format(
+                        success_count, partial_count, failed_count,
+                        "; ".join(issue_messages) or "See the diagnostic log.",
+                    )
+                )
+            elif success_count == total_clips:
                 self.signals.finished.emit(
                     True,
                     f"Todos los shots ({success_count}/{total_clips}) fueron procesados exitosamente.",
                 )
-            elif success_count > 0:
-                self.signals.finished.emit(
-                    True,
-                    f"Se procesaron {success_count}/{total_clips} shots exitosamente.",
-                )
             else:
-                self.signals.error.emit("No se pudieron procesar ninguno de los shots.")
+                self.signals.error.emit("No shots were processed.")
 
+        except ContextChangedError as e:
+            self.signals.error.emit(str(e))
         except Exception as e:
             debug_print(f"Error en CreateShotWorker: {e}")
             # Emitir señal para imprimir logs al final
@@ -2507,16 +2683,21 @@ class CreateShotWorker(QRunnable):
 
 
 class ShotExistenceCheckWorker(QRunnable):
-    def __init__(self, clips_info):
+    def __init__(self, clips_info, context_mode):
         super(ShotExistenceCheckWorker, self).__init__()
         self.clips_info = clips_info
+        self.context_mode = context_mode
         self.signals = ShotExistenceSignals()
 
     @Slot()
     def run(self):
         try:
             debug_print("=== Iniciando chequeo de existencia de shots ===")
-            sg_url, sg_login, sg_password = get_flow_credentials_secure()
+            operation_mode, credentials = load_in_stable_context(
+                get_context_mode, get_flow_credentials_secure,
+                expected_mode=self.context_mode,
+            )
+            sg_url, sg_login, sg_password = credentials
             if not all([sg_url, sg_login, sg_password]):
                 self.signals.debug_output.emit()
                 self.signals.error.emit(
@@ -2524,7 +2705,9 @@ class ShotExistenceCheckWorker(QRunnable):
                 )
                 return
 
-            sg_manager = ShotGridManager(sg_url, sg_login, sg_password)
+            sg_manager = ShotGridManager(
+                sg_url, sg_login, sg_password, context_mode=operation_mode
+            )
             if not sg_manager.sg:
                 self.signals.debug_output.emit()
                 self.signals.error.emit(
@@ -2553,6 +2736,8 @@ class ShotExistenceCheckWorker(QRunnable):
             )
             self.signals.debug_output.emit()
             self.signals.finished.emit(existing)
+        except ContextChangedError as e:
+            self.signals.error.emit(str(e))
         except Exception as e:
             debug_print(f"Error en ShotExistenceCheckWorker: {e}")
             self.signals.debug_output.emit()
@@ -2628,9 +2813,13 @@ def create_shots_from_selected_clips():
     if app is None:
         app = QApplication([])
 
+    operation_mode = get_context_mode()
+
     # Primero obtener informacion de clips para mostrar en el dialogo de configuracion
     hiero_ops_temp = HieroOperations(None)
-    clips_info = hiero_ops_temp.get_selected_clips_info()
+    clips_info = hiero_ops_temp.get_selected_clips_info(
+        context_mode=operation_mode
+    )
 
     if not clips_info:
         debug_print("No se encontraron clips seleccionados para crear shots", level="warning")
@@ -2653,10 +2842,10 @@ def create_shots_from_selected_clips():
         return
 
     # Iniciar pre-chequeo de existencia
-    start_shot_existence_check(clips_info, sequence_name)
+    start_shot_existence_check(clips_info, sequence_name, operation_mode)
 
 
-def start_shot_existence_check(clips_info, sequence_name):
+def start_shot_existence_check(clips_info, sequence_name, operation_mode):
     """Abre ventana de estado y lanza worker para verificar existencia previa."""
     global _status_window
 
@@ -2667,11 +2856,11 @@ def start_shot_existence_check(clips_info, sequence_name):
     _status_window.show()
     _status_window.show_step_message("Comprobando existencia de los shots en Flow...")
 
-    worker = ShotExistenceCheckWorker(clips_info)
+    worker = ShotExistenceCheckWorker(clips_info, operation_mode)
 
     worker.signals.finished.connect(
         lambda existing: handle_shot_existence_result(
-            existing, clips_info, sequence_name
+            existing, clips_info, sequence_name, operation_mode
         )
     )
     worker.signals.error.connect(handle_shot_existence_error)
@@ -2689,8 +2878,14 @@ def handle_shot_existence_error(message):
         show_warning(None, "Flow | Create Shot", message)
 
 
-def handle_shot_existence_result(existing_shots, clips_info, sequence_name):
+def handle_shot_existence_result(existing_shots, clips_info, sequence_name, operation_mode):
     global _status_window
+
+    if get_context_mode() != operation_mode:
+        handle_shot_existence_error(
+            "The Studio/Client context changed during validation. Nothing was written."
+        )
+        return
 
     if existing_shots:
         shot_names = [item["clip_info"]["shot_code"] for item in existing_shots]
@@ -2728,10 +2923,10 @@ def handle_shot_existence_result(existing_shots, clips_info, sequence_name):
         _status_window.close()
         _status_window = None
 
-    show_shot_config_dialog(clips_info, sequence_name)
+    show_shot_config_dialog(clips_info, sequence_name, operation_mode)
 
 
-def show_shot_config_dialog(clips_info, sequence_name):
+def show_shot_config_dialog(clips_info, sequence_name, operation_mode):
     """Muestra el dialogo de configuración de forma no modal."""
     global _config_dialog
 
@@ -2740,13 +2935,13 @@ def show_shot_config_dialog(clips_info, sequence_name):
     _config_dialog = config_dialog
     config_dialog.finished.connect(
         lambda result, dialog=config_dialog: handle_shot_config_finished(
-            result, dialog, clips_info
+            result, dialog, clips_info, operation_mode
         )
     )
     config_dialog.show()
 
 
-def handle_shot_config_finished(result, config_dialog, clips_info):
+def handle_shot_config_finished(result, config_dialog, clips_info, operation_mode):
     """Continua el flujo de Create Shot cuando cierra el dialogo no modal."""
     global _config_dialog, _status_window
 
@@ -2776,7 +2971,10 @@ def handle_shot_config_finished(result, config_dialog, clips_info):
     _status_window.show()
     _status_window.show_processing_message()
 
-    worker = CreateShotWorker(_status_window, shot_config, clips_info, thumbnail_path)
+    worker = CreateShotWorker(
+        _status_window, shot_config, clips_info, thumbnail_path,
+        context_mode=operation_mode,
+    )
 
     worker.signals.shot_info_ready.connect(
         lambda shot_name, project_name, window=_status_window: window.update_shot_info(
@@ -2788,7 +2986,7 @@ def handle_shot_config_finished(result, config_dialog, clips_info):
     )
     worker.signals.finished.connect(
         lambda success, message, window=_status_window: (
-            window.show_success(message) if window else None,
+            (window.show_success(message) if success else window.show_error(message)) if window else None,
             cleanup_thumbnail_file(thumbnail_path),
         )
     )

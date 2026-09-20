@@ -82,9 +82,9 @@ Tools for assigning artists to Flow tasks and managing related Wasabi access pol
   Click: removes assignees in Flow for the selected tasks, with comp used by default. If multiple clips are selected, it processes all of them; if only one clip is selected, it uses the playhead.  
   Shift+Click: scans approved / delivery_checked shots in `pipesync.db` and lets you clean their lines from Wasabi policies.
 - **Dynamic user buttons**  
-  User buttons are generated from `LGA_NKS_Flow_Users.json` when it exists locally, or from `LGA_NKS_Flow_Users_dist.json` in distributed/public setups.  
-  Click: assigns the user to the selected tasks in Flow Production Tracking.  
-  Shift+Click: creates or updates Wasabi IAM policies for that user.  
+  User buttons are generated from PipeSync's `pipesync_stats.db`; there is no local JSON fallback.
+  Click: assigns the user in Flow, mirrors the local databases, then grants Wasabi access in Studio after the stats mirror succeeds.
+  Shift+Click: runs the same canonical PipeSync grant engine for that user. In Client, the Wasabi step is always skipped.
   Ctrl+Shift+Click: opens a window to manage the shots currently assigned to that user's Wasabi policy.
 
 ### Coordination Panel
@@ -95,7 +95,10 @@ Production-facing tools for Flow, FileManagerS3, PipeSync, and shot creation / u
   Click: saves a viewer snapshot (zoom-to-fill, cropped to the sequence aspect) to `N:/<project>/Thumbs`.  
   Shift+Click: replaces the shot's thumbnail in Flow with that snapshot. Opens a confirmation window showing the current Flow thumbnail vs the new one, and uploads on a background thread.
 - **Create Shot**  
-  Creates a shot in Flow based on the selected clip.
+  Creates a shot in Flow based on the selected clip. In Client, external vendor
+  suffixes are validated before any write and create the Shot/Task access links;
+  `SUP` remains an internal naming suffix without vendor access and is omitted
+  from the Flow Shot code; external vendor suffixes remain part of the code.
 - **Modify Shot**  
   Modifies an existing shot in Flow. One clip at a time.
 - **Check Shots Exist**  

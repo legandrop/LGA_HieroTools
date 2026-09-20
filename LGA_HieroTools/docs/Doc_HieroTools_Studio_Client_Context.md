@@ -84,8 +84,9 @@ Detalle completo en [Docu_Flow_Estados_Colores.md](Docu_Flow_Estados_Colores.md)
 
 ### Assignee Panel en client
 
-En client el panel queda **deshabilitado**, con el motivo a la vista. No es una
-decision de UI: es que ahi no hay assignees que mostrar.
+En client el panel queda **deshabilitado**, con el motivo a la vista. No se
+asignan artistas individualmente desde ese panel. Esto no impide que Create Shot
+cree automáticamente `task_assignees` para los usuarios prevalidos del vendor.
 
 - El envelope `HumanUser.sg_pipesync_user_json` es un custom field que solo
   existe en el sitio de studio. En client todos los usuarios llegan con
@@ -95,6 +96,10 @@ decision de UI: es que ahi no hay assignees que mostrar.
   `OperationalError` y devolvia lista vacia.
 - Las policies de Wasabi por shot no aplican: en client el acceso se resuelve con
   Vendor Groups y permission rules de Flow.
+
+La guarda existe también en runtime: incluso si se invoca el wrapper compartido
+fuera del panel, contexto Client devuelve un no-op antes de resolver o ejecutar
+el motor de Wasabi.
 
 Antes de este cambio el panel se dibujaba igual, con los dos botones fijos y
 ningun usuario — indistinguible de "PipeSync todavia no sincronizo", que es un
@@ -171,6 +176,13 @@ Por eso nada arma el nombre de la carpeta con un literal:
   `get_available_tasks()` de `LGA_NKS_Flow_Task_Config` en vez de iterar
   `AVAILABLE_TASKS` completo. En `client` eso ofrece únicamente `Comp` y
   `CG`; en `studio`, todo el catálogo salvo `CG`.
+  En `client`, además, `SUP` es un token interno de naming sin acceso vendor y
+  se omite del Shot en Flow (`PROJA_010_020_SUP_comp` crea `PROJA_010_020`).
+  Un vendor externo pasa un preflight de catálogo, Group, `sg_vendor_group`,
+  `HumanUser.groups` y usuarios antes de toda mutación; el Shot nace con
+  `sg_vendor_groups`, las Tasks con `task_assignees` y `Project.users` se amplía
+  sin quitar miembros. Ver
+  [Docu_Vendor_Access_CreateShot.md](Docu_Vendor_Access_CreateShot.md).
   ([LGA_NKS_Flow_CreateShot_Folders.py](../LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py)
   suma la estructura de carpetas de `CG` — una sola carpeta para todas las
   disciplinas, sin subdividir por stream.)
