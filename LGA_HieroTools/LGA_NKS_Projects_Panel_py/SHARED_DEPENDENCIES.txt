@@ -4,3 +4,5 @@ Shared dependencies:
 - LGA_NKS_Shared/SecureConfig_Reader.py
 - LGA_NKS_Shared/LGA_NKS_Reduce_SeqWin.py
 - LGA_NKS_Shared/LGA_NKS_ScrollTo_TopTrack.py
+- LGA_NKS_Shared/icons/trash.svg
+- LGA_NKS_Shared/icons/trash_hover.svg

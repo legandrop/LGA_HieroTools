@@ -180,12 +180,10 @@ Hoy carga scripts desde:
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_ColorTransforms.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_FixColorspaces.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_CreateNewTrack.py`
-- `LGA_NKS_Edit_Panel_py/LGA_NKS_OrganizeProject.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_SetShotName.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_Trim_In.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_Trim_Out.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_Reconnect.py`
-- `LGA_NKS_Edit_Panel_py/LGA_NKS_CleanProject.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_mediaMissingFrames.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_MatchVerToEXR.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_CompareVerToEditref.py`
@@ -243,6 +241,8 @@ Hoy carga scripts y recursos desde:
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_ScanManager.py`
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_ProjectHandler.py`
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_Projects_Panel_Smart_Reload.py`
+- `LGA_NKS_Projects_Panel_py/LGA_NKS_OrganizeProject.py`
+- `LGA_NKS_Projects_Panel_py/LGA_NKS_CleanProject.py`
 - `LGA_NKS_Projects_Panel_py/*.svg`
 
 Tambien usa shareds:
@@ -366,12 +366,10 @@ Conclusion:
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_ColorTransforms.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_FixColorspaces.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_CreateNewTrack.py`
-- `LGA_NKS_Edit_Panel_py/LGA_NKS_OrganizeProject.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_SetShotName.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_Trim_In.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_Trim_Out.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_Reconnect.py`
-- `LGA_NKS_Edit_Panel_py/LGA_NKS_CleanProject.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_mediaMissingFrames.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_MatchVerToEXR.py`
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_CompareVerToEditref.py`
@@ -399,6 +397,8 @@ Conclusion:
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_ScanManager.py`
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_ProjectHandler.py`
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_Projects_Panel_Smart_Reload.py`
+- `LGA_NKS_Projects_Panel_py/LGA_NKS_OrganizeProject.py`
+- `LGA_NKS_Projects_Panel_py/LGA_NKS_CleanProject.py`
 - `LGA_NKS_Projects_Panel_py/*.svg`
 
 ## Problemas detectados
@@ -526,12 +526,10 @@ Startup/
     LGA_NKS_ColorTransforms.py
     LGA_NKS_FixColorspaces.py
     LGA_NKS_CreateNewTrack.py
-    LGA_NKS_OrganizeProject.py
     LGA_NKS_SetShotName.py
     LGA_NKS_Trim_In.py
     LGA_NKS_Trim_Out.py
     LGA_NKS_Reconnect.py
-    LGA_NKS_CleanProject.py
     LGA_NKS_mediaMissingFrames.py
     LGA_NKS_MatchVerToEXR.py
     LGA_NKS_CompareVerToEditref.py
@@ -562,6 +560,8 @@ Startup/
     LGA_NKS_ScanManager.py
     LGA_NKS_ProjectHandler.py
     LGA_NKS_Projects_Panel_Smart_Reload.py
+    LGA_NKS_OrganizeProject.py
+    LGA_NKS_CleanProject.py
     *.svg
 ```
 
@@ -818,9 +818,6 @@ Esta seccion agrega el nivel fino: para cada `.py` relevante se indica si lo lla
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_CreateNewTrack.py`
   - Lo usa `LGA_NKS_Edit_Panel.py`.
 
-- `LGA_NKS_Edit_Panel_py/LGA_NKS_OrganizeProject.py`
-  - Lo usa `LGA_NKS_Edit_Panel.py`.
-
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_SetShotName.py`
   - Lo usa `LGA_NKS_Edit_Panel.py`.
 
@@ -831,9 +828,6 @@ Esta seccion agrega el nivel fino: para cada `.py` relevante se indica si lo lla
   - Lo usa `LGA_NKS_Edit_Panel.py`.
 
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_Reconnect.py`
-  - Lo usa `LGA_NKS_Edit_Panel.py`.
-
-- `LGA_NKS_Edit_Panel_py/LGA_NKS_CleanProject.py`
   - Lo usa `LGA_NKS_Edit_Panel.py`.
 
 - `LGA_NKS_Edit_Panel_py/LGA_NKS_mediaMissingFrames.py`
@@ -902,6 +896,12 @@ Esta seccion agrega el nivel fino: para cada `.py` relevante se indica si lo lla
   - Lo usa `LGA_NKS_Projects_Panel.py`.
 
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_Projects_Panel_Smart_Reload.py`
+  - Lo usa `LGA_NKS_Projects_Panel.py`.
+
+- `LGA_NKS_Projects_Panel_py/LGA_NKS_OrganizeProject.py`
+  - Lo usa `LGA_NKS_Projects_Panel.py`.
+
+- `LGA_NKS_Projects_Panel_py/LGA_NKS_CleanProject.py`
   - Lo usa `LGA_NKS_Projects_Panel.py`.
 
 ## Prioridad sugerida para implementar despues

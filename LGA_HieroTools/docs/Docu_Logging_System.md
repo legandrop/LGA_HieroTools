@@ -38,8 +38,8 @@ Esta guía documenta cómo implementar un sistema de logging robusto que escribe
   - `LGA_NKS_Edit_Panel_py/LGA_import_shots.py` (log: `debugPy_ImportShots.log`)
   - `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_CreateShot.py`
   - `LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ModifyShot.py`
-  - `LGA_NKS_Edit/LGA_NKS_OrganizeProject.py`
-  - `LGA_NKS_Edit/LGA_NKS_CleanProject.py`
+  - `LGA_NKS_Projects_Panel_py/LGA_NKS_OrganizeProject.py`
+  - `LGA_NKS_Projects_Panel_py/LGA_NKS_CleanProject.py`
   - `+Building_Blocks/LGA_NKS_Flow_Pull_DoScan.py`
   - `+Building_Blocks/LGA_NKS_Flow_Pull_BinItem.py`
   - `+Building_Blocks/test_funcion_por_funcion.py`

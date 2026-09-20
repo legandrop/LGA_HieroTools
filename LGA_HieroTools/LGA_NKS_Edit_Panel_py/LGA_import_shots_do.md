@@ -398,4 +398,4 @@ BurnIn no figura en la lista (se trata como índice infinito, siempre en el tope
 | `+Building_Blocks/Hiero/Timeline/LGA_H-SelectFromPlayhead.py` | Referencia del patrón `setTimelineOut/setTimelineIn` para mover clips |
 | `LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py` | Referencia del flujo: `_import_v000_to_bin`, `_set_v000_clip_color`, `bin_item.setColor()` |
 | `+Building_Blocks/LGA_NKS_BurnIn_Extend_To_LastVisible.py` | Referencia del patrón `stretch_burnin`: `get_burnin_effects()` via `subTrackItems()`, `get_last_visible_clip()`, `effect.setTimelineOut()` |
-| `LGA_NKS_Edit_Panel_py/LGA_NKS_OrganizeProject.py` | Estructura de bins `F <seq_name>/<shot_name>` |
+| `LGA_NKS_Projects_Panel_py/LGA_NKS_OrganizeProject.py` | Estructura de bins `F <seq_name>/<shot_name>` |

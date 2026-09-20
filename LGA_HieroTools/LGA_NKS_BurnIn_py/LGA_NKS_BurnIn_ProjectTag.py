@@ -1,17 +1,18 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_ProjectTag v1.00 | Lega
+  LGA_NKS_BurnIn_ProjectTag v1.01 | Lega
 
   Lectura y escritura del override de config de LGA_BurnIn que viaja
   dentro del proyecto: un tag LGA_BurnIn_Settings en el tagsBin() del
   proyecto, con el JSON en la key tag.lga_burnin_config (las keys de
   metadata de tags DEBEN empezar con "tag.", lo exige Hiero).
 
-  El tag NO lo toca el Clean Project del Edit Panel (ese solo borra
+  El tag NO lo toca Clean Project del Projects Panel (ese solo borra
   BinItems sin uso, nunca tags), y se serializa en el .hrox, asi que
   los settings acompanan al proyecto cuando se lo manda a otra persona.
 
+  v1.01: Actualizada la ubicacion de Clean Project en la documentacion interna.
   v1.00: Version inicial.
 ____________________________________________________________________
 """

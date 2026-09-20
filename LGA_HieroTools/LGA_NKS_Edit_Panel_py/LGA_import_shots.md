@@ -961,7 +961,7 @@ donde se distribuya la repo.
 | `LGA_NKS_Edit_Panel_py/LGA_import_shots_transcode.md` | Especificación funcional de la sub-vista Convert (PAGE_CONVERT): tabla EXRs, opciones Codec/Resolución, manejo de originales, presets INI, `_ArrowSpinBox` |
 | `LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py` | Referencia de UI, bin import, timeline placement, colorize path, patrón de settings persistentes |
 | `LGA_NKS_Edit_Panel_py/LGA_NKS_SetShotName.py` | Renombrado de clips post-importacion |
-| `LGA_NKS_Edit_Panel_py/LGA_NKS_OrganizeProject.py` | Estructura de bins `F <grupo>/<shot>` |
+| `LGA_NKS_Projects_Panel_py/LGA_NKS_OrganizeProject.py` | Estructura de bins `F <grupo>/<shot>` |
 | `LGA_NKS_Shared/LGA_EXR_Convert.py` | Motor de transcode EXR. Llamado via subprocess con `--manifest` JSON. Soporta DWAA, resize, channels, pixel_aspect_ratio, OCIO, workers paralelos. |
 | `LGA_NKS_Shared/LGA_NKS_Flow_NamingUtils.py` | `clean_base_name()`, `extract_shot_code()` |
 | `LGA_NKS_Shared/LGA_QtAdapter_HieroTools.py` | Qt adapter (PyQt5/PySide2) |

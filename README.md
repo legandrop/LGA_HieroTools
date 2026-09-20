@@ -154,12 +154,7 @@ Viewer and timeline utilities focused on framing, navigation, review navigation,
 
 ### Edit Panel
 
-Timeline editing, cleanup, reconnect, colorspace, and validation utilities.
-
-- **Organize Project**  
-  Organizes clips into bins based on their file path.
-- **Clean Project**  
-  Removes unused clips from the project.
+Timeline editing, reconnect, colorspace, and validation utilities.
 - **Rec709 | Clip**  
   Sets the selected clips' color transform to Rec.709.
 - **Default | Clip**  
@@ -262,6 +257,8 @@ Project browser and sequence switcher built around the studio's project structur
   Re-scans projects.
 - **Reimport / Redock**  
   Reloads and re-docks the panel using the external smart-reload script.
+- **Organize Project** — Folder-with-arrow icon in the right rail. Organizes clips into bins based on their file path; its original Spanish tooltip is preserved.
+- **Clean Project** — Trash icon in the right rail. Removes unused clips from the project; its original Spanish tooltip is preserved.
 - **Auto-refresh settings**  
   Includes configurable refresh intervals for keeping the project list current.
 

@@ -98,7 +98,7 @@ En `+Building_Blocks/` (solo lectura, log crash-safe línea por línea):
 ## Pendiente
 
 - Confirmar qué herramienta deja el BinItem huérfano.
-- `LGA_NKS_CleanProject.py`: decide si un BinItem se usa comparando
+- `LGA_NKS_Projects_Panel_py/LGA_NKS_CleanProject.py`: decide si un BinItem se usa comparando
   `bin_item.name()` contra `track_item.source().name()`. En los clips que
   importa el pack esos dos nombres **difieren** (`<shot>_aPlate` vs
   `<shot>_aPlate_v001`), así que puede borrar un BinItem en uso. Debería

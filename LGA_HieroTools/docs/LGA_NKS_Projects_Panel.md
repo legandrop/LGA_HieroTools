@@ -5,7 +5,7 @@
 
 ## Concepto rapido
 - Panel `com.lega.ProjectsPanel` para Hiero/Nuke Studio que escanea `T:\` (`VFX-*/*_SUP`), detecta la ultima version `.hrox` de cada proyecto, y permite abrir proyectos y sus secuencias.
-- Barra superior: `Refresh` reescanea en background; estado visible; `Reimport` ejecuta el smart reload para redockear y aplicar cambios.
+- Barra lateral derecha: `Refresh` reescanea en background; `Settings` abre la configuracion; `Reimport` ejecuta el smart reload. Debajo de un separador, `Organize Project` y `Clean Project` actuan sobre el proyecto completo con botones de icono y tooltip.
 - Click en proyecto lo abre; click en secuencia la abre en timeline (cross-project) preservando ajustes de viewer y dejando apagado el Frame Number del ViewerTL.
 - Boton `Update`: aparece al lado de proyectos abiertos cuando existe version mas nueva en disco y permite actualizar automaticamente.
 
@@ -22,6 +22,8 @@
 - `LGA_NKS_Shared/LGA_NKS_Timeline_PreCleanup.py` - `main()`, `remove_nukevfx_tracks()`, `extend_burnin_to_last_visible()`. Limpieza compartida de timeline para ViewerTL y Projects Panel.
 - `LGA_NKS_Shared/LGA_NKS_ScrollTo_TopTrack.py` - `main()`, `obtener_limites_scrollbar()`, `scroll_to_position()`. Scroll vertical al top track, integrado al log del panel cuando se usa desde Projects Panel. Busca primero el scrollbar por contenedor (`qt_scrollarea_vcontainer`) validando su rango negativo; el camino por indices de Nuke 15 queda de respaldo porque puede devolver otro `QScrollBar` sin tirar error.
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_Projects_Panel_Smart_Reload.py` - `main()` recarga y redockea el panel.
+- `LGA_NKS_Projects_Panel_py/LGA_NKS_OrganizeProject.py` - `OrganizeProject.organize_project()` y `main()` reorganizan los clips en bins derivados de la ruta de media.
+- `LGA_NKS_Projects_Panel_py/LGA_NKS_CleanProject.py` - `cleanAllUnusedClips()`, `cleanOfflineVersions()` y `main()` limpian BinItems sin uso y versiones offline.
 - `LGA_NKS_Projects_Panel.ini` - Configuracion. Solo queda `[General] AutoRefreshInterval` para los re-escaneos periodicos; la seccion `[Colors]` se elimino.
 - `LGA_NKS_Shared/LGA_NKS_Project_Colors_Config.py` - `load_project_colors()`, `find_project_color()`, `get_project_colors_db_path()`. Lee los colores de proyecto de la `pipesync_stats.db` del contexto activo.
 - `LGA_NKS_Shared/LGA_QtAdapter_HieroTools.py` - Adapter Qt obligatorio.
@@ -62,6 +64,7 @@
 - Al final de cada cambio de secuencia, `disable_frame_number_on_active_sequence()` busca `Frame_Only` en el track `BurnIn` de la secuencia activa y lo deshabilita si estaba activo. No llama al toggle de posicionamiento, por lo que no crea el efecto ni lo enciende por accidente.
 - Contadores: etiqueta inferior muestra totales de proyectos encontrados y abiertos.
 - Reimport: ejecuta el smart reload externo para probar cambios sin reiniciar Hiero.
+- Acciones de proyecto: los iconos debajo del separador llaman `ProjectsPanel.organize_project()` y `ProjectsPanel.clean_project()`. El loader comun `_run_project_tool()` valida ruta, loader y `main()` antes de ejecutar, y avisa si falla.
 
 ## Logging y debug
 - El panel usa `LGA_NKS_Projects_Panel_py/LGA_NKS_ProjectsPanel_Logging.py`.
@@ -87,11 +90,14 @@
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel_py\LGA_NKS_ProjectItem.py`: `ProjectItem.show_sequences()`, `ProjectItem.on_sequence_click()`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel_py\LGA_Projects_Panel_SwitchSequence.py`: `switch_to_sequence_hybrid()`, `disable_frame_number_on_active_sequence()`, `import_script()`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel_py\LGA_NKS_TimelineMemory.py`: `capture_active()`, `restore_view()`, `remember_context()`, `recall_context()`.
+- `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel_py\LGA_NKS_UIManager.py`: `setup_ui()`, `_add_project_action_button()`, `setup_connections()`, `eventFilter()`.
+- `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel_py\LGA_NKS_OrganizeProject.py`: `OrganizeProject`, `main()`.
+- `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel_py\LGA_NKS_CleanProject.py`: `cleanAllUnusedClips()`, `cleanOfflineVersions()`, `main()`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_ViewerTL_Panel_py\LGA_NKS_FrameNumber.py`: `find_frame_only_effect()`, `print_box_values()`.
 
 ## UI del panel
 - Titulo centrado `Projects`.
-- Toolbar derecha: `Refresh`, `Settings`, estado, `Reimport` (opcional).
+- Toolbar derecha: `Refresh`, `Settings`, `Reimport` (opcional); separador; `Organize Project` (carpeta con flecha) y `Clean Project` (papelera). Las dos acciones nuevas conservan los tooltips en castellano y reutilizan la huella visual del boton Refresh.
 - Lista con scroll: proyectos cerrados/abiertos y boton `Update` cuando corresponde.
 - Etiqueta inferior con resumen de conteos.
 - Toggle de contexto (pill) en una fila propia arriba de la lista, solo visible para el login habilitado (`SWITCH_ALLOWED_LOGIN`). Orden visual: **`studio` a la izquierda, `client` a la derecha**. El activo se pinta violeta.

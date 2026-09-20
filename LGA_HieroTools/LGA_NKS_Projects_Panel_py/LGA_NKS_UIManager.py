@@ -1,11 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_UIManager v1.06 | Lega
+  LGA_NKS_UIManager v1.07 | Lega
 
   Gestor de interfaz de usuario para el panel de proyectos LGA.
   Centraliza creación de widgets, conexión de señales, y manejo de eventos.
 
+  v1.07: Agregados Organize Project y Clean Project como botones de icono
+         separados de Refresh, Settings y Reimport; conservan sus tooltips.
   v1.06: El toggle de contexto arranca alineado con los nombres de proyecto
          (antes quedaba mas a la izquierda) y la separacion entre el toggle y
          el primer proyecto es un 35% menor. Los dos valores se calculan con
@@ -52,6 +54,9 @@ PROJECT_ITEM_TOP_MARGIN = 2
 # separacion entre el toggle y el primer proyecto.
 TOGGLE_ROW_BOTTOM_MARGIN = 4
 TOGGLE_GAP_REDUCTION = 0.35
+
+TOOLTIP_ORGANIZE_PROJECT = "Organiza los clips en bins basándose en su ruta de archivo"
+TOOLTIP_CLEAN_PROJECT = "Elimina clips no usados del proyecto"
 
 
 def initialize_ui_dependencies(reimport_flag, switch_login=None, get_context_fn=None, find_ini_fn=None, get_login_fn=None):
@@ -220,8 +225,67 @@ class UIManager:
 
             right_column.addWidget(panel.reimport_button)
 
+        # Las acciones que afectan al proyecto completo viven separadas de los
+        # controles propios del panel. Reutilizan exactamente la hoja del
+        # boton Refresh para conservar la misma huella visual.
+        project_actions_separator = QtWidgets.QFrame()
+        project_actions_separator.setFrameShape(QtWidgets.QFrame.HLine)
+        project_actions_separator.setFrameShadow(QtWidgets.QFrame.Sunken)
+        project_actions_separator.setFixedWidth(20)
+        right_column.addSpacing(4)
+        right_column.addWidget(
+            project_actions_separator, 0, QtCore.Qt.AlignHCenter
+        )
+        right_column.addSpacing(4)
+
+        icons_dir = os.path.dirname(__file__)
+        shared_icons_dir = os.path.normpath(
+            os.path.join(icons_dir, "..", "LGA_NKS_Shared", "icons")
+        )
+        UIManager._add_project_action_button(
+            panel,
+            right_column,
+            "organize",
+            TOOLTIP_ORGANIZE_PROJECT,
+            os.path.join(icons_dir, "organize_project.svg"),
+            os.path.join(icons_dir, "organize_project_white.svg"),
+            "Organize",
+        )
+        UIManager._add_project_action_button(
+            panel,
+            right_column,
+            "clean",
+            TOOLTIP_CLEAN_PROJECT,
+            os.path.join(shared_icons_dir, "trash.svg"),
+            os.path.join(shared_icons_dir, "trash_hover.svg"),
+            "Clean",
+        )
+
         # Añadir columna derecha al layout principal (sin stretch para mantener tamaño pequeño)
         panel.main_layout.addLayout(right_column, 0)  # stretch factor 0
+
+    @staticmethod
+    def _add_project_action_button(
+        panel, layout, name, tooltip, normal_icon_path, hover_icon_path, fallback_text
+    ):
+        """Agrega una accion de proyecto con el mismo estilo del rail existente."""
+        button = QtWidgets.QPushButton()
+        button.setToolTip(tooltip)
+        button.setStyleSheet(panel.refresh_button.styleSheet())
+
+        if os.path.exists(normal_icon_path) and os.path.exists(hover_icon_path):
+            normal_icon = QtGui.QIcon(normal_icon_path)
+            hover_icon = QtGui.QIcon(hover_icon_path)
+            button.setIcon(normal_icon)
+            button.setIconSize(QtCore.QSize(20, 20))
+            button.installEventFilter(panel)
+            setattr(panel, f"{name}_icon_normal", normal_icon)
+            setattr(panel, f"{name}_icon_hover", hover_icon)
+        else:
+            button.setText(fallback_text)
+
+        setattr(panel, f"{name}_button", button)
+        layout.addWidget(button)
 
     @staticmethod
     def _fit_toggle_to_list(container_layout, scroll_area, list_layout):
@@ -311,6 +375,8 @@ class UIManager:
             panel.settings_button.clicked.connect(panel.show_settings_view)
         if REIMPORT_BUTTON and hasattr(panel, 'reimport_button'):
             panel.reimport_button.clicked.connect(panel.reimport_panel)
+        panel.organize_button.clicked.connect(panel.organize_project)
+        panel.clean_button.clicked.connect(panel.clean_project)
         ctx_client_btn = getattr(panel, "ctx_client_btn", None)
         ctx_studio_btn = getattr(panel, "ctx_studio_btn", None)
         if ctx_client_btn is not None and ctx_studio_btn is not None:
@@ -346,6 +412,23 @@ class UIManager:
             elif event.type() == QtCore.QEvent.Leave:
                 if hasattr(panel, 'reimport_icon_normal'):
                     panel.reimport_button.setIcon(panel.reimport_icon_normal)
+
+        # Hover de las acciones de proyecto
+        elif obj == getattr(panel, "organize_button", None):
+            if event.type() == QtCore.QEvent.Enter:
+                if hasattr(panel, "organize_icon_hover"):
+                    panel.organize_button.setIcon(panel.organize_icon_hover)
+            elif event.type() == QtCore.QEvent.Leave:
+                if hasattr(panel, "organize_icon_normal"):
+                    panel.organize_button.setIcon(panel.organize_icon_normal)
+
+        elif obj == getattr(panel, "clean_button", None):
+            if event.type() == QtCore.QEvent.Enter:
+                if hasattr(panel, "clean_icon_hover"):
+                    panel.clean_button.setIcon(panel.clean_icon_hover)
+            elif event.type() == QtCore.QEvent.Leave:
+                if hasattr(panel, "clean_icon_normal"):
+                    panel.clean_button.setIcon(panel.clean_icon_normal)
 
         # Manejar hover del botón update (buscar en todos los project items)
         elif hasattr(obj, 'toolTip') and obj.toolTip() == "Actualizar a versión más nueva":

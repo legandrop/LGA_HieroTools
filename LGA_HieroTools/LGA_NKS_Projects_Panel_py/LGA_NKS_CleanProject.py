@@ -1,12 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CleanProject v2.02 | Safe Hiero Cleaning System
+  LGA_NKS_CleanProject v2.03 | Lega
 
   Main automatic cleaning script that combines both objectives:
   1. Removal of unused clips in sequences
   2. Cleaning of offline versions in clips with multiple versions
 
+  v2.03: Movido al Projects Panel; la accion se ejecuta desde su barra lateral.
   v2.02: Translation to English
   v2.01: Added final user message with cleaning summary
          Main script that integrates both cleaning functionalities

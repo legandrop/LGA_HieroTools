@@ -1,10 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_EditToolsPanel v3.09 | Lega
+  LGA_EditToolsPanel v3.10 | Lega
 
   Tools panel for Hiero / Nuke Studio
 
+  v3.10: Organize Project y Clean Project se movieron al Projects Panel,
+         porque actuan sobre el proyecto completo y no sobre la edicion.
   v3.09: Nuevo boton Fix Zombies, debajo de Self ReplaceClip, que llama a
          LGA_NKS_FixZombieClips.py.
   v3.08: Nuevo boton Replace Clip, entre Reconnect Media y Self ReplaceClip,
@@ -331,8 +333,6 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
 
         # Crear botones y agregarlos al layout
         self.buttons = [
-            ("Organize Project", self.organize_project, "#283548", None, "Organiza los clips en bins basándose en su ruta de archivo"),
-            ("Clean Project", self.clean_project, "#283548", None, "Elimina clips no usados del proyecto"),
             ("Rec709 | Clip", self.rec709_clip, "#434c41", None, "Cambia el color transform a Rec.709 en los clips seleccionados"),
             ("Default | Clip", self.default_clip, "#434c41", None, "Cambia el color transform a default en los clips seleccionados"),
             ("Compositing Log | Clip", self.set_compositing_log, "#434c41", None, "Cambia el color transform a compositing_log en los clips seleccionados"),
@@ -777,23 +777,6 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
 
             debug_print_b(traceback.format_exc())
 
-    ###### Organize Project
-    def organize_project(self):
-        """Ejecuta el script LGA_NKS_OrganizeProject.py para organizar clips en bins."""
-        debug_print_b("\n>>> Ejecutando Organize Project script...")
-
-        try:
-            # Ejecutamos el script externo
-            result = self.execute_external_script("LGA_NKS_OrganizeProject.py")
-            if result:
-                debug_print_b(">>> Organize Project script completado")
-            else:
-                debug_print_b(">>> Error al ejecutar Organize Project script")
-        except Exception as e:
-            debug_print_b(f"Error durante la ejecución de Organize Project: {e}")
-            import traceback
-            debug_print_b(traceback.format_exc())
-
     ###### Shot name
     def set_shot_name(self):
         """Ejecuta el script LGA_NKS_SetShotName.py para establecer nombres de shots."""
@@ -1095,19 +1078,6 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
     ###### Fix Zombies
     def execute_FixZombieClips(self):
         self.execute_external_script("LGA_NKS_FixZombieClips.py")
-
-    ###### Clean Project
-    def clean_project(self):
-        """Ejecuta el script externo de limpieza de clips no usados."""
-        debug_print_b("\n>>> Ejecutando Clean Project script...")
-        try:
-            result = self.execute_external_script("LGA_NKS_CleanProject.py")
-            if result:
-                debug_print_b(">>> Clean Project script completado")
-            else:
-                debug_print_b(">>> Error al ejecutar Clean Project script")
-        except Exception as e:
-            debug_print_b(f"Error durante la ejecución de Clean Project: {e}")
 
     # Metodo para ejecutar scripts externos con parametros
     def execute_external_script_with_param(self, script_name, force_all_clips=False):

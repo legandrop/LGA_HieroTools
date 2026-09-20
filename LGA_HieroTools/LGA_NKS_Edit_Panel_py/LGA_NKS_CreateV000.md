@@ -722,5 +722,5 @@ C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\+Building_Blocks\Hiero\Time
 | `LGA_NKS_Shared\LGA_NKS_Flow_NamingUtils.py` | `clean_base_name()`, `extract_project_name()`, `extract_shot_code()` |
 | `LGA_NKS_Shared\LGA_NKS_Flow_Task_Config.py` | `get_task_color()` |
 | `LGA_NKS_Shared\OIIO_Win\oiiotool.exe` | Creacion de EXR negro |
-| `LGA_NKS_Edit_Panel_py\LGA_NKS_OrganizeProject.py` | Estructura de bins usada por la importacion |
+| `LGA_NKS_Projects_Panel_py\LGA_NKS_OrganizeProject.py` | Estructura de bins usada por la importacion |
 | `LGA_NKS_Edit_Panel_py\LGA_NKS_SetShotName.py` | Logica de naming de clips usada por la importacion |

@@ -107,7 +107,7 @@ Keys reales medidas con `[metadata keys input/*]` en un Text2 del timeline:
   `tag.metadata().setValue(...)` se serializa dentro del `.hrox` y sobrevive
   guardar/reabrir (probado). **Las keys DEBEN empezar con `tag.`** (RuntimeError
   si no).
-- El Clean Project del Edit Panel borra BinItems sin uso pero NO toca tags:
+- Clean Project del Projects Panel borra BinItems sin uso pero NO toca tags:
   un "clip fantasma" para transportar settings moriria; un tag no.
 
 ## Fondo de texto que "respira"

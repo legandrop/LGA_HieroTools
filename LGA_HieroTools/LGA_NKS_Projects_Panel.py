@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.38 | Lega
+  LGA_NKS_Projects_Panel v2.39 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,9 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.39: Organize Project y Clean Project pasan del Edit Panel a la barra
+         lateral de este panel. Los scripts se cargan desde Projects_Panel_py
+         y conservan sus tooltips en castellano.
   v2.38: Colapsar y cerrar proyectos. collapsed_projects recuerda los
          colapsados a traves del rearmado de la lista. close_project() pregunta
          con modifiedSinceLastSave() antes de cerrar (project.close() descarta
@@ -92,6 +95,7 @@ import hiero.ui
 import hiero.core
 import os
 import importlib
+import importlib.util
 import sys
 import configparser
 import time
@@ -818,6 +822,50 @@ class ProjectsPanel(QtWidgets.QWidget):
         except Exception as e:
             debug_print(f"Error durante reimportación: {e}")
             show_warning(self, "Error", f"Error durante reimportación:\n{str(e)}")
+
+    def _run_project_tool(self, script_name, action_label):
+        """Carga una accion de proyecto desde su script y ejecuta main()."""
+        script_path = os.path.join(
+            os.path.dirname(__file__), "LGA_NKS_Projects_Panel_py", script_name
+        )
+        debug_print(f"Ejecutando {action_label}: {script_path}")
+
+        try:
+            if not os.path.isfile(script_path):
+                raise FileNotFoundError(script_path)
+
+            module_name = f"lga_projects_panel_{os.path.splitext(script_name)[0]}"
+            spec = importlib.util.spec_from_file_location(module_name, script_path)
+            if spec is None or spec.loader is None:
+                raise ImportError(f"No se pudo crear el loader para {script_name}")
+
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            entry_point = getattr(module, "main", None)
+            if not callable(entry_point):
+                raise AttributeError(f"{script_name} no expone main()")
+
+            entry_point()
+            debug_print(f"{action_label} completado")
+            return True
+        except Exception as e:
+            debug_print(f"Error ejecutando {action_label}: {e}")
+            show_warning(
+                self,
+                action_label,
+                f"Couldn't run {action_label}.\n\n{e}",
+            )
+            return False
+
+    def organize_project(self):
+        """Organiza los clips del proyecto activo en bins segun su ruta."""
+        return self._run_project_tool(
+            "LGA_NKS_OrganizeProject.py", "Organize Project"
+        )
+
+    def clean_project(self):
+        """Elimina del proyecto activo los clips que no estan en uso."""
+        return self._run_project_tool("LGA_NKS_CleanProject.py", "Clean Project")
 
     def on_update_project_click(self, newer_version_info):
         """Manejar el click en el botón de update para actualizar proyecto a versión más nueva"""

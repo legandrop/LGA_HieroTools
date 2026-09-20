@@ -1,9 +1,11 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_OrganizeProject v1.00 | Lega
+  LGA_NKS_OrganizeProject v1.01 | Lega
 
   Script para organizar clips en bins basado en rutas de archivos.
+
+  v1.01: Movido al Projects Panel; la accion se ejecuta desde su barra lateral.
 ____________________________________________________________________
 
 """
