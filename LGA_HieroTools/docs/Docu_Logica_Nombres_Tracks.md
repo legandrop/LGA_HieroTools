@@ -135,7 +135,7 @@ Los pasos para sumar una task nueva son:
    así que sumar el track ahí alcanza para que el selector de task, el chequeo
    de mismatch y `registered_task_names()` lo reconozcan solos.
 4. Revisar filtros por nombre de archivo, regex y detección de task en los scripts que ya soportan multi-task.
-5. Revisar UI donde hay acciones específicas por task (ej. botones on/off del ViewerTL Panel).
+5. Revisar UI donde hay acciones específicas por task (ej. botones on/off del Viewer | TL Panel).
 6. Actualizar la tabla de tasks vigentes de este documento.
 7. Revisar el estado en [Docu_MultiTask.md](Docu_MultiTask.md).
 

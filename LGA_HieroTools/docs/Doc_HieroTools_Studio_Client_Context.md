@@ -73,13 +73,13 @@ toda la maquinaria dinamica esta detras de un gate:
   emite **despues** de escribir el INI, porque los suscriptos releen el contexto
   y tienen que ver el valor nuevo.
 
-Paneles suscriptos: Flow Rev Panel (`on_context_changed` -> `build_buttons`) y
+Paneles suscriptos: Flow Review Panel (`on_context_changed` -> `build_buttons`) y
 Assignee Panel (`on_context_changed` -> `build_buttons`).
 
 ### Estados de Flow por contexto
 
 Los dos sitios de Flow no tienen la misma lista de `sg_status_list`, asi que los
-botones del Flow Rev Panel y los dropdowns de Create Shot se filtran por contexto.
+botones del Flow Review Panel y los dropdowns de Create Shot se filtran por contexto.
 Detalle completo en [Docu_Flow_Estados_Colores.md](Docu_Flow_Estados_Colores.md).
 
 ### Assignee Panel en client
@@ -169,7 +169,7 @@ Por eso nada arma el nombre de la carpeta con un literal:
   respeta el caso de los segmentos que ya existan, así un shot histórico no
   queda partido en dos carpetas.
 
-## Impacto en Flow S3 Panel
+## Impacto en Flow | S3 Panel
 
 - `Create Shot` ([LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py)):
   el diálogo de creación genera una sección por task con
@@ -198,7 +198,7 @@ Por eso nada arma el nombre de la carpeta con un literal:
   coincidan con cada nombre, no solo el primero, porque puede haber varios
   `_cg_` en el mismo timeline (uno por stream).
 
-## Impacto en ViewerTL Panel
+## Impacto en Viewer | TL Panel
 
 - El segundo botón ON/OFF ya no es siempre `_roto_`: `_segunda_task()`
   ([LGA_NKS_ViewerTL_Panel.py](../LGA_NKS_ViewerTL_Panel.py)) resuelve la
@@ -250,14 +250,14 @@ Por eso nada arma el nombre de la carpeta con un literal:
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_Flow_Task_Config.py` (`contexts` por task, `get_available_tasks()`)
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_Flow_NamingUtils.py` (familia CG lee `all_track_task_names()` de TaskScope)
 
-### Flow S3 Panel (Create Shot / Show in Flow / Check Shots)
+### Flow | S3 Panel (Create Shot / Show in Flow / Check Shots)
 
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py`
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py`
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py`
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py`
 
-### ViewerTL Panel
+### Viewer | TL Panel
 
 - `LGA_HieroTools/LGA_NKS_ViewerTL_Panel.py` (segundo botón ON/OFF por contexto)
 - `LGA_HieroTools/LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableCG.py` (wrapper contextual de Client)
@@ -310,7 +310,7 @@ Por eso nada arma el nombre de la carpeta con un literal:
 
 ## Gaps detectados (seguimiento)
 
-- Unificar paths de runtime/ejecutable de PipeSync en módulos de Flow S3.
+- Unificar paths de runtime/ejecutable de PipeSync en módulos de Flow | S3.
 - Revisar documentación auxiliar para eliminar ejemplos studio-only.
 - Validar en QA que todos los paneles abiertos en sesión refrescan contexto sin
   reinicio en escenarios edge.

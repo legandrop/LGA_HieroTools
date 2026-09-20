@@ -1,14 +1,14 @@
 > **Regla de documentacion**: este archivo describe el estado actual del codigo. No es un historial de cambios.
 
-# Flow Rev Panel (`LGA_NKS_Flow_Panel`)
+# Flow Review Panel (`LGA_NKS_Flow_Panel`)
 
 ## Por qué existe
 
-Flow Rev reúne el recorrido de review sobre material ya sincronizado: traer el
+Flow Review reúne el recorrido de review sobre material ya sincronizado: traer el
 estado actual desde Flow, inspeccionar un shot y sus comentarios, generar una
 imagen para notas y empujar el siguiente estado de revisión. El nombre anterior,
 `Flow`, era demasiado amplio y se confundía con las operaciones de creación,
-consulta y acceso que viven en Flow S3.
+consulta y acceso que viven en Flow | S3.
 
 Solo cambia la identidad visible y la carpeta privada. El módulo
 `LGA_NKS_Flow_Panel.py`, la clase `ColorChangeWidget` y el `objectName`
@@ -49,12 +49,12 @@ legible; el color aplicado al clip sigue siendo el valor real sin esa correcció
   seleccionar distintos alcances/versiones según el botón y el flujo de Push.
 
 El panel no crea shots, no administra vendor groups y no lanza operaciones S3.
-Esas responsabilidades pertenecen a Flow S3 y Assignee.
+Esas responsabilidades pertenecen a Flow | S3 y Assignee.
 
 ## Referencias técnicas
 
 - `LGA_HieroTools/LGA_NKS_Flow_Panel.py`
-  - `ColorChangeWidget.__init__()` fija `Flow Rev` como título visible sin cambiar el `objectName`.
+  - `ColorChangeWidget.__init__()` fija `Flow Review` como título visible sin cambiar el `objectName`.
   - `build_buttons(mode)` arma los tres botones fijos y agrega los estados del contexto.
   - `on_context_changed(mode)` reconstruye el panel al alternar Studio/Client.
   - `run_FPT_pull_with_deselect()` y `run_FPT_pull()` ejecutan los dos alcances de Pull.

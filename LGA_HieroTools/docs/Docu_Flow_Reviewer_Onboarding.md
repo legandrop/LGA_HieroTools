@@ -46,7 +46,7 @@ capturado al abrir el diálogo.
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ModifyShot.py`
   - `ModifyShotWorker` - aplica cambios de estado y reviewers a tasks existentes.
 - `LGA_HieroTools/LGA_NKS_Flow_Panel.py`
-  - Configuracion de botones de Flow Rev Panel, incluyendo botones `Rev <Reviewer>`.
+  - Configuracion de botones de Flow Review Panel, incluyendo botones `Rev <Reviewer>`.
 - `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py`
   - `status_translation` - traduce labels de botones a codigos SG.
   - `task_status_dict` - colores/tags asociados a estados.

@@ -1,5 +1,7 @@
 v3.95:
 
+        - Los titulos visibles explicitan la estructura de los tres docks sin cambiar modulos, clases, carpetas ni `objectName`: `Flow Review` describe un unico recorrido de review conectado con Flow; `Flow | S3` separa las herramientas de Flow de las de almacenamiento; `Viewer | TL` separa Viewer de Timeline (`LGA_NKS_Flow_Panel v2.61`, `LGA_NKS_Flow_FlowProd_Panel v1.31`, `LGA_ViewerPanel v1.76`). [ Paneles - Aclarar titulos visibles ]
+
         - ViewerTL y Review quedan separados por ambito (`LGA_ViewerPanel v1.75`, `LGA_ReviewPanel v2.87`): los tres controles de estado de clips pasan a ViewerTL con sus scripts y conservan Shift+D, Ctrl+Shift+D, el tercer toggle contextual Studio/Client y el gesto Shift de seleccion. Todos los botones del panel declaran `Viewer |` o `TL |`; Frame Number adopta el violeta del Viewer y los tres toggles cierran el panel en azul. Snapshot y ON Clips procesan Shift desde la senal de click, por lo que tambien funcionan por teclado. [ ViewerTL - Separar Viewer y Timeline ]
 
         - Review Panel (`LGA_ReviewPanel v2.86`) deja las acciones ocasionales Match Rev Ver, Compare Rev EdRef y Compare EXR aPlate al final del panel. Contact Sheet y Previous/Next Annotation forman ahora un bloque intermedio azul petroleo propio, separado visualmente de Difference/Compare. [ Review Panel - Priorizar acciones frecuentes ]

@@ -120,7 +120,7 @@ Hay **dos** disparadores, y los dos usan la MISMA funcion, `run_if_color_managed
 | Disparador | Donde | Quien abre el grupo de undo |
 |---|---|---|
 | Boton `Fix Colorspaces` del Edit Panel | `LGA_NKS_Edit_Panel.py::fix_colorspaces()` -> `main()` | el panel, con `beginUndo("Fix Colorspaces")` |
-| Al terminar un **Flow Pull** | `LGA_NKS_Flow_Pull.py::fix_colorspaces_si_proyecto_managed()` | el Flow Rev Panel, con `beginUndo("Run External Script")` |
+| Al terminar un **Flow Pull** | `LGA_NKS_Flow_Pull.py::fix_colorspaces_si_proyecto_managed()` | el Flow Review Panel, con `beginUndo("Run External Script")` |
 
 🔴 **`run_if_color_managed()` NO abre grupo de undo. Lo abre siempre el llamador**, que es la
 convencion del repo ("El undo lo maneja el propio script, para no anidar bloques",

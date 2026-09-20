@@ -1,14 +1,16 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Panel v2.60 | Lega
+  LGA_NKS_Flow_Panel v2.61 | Lega
 
-  Panel Flow Rev con herramientas de review que interactuan con las tasks de
+  Panel Flow Review con herramientas de review que interactuan con las tasks de
   Flow Production Tracking descargadas previamente con LGA_NKS_Flow_Downloader.
   Actualizado para ser compatible con ambos sistemas de nomenclatura:
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v2.61: La etiqueta visible pasa de Flow Rev a Flow Review para describir un
+         unico flujo de review conectado con Flow.
   v2.60: La etiqueta visible pasa de Flow a Flow Rev y la carpeta privada pasa
          a LGA_NKS_Flow_Rev_Panel_py. Se conservan modulo, clase y objectName
          para mantener compatibles los docks y layouts guardados.
@@ -232,7 +234,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
         super(ColorChangeWidget, self).__init__()
 
         self.setObjectName("com.lega.FPTPanel")
-        self.setWindowTitle("Flow Rev")
+        self.setWindowTitle("Flow Review")
         debug_print("=== FlowPanel init ===")
 
         self.root_layout = QtWidgets.QVBoxLayout()

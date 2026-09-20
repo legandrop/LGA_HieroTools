@@ -34,20 +34,20 @@ Current persisted settings:
 
 ## Reusability
 
-- **Broadly reusable:** several tools in `ViewerTL`, parts of `Edit`, parts of `Review`, and `ClipColor`
-- **Reusable with adaptation:** `Projects`, some `Flow Rev` utilities, and some comparison / reconnect tools
-- **Strongly pipeline-specific:** most of `Flow Rev`, `Flow S3`, and `Assignee`, plus anything tied to Flow Production Tracking, Wasabi, PipeSync, or studio naming rules
+- **Broadly reusable:** several tools in `Viewer | TL`, parts of `Edit`, parts of `Review`, and `ClipColor`
+- **Reusable with adaptation:** `Projects`, some `Flow Review` utilities, and some comparison / reconnect tools
+- **Strongly pipeline-specific:** most of `Flow Review`, `Flow | S3`, and `Assignee`, plus anything tied to Flow Production Tracking, Wasabi, PipeSync, or studio naming rules
 
 ## Panels Overview
 
-### Flow Rev Panel
+### Flow Review Panel
 
 Tools for the Flow review cycle: pull current data, inspect shots, create review
 snapshots, and push context-valid review/delivery states. The runtime module and
 dock id remain `LGA_NKS_Flow_Panel` / `com.lega.FPTPanel`; only the visible title
 and private folder changed.
 
-Internal reference: [Flow Rev Panel](LGA_HieroTools/docs/LGA_NKS_Flow_Rev_Panel_README.md).
+Internal reference: [Flow Review Panel](LGA_HieroTools/docs/LGA_NKS_Flow_Rev_Panel_README.md).
 
 - **Flow Pull**  
   Click: pull all shots from the timeline.  
@@ -77,14 +77,14 @@ Tools for assigning artists to Flow tasks and managing related Wasabi access pol
   Shift+Click: runs the same canonical PipeSync grant engine for that user. In Client, the Wasabi step is always skipped.
   Ctrl+Shift+Click: opens a window to manage the shots currently assigned to that user's Wasabi policy.
 
-### Flow S3 Panel
+### Flow | S3 Panel
 
 Production-facing tools split into two visual blocks. The first six actions
 belong to Flow; the final five belong to FileManagerS3/Wasabi S3. The runtime
 module and dock id remain `LGA_NKS_Coordination_Panel` /
 `com.lega.FlowProdPanel` for layout compatibility.
 
-Internal reference: [Flow S3 Panel](LGA_HieroTools/docs/LGA_NKS_Flow_S3_Panel_README.md).
+Internal reference: [Flow | S3 Panel](LGA_HieroTools/docs/LGA_NKS_Flow_S3_Panel_README.md).
 
 - **Create Shot**  
   Creates a shot in Flow based on the selected clip. In Client, external vendor
@@ -125,7 +125,7 @@ Internal reference: [Flow S3 Panel](LGA_HieroTools/docs/LGA_NKS_Flow_S3_Panel_RE
 The former **.Psync** button is intentionally hidden because that handoff is no
 longer used. Its script remains in the repository as a documented legacy tool.
 
-### ViewerTL Panel
+### Viewer | TL Panel
 
 Viewer and timeline utilities. Every label declares its scope with `Viewer |`
 or `TL |`, so similarly colored controls do not imply an unrelated function.

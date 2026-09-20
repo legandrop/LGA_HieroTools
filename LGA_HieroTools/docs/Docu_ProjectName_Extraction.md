@@ -169,7 +169,7 @@ Leyenda:
 | `LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Assign_Assignee.py` | ✅ Actualizado v1.25 — ídem |
 | `LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Clear_Assignees.py` | ✅ Actualizado v1.25 — ídem |
 
-### Flow S3 Panel
+### Flow | S3 Panel
 
 | Script | Estado |
 |--------|--------|

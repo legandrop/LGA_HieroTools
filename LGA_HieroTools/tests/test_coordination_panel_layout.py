@@ -6,6 +6,7 @@ from pathlib import Path
 
 PANEL_PATH = Path(__file__).resolve().parents[1] / "LGA_NKS_Coordination_Panel.py"
 FLOW_PANEL_PATH = Path(__file__).resolve().parents[1] / "LGA_NKS_Flow_Panel.py"
+VIEWER_PANEL_PATH = Path(__file__).resolve().parents[1] / "LGA_NKS_ViewerTL_Panel.py"
 STYLE_UTILS_PATH = (
     Path(__file__).resolve().parents[1]
     / "LGA_NKS_Shared"
@@ -77,6 +78,7 @@ class CoordinationPanelLayoutTests(unittest.TestCase):
     def test_visible_titles_change_without_renaming_dock_ids(self):
         flow_tree = ast.parse(FLOW_PANEL_PATH.read_text(encoding="utf-8"))
         s3_tree = ast.parse(PANEL_PATH.read_text(encoding="utf-8"))
+        viewer_tree = ast.parse(VIEWER_PANEL_PATH.read_text(encoding="utf-8"))
 
         def string_calls(tree, method_name):
             return [
@@ -90,8 +92,9 @@ class CoordinationPanelLayoutTests(unittest.TestCase):
                 and isinstance(node.args[0].value, str)
             ]
 
-        self.assertIn("Flow Rev", string_calls(flow_tree, "setWindowTitle"))
-        self.assertIn("Flow S3", string_calls(s3_tree, "setWindowTitle"))
+        self.assertIn("Flow Review", string_calls(flow_tree, "setWindowTitle"))
+        self.assertIn("Flow | S3", string_calls(s3_tree, "setWindowTitle"))
+        self.assertIn("Viewer | TL", string_calls(viewer_tree, "setWindowTitle"))
         self.assertIn("com.lega.FPTPanel", string_calls(flow_tree, "setObjectName"))
         self.assertIn("com.lega.FlowProdPanel", string_calls(s3_tree, "setObjectName"))
 

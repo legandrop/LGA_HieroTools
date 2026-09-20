@@ -1,10 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_ViewerPanel v1.75 | Lega
+  LGA_ViewerPanel v1.76 | Lega
 
   Panel con herramientas para el viewer y el timeline de Hiero
 
+  v1.76: La etiqueta visible pasa de ViewerTL a Viewer | TL para separar con
+         claridad las herramientas del Viewer y del Timeline.
   v1.75: Separa nombres Viewer | y TL |, recibe los tres toggles de clips del
          Review Panel y agrupa las acciones por ambito. Frame Number pasa al
          violeta del Viewer y los gestos Shift funcionan tambien por teclado.
@@ -212,7 +214,7 @@ class ViewerPanel(QtWidgets.QWidget):
         super(ViewerPanel, self).__init__()
 
         self.setObjectName("com.lega.ViewerPanel")
-        self.setWindowTitle("ViewerTL")
+        self.setWindowTitle("Viewer | TL")
         debug_print("=== ViewerPanel init ===")
 
         self.root_layout = QtWidgets.QVBoxLayout()

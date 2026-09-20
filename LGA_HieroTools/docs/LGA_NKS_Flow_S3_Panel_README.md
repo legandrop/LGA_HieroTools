@@ -1,10 +1,10 @@
 > **Regla de documentacion**: este archivo describe el estado actual del codigo. No es un historial de cambios, changelog ni bitacora temporal.
 > **Regla de documentacion**: este archivo debe incluir una seccion de referencias tecnicas con rutas completas a los archivos mas importantes relacionados, y para cada archivo nombrar las funciones, clases o metodos clave vinculados a este tema.
 
-# Flow S3 Panel (`LGA_NKS_Coordination_Panel`)
+# Flow | S3 Panel (`LGA_NKS_Coordination_Panel`)
 
 ## Descripción
-Flow S3 separa en un solo dock dos etapas contiguas del trabajo de producción:
+Flow | S3 separa en un solo dock dos etapas contiguas del trabajo de producción:
 las primeras seis acciones operan sobre Flow Production Tracking y las cinco
 restantes preparan o transfieren datos mediante FileManagerS3/Wasabi S3. El
 nombre visible describe esa frontera; el módulo, la clase y el `objectName`

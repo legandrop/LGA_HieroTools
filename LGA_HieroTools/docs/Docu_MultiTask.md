@@ -154,7 +154,7 @@ Leyenda:
 
 Nada pendiente.
 
-### 5.2. Flow Rev Panel
+### 5.2. Flow Review Panel
 
 | Script | comp EXR | roto EXR | cleanup EXR | cg EXR (client) | comp Rev | roto Rev | cleanup Rev |
 |---|---|---|---|---|---|---|---|
@@ -181,7 +181,7 @@ Nada pendiente.
 
 **Flow ReviewPic:** no auditado en detalle. Posibles hardcodes a revisar; pendiente integrar el mismo helper.
 
-### 5.3. ViewerTL Panel: toggles por task
+### 5.3. Viewer | TL Panel: toggles por task
 
 | Script | comp | roto (studio) | cleanup (studio) | cg (client) | Notas |
 |---|---|---|---|---|---|
@@ -202,7 +202,7 @@ resuelve la segunda task de `active_track_tasks()` (TaskScope) y
 botón era literal `"ON OFF _roto_"` y en client no servía para nada porque
 roto no existe ahí.
 
-**Pendiente en ViewerTL Panel:**
+**Pendiente en Viewer | TL Panel:**
 - Agregar botón y wrapper `TL | ON/OFF _cleanup_` análogo a los de comp y roto
   (`_SEGUNDA_TASK_SCRIPTS` no incluye `cleanup` a propósito: mapearlo
   apuntaría a un wrapper inexistente y el botón fallaría en silencio).
@@ -229,7 +229,7 @@ roto no existe ahí.
 | [LGA_import_shots.py](../LGA_NKS_Edit_Panel_py/LGA_import_shots.py) | ✅ | ✅ | ✅ | ✅ | CG es task de primera clase en el import: color (`_CLR_CG`), orden de track (`_cg_` bajo `_comp_`), carpeta de publish (`_task_folders_for_context()`) y "última versión" calculada **por stream** (`_stream_token()`), porque una sola carpeta CG agrupa disciplinas con numeración independiente |
 | [LGA_import_shots_preview.py](../LGA_NKS_Edit_Panel_py/LGA_import_shots_preview.py) | ✅ | ✅ | ✅ | ✅ | `classify_track_type()` reconoce `_cg_` vía `exr_track_for_task(CG_TASK_NAME)`; devuelve el tipo `"cg"` |
 
-### 5.5. Flow S3 Panel
+### 5.5. Flow | S3 Panel
 
 | Script | comp | roto (studio) | cleanup (studio) | cg (client) | Notas |
 |---|---|---|---|---|---|
@@ -305,13 +305,13 @@ Una fila por clip con tres columnas: **Clip**, **Task (filename)**, **Track**.
 
 Lista de pendientes concretos, en orden sugerido:
 
-1. **ViewerTL Panel** — crear wrapper y botón para `TL | ON/OFF _cleanup_` (el de `_cg_` ya existe: `LGA_NKS_Clip_DisableCG.py`).
+1. **Viewer | TL Panel** — crear wrapper y botón para `TL | ON/OFF _cleanup_` (el de `_cg_` ya existe: `LGA_NKS_Clip_DisableCG.py`).
 2. **Flow Push** — migrar `_show_task_selection_dialog` interno al helper compartido `LGA_NKS_TaskSelectionDialog`.
 3. **Flow Push** — decidir política del assignee del shot (`get_comp_assignee`) y ajustar si corresponde.
 4. **Flow ReviewPic** — auditar hardcodes a comp e integrar `LGA_NKS_TaskSelectionDialog`.
 5. **Review Panel** — extender MatchVerToEXR y CompareVerToEditref a operar por task iterando `TASK_EXR_TRACKS` / `TASK_REV_TRACKS`.
 6. **Review Panel** — evaluar si EXRTrack_Difference y Compare_Versions deben trabajar por task o seguir siendo comp-only.
-7. **Scripts no auditados** — pasar el filtro de hardcodes por Assignee, ViewerTL. (Flow S3 Panel — Create Shot, Show in Flow, Check Shots — ya se auditó para el scope de CG, ver sección 5.5.)
+7. **Scripts no auditados** — pasar el filtro de hardcodes por Assignee, ViewerTL. (Flow | S3 Panel — Create Shot, Show in Flow, Check Shots — ya se auditó para el scope de CG, ver sección 5.5.)
 
 ## 8. Tests manuales sugeridos
 
@@ -325,7 +325,7 @@ Con un timeline que tenga un shot con clips en `_comp_`, `_roto_`, `_cleanup_`, 
 - Flow Push con un status:
   - Seleccionar clips de varias tasks → debe mostrar el diálogo preguntando a cuál aplicar.
   - Aplicar a una sola task → el status debe escribirse únicamente en esa task en SG.
-- ViewerTL Panel:
+- Viewer | TL Panel:
   - `TL | ON/OFF _comp_` (Shift+D) alterna el clip de `_comp_`.
   - `TL | ON/OFF _roto_` (Ctrl+Shift+D) alterna el clip de `_roto_`.
   - `TL | ON/OFF _cleanup_` todavía no existe (pendiente).
@@ -339,11 +339,11 @@ con `PROJA_1013_0800_layout_v003` y otro `_cg_` con
 
 - **Create Shot:** el diálogo debe ofrecer únicamente las tasks `Comp` y `CG`, sin Roto/Cleanup/DMP/3D.
 - **Create v000:** los botones de task deben ser `comp` y `cg` únicamente; crear una v000 de `cg` debe publicar en la carpeta `CG`.
-- **ViewerTL Panel:** el segundo botón ON/OFF (`Ctrl+Shift+D`) debe leer `TL | ON/OFF _cg_` y alternar el clip de un track `_cg_` bajo el playhead, no de `_roto_`.
+- **Viewer | TL Panel:** el segundo botón ON/OFF (`Ctrl+Shift+D`) debe leer `TL | ON/OFF _cg_` y alternar el clip de un track `_cg_` bajo el playhead, no de `_roto_`.
 - **Show in Flow:** un shot sin task Comp pero con task CG debe abrir la URL de la task CG, no la del shot pelado.
 - **Check Shots:** debe reportar como existentes los shots que solo tienen clip en `_cg_`; si hay varios tracks `_cg_`, tiene que revisarlos todos, no solo el primero.
 - **Import Shots:** una carpeta de publish `CG` con streams `layout` y `lighting` numerados de forma independiente (`..._layout_v001`, `..._layout_v002`, `..._lighting_v001`) tiene que marcar `is_latest=True` en la versión más alta de CADA stream, no solo en el máximo global de la carpeta.
-- **Cambiar el contexto a `studio`** y repetir Create Shot / Create v000 / ViewerTL Panel: ninguno debe ofrecer ni mostrar `cg`.
+- **Cambiar el contexto a `studio`** y repetir Create Shot / Create v000 / Viewer | TL Panel: ninguno debe ofrecer ni mostrar `cg`.
 
 ## 9. Referencias técnicas
 
@@ -362,9 +362,9 @@ con `PROJA_1013_0800_layout_v003` y otro `_cg_` con
   - Métodos: `HieroOperations.process_selected_clips()`, `HieroOperations.enable_or_disable_clips()`, `SGManager.find_highest_version_for_task()`
 - **Flow Push:** [LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py](../LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py)
   - Funciones: `push_from_selected_clips()`, `_show_task_selection_dialog()`, `get_comp_assignee()`
-- **ViewerTL Panel (panel):** [LGA_NKS_ViewerTL_Panel.py](../LGA_NKS_ViewerTL_Panel.py)
+- **Viewer | TL Panel (panel):** [LGA_NKS_ViewerTL_Panel.py](../LGA_NKS_ViewerTL_Panel.py)
   - Métodos: `enable_or_disable_all_clips()`, `enable_or_disable_selected_clips()`, `toggle_comp_clip()`, `_segunda_task()`, `_second_task_button()`, `toggle_second_task_clip()`
-- **ViewerTL Panel (scripts):** [LGA_NKS_ViewerTL_Panel_py/LGA_NKS_ON_Clips_OFF_v00-Clips.py](../LGA_NKS_ViewerTL_Panel_py/LGA_NKS_ON_Clips_OFF_v00-Clips.py), [LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableEXR.py](../LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableEXR.py), [LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableRoto.py](../LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableRoto.py), [LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableCG.py](../LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableCG.py)
+- **Viewer | TL Panel (scripts):** [LGA_NKS_ViewerTL_Panel_py/LGA_NKS_ON_Clips_OFF_v00-Clips.py](../LGA_NKS_ViewerTL_Panel_py/LGA_NKS_ON_Clips_OFF_v00-Clips.py), [LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableEXR.py](../LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableEXR.py), [LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableRoto.py](../LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableRoto.py), [LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableCG.py](../LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Clip_DisableCG.py)
 - **Review Panel (comparaciones):** [LGA_NKS_Review_Panel_py/LGA_NKS_MatchVerToEXR.py](../LGA_NKS_Review_Panel_py/LGA_NKS_MatchVerToEXR.py), [LGA_NKS_Review_Panel_py/LGA_NKS_CompareVerToEditref.py](../LGA_NKS_Review_Panel_py/LGA_NKS_CompareVerToEditref.py), [LGA_NKS_Review_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py](../LGA_NKS_Review_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py)
 - **Create v000:** [LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py](../LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py)
   - Funciones: `_active_tasks()`, `_task_folder_map()`, `_tasks_human_list()`

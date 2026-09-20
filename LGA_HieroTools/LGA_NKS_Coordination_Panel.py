@@ -1,14 +1,16 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_FlowProd_Panel v1.30 | Lega
-  Panel Flow S3 para operaciones de produccion con Flow y almacenamiento S3:
+  LGA_NKS_Flow_FlowProd_Panel v1.31 | Lega
+  Panel Flow | S3 para operaciones de produccion con Flow y almacenamiento S3:
   - Revelar clips en Flow
   - Crear shots automáticamente
   - Crear thumbnails
   - Cambiar prioridad de shots
   - Integración con FileManagerS3 (Open, Download, Upload)
 
+  v1.31: La etiqueta visible pasa de Flow S3 a Flow | S3 para separar las dos
+         areas funcionales sin cambiar el identificador interno del dock.
   v1.30: Se oculta el boton .Psync porque su flujo quedo fuera de uso. El
          metodo y el script se conservan como referencia, pero ya no forman
          parte de la interfaz ni del bloque visible de S3.
@@ -219,7 +221,7 @@ class FlowProdPanel(QtWidgets.QWidget):
     def __init__(self):
         super(FlowProdPanel, self).__init__()
         self.setObjectName("com.lega.FlowProdPanel")
-        self.setWindowTitle("Flow S3")
+        self.setWindowTitle("Flow | S3")
         debug_print("=== FlowProdPanel init ===")
         self.root_layout = QtWidgets.QVBoxLayout()
         self.root_layout.setContentsMargins(0, 0, 0, 0)

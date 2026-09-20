@@ -16,10 +16,10 @@
 - [x] `LGA_NKS_ClipColor_Panel.py` — Panel de colores de clips (PySide2.QtWidgets, PySide2.QtGui)
 - [x] `LGA_NKS_Edit_Panel.py` — Panel de herramientas de edición (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
 - [x] `LGA_NKS_Assignee_Panel.py` — Panel de asignación de usuarios Flow (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
-- [x] `LGA_NKS_Coordination_Panel.py` — Panel visible Flow S3 (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
-- [x] `LGA_NKS_Flow_Panel.py` — Panel visible Flow Rev (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
+- [x] `LGA_NKS_Coordination_Panel.py` — Panel visible Flow | S3 (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
+- [x] `LGA_NKS_Flow_Panel.py` — Panel visible Flow Review (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
 - [x] `LGA_NKS_Review_Panel.py` — Panel de revisión (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
-- [x] `LGA_NKS_ViewerTL_Panel.py` — Panel de viewer (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
+- [x] `LGA_NKS_ViewerTL_Panel.py` — Panel visible Viewer | TL (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
 - [x] `LGA_NKS_NoFPT_Panel.py` — Panel Flow alternativo (PySide2.QtWidgets, PySide2.QtGui)
 
 ### Archivos adicionales migrados (scripts auxiliares)
@@ -48,7 +48,7 @@
 - [x] `LGA_NKS_CompareVerToEditref.py` — Comparación con EditRef (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QProgressBar)
 - [x] `LGA_NKS_CompareEXR_to_aPlate.py` — Comparación EXR aPlate (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QProgressBar)
 
-### Scripts de Flow (Flow Rev, Assignees y Flow S3)
+### Scripts de Flow (Flow Review, Assignees y Flow | S3)
 - [x] `LGA_NKS_Flow_Pull.py` — Pull de tasks Flow (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QProgressBar, QRunnable, QThreadPool)
 - [x] `LGA_NKS_Flow_Push.py` — Push de estados Flow (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QProgressBar)
 - [x] `LGA_NKS_Flow_Assign_Assignee.py` — Asignación de usuarios (QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QProgressBar)

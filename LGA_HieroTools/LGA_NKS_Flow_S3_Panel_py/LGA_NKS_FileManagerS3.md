@@ -260,7 +260,7 @@ Cuando se usa **Download Clip**, al terminar la descarga el clip se reconecta so
    { "requested_path": "T:/..._v05.mov", "latest": true }
    ```
    para que Hiero matchee el clip por ruta original y haga `setActiveVersion()` al nuevo media.
-3. **El watcher** `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_DownloadClip_Watcher.py` (lo arranca el Flow S3 Panel al iniciar Hiero) revisa esa carpeta cada ~5 s con un `QTimer`. Por cada marcador:
+3. **El watcher** `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_DownloadClip_Watcher.py` (lo arranca el Flow | S3 Panel al iniciar Hiero) revisa esa carpeta cada ~5 s con un `QTimer`. Por cada marcador:
    - Si `success` es `false` → no reconecta, descarta el marcador.
    - Si `success` es `true` → busca el/los clip(s) cuyo media coincide (`file` = ruta exacta; `folder` = `dirname` del media de la secuencia), ejecuta `reconnectMedia()` con fallback `refresh()`, hace un **toggle del estado `enabled`** del track item (restaurando el original) para forzar el refresco del viewer, y borra el marcador.
 
@@ -367,7 +367,7 @@ Cuando se usa **Download Clip**, al terminar la descarga el clip se reconecta so
   - `get_notify_dir()`: devuelve la carpeta de marcadores (`logs/download_clip_done`).
   - `setup_debug_logging()`, `debug_print()`: sistema de logging a archivo.
 
-- **`LGA_NKS_Flow_S3_Panel_py/LGA_NKS_DownloadClip_Watcher.py`** (lo arranca el Flow S3 Panel al iniciar Hiero)
+- **`LGA_NKS_Flow_S3_Panel_py/LGA_NKS_DownloadClip_Watcher.py`** (lo arranca el Flow | S3 Panel al iniciar Hiero)
   - `DownloadClipWatcher`: `QObject` con un `QTimer` que vigila la carpeta de marcadores.
   - `start_watcher()`: crea la instancia del watcher (se llama al cargarse el módulo).
   - `_scan_markers()`, `_process_marker()`: leen y procesan los marcadores `.json`.
