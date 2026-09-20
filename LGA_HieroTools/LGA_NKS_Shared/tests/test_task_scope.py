@@ -325,6 +325,17 @@ def check_catalogo_de_creacion_por_contexto():
         len(studio) == len(task_config.AVAILABLE_TASKS) - 1,
         "En studio se ofrecen todas las tasks menos CG",
     )
+    for mode in ("studio", "client"):
+        enabled = [
+            task["name"]
+            for task in task_config.get_available_tasks(mode)
+            if task["enabled_by_default"]
+        ]
+        _expect(
+            enabled == ["Comp"],
+            "Comp debe ser la unica task activa por defecto en %s: %r"
+            % (mode, enabled),
+        )
     # El color de CG tiene que sobrevivir a haber salido de _TASK_COLOR_MAP.
     _expect(
         task_config.get_task_color("cg") == "#CA7A3B",
@@ -338,6 +349,22 @@ def check_catalogo_de_creacion_por_contexto():
         )
 
 
+def check_reviewers_por_contexto():
+    import LGA_NKS_Flow_Reviewer_Config as reviewer_config
+
+    client = reviewer_config.get_available_reviewers("client")
+    studio = reviewer_config.get_available_reviewers("studio")
+
+    _expect(
+        [reviewer["label"] for reviewer in client] == ["Lega"],
+        "En Client el unico reviewer visible debe ser Lega: %r" % (client,),
+    )
+    _expect(
+        len(studio) == len(reviewer_config.REVIEWERS) == 5,
+        "Studio debe conservar los cinco reviewers: %r" % (studio,),
+    )
+
+
 def run():
     check_consistencia_con_getclip()
     check_scope_por_contexto()
@@ -346,6 +373,7 @@ def run():
     check_entradas_basura()
     check_resolve_mode()
     check_catalogo_de_creacion_por_contexto()
+    check_reviewers_por_contexto()
     check_familia_cg_sin_hiero()
 
 

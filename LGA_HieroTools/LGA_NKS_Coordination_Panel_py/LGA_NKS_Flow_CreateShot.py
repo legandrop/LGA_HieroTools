@@ -1,11 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CreateShot v1.52 | Lega
+  LGA_NKS_Flow_CreateShot v1.53 | Lega
 
   Script para crear shots en ShotGrid basado en el nombre del clip seleccionado en Hiero.
   SIN usar templates predefinidos - crea tasks manualmente para mayor control.
 
+  v1.53: En Client, CG queda apagada por defecto y el unico reviewer visible es
+         Lega. La captura de thumbnail usa la API de zoom del viewer actual con
+         fallback legacy y no aborta si el zoom no esta disponible.
   v1.52: SUP se reconoce como naming interno pero no forma parte del Shot en Flow.
   v1.51: Create Shot client hace preflight fail-closed del acceso vendor,
          crea Shot/Task con sus grupos/asignados y reporta resultados parciales.
@@ -118,7 +121,12 @@ from logging.handlers import QueueHandler, QueueListener
 from pathlib import Path
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, apply_ui_font
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import (
+    Style,
+    Color,
+    apply_ui_font,
+    semibold_css,
+)
 QApplication = QtWidgets.QApplication
 QMessageBox = QtWidgets.QMessageBox
 QDialog = QtWidgets.QDialog
@@ -180,6 +188,10 @@ if utils_path.exists():
 from LGA_NKS_Shared.LGA_NKS_Flow_Task_Config import (
     AVAILABLE_TASKS,
     get_available_tasks,
+)
+from LGA_NKS_Shared.LGA_NKS_Flow_Reviewer_Config import (
+    REVIEWER_KEY_TO_NAME,
+    get_available_reviewers,
 )
 from LGA_NKS_Shared.LGA_NKS_ContextProfile import get_context_mode
 from LGA_NKS_Shared.LGA_NKS_ClientVendorAccess import (
@@ -360,24 +372,35 @@ def get_active_sequence_name(file_path=None):
 
 # Funciones para crear thumbnails de shots
 def zoom_to_fill_in_viewer():
-    """Aplica zoom to fill al viewer actual"""
+    """Aplica zoom to fill con la API disponible en la version del host."""
     viewer = hiero.ui.currentViewer()
     if not viewer:
         debug_print("❌ No hay viewer activo")
         return False
 
-    try:
-        player = viewer.player()
-        if not player:
-            debug_print("❌ No se encontró el player del viewer")
-            return False
+    zoom = getattr(viewer, "zoomToFill", None)
+    if callable(zoom):
+        try:
+            zoom()
+            QApplication.processEvents()
+            debug_print("✅ Zoom to Fill aplicado desde el viewer")
+            return True
+        except Exception as exc:
+            debug_print(f"⚠️ Fallo viewer.zoomToFill(); probando fallback: {exc}")
 
-        player.zoomToFill()
-        debug_print("✅ Zoom to Fill aplicado con éxito")
-        return True
-    except Exception as e:
-        debug_print(f"❌ Error aplicando zoomToFill: {e}")
-        return False
+    try:
+        player = viewer.player() if callable(getattr(viewer, "player", None)) else None
+        legacy_zoom = getattr(player, "zoomToFill", None) if player else None
+        if callable(legacy_zoom):
+            legacy_zoom()
+            QApplication.processEvents()
+            debug_print("✅ Zoom to Fill aplicado desde el player legacy")
+            return True
+    except Exception as exc:
+        debug_print(f"⚠️ Fallo player.zoomToFill(): {exc}")
+
+    debug_print("⚠️ zoomToFill no disponible; se captura la imagen actual")
+    return False
 
 
 def crop_to_aspect_ratio(qimage, target_aspect):
@@ -457,10 +480,9 @@ def get_shot_name_from_selected_clip():
 
 def create_shot_thumbnail():
     """Crea un thumbnail del shot actual y retorna la ruta del archivo creado."""
-    # Aplicar zoom to fill primero
+    # El zoom mejora el encuadre, pero no es requisito para capturar viewer.image().
     if not zoom_to_fill_in_viewer():
-        debug_print("❌ No se pudo aplicar zoom to fill")
-        return None
+        debug_print("⚠️ Continuando la captura sin zoom to fill")
 
     # Obtener el shot name
     shot_name = get_shot_name_from_selected_clip()
@@ -587,16 +609,6 @@ DEFAULT_STATE_CODE = "ready"
 
 # Carpeta de iconos (ruta derivada del __file__ del script, nunca absoluta hardcodeada)
 ICONS_DIR = Path(__file__).parent.parent / "LGA_NKS_Shared" / "icons"
-
-# Mapeo de los reviewers de la UI (clave interna) al nombre real en Flow.
-REVIEWER_KEY_TO_NAME = {
-    "lega_pugliese": "Lega Pugliese",
-    "sebas_romano": "Sebas Romano",
-    "juano": "Juan Olivares",
-    "charly_villafane": "Charly Villafañe",
-    "javi_bravo": "Javi Bravo",
-}
-
 
 def resolve_reviewer_ids(sg, reviewers_config):
     """Convierte el dict de reviewers de la UI en lista de {type, id} de HumanUser."""
@@ -730,6 +742,8 @@ class ColoredStatusComboBox(QComboBox):
         # Ocultar frame/arrow nativos: el combo cerrado lo pintamos en paintEvent.
         # El fondo y el borde del popup salen de los tokens del pack.
         self.setStyleSheet(
+            Style.COMBO
+            +
             "QComboBox { border: none; border-radius: 3px; padding: 0px;"
             " min-height: 22px; }"
             " QComboBox::drop-down { width: 0px; border: none; }"
@@ -799,11 +813,13 @@ class ShotConfigDialog(QDialog):
         action_button_label=None,
         allow_thumbnail_creation=True,
         existing_thumb_path=None,
+        context_mode=None,
     ):
         super(ShotConfigDialog, self).__init__(parent)
         self.dialog_mode = dialog_mode
         self.allow_thumbnail_creation = allow_thumbnail_creation
         self.existing_thumb_path = existing_thumb_path
+        self.context_mode = context_mode or get_context_mode()
         self.setWindowTitle(
             "Flow | Modify Shot" if dialog_mode == "modify" else "Flow | Shot Creation"
         )
@@ -1014,7 +1030,7 @@ class ShotConfigDialog(QDialog):
         # Generar una sección para cada task configurada del contexto activo.
         # En client solo existen Comp y CG: ofrecer Roto/Cleanup/DMP/3D ahi
         # crea tasks que ese sitio de Flow no usa.
-        for task_config in get_available_tasks():
+        for task_config in get_available_tasks(self.context_mode):
             # Separador antes de cada task
             task_separator = QFrame()
             task_separator.setFrameShape(QFrame.HLine)
@@ -1109,7 +1125,9 @@ class ShotConfigDialog(QDialog):
         name_layout.addWidget(enabled_cb)
         
         name_label = QLabel(task_name.upper())
-        name_label.setStyleSheet(f"color: {task_color}; font-weight: bold; padding-top: 0px; font-size: 12px;")
+        name_label.setStyleSheet(
+            f"color: {task_color}; {semibold_css()} padding-top: 0px;"
+        )
         name_layout.addWidget(name_label)
         
         # Espaciador para empujar todo a la izquierda
@@ -1214,39 +1232,18 @@ class ShotConfigDialog(QDialog):
         # Reviewers checkboxes en línea horizontal; los estila Style.FORM
         reviewers_checkboxes_layout = QHBoxLayout()
 
-        reviewer_lega_cb = QCheckBox("Lega")
-        reviewer_lega_cb.setChecked(True)
-        reviewer_lega_cb.setProperty("lgaLabeled", True)
-        reviewers_checkboxes_layout.addWidget(reviewer_lega_cb)
-
-        reviewer_sebas_cb = QCheckBox("Sebas")
-        reviewer_sebas_cb.setChecked(True)
-        reviewer_sebas_cb.setProperty("lgaLabeled", True)
-        reviewers_checkboxes_layout.addWidget(reviewer_sebas_cb)
-
-        reviewer_juano_cb = QCheckBox("Juano")
-        reviewer_juano_cb.setChecked(True)
-        reviewer_juano_cb.setProperty("lgaLabeled", True)
-        reviewers_checkboxes_layout.addWidget(reviewer_juano_cb)
-
-        reviewer_charly_cb = QCheckBox("Charly")
-        reviewer_charly_cb.setChecked(True)
-        reviewer_charly_cb.setProperty("lgaLabeled", True)
-        reviewers_checkboxes_layout.addWidget(reviewer_charly_cb)
-
-        reviewer_javi_cb = QCheckBox("Javi")
-        reviewer_javi_cb.setChecked(True)
-        reviewer_javi_cb.setProperty("lgaLabeled", True)
-        reviewers_checkboxes_layout.addWidget(reviewer_javi_cb)
+        reviewer_checkboxes = {}
+        for reviewer in get_available_reviewers(self.context_mode):
+            reviewer_cb = QCheckBox(reviewer["label"])
+            reviewer_cb.setChecked(True)
+            reviewer_cb.setProperty("lgaLabeled", True)
+            reviewers_checkboxes_layout.addWidget(reviewer_cb)
+            reviewer_checkboxes[reviewer["key"]] = reviewer_cb
 
         reviewers_layout.addLayout(reviewers_checkboxes_layout)
         task_layout.addWidget(reviewers_widget, 2)  # Stretch factor 2 para hacerla más ancha
         
-        self.task_widgets[task_name]["reviewer_lega"] = reviewer_lega_cb
-        self.task_widgets[task_name]["reviewer_sebas"] = reviewer_sebas_cb
-        self.task_widgets[task_name]["reviewer_juano"] = reviewer_juano_cb
-        self.task_widgets[task_name]["reviewer_charly"] = reviewer_charly_cb
-        self.task_widgets[task_name]["reviewer_javi"] = reviewer_javi_cb
+        self.task_widgets[task_name]["reviewer_checkboxes"] = reviewer_checkboxes
         self.task_widgets[task_name]["reviewers_label"] = reviewers_label
         self.task_widgets[task_name]["reviewers_widget"] = reviewers_widget
 
@@ -1295,20 +1292,13 @@ class ShotConfigDialog(QDialog):
     def set_task_fields_editable(self, task_name, editable):
         """Habilita o deshabilita los campos editables de una task."""
         widgets = self.task_widgets.get(task_name, {})
-        field_keys = [
-            "estimated_days",
-            "task_status",
-            "copy_description",
-            "reviewer_lega",
-            "reviewer_sebas",
-            "reviewer_juano",
-            "reviewer_charly",
-            "reviewer_javi",
-        ]
+        field_keys = ["estimated_days", "task_status", "copy_description"]
         for key in field_keys:
             widget = widgets.get(key)
             if widget:
                 widget.setEnabled(editable)
+        for reviewer_cb in widgets.get("reviewer_checkboxes", {}).values():
+            reviewer_cb.setEnabled(editable)
 
     def set_shot_fields_editable(self, editable):
         """Habilita o deshabilita los campos generales del shot."""
@@ -1368,11 +1358,10 @@ class ShotConfigDialog(QDialog):
 
             # Reviewers REALES desde Flow (task_reviewers)
             rev_cfg = reviewers_config_from_task(task_info)
-            widgets["reviewer_lega"].setChecked(rev_cfg.get("lega_pugliese", False))
-            widgets["reviewer_sebas"].setChecked(rev_cfg.get("sebas_romano", False))
-            widgets["reviewer_juano"].setChecked(rev_cfg.get("juano", False))
-            widgets["reviewer_charly"].setChecked(rev_cfg.get("charly_villafane", False))
-            widgets["reviewer_javi"].setChecked(rev_cfg.get("javi_bravo", False))
+            for reviewer_key, reviewer_cb in widgets.get(
+                "reviewer_checkboxes", {}
+            ).items():
+                reviewer_cb.setChecked(rev_cfg.get(reviewer_key, False))
 
             # Dias estimados reales (si los hay) - solo informativo
             est = task_info.get("sg_estdias")
@@ -1412,18 +1401,22 @@ class ShotConfigDialog(QDialog):
             except ValueError:
                 estimated_days = 0.0
             
+            reviewers = {key: False for key in REVIEWER_KEY_TO_NAME}
+            reviewers.update(
+                {
+                    key: checkbox.isChecked()
+                    for key, checkbox in widgets.get(
+                        "reviewer_checkboxes", {}
+                    ).items()
+                }
+            )
+
             tasks_config[task_name] = {
                 "enabled": widgets["enabled"].isChecked(),
                 "task_status": widgets["task_status"].current_code(),
                 "copy_description": widgets["copy_description"].isChecked(),
                 "estimated_days": estimated_days,
-                "reviewers": {
-                    "lega_pugliese": widgets["reviewer_lega"].isChecked(),
-                    "sebas_romano": widgets["reviewer_sebas"].isChecked(),
-                    "juano": widgets["reviewer_juano"].isChecked(),
-                    "charly_villafane": widgets["reviewer_charly"].isChecked(),
-                    "javi_bravo": widgets["reviewer_javi"].isChecked(),
-                }
+                "reviewers": reviewers,
             }
         
         self.shot_config["tasks"] = tasks_config
@@ -2931,7 +2924,9 @@ def show_shot_config_dialog(clips_info, sequence_name, operation_mode):
     global _config_dialog
 
     debug_print("Mostrando dialogo de configuracion de shots")
-    config_dialog = ShotConfigDialog(clips_info, sequence_name)
+    config_dialog = ShotConfigDialog(
+        clips_info, sequence_name, context_mode=operation_mode
+    )
     _config_dialog = config_dialog
     config_dialog.finished.connect(
         lambda result, dialog=config_dialog: handle_shot_config_finished(

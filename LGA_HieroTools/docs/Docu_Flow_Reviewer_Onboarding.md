@@ -18,6 +18,11 @@ Cuando entra o sale un reviewer del estudio hay que actualizar Flow y todos los 
 
 ## Mapeo actual
 
+El catálogo completo se usa en Studio. En Client, Create Shot y Modify Shot
+ofrecen únicamente `Lega`; los demás reviewers no se construyen como checkboxes
+en ese contexto. La política vive en un módulo puro y se filtra por el contexto
+capturado al abrir el diálogo.
+
 | Reviewer | Codigo SG task status | Color timeline | Login/alias principal | Rev type ViewerTL |
 |----------|-----------------------|----------------|-----------------------|-------------------|
 | Lega     | `revleg`              | `#69135e`      | `lega` / `lega_pugliese` | `lega` |
@@ -34,6 +39,10 @@ Cuando entra o sale un reviewer del estudio hay que actualizar Flow y todos los 
   - `resolve_reviewer_ids()` - convierte reviewers de UI a `HumanUser`.
   - `reviewers_config_from_task()` - lee `task_reviewers` desde Flow.
   - `ShotConfigDialog` - crea los checkboxes visibles de reviewers.
+- `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_Flow_Reviewer_Config.py`
+  - `REVIEWERS` - catálogo único con nombre visible, nombre de Flow y contextos.
+  - `get_available_reviewers()` - limita Client a Lega y conserva el catálogo
+    completo en Studio.
 - `LGA_HieroTools/LGA_NKS_Coordination_Panel_py/LGA_NKS_Flow_ModifyShot.py`
   - `ModifyShotWorker` - aplica cambios de estado y reviewers a tasks existentes.
 - `LGA_HieroTools/LGA_NKS_Flow_Panel.py`

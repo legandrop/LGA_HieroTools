@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Task_Config v1.28 | Lega
+  LGA_NKS_Flow_Task_Config v1.29 | Lega
 
   Usado por runtime activo:
   - LGA_NKS_Assignee_Panel_py/LGA_NKS_Flow_Assignee.py
@@ -13,6 +13,8 @@ ____________________________________________________________________
   La lista está sincronizada con los scripts de creación/modificación de shots y
   provee colores consistentes para las UIs compactas (assignee panel, create shot, etc.).
 
+  v1.29: Comp es la unica task habilitada por defecto; CG sigue disponible en
+         Client pero nace apagada.
   v1.28: Cada task declara en que contextos existe ("contexts") y CG entra al
          catalogo como CLIENT_ONLY, en vez de vivir suelta en _TASK_COLOR_MAP.
          Nuevo get_available_tasks(mode) para que los catalogos de creacion
@@ -93,7 +95,7 @@ AVAILABLE_TASKS: List[Dict[str, str]] = [
         # Encabeza la familia 3D y lleva su mismo naranja.
         "name": "CG",
         "pipeline_step": "CG",
-        "enabled_by_default": True,
+        "enabled_by_default": False,
         "color": "#CA7A3B",  # Naranja - familia 3D
         "contexts": CLIENT_ONLY,
     },

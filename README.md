@@ -99,6 +99,8 @@ Production-facing tools for Flow, FileManagerS3, PipeSync, and shot creation / u
   suffixes are validated before any write and create the Shot/Task access links;
   `SUP` remains an internal naming suffix without vendor access and is omitted
   from the Flow Shot code; external vendor suffixes remain part of the code.
+  Comp is the only task enabled by default, CG remains available but disabled,
+  and Lega is the only reviewer offered in Client.
 - **Modify Shot**  
   Modifies an existing shot in Flow. One clip at a time.
 - **Check Shots Exist**  

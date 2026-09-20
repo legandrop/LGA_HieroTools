@@ -22,6 +22,9 @@ el acceso se resuelven por separado y todo el acceso externo es fail-closed.
 - El Shot nace con `sg_vendor_groups`; cada Task nace con `task_assignees`.
   Los usuarios se agregan a `Project.users` con el modo multi-entidad `add` de
   Flow, sin reenviar ni reemplazar el snapshot de miembros existentes.
+- En el diálogo Client, Comp es la única task activa por defecto; CG sigue
+  disponible pero apagada. El único reviewer ofrecido es Lega. Los reviewers
+  de Studio no se construyen como checkboxes en Client.
 - En Client, la familia CG se resuelve por exclusión. Una forma exacta
   `PROJA_010_020_X_stream` trata `X` como candidato vendor aunque `stream` sea
   una disciplina nueva; si `X` no es vendor live ni token interno, se rechaza y

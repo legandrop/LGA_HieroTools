@@ -1,7 +1,7 @@
 > **Regla de documentacion**: este archivo describe el estado actual del codigo. No es un historial de cambios, changelog ni bitacora temporal.
 > **Regla de documentacion**: este archivo debe incluir una seccion de referencias tecnicas con rutas completas a los archivos mas importantes relacionados, y para cada archivo nombrar las funciones, clases o metodos clave vinculados a este tema.
 
-# LGA_NKS_Flow_CreateShot v1.34
+# LGA_NKS_Flow_CreateShot v1.53
 
 Script para crear shots en ShotGrid/Flow Production Tracking basado en clips seleccionados en Hiero/Nuke Studio.
 
@@ -72,7 +72,9 @@ Todas las tasks del pipeline están disponibles con sus colores específicos:
 - Detección automática del formato basado en el campo 5 del nombre
 
 ### ✅ Características Avanzadas
-- Creación de thumbnails automática desde Hiero
+- Creación de thumbnails automática desde Hiero. Primero usa
+  `viewer.zoomToFill()` y conserva el fallback legacy del player; si ninguna
+  API de zoom está disponible, captura igualmente `viewer.image()`.
 - Configuración de estados de shot y task
 - Copia de descripción del shot a las tasks
 - Reducción automática del 30% en tiempo estimado (v1.30)
@@ -160,10 +162,8 @@ Cada task tiene su propia fila con:
 - **Status:** ☑️ Ready to start (estado inicial de la task)
 - **Description:** ☑️ copy from shot (copiar descripción del shot)
 - **Reviewers:** Checkboxes horizontales (solo nombres en UI)
-  - ☑️ Lega
-  - ☑️ Sebas
-  - ☑️ Juano
-  - ☑️ Javi
+  - Client: únicamente ☑️ Lega.
+  - Studio: ☑️ Lega, ☑️ Sebas, ☑️ Juano, ☑️ Charly y ☑️ Javi.
 
 **Comportamiento (v1.29 - Diseño Compacto):**
 - **Task DESHABILITADA (☐):**
@@ -178,8 +178,9 @@ Cada task tiene su propia fila con:
   - Muestra todas las columnas: Est. Days, Status, Description, Reviewers
   - Ocupa ~3 líneas
 
-- **Comp:** Habilitada por defecto (muestra columnas)
-- **Todas las demás:** Deshabilitadas por defecto (solo 1 línea cada una)
+- **Comp:** única task habilitada por defecto (muestra columnas).
+- **CG en Client:** disponible pero deshabilitada por defecto.
+- **Todas las demás de Studio:** deshabilitadas por defecto (solo 1 línea cada una).
 
 #### Ejemplo Visual de la UI (v1.29) - Diseño Compacto
 
