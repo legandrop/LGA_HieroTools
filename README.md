@@ -91,9 +91,6 @@ Tools for assigning artists to Flow tasks and managing related Wasabi access pol
 
 Production-facing tools for Flow, FileManagerS3, PipeSync, and shot creation / update workflows.
 
-- **Thumbnail**  
-  Click: saves a viewer snapshot (zoom-to-fill, cropped to the sequence aspect) to `N:/<project>/Thumbs`.  
-  Shift+Click: replaces the shot's thumbnail in Flow with that snapshot. Opens a confirmation window showing the current Flow thumbnail vs the new one, and uploads on a background thread.
 - **Create Shot**  
   Creates a shot in Flow based on the selected clip. In Client, external vendor
   suffixes are validated before any write and create the Shot/Task access links;
@@ -105,6 +102,14 @@ Production-facing tools for Flow, FileManagerS3, PipeSync, and shot creation / u
   Modifies an existing shot in Flow. One clip at a time.
 - **Check Shots Exist**  
   Checks whether the shots from the comp track exist in Flow.
+- **Thumbnail**
+
+  Click: replaces the shot's thumbnail in Flow with a viewer snapshot, after a
+  confirmation window comparing the current and proposed images. The upload
+  runs on a background thread.
+
+  Shift+Click: saves the same zoom-to-fill snapshot, cropped to the sequence
+  aspect, to `N:/<project>/Thumbs`.
 - **Shot Priority**  
   Toggles shot priority between high and normal.
 - **.Psync**  

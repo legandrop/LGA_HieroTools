@@ -1,5 +1,7 @@
 v3.95:
 
+        - Coordination agrupa sus cuatro acciones principales de Shot (`LGA_NKS_Flow_FlowProd_Panel v1.28`): Create Shot, Modify Shot y Check Shots Exist quedan primero, Thumbnail pasa al cuarto lugar y usa el mismo verde para que el bloque se lea como una sola familia. La documentacion corrige tambien los gestos reales de Thumbnail: click reemplaza en Flow y Shift guarda localmente. [ Coordination - Agrupar acciones de Shot ]
+
         - Create Shot ajusta sus defaults de Client y recupera el thumbnail (`LGA_NKS_Flow_CreateShot v1.53`, `LGA_NKS_Flow_Task_Config v1.29`, `LGA_NKS_Flow_Reviewer_Config v1.00`): Comp es la unica task activa por defecto, CG queda disponible pero apagada y el unico reviewer visible en Client es Lega; Studio conserva su catalogo completo. La captura automatica ahora prueba primero `viewer.zoomToFill()`, como el boton Thumbnail, conserva el fallback del player para hosts viejos y no cancela `viewer.image()` si el zoom no existe. [ Create Shot - Defaults Client y thumbnail compatible ]
 
         - Create Shot separa el token interno del identificador de Flow (`LGA_NKS_Flow_NamingUtils v1.19`, `LGA_NKS_Flow_CreateShot v1.52`): `PROJA_010_020_SUP_comp` conserva `SUP` para reconocer naming interno y `comp` como Task, pero crea el Shot `PROJA_010_020`. Los vendors externos siguen formando parte del shot code y `SUP` continúa sin grupos, assignees vendor ni altas en `Project.users`. [ Create Shot - Omitir SUP del nombre en Flow ]

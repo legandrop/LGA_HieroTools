@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_FlowProd_Panel v1.27 | Lega
+  LGA_NKS_Flow_FlowProd_Panel v1.28 | Lega
   Panel para operaciones de producción con Flow:
   - Revelar clips en Flow
   - Crear shots automáticamente
@@ -9,7 +9,8 @@ ________________________________________________________________________________
   - Cambiar prioridad de shots
   - Integración con FileManagerS3 (Open, Download, Upload)
 
-
+  v1.28: Thumbnail pasa al cuarto lugar, junto a Create Shot, Modify Shot y
+         Check Shots Exist, y comparte el mismo color de ese grupo.
   v1.27: Agregado boton "Download AMF" para descargar la carpeta
          _input/Look_Files del shot del clip seleccionado, con los .amf/.cdl
          que hacen falta para ver bien los renders de comp.
@@ -167,6 +168,9 @@ SCROLL_OVERLAP_THRESHOLD_PX = 6
 # Controla visibilidad de la barra de scroll (True = visible cuando corresponde)
 SCROLLBAR_VISIBLE = False
 
+# Las cuatro acciones forman un unico grupo de trabajo sobre el Shot en Flow.
+SHOT_WORKFLOW_COLOR = "#2a4d3a"
+
 
 def debug_print(*message, level="info"):
     global script_start_time
@@ -234,33 +238,33 @@ class FlowProdPanel(QtWidgets.QWidget):
         # Definir los botones fijos y sus colores/estilos
         self.fixed_buttons = [
             (
-                "Thumbnail",
-                self.create_thumbnail_for_selected_clip,
-                "#3a2a4d",
-                None,
-                "Click: reemplazar el thumbnail del shot en Flow con un snapshot\n"
-                "Shift+Click: guardar snapshot del viewer en N:/proyecto/Thumbs",
-            ),
-            (
                 "Create Shot",
                 self.create_shot_for_selected_clip,
-                "#2a4d3a",
+                SHOT_WORKFLOW_COLOR,
                 None,
                 "Crear shot en Flow basado en el clip seleccionado",
             ),
             (
                 "Modify Shot",
                 self.modify_shot_for_selected_clip,
-                "#2a4d3a",
+                SHOT_WORKFLOW_COLOR,
                 None,
                 "Modificar shot existente en Flow (1 clip a la vez)",
             ),
             (
                 "Check Shots Exist",
                 self.check_timeline_shots,
-                "#2a4d3a",
+                SHOT_WORKFLOW_COLOR,
                 None,
                 "Chequear si los shots del track comp existen en Flow",
+            ),
+            (
+                "Thumbnail",
+                self.create_thumbnail_for_selected_clip,
+                SHOT_WORKFLOW_COLOR,
+                None,
+                "Click: reemplazar el thumbnail del shot en Flow con un snapshot\n"
+                "Shift+Click: guardar snapshot del viewer en N:/proyecto/Thumbs",
             ),
             (
                 "Shot Priority",
