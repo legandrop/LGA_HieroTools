@@ -293,7 +293,8 @@ Project browser and sequence switcher built around the studio's project structur
 
 ### ClipColor Panel
 
-Simple clip-color utility panel for quickly tagging selected clips.
+Fast local clip-color utility for visually tagging selected clips without
+changing any Flow status.
 
 - **v_00**  
   Sets the clip color to the `v_00` color.
@@ -311,6 +312,12 @@ Simple clip-color utility panel for quickly tagging selected clips.
   Sets the clip color to the Magenta color.
 - **Cyan**  
   Sets the clip color to the Cyan color.
+- **Corrections** — Sets the clip color used by the Corrections state in Flow Review.
+- **Review Lega** — Sets the clip color used by the Review Lega state in Flow Review.
+- **Review Dir** — Sets the clip color used by the Review Dir state in Flow Review.
+- **Approved** — Sets the final approval clip color used by Flow Review.
+
+Internal reference: [ClipColor Panel](LGA_HieroTools/docs/Docu_ClipColor_Panel.md).
 
 ## Pipeline-Specific Notes
 

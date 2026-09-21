@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_StyleUtils v1.02 | Lega
+  LGA_NKS_StyleUtils v1.03 | Lega
 
   Utilidades para estilos dinámicos de botones en paneles Hiero.
   Incluye funciones para conversión de colores, cálculo de bordes
@@ -17,6 +17,7 @@ ____________________________________________________________________
   - LGA_NKS_Review_Panel.py
   - LGA_NKS_ViewerTL_Panel.py
 
+  v1.03: Suma la hoja reutilizable de botones cuyo fondo es un color de dato.
   v1.02: Los gradientes pasan a un catalogo semantico reutilizable. Suma los
          cruces Flow-Priority y Flow-Reveal del panel Flow S3.
   v1.01: Agregadas luminance(), ensure_min_luminance() y ensure_max_luminance().
@@ -344,6 +345,59 @@ def calculate_dynamic_hover(style):
 
         new_r, new_g, new_b = hsv_to_rgb(h, s, new_v)
         return rgb_to_hex((new_r, new_g, new_b))
+
+
+def calculate_dynamic_pressed(style):
+    """Oscurece un color solido para dar feedback al presionar un boton."""
+    r, g, b = hex_to_rgb(style)
+    h, s, v = rgb_to_hsv(r, g, b)
+    new_r, new_g, new_b = hsv_to_rgb(h, s, max(0, v - 8))
+    return rgb_to_hex((new_r, new_g, new_b))
+
+
+def create_data_button_stylesheet(
+    background_color,
+    text_color,
+    focus_color,
+    button_height,
+    radius,
+    semibold,
+):
+    """
+    Hoja comun para un boton cuyo fondo representa un DATO y no un rol de UI.
+
+    Los colores de estado y de clip no pueden reemplazarse por `Style.BTN_*`:
+    la informacion se perderia. La caja, el contraste, el hover y el foco si
+    permanecen centralizados para que los paneles no rearmen QSS a mano.
+    """
+    border_color = calculate_dynamic_border(background_color)
+    hover_color = calculate_dynamic_hover(background_color)
+    pressed_color = calculate_dynamic_pressed(background_color)
+
+    return """
+QPushButton {
+    background-color: %(background)s;
+    border: 1px solid %(border)s;
+    border-radius: %(radius)dpx;
+    color: %(text)s;
+    min-height: %(height)dpx;
+    padding: 0px;
+    %(semibold)s
+}
+QPushButton:hover { background-color: %(hover)s; }
+QPushButton:pressed { background-color: %(pressed)s; }
+QPushButton:focus { border: 2px solid %(focus)s; }
+""" % {
+        "background": background_color,
+        "border": border_color,
+        "radius": radius,
+        "text": text_color,
+        "height": button_height,
+        "semibold": semibold,
+        "hover": hover_color,
+        "pressed": pressed_color,
+        "focus": focus_color,
+    }
 
 
 def calculate_dynamic_tooltip(style):
