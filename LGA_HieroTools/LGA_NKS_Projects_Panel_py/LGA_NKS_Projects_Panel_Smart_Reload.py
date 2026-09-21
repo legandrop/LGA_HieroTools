@@ -1,12 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel_Smart_Reload v2.24 | Lega
+  LGA_NKS_Projects_Panel_Smart_Reload v2.25 | Lega
 
   Script para recarga inteligente del panel Projects
   Destruye el panel actual, crea uno nuevo y lo dockea automáticamente
   usando el método nativo de Hiero wm.showWindow().
 
+  v2.25: Recarga el estilo compartido antes del preview para que Reload Panel
+         aplique switches o tokens nuevos sin reiniciar Nuke.
   v2.24: Recarga las ventanas privadas junto al panel, incluido
          ProjectMediaPreview; sin ese modulo, Drop media conservaba la clase
          anterior despues de Reload Panel.
@@ -311,6 +313,9 @@ def create_new_panel_anyway(wm):
         # 🔄 RECARGAR MÓDULOS DEPENDIENTES ANTES DE EXEC_MODULE
         debug_print("🔄 Recargando módulos dependientes...")
         modules_to_reload = [
+            # Va antes de los módulos que importan Style directamente: un
+            # Reload Panel tiene que levantar tokens y hojas nuevas del preview.
+            'LGA_NKS_Shared.LGA_UI_Style_HieroTools',
             # Estos módulos se importan directamente en el panel: recargarlos
             # antes garantiza que sus diálogos y logs salgan de esta pasada.
             'LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectsPanel_Logging',

@@ -454,6 +454,7 @@ class ProjectsPanelMediaDropTests(unittest.TestCase):
         source = SMART_RELOAD_PATH.read_text(encoding="utf-8-sig")
         exec_index = source.index("spec.loader.exec_module(panel_module)")
         for module_name in (
+            "LGA_NKS_Shared.LGA_UI_Style_HieroTools",
             "LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectsPanel_Logging",
             "LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectMediaPreview",
             "LGA_NKS_Projects_Panel_py.LGA_NKS_TrackNames_Section",

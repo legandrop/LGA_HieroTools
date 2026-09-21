@@ -128,6 +128,9 @@
     antes de importar. Los
     mensajes junto al switch solo aparecen en rojo cuando el plan no se puede
     ejecutar, no como explicación redundante de una inserción válida.
+    Reload Panel recarga primero `LGA_UI_Style_HieroTools` y después el propio
+    preview, de modo que un cambio del switch o de sus tokens se aplica en la
+    sesión actual y no queda retenido por un import previo.
     Recalcula el plan al confirmar contra la secuencia capturada antes de abrir
     el modal. No consulta `activeSequence()` tras cerrar el diálogo: Hiero puede
     devolver `None` solo porque el modal tomó el foco, aunque ese timeline siga
