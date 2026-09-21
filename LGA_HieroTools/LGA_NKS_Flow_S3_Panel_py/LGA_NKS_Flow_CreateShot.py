@@ -1,11 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CreateShot v1.55 | Lega
+  LGA_NKS_Flow_CreateShot v1.56 | Lega
 
   Script para crear shots en ShotGrid basado en el nombre del clip seleccionado en Hiero.
   SIN usar templates predefinidos - crea tasks manualmente para mayor control.
 
+  v1.56: Si una Sequence no existe en Flow, pregunta antes de crearla y solo
+         continua con los Shots cuando el usuario confirma.
   v1.55: La UI Client muestra por separado el reviewer editable y el Flow
          Assignee fijo de SUP, con Lega chequeado en cada Task habilitada.
   v1.54: En Client, las Tasks habilitadas de un shot SUP se asignan siempre a
@@ -124,7 +126,7 @@ import time
 from logging.handlers import QueueHandler, QueueListener
 from pathlib import Path
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
-from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
+from LGA_NKS_Shared.LGA_NKS_MessageBox import ask_question, show_warning
 from LGA_NKS_Shared.LGA_UI_Style_HieroTools import (
     Style,
     Color,
@@ -214,6 +216,12 @@ from LGA_NKS_Shared.LGA_NKS_AssignmentSaga import (
     load_in_stable_context,
 )
 from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import filter_states_for_mode
+from LGA_NKS_Shared.LGA_NKS_Flow_Sequence import (
+    SequencePreflightError,
+    create_missing_sequences,
+    find_missing_sequences,
+    unapproved_missing_sequences,
+)
 
 
 TASK_ROLE_UI = {
@@ -1940,6 +1948,7 @@ class ShotGridManager:
         thumbnail_path=None,
         create_if_missing=True,
         file_path=None,
+        approved_sequence_keys=None,
     ):
         """Encuentra el shot en ShotGrid y sus tareas asociadas. Si no existe, lo crea.
         Retorna: (shot, tasks, was_created) donde was_created es True si se creó nuevo."""
@@ -1987,7 +1996,12 @@ class ShotGridManager:
 
         debug_print("No se encontro el shot. Creando shot...")
         created_shot = self.create_shot(
-            project_id, shot_code, shot_config, thumbnail_path, file_path=file_path
+            project_id,
+            shot_code,
+            shot_config,
+            thumbnail_path,
+            file_path=file_path,
+            approved_sequence_keys=approved_sequence_keys,
         )
         if created_shot:
             tasks = self.find_tasks_for_shot(created_shot["id"])
@@ -2139,7 +2153,13 @@ class ShotGridManager:
             debug_print(f"Error actualizando task description: {e}")
 
     def create_shot(
-        self, project_id, shot_code, shot_config, thumbnail_path=None, file_path=None
+        self,
+        project_id,
+        shot_code,
+        shot_config,
+        thumbnail_path=None,
+        file_path=None,
+        approved_sequence_keys=None,
     ):
         """Crea un shot en ShotGrid SIN usar templates - crea tasks manualmente."""
         self.last_create_result = {
@@ -2174,15 +2194,32 @@ class ShotGridManager:
             ["code", "is", sequence_name],
         ]
         sequences = self.sg.find("Sequence", sequence_filters, ["id", "code"])
-        if not sequences:
+        pending_sequence = None
+        sequence_key = (project_id, sequence_name)
+        approved_sequence_keys = set(approved_sequence_keys or [])
+        if not sequences and sequence_key not in approved_sequence_keys:
             debug_print(f"ERROR: No se encontro la secuencia '{sequence_name}'")
             self.last_create_result["errors"].append(
                 "Sequence '{0}' was not found.".format(sequence_name)
             )
             return None
-
-        sequence_id = sequences[0]["id"]
-        debug_print(f"Secuencia encontrada: {sequences[0]['code']} (ID: {sequence_id})")
+        if sequences:
+            sequence_id = sequences[0]["id"]
+            debug_print(
+                f"Secuencia encontrada: {sequences[0]['code']} (ID: {sequence_id})"
+            )
+        else:
+            sequence_id = None
+            pending_sequence = {
+                "project_id": project_id,
+                "project_name": shot_config.get("_project_name") or "Flow project",
+                "sequence_name": sequence_name,
+            }
+            debug_print(
+                "Sequence '{0}' ausente y autorizada para crear".format(
+                    sequence_name
+                )
+            )
 
         mode = self.context_mode
         self.last_create_result["flags"]["project_users"] = mode != "client"
@@ -2240,6 +2277,34 @@ class ShotGridManager:
             return None
 
         self.last_create_result["flags"]["preflight"] = True
+
+        # La Sequence se crea solo despues de completar todos los preflights
+        # de vendor, assignee, Step y reviewers, pero antes de otras mutaciones.
+        if pending_sequence:
+            try:
+                created_sequences = create_missing_sequences(
+                    self.sg, [pending_sequence]
+                )
+                if created_sequences:
+                    sequence_id = created_sequences[0].get("id")
+                else:
+                    sequences = self.sg.find(
+                        "Sequence", sequence_filters, ["id", "code"]
+                    )
+                    sequence_id = sequences[0]["id"] if sequences else None
+                if not sequence_id:
+                    raise SequencePreflightError(
+                        "The confirmed Sequence could not be resolved after creation."
+                    )
+                debug_print(
+                    "Sequence creada y validada: {0} (ID: {1})".format(
+                        sequence_name, sequence_id
+                    )
+                )
+            except SequencePreflightError as exc:
+                self.last_create_result["errors"].append(str(exc))
+                debug_print(f"Error creando Sequence confirmada: {exc}")
+                return None
 
         if mode == "client":
             try:
@@ -2595,6 +2660,7 @@ class WorkerSignals(QObject):
     step_update = Signal(str)  # step message
     finished = Signal(bool, str)  # success, message
     error = Signal(str)
+    sequence_confirmation_required = Signal(list)
     debug_output = Signal()  # Señal para imprimir logs al final
 
 
@@ -2605,13 +2671,22 @@ class ShotExistenceSignals(QObject):
 
 
 class CreateShotWorker(QRunnable):
-    def __init__(self, status_window, shot_config, clips_info, thumbnail_path=None, context_mode=None):
+    def __init__(
+        self,
+        status_window,
+        shot_config,
+        clips_info,
+        thumbnail_path=None,
+        context_mode=None,
+        approved_sequences=None,
+    ):
         super(CreateShotWorker, self).__init__()
         self.status_window = status_window
         self.shot_config = shot_config
         self.clips_info = clips_info  # Clips obtenidos en el hilo principal
         self.thumbnail_path = thumbnail_path
         self.context_mode = context_mode
+        self.approved_sequences = list(approved_sequences or [])
         self.signals = WorkerSignals()
 
     @Slot()
@@ -2655,6 +2730,39 @@ class CreateShotWorker(QRunnable):
                 )
                 return
 
+            # La consulta ocurre antes de cualquier escritura. Si falta una
+            # Sequence, el worker termina y la UI pide confirmacion; un segundo
+            # worker vuelve a validar y recien entonces la crea.
+            try:
+                missing_sequences = find_missing_sequences(
+                    sg_manager.sg,
+                    clips_info,
+                    self.shot_config.get("sequence_name"),
+                    sg_manager.get_project_id,
+                )
+            except SequencePreflightError as exc:
+                debug_print(f"Preflight de Sequences abortado: {exc}")
+                self.signals.debug_output.emit()
+                self.signals.error.emit(str(exc))
+                return
+
+            approved_keys = {
+                (item["project_id"], item["sequence_name"])
+                for item in self.approved_sequences
+            }
+            unapproved_sequences = unapproved_missing_sequences(
+                missing_sequences, self.approved_sequences
+            )
+            if unapproved_sequences:
+                debug_print(
+                    "Faltan {0} Sequence(s); esperando confirmacion del usuario".format(
+                        len(missing_sequences)
+                    )
+                )
+                self.signals.debug_output.emit()
+                self.signals.sequence_confirmation_required.emit(missing_sequences)
+                return
+
             # Procesar cada clip
             total_clips = len(clips_info)
             success_count = 0
@@ -2675,12 +2783,14 @@ class CreateShotWorker(QRunnable):
                 # Procesar shot
                 clip_config = dict(self.shot_config)
                 clip_config["_vendor_token"] = clip_info.get("vendor_token") or ""
+                clip_config["_project_name"] = clip_info["project_name"]
                 shot, tasks, was_created = sg_manager.find_shot_and_tasks(
                     clip_info["project_name"],
                     clip_info["shot_code"],
                     clip_config,
                     self.thumbnail_path,
                     file_path=clip_info.get("file_path"),
+                    approved_sequence_keys=approved_keys,
                 )
 
                 create_result = sg_manager.last_create_result or {}
@@ -2832,6 +2942,39 @@ def get_flow_credentials_secure():
 # Variables globales para mantener referencias
 _status_window = None
 _config_dialog = None
+
+
+def format_missing_sequences_prompt(missing_sequences):
+    """Arma el texto visible de confirmacion sin mezclarlo con el worker."""
+    rows = sorted(
+        {
+            "{0} / {1}".format(item["project_name"], item["sequence_name"])
+            for item in missing_sequences
+        }
+    )
+    if len(rows) == 1:
+        return (
+            "This Sequence does not exist in Flow:\n\n"
+            "{0}\n\n"
+            "Do you want to create it and continue creating the shot?"
+        ).format(rows[0])
+    return (
+        "These Sequences do not exist in Flow:\n\n"
+        "{0}\n\n"
+        "Do you want to create them and continue creating the shots?"
+    ).format("\n".join("• " + row for row in rows))
+
+
+def ask_create_missing_sequences(parent, missing_sequences):
+    """Pregunta en el hilo UI antes de autorizar la escritura de Sequences."""
+    plural = len(missing_sequences) != 1
+    return ask_question(
+        parent,
+        "Flow | Missing Sequence",
+        format_missing_sequences_prompt(missing_sequences),
+        yes_text="Create Sequences" if plural else "Create Sequence",
+        no_text="Cancel",
+    )
 
 
 def cleanup_thumbnail_file(thumbnail_path):
@@ -3046,9 +3189,31 @@ def handle_shot_config_finished(result, config_dialog, clips_info, operation_mod
     _status_window.show()
     _status_window.show_processing_message()
 
+    start_create_shot_worker(
+        shot_config,
+        clips_info,
+        thumbnail_path,
+        operation_mode,
+    )
+
+
+def start_create_shot_worker(
+    shot_config,
+    clips_info,
+    thumbnail_path,
+    operation_mode,
+    approved_sequences=None,
+):
+    """Lanza una fase del worker y conecta su posible confirmacion de Sequence."""
+    global _status_window
+
+    if _status_window:
+        _status_window.show_processing_message()
+
     worker = CreateShotWorker(
         _status_window, shot_config, clips_info, thumbnail_path,
         context_mode=operation_mode,
+        approved_sequences=approved_sequences,
     )
 
     worker.signals.shot_info_ready.connect(
@@ -3071,10 +3236,64 @@ def handle_shot_config_finished(result, config_dialog, clips_info, operation_mod
             cleanup_thumbnail_file(thumbnail_path),
         )
     )
+    worker.signals.sequence_confirmation_required.connect(
+        lambda missing, config=shot_config, clips=clips_info,
+        thumb=thumbnail_path, mode=operation_mode: handle_missing_sequences(
+            missing, config, clips, thumb, mode
+        )
+    )
     worker.signals.debug_output.connect(lambda: print_debug_messages())
 
     QThreadPool.globalInstance().start(worker)
     debug_print("=== Worker iniciado en hilo separado ===")
+
+
+def handle_missing_sequences(
+    missing_sequences,
+    shot_config,
+    clips_info,
+    thumbnail_path,
+    operation_mode,
+):
+    """Pide confirmacion en UI y reanuda sin bloquear el worker de Flow."""
+    global _status_window
+
+    if get_context_mode() != operation_mode:
+        message = (
+            "The Studio/Client context changed during validation. Nothing was written."
+        )
+        debug_print(message, level="error")
+        if _status_window:
+            _status_window.show_error(message)
+        cleanup_thumbnail_file(thumbnail_path)
+        return
+
+    if not ask_create_missing_sequences(_status_window, missing_sequences):
+        debug_print(
+            "El usuario cancelo la creacion de Sequences; no se escribieron Shots",
+            level="warning",
+        )
+        if _status_window:
+            _status_window.show_error(
+                "Creation cancelled. No Sequences or shots were created."
+            )
+        cleanup_thumbnail_file(thumbnail_path)
+        return
+
+    debug_print(
+        "El usuario confirmo la creacion de {0} Sequence(s)".format(
+            len(missing_sequences)
+        )
+    )
+    if _status_window:
+        _status_window.show_step_message("Creating missing Sequences in Flow...")
+    start_create_shot_worker(
+        shot_config,
+        clips_info,
+        thumbnail_path,
+        operation_mode,
+        approved_sequences=missing_sequences,
+    )
 
 
 def main():

@@ -98,14 +98,16 @@ Todas las tasks del pipeline están disponibles con sus colores específicos:
 2. **Ejecutar script:** `LGA_NKS_Flow_CreateShot.py`
 3. **Configurar opciones** en el diálogo
 4. **Hacer clic en "Create Shot"**
-5. **Monitorear progreso** en la ventana de estado
+5. **Confirmar la Sequence si falta:** el script pregunta antes de crearla en Flow
+6. **Monitorear progreso** en la ventana de estado
 
 **Método 2: Selección múltiple**
 1. **Seleccionar múltiples clips** en el track `_comp_` del timeline
 2. **Ejecutar script:** `LGA_NKS_Flow_CreateShot.py`
 3. **Configurar opciones** en el diálogo (se aplicarán a todos los clips seleccionados)
 4. **Hacer clic en "Create Shot"**
-5. **Monitorear progreso** en la ventana de estado
+5. **Confirmar las Sequences faltantes si corresponde:** la lista se deduplica por proyecto y nombre
+6. **Monitorear progreso** en la ventana de estado
 
 **Nota:** El script usa el método híbrido centralizado:
 - Si hay múltiples clips seleccionados en el track `_comp_`, procesa todos ellos
@@ -528,8 +530,10 @@ El script utiliza un sistema de logging seguro para entornos multi-hilo que evit
 ### Logs de Error Comunes
 
 **"No se encontró la secuencia"**
-- Verificar que la secuencia existe en ShotGrid
-- Revisar permisos de acceso
+- La tool consulta Flow antes de escribir y pregunta si debe crearla
+- `Cancel` no crea la Sequence ni inicia la creación de Shots
+- `Create Sequence` valida nuevamente, crea sólo la Sequence aprobada y continúa
+- Si la creación confirmada falla, revisar permisos de acceso en Flow
 
 **"Error al crear el shot"**
 - Verificar permisos de creación en ShotGrid

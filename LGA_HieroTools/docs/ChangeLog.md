@@ -1,5 +1,7 @@
 v3.95:
 
+        - Create Shot deja de fallar cuando la Sequence aun no existe (`LGA_NKS_Flow_CreateShot v1.56`, `LGA_NKS_Flow_Sequence v1.00`): antes de cualquier Shot consulta las Sequences en un worker y pregunta si debe crear las faltantes. `Cancel` no escribe; la confirmacion autoriza solo los pares proyecto/nombre mostrados, que se revalidan para evitar duplicados o crear otra Sequence por carrera. En Client, vendor, assignee, Step y reviewers se validan antes de crear la Sequence confirmada. [ Create Shot - Preguntar y crear Sequence faltante ]
+
         - Create Shot hace visible la asignacion automatica de SUP (`LGA_NKS_Flow_CreateShot v1.55`): cada Task habilitada muestra ahora `Reviewers` y `Flow Assignee` por separado, con Lega chequeado y bloqueado en el segundo. Asi queda claro que destildar el reviewer no quita el assignee fijo que se escribe en Flow. [ Create Shot - Mostrar assignee SUP en la UI ]
 
         - Create Shot completa el falso vendor SUP (`LGA_NKS_Flow_CreateShot v1.54`, `LGA_NKS_ClientVendorAccess v1.01`, `LGA_NKS_Flow_Reviewer_Config v1.01`): conserva el token solo para reconocer el naming interno y sigue sin grupo vendor ni altas en `Project.users`, pero ahora resuelve de forma univoca a Lega en el preflight y crea cada Task habilitada con ese `task_assignees`. El checkbox de Lega ya aparece marcado como reviewer en Client; el assignee fijo no depende de que se conserve esa seleccion. [ Create Shot - Asignar SUP a Lega ]

@@ -42,6 +42,11 @@ el acceso se resuelven por separado y todo el acceso externo es fail-closed.
   un token ausente del catálogo live aborta antes de escribir.
 
 Las lecturas de Sequence, Steps, reviewers y acceso vendor forman el preflight.
+Si falta una Sequence, el worker vuelve al hilo de UI y pregunta antes de
+autorizar su creación. La aprobación queda acotada al par exacto proyecto/nombre;
+si aparece otra Sequence faltante al revalidar, se pregunta de nuevo. En Client,
+la Sequence confirmada se crea recién después de validar vendor, assignee, Step y
+reviewers, y antes del Shot. `Cancel` no escribe ninguna entidad.
 Después de la primera mutación no se intenta borrar entidades como compensación:
 el resultado de la saga identifica IDs, flags y errores como `complete`, `partial`
 o `failed` para poder reparar sin perder datos.
@@ -59,3 +64,5 @@ o `failed` para poder reparar sin perder datos.
   `ShotGridManager.create_shot()` y `CreateShotWorker.run()`.
 - `LGA_NKS_Shared/LGA_NKS_AssignmentSaga.py`: resultado parcial, espejo de
   assignees y carga sensible bajo un contexto estable.
+- `LGA_NKS_Shared/LGA_NKS_Flow_Sequence.py`: detección deduplicada, revalidación
+  y creación explícitamente confirmada de Sequences.
