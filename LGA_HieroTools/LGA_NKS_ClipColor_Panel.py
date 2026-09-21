@@ -7,8 +7,9 @@ ____________________________________________________________________
   a Flow. Conserva los colores de trabajo locales y ofrece estados de review
   con el mismo color que Flow Review.
 
-  v1.10: Migra al estilo comun, suma cuatro colores de Flow Review, evita
-         reconstrucciones innecesarias al redimensionar y registra errores.
+  v1.10: Suma cuatro colores de Flow Review, conserva el estilo compacto de
+         los paneles dockeados, evita reconstrucciones innecesarias y registra
+         errores.
   v1.09: Actualizado para usar estilos dinámicos con bordes y hover
 ____________________________________________________________________
 """
@@ -18,21 +19,12 @@ from datetime import datetime
 
 import hiero.ui
 import hiero.core
-from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui
+from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
 from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import get_status_color
 from LGA_NKS_Shared.LGA_NKS_StyleUtils import (
     create_data_button_stylesheet,
     ensure_max_luminance,
 )
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import (
-    Color,
-    Metric,
-    Style,
-    apply_ui_font,
-    semibold_css,
-)
-
-
 DEBUG = False
 LOG_PATH = os.path.join(
     os.path.dirname(__file__), "logs", "DebugPy_LGA_NKS_ClipColor_Panel.log"
@@ -81,6 +73,7 @@ FLOW_REVIEW_COLOR_BUTTONS = (
 # Mismo criterio que Flow Review: el QColor queda intacto para el clip, pero
 # un fondo demasiado claro se oscurece antes de dibujar texto claro encima.
 MAX_STATUS_BG_LUMINANCE = 135
+SCROLLBAR_VISIBLE = False
 
 
 class ColorChangeWidget(QtWidgets.QWidget):
@@ -90,25 +83,31 @@ class ColorChangeWidget(QtWidgets.QWidget):
         self.setObjectName("com.lega.colorChangePanel")
         self.setWindowTitle("ClipColor")
 
-        self.setStyleSheet(Style.WINDOW)
+        self.root_layout = QtWidgets.QVBoxLayout()
+        self.root_layout.setContentsMargins(0, 0, 0, 0)
+        self.root_layout.setSpacing(0)
+        self.setLayout(self.root_layout)
 
-        self.layout = QtWidgets.QGridLayout()
-        self.layout.setContentsMargins(
-            Metric.WINDOW_MARGIN,
-            Metric.WINDOW_MARGIN,
-            Metric.WINDOW_MARGIN,
-            Metric.WINDOW_MARGIN,
+        self.scroll_area = QtWidgets.QScrollArea()
+        self.scroll_area.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.scroll_area.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.scroll_area.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.scroll_area.setWidgetResizable(True)
+        self.root_layout.addWidget(self.scroll_area)
+
+        self.scroll_widget = QtWidgets.QWidget()
+        self.scroll_widget.setSizePolicy(
+            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred
         )
-        self.layout.setSpacing(Metric.SPACING)
-        self.setLayout(self.layout)
+        self.layout = QtWidgets.QGridLayout()
+        self.layout.setHorizontalSpacing(6)
+        self.layout.setVerticalSpacing(3)
+        self.scroll_widget.setLayout(self.layout)
+        self.scroll_area.setWidget(self.scroll_widget)
 
         self.buttons = self._build_buttons()
         self.num_columns = 1
         self.button_width_hint = 0
-        self._create_buttons()
-        apply_ui_font(self)
-        # La fuente comun puede cambiar el ancho de un label. Re-medimos antes
-        # de decidir cuantas columnas entran para no calcular con la del host.
         self._create_buttons()
         self.adjust_columns_on_resize()
 
@@ -126,6 +125,10 @@ class ColorChangeWidget(QtWidgets.QWidget):
         super(ColorChangeWidget, self).resizeEvent(event)
         self.adjust_columns_on_resize()
 
+    def showEvent(self, event):
+        super(ColorChangeWidget, self).showEvent(event)
+        self.adjust_columns_on_resize()
+
     def _create_buttons(self):
         while self.layout.count():
             item = self.layout.takeAt(0)
@@ -137,17 +140,9 @@ class ColorChangeWidget(QtWidgets.QWidget):
         for index, (name, color, style) in enumerate(self.buttons):
             display_style = ensure_max_luminance(style, MAX_STATUS_BG_LUMINANCE)
             button = QtWidgets.QPushButton(name)
-            button.setSizePolicy(
-                QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed
-            )
             button.setStyleSheet(
                 create_data_button_stylesheet(
                     display_style,
-                    Color.TEXT_STRONG,
-                    Color.ACCENT,
-                    Metric.BUTTON_HEIGHT,
-                    Metric.RADIUS,
-                    semibold_css(),
                 )
             )
             button.clicked.connect(self.create_button_click_handler(color))
@@ -157,6 +152,12 @@ class ColorChangeWidget(QtWidgets.QWidget):
             self.layout.addWidget(button, row, column)
 
         self.button_width_hint = max_button_width
+        num_rows = (len(self.buttons) + self.num_columns - 1) // self.num_columns
+        spacer = QtWidgets.QSpacerItem(
+            20, 20, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding
+        )
+        self.layout.addItem(spacer, num_rows, 0, 1, self.num_columns)
+        self.update_scrollbar_policy()
 
     def create_button_click_handler(self, color):
         def button_click_handler(_):
@@ -165,18 +166,27 @@ class ColorChangeWidget(QtWidgets.QWidget):
         return button_click_handler
 
     def adjust_columns_on_resize(self, event=None):
+        viewport_width = self.scroll_area.viewport().width()
+        panel_width = min(viewport_width, self.scroll_area.width(), self.width())
         margins = self.layout.contentsMargins()
-        available_width = max(1, self.width() - margins.left() - margins.right())
+        available_width = max(1, panel_width - margins.left() - margins.right())
         button_width = max(1, self.button_width_hint)
+        spacing = max(0, self.layout.horizontalSpacing())
         columns = max(
             1,
-            (available_width + self.layout.horizontalSpacing())
-            // (button_width + self.layout.horizontalSpacing()),
+            (available_width + spacing) // (button_width + spacing),
         )
 
         if columns != self.num_columns:
             self.num_columns = columns
             self._create_buttons()
+        else:
+            self.update_scrollbar_policy()
+
+    def update_scrollbar_policy(self):
+        if not SCROLLBAR_VISIBLE:
+            self.scroll_area.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+            self.scroll_widget.setMinimumHeight(0)
 
     def change_clip_color(self, color):
         log_messages = ["Color solicitado: %s." % color.name()]

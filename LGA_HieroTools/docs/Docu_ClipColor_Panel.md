@@ -49,10 +49,14 @@ Los fondos de los botones son datos semanticos, por eso no usan
 `Style.BTN_SECONDARY`: reemplazar el color borraria la informacion que el boton
 representa. Si el color es muy claro, se oscurece solo el fondo del boton para
 que el texto se lea; el `QColor` que llega al clip sigue siendo el original.
-La caja comun, el contraste, hover, pressed y foco salen de
+
+ClipColor usa la misma estructura compacta de Edit y Flow Review: `QScrollArea`
+sin marco, grilla con 6 px horizontales y 3 px verticales, botones de 20 px,
+radio 3 y texto regular. La caja comun, hover, pressed y foco salen de
 `create_data_button_stylesheet()` en `LGA_NKS_StyleUtils`; asi el panel no
-define QSS propio. El layout mide el ancho real de los botones y solo se
-reconstruye cuando cambia el numero de columnas.
+define QSS propio ni vuelve a verse como una ventana de formulario. El layout
+mide el ancho real de los botones y solo se reconstruye cuando cambia el numero
+de columnas.
 
 ## Referencias tecnicas
 
@@ -68,6 +72,3 @@ reconstruye cuando cambia el numero de columnas.
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_StyleUtils.py`
   - `create_data_button_stylesheet()` concentra el estilo de botones que
     expresan colores de datos.
-- `LGA_HieroTools/LGA_NKS_Shared/LGA_UI_Style_HieroTools.py`
-  - `Style.WINDOW`, `Metric`, `Color`, `apply_ui_font()` y `semibold_css()`
-    aportan la base visual del pack.

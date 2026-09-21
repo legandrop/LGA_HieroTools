@@ -42,6 +42,14 @@ GRADIENT_COLORS = {
 }
 
 
+# Geometria y texto de los botones compactos de los paneles dockeados. Los
+# colores de fondo llegan como datos de cada panel; esta caja debe quedar igual
+# en Edit, Flow y ClipColor para que no parezcan interfaces distintas.
+PANEL_BUTTON_TEXT_COLOR = "#d8d8d8"
+PANEL_BUTTON_MIN_HEIGHT = 20
+PANEL_BUTTON_RADIUS = 3
+
+
 # Funciones de conversión de colores
 def hex_to_rgb(hex_color):
     """Convierte color hex a RGB (0-255)"""
@@ -357,18 +365,13 @@ def calculate_dynamic_pressed(style):
 
 def create_data_button_stylesheet(
     background_color,
-    text_color,
-    focus_color,
-    button_height,
-    radius,
-    semibold,
 ):
     """
     Hoja comun para un boton cuyo fondo representa un DATO y no un rol de UI.
 
     Los colores de estado y de clip no pueden reemplazarse por `Style.BTN_*`:
-    la informacion se perderia. La caja, el contraste, el hover y el foco si
-    permanecen centralizados para que los paneles no rearmen QSS a mano.
+    la informacion se perderia. La caja compacta, el contraste, el hover y el
+    foco permanecen centralizados para que se lea como los demas paneles.
     """
     border_color = calculate_dynamic_border(background_color)
     hover_color = calculate_dynamic_hover(background_color)
@@ -382,21 +385,18 @@ QPushButton {
     color: %(text)s;
     min-height: %(height)dpx;
     padding: 0px;
-    %(semibold)s
 }
 QPushButton:hover { background-color: %(hover)s; }
 QPushButton:pressed { background-color: %(pressed)s; }
-QPushButton:focus { border: 2px solid %(focus)s; }
+QPushButton:focus { border: 2px solid %(hover)s; }
 """ % {
         "background": background_color,
         "border": border_color,
-        "radius": radius,
-        "text": text_color,
-        "height": button_height,
-        "semibold": semibold,
+        "radius": PANEL_BUTTON_RADIUS,
+        "text": PANEL_BUTTON_TEXT_COLOR,
+        "height": PANEL_BUTTON_MIN_HEIGHT,
         "hover": hover_color,
         "pressed": pressed_color,
-        "focus": focus_color,
     }
 
 
