@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.40 | Lega
+  LGA_NKS_Projects_Panel v2.41 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,9 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.41: El drop acepta MOV, MXF, JPG, PNG y EXR ademas de MP4. Para las
+         imagenes, Hiero detecta automaticamente si el archivo representa una
+         secuencia; el log deja el rango detectado para diagnosticarlo.
   v2.40: El panel acepta un unico MP4 local arrastrado. Si hay una secuencia,
          track y playhead validos y el track esta libre desde ese frame, lo
          importa al bin raiz y lo coloca desde el playhead. Los demas casos
@@ -165,6 +168,12 @@ POST_OPEN_TIMEOUT_MS = 3000
 # hasta el final de la post-apertura. Sin esto se ve el timeline que abre Hiero
 # y los restos del proyecto anterior antes de que arranque el switch.
 FREEZE_DURING_PROJECT_OPEN = True
+
+# Primer grupo de formatos para el drop de media. Las secuencias JPG/PNG/EXR
+# no se arman a mano: hiero.core.Clip reconoce la secuencia desde cualquiera
+# de sus frames, igual que Import Shot.
+_DROP_MEDIA_EXTENSIONS = {".mp4", ".mov", ".mxf", ".jpg", ".png", ".exr"}
+_DROP_IMAGE_EXTENSIONS = {".jpg", ".png", ".exr"}
 
 # Opciones de intervalo de auto-refresh (minutos)
 AUTO_REFRESH_OPTIONS = {
@@ -488,7 +497,7 @@ class ProjectsPanel(QtWidgets.QWidget):
     #       DROP DE MEDIA
     # =========================
     def _create_media_drop_overlay(self):
-        """Crea el cartel de drop que se muestra solo para un MP4 valido."""
+        """Crea el cartel de drop que se muestra solo para media valida."""
         overlay = QtWidgets.QWidget(self)
         overlay.setObjectName("ProjectMediaDropOverlay")
         overlay.setAttribute(Qt.WA_StyledBackground, True)
@@ -508,7 +517,7 @@ class ProjectsPanel(QtWidgets.QWidget):
         )
 
         layout = QtWidgets.QVBoxLayout(overlay)
-        label = QtWidgets.QLabel("Drop MP4 to import at the playhead", overlay)
+        label = QtWidgets.QLabel("Drop media to import at the playhead", overlay)
         label.setObjectName("ProjectMediaDropOverlayLabel")
         label.setAlignment(Qt.AlignCenter)
         layout.addWidget(label)
@@ -528,8 +537,8 @@ class ProjectsPanel(QtWidgets.QWidget):
             self._drop_overlay.hide()
 
     @staticmethod
-    def _single_mp4_from_mime(mime_data):
-        """Devuelve el unico MP4 local del drop; esta primera etapa no acepta mas."""
+    def _single_media_from_mime(mime_data):
+        """Devuelve un único archivo local con una extensión soportada."""
         if mime_data is None or not mime_data.hasUrls():
             return None
 
@@ -538,13 +547,16 @@ class ProjectsPanel(QtWidgets.QWidget):
             if not url.isLocalFile():
                 continue
             path = url.toLocalFile()
-            if os.path.isfile(path) and os.path.splitext(path)[1].lower() == ".mp4":
+            if (
+                os.path.isfile(path)
+                and os.path.splitext(path)[1].lower() in _DROP_MEDIA_EXTENSIONS
+            ):
                 paths.append(path)
 
         return paths[0] if len(paths) == 1 and len(mime_data.urls()) == 1 else None
 
     def dragEnterEvent(self, event):
-        media_path = self._single_mp4_from_mime(event.mimeData())
+        media_path = self._single_media_from_mime(event.mimeData())
         self._drop_has_supported_media = media_path is not None
         if self._drop_has_supported_media:
             event.acceptProposedAction()
@@ -566,9 +578,9 @@ class ProjectsPanel(QtWidgets.QWidget):
     def dropEvent(self, event):
         self._drop_has_supported_media = False
         self._set_media_drop_overlay_visible(False)
-        media_path = self._single_mp4_from_mime(event.mimeData())
+        media_path = self._single_media_from_mime(event.mimeData())
         if media_path is None:
-            debug_print("[Drop media] Drop ignorado: se espera un unico MP4 local.")
+            debug_print("[Drop media] Drop ignorado: se espera un unico archivo de media local soportado.")
             event.ignore()
             return
 
@@ -578,7 +590,7 @@ class ProjectsPanel(QtWidgets.QWidget):
         QtCore.QTimer.singleShot(
             0,
             lambda path=media_path: (
-                self._import_dropped_mp4(path) if is_widget_alive(self) else None
+                self._import_dropped_media(path) if is_widget_alive(self) else None
             ),
         )
 
@@ -643,17 +655,69 @@ class ProjectsPanel(QtWidgets.QWidget):
 
     def _warn_drop_import(self, text):
         debug_print("[Drop media] %s" % text, level="warning")
-        show_warning(self, "Import MP4", text)
+        show_warning(self, "Import media", text)
 
-    def _import_dropped_mp4(self, media_path):
-        """Importa un MP4 al bin raiz y lo coloca en un track vacio desde el playhead."""
+    @staticmethod
+    def _detected_drop_media_kind(clip, extension):
+        """Describe la media que Hiero detectó al crear el Clip."""
+        if extension not in _DROP_IMAGE_EXTENSIONS:
+            return "video"
+
+        try:
+            media_source = clip.mediaSource()
+            duration = int(media_source.duration())
+            file_infos = list(media_source.fileinfos() or [])
+            frame_ranges = [
+                (int(info.startFrame()), int(info.endFrame())) for info in file_infos
+            ]
+            if duration > 1 or any(first != last for first, last in frame_ranges):
+                return "image sequence"
+        except Exception as exc:
+            debug_print(
+                "[Drop media] No se pudo clasificar la imagen detectada: %s" % exc,
+                level="warning",
+            )
+        return "single image"
+
+    @staticmethod
+    def _log_detected_drop_media(clip, extension, media_path):
+        """Registra el rango que Hiero detectó; no vuelve a escanear el disco."""
+        kind = ProjectsPanel._detected_drop_media_kind(clip, extension)
+        try:
+            media_source = clip.mediaSource()
+            duration = int(media_source.duration())
+            file_infos = list(media_source.fileinfos() or [])
+            ranges = [
+                "%s-%s" % (int(info.startFrame()), int(info.endFrame()))
+                for info in file_infos
+            ]
+            range_text = ", ".join(ranges) if ranges else "sin FileInfo"
+            debug_print(
+                "[Drop media] Detectado %s | '%s' | duracion=%d | rango=%s"
+                % (kind, media_path, duration, range_text)
+            )
+        except Exception as exc:
+            debug_print(
+                "[Drop media] No se pudo leer el rango detectado para '%s': %s"
+                % (media_path, exc),
+                level="warning",
+            )
+        return kind
+
+    def _import_dropped_media(self, media_path):
+        """Importa media soportada al bin raiz y la coloca desde el playhead."""
         if not os.path.isfile(media_path):
-            self._warn_drop_import("The dropped MP4 is no longer available.")
+            self._warn_drop_import("The dropped media is no longer available.")
+            return
+
+        extension = os.path.splitext(media_path)[1].lower()
+        if extension not in _DROP_MEDIA_EXTENSIONS:
+            self._warn_drop_import("This media format is not supported yet.")
             return
 
         sequence = hiero.ui.activeSequence()
         if sequence is None:
-            self._warn_drop_import("Open a timeline before dropping an MP4.")
+            self._warn_drop_import("Open a timeline before dropping media.")
             return
 
         timeline_editor = hiero.ui.getTimelineEditor(sequence)
@@ -668,7 +732,7 @@ class ProjectsPanel(QtWidgets.QWidget):
 
         target_track = self._selected_video_track(sequence, timeline_editor)
         if target_track is None:
-            self._warn_drop_import("Select a video track before dropping an MP4.")
+            self._warn_drop_import("Select a video track before dropping media.")
             return
 
         if self._track_has_media_from(target_track, playhead):
@@ -688,11 +752,16 @@ class ProjectsPanel(QtWidgets.QWidget):
 
         clip_name = os.path.splitext(os.path.basename(media_path))[0]
         try:
-            with project.beginUndo("Import MP4: %s" % clip_name):
+            with project.beginUndo("Import media: %s" % clip_name):
                 clip = hiero.core.Clip(str(media_path))
                 clip.setName(clip_name)
                 project.clipsBin().addItem(hiero.core.BinItem(clip))
-                clip.rescan()
+                # No llamar clip.rescan(): Hiero crea una entrada Undo propia
+                # aun dentro de beginUndo. Clip() ya detecta una secuencia
+                # desde cualquiera de sus frames, igual que Import Shot.
+                media_kind = self._log_detected_drop_media(
+                    clip, extension, media_path
+                )
 
                 duration = int(clip.mediaSource().duration())
                 if duration <= 0:
@@ -705,11 +774,17 @@ class ProjectsPanel(QtWidgets.QWidget):
 
             timeline_editor.setSelection([track_item])
             debug_print(
-                "[Drop media] MP4 importado '%s' | track='%s' | tl=%d-%d"
-                % (media_path, target_track.name(), playhead, playhead + duration - 1)
+                "[Drop media] %s importado '%s' | track='%s' | tl=%d-%d"
+                % (
+                    media_kind,
+                    media_path,
+                    target_track.name(),
+                    playhead,
+                    playhead + duration - 1,
+                )
             )
         except Exception as exc:
-            self._warn_drop_import("Couldn't import the MP4.\n\n%s" % exc)
+            self._warn_drop_import("Couldn't import the media.\n\n%s" % exc)
 
 
     def _get_normal_pipesync_login(self):

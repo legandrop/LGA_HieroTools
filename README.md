@@ -279,8 +279,8 @@ opening related Nuke scripts.
 
 Project browser and sequence switcher built around the studio's project structure and PipeSync storage.
 
-- **Drop MP4 (first step)**
-  Drag one local MP4 over the panel to import it into the active project's root bin and place it at the playhead on the selected empty video track. The current first step stops with an explanation if no timeline, track or playhead is available, or if media exists from the playhead onward; sequences, other media types, collision handling and the placement preview come next.
+- **Drop media (first step)**
+  Drag one local MP4, MOV, MXF, JPG, PNG or EXR over the panel to import it into the active project's root bin and place it at the playhead on the selected empty video track. Hiero detects JPG, PNG and EXR sequences from any dropped frame. The current first step stops with an explanation if no timeline, track or playhead is available, or if media exists from the playhead onward; folders, multiple files, collision handling and the placement preview come next.
 
 - **Project list**  
   Scans projects on disk, shows open projects, and lets you switch sequences without losing viewer state. Each timeline remembers its zoom, horizontal scroll and playhead across sessions and project versions, and opening a project goes back to its last timeline.
