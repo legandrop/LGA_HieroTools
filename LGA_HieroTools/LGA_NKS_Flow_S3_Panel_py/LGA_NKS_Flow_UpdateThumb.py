@@ -1,12 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_UpdateThumb v1.04 | Lega
+  LGA_NKS_Flow_UpdateThumb v1.05 | Lega
 
   Reemplaza el thumbnail de un shot existente en Flow (ShotGrid) con un snapshot
-  del viewer actual de Hiero. Pensado para el Shift+Click del boton "Thumbnail"
+  del viewer actual de Hiero. Pensado para el click normal del boton "Thumbnail"
   del Flow S3 Panel.
 
+  v1.05: Oculta BurnIn/burn-in con el helper compartido durante la captura y
+         restaura el estado original aunque viewer.image() falle.
   v1.04: La ventana lleva la fuente del pack (apply_ui_font); sin
          eso salia con la fuente del host.
   v1.03: ThumbReplaceDialog migra al modulo de estilo LGA_UI_Style_HieroTools:
@@ -86,12 +88,14 @@ from LGA_NKS_Flow_NamingUtils import (  # noqa: E402
     clean_base_name,
 )
 from LGA_NKS_Shared.LGA_NKS_GetClip import get_clip_to_process  # noqa: E402
+from LGA_NKS_Shared.LGA_NKS_ThumbnailCapture import (  # noqa: E402
+    BurnInTrackError,
+    capture_viewer_image_without_burnin,
+)
 
 # Reutilizar los helpers de captura del snapshot del viewer (mismo comportamiento
 # que el click normal del boton Thumbnail).
 from LGA_NKS_Flow_Thumbs import (  # noqa: E402
-    disable_burnin_track_simple,
-    restore_burnin_track_simple,
     zoom_to_fill_simple,
     crop_to_aspect_ratio,
 )
@@ -115,7 +119,6 @@ def capture_viewer_snapshot_to_temp():
     Returns:
         str | None: ruta del JPG temporal, o None si fallo la captura.
     """
-    track_found, was_enabled = disable_burnin_track_simple()
     try:
         if not zoom_to_fill_simple():
             debug_print("No se pudo aplicar zoom to fill")
@@ -127,13 +130,18 @@ def capture_viewer_snapshot_to_temp():
             debug_print("No hay viewer activo")
             return None
 
-        qimage = viewer.image()
+        sequence = hiero.ui.activeSequence()
+        qimage = capture_viewer_image_without_burnin(
+            sequence,
+            viewer.image,
+            process_events=QApplication.processEvents,
+            logger=debug_print,
+        )
         if qimage is None or qimage.isNull():
             debug_print("viewer.image() devolvio None o imagen nula")
             return None
 
         # Crop al aspecto de la secuencia
-        sequence = hiero.ui.activeSequence()
         if sequence is None:
             target_aspect = 16 / 9
         else:
@@ -151,11 +159,12 @@ def capture_viewer_snapshot_to_temp():
         debug_print(f"Snapshot temporal guardado: {temp_path}")
         return temp_path
 
+    except BurnInTrackError as e:
+        debug_print(f"Captura cancelada para evitar un thumbnail con burn-in: {e}")
+        return None
     except Exception as e:
         debug_print(f"Error capturando snapshot: {e}")
         return None
-    finally:
-        restore_burnin_track_simple(track_found, was_enabled)
 
 
 def get_playhead_clip_info():
@@ -604,7 +613,7 @@ def _on_dialog_finished(_result):
 
 
 def update_thumbnail_in_flow():
-    """Entry point del Shift+Click: captura el viewer y abre la ventana de
+    """Entry point del click normal: captura el viewer y abre la ventana de
     reemplazo del thumbnail del shot en Flow."""
     global _dialog, _load_worker, _upload_worker
     global _temp_new_thumb, _temp_current_thumb, _shot_id
@@ -682,7 +691,7 @@ def _on_upload_finished(success, message):
 
 
 def main():
-    """Compatibilidad: el panel llama main() para el Shift+Click."""
+    """Compatibilidad: el panel llama main() para el click normal."""
     update_thumbnail_in_flow()
 
 

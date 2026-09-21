@@ -96,7 +96,8 @@ Internal reference: [Flow | S3 Panel](LGA_HieroTools/docs/LGA_NKS_Flow_S3_Panel_
   and Lega is the only reviewer offered in Client. For SUP shots, every enabled
   task also shows a separate checked `Flow Assignee: Lega` indicator. If the
   required Sequence is missing in Flow, Create Shot asks before creating it;
-  cancelling leaves both the Sequence and Shot untouched.
+  cancelling leaves both the Sequence and Shot untouched. Its automatic viewer
+  thumbnail temporarily hides any `BurnIn`/`burn-in` track and restores it.
 - **Modify Shot**  
   Modifies an existing shot in Flow. One clip at a time.
 - **Check Shots Exist**  
@@ -106,10 +107,11 @@ Internal reference: [Flow | S3 Panel](LGA_HieroTools/docs/LGA_NKS_Flow_S3_Panel_
 
   Click: replaces the shot's thumbnail in Flow with a viewer snapshot, after a
   confirmation window comparing the current and proposed images. The upload
-  runs on a background thread.
+  runs on a background thread. Before reading the viewer, the capture disables
+  any `BurnIn`/`burn-in` track and then restores its previous state.
 
   Shift+Click: saves the same zoom-to-fill snapshot, cropped to the sequence
-  aspect, to `N:/<project>/Thumbs`.
+  aspect, to `N:/<project>/Thumbs`, with the same temporary burn-in exclusion.
 - **Shot Priority**  
   Toggles shot priority between high and normal. Its green/red gradient keeps
   it in the Flow block while signalling priority.

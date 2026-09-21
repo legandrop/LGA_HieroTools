@@ -1,11 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CreateShot v1.57 | Lega
+  LGA_NKS_Flow_CreateShot v1.58 | Lega
 
   Script para crear shots en ShotGrid basado en el nombre del clip seleccionado en Hiero.
   SIN usar templates predefinidos - crea tasks manualmente para mayor control.
 
+  v1.58: El thumbnail apaga temporalmente cualquier track BurnIn/burn-in y
+         restaura su estado original aun cuando la captura falle.
   v1.57: Corrige el postproceso de carpetas: usa el helper del modulo de
          folders y reporta como parcial un resumen sin rutas.
   v1.56: Si una Sequence no existe en Flow, pregunta antes de crearla y solo
@@ -170,6 +172,10 @@ import shotgun_api3
 # Importar el modulo de configuracion segura
 sys.path.append(str(shared_dir))
 from SecureConfig_Reader import get_flow_credentials
+from LGA_NKS_Shared.LGA_NKS_ThumbnailCapture import (
+    BurnInTrackError,
+    capture_viewer_image_without_burnin,
+)
 
 # Importar utilidades de naming
 from LGA_NKS_Flow_NamingUtils import (
@@ -540,13 +546,24 @@ def create_shot_thumbnail():
         debug_print("❌ No hay viewer activo")
         return None
 
-    qimage = viewer.image()
+    sequence = hiero.ui.activeSequence()
+    try:
+        qimage = capture_viewer_image_without_burnin(
+            sequence,
+            viewer.image,
+            process_events=QApplication.processEvents,
+            logger=debug_print,
+        )
+    except BurnInTrackError as exc:
+        debug_print(
+            f"❌ Captura cancelada para evitar un thumbnail con burn-in: {exc}"
+        )
+        return None
     if qimage is None or qimage.isNull():
         debug_print("❌ viewer.image() devolvió None o imagen nula")
         return None
 
     # Obtener la secuencia activa y su relacion de aspecto
-    sequence = hiero.ui.activeSequence()
     if sequence is None:
         debug_print("No hay ninguna secuencia activa, usando 16:9 por defecto.")
         target_aspect = 16 / 9

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_FlowProd_Panel v1.31 | Lega
+  LGA_NKS_Flow_FlowProd_Panel v1.32 | Lega
   Panel Flow | S3 para operaciones de produccion con Flow y almacenamiento S3:
   - Revelar clips en Flow
   - Crear shots automáticamente
@@ -9,6 +9,8 @@ ________________________________________________________________________________
   - Cambiar prioridad de shots
   - Integración con FileManagerS3 (Open, Download, Upload)
 
+  v1.32: Corrige la documentacion interna del gesto actual de Thumbnail:
+         click normal reemplaza en Flow y Shift+Click guarda una copia local.
   v1.31: La etiqueta visible pasa de Flow S3 a Flow | S3 para separar las dos
          areas funcionales sin cambiar el identificador interno del dock.
   v1.30: Se oculta el boton .Psync porque su flujo quedo fuera de uso. El
@@ -597,7 +599,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             show_warning(self, "Error al ejecutar", str(e))
 
     def create_thumbnail_for_selected_clip(self):
-        """Llama al script Thumbnail para crear un thumbnail del clip seleccionado"""
+        """Shift+Click de Thumbnail: guarda un snapshot local del viewer."""
         script_path = os.path.join(
             os.path.dirname(__file__), "LGA_NKS_Flow_S3_Panel_py", "LGA_NKS_Flow_Thumbs.py"
         )
@@ -624,7 +626,7 @@ class FlowProdPanel(QtWidgets.QWidget):
             show_warning(self, "Error al ejecutar", str(e))
 
     def update_thumbnail_in_flow_for_selected_clip(self):
-        """Shift+Click del boton Thumbnail: reemplaza el thumbnail del shot en Flow
+        """Click normal de Thumbnail: reemplaza el thumbnail del shot en Flow
         con un snapshot del viewer (abre ventana de confirmacion)."""
         script_path = os.path.join(
             os.path.dirname(__file__),

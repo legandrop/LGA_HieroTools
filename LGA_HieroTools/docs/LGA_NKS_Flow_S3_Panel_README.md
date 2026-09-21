@@ -22,6 +22,7 @@ La carpeta privada del panel es `LGA_NKS_Flow_S3_Panel_py/`. El nombre viejo
 - **Pre-chequeo v1.33**: Antes de mostrar la UI verifica si ya existen; si hay múltiples y alguno existe se cancela mostrando la lista, si es un único shot existente lanza Modify Shot automáticamente
 - **Sequence v1.56**: Después de configurar el Shot, valida en un worker las Sequences necesarias. Si alguna falta, muestra una confirmación en UI; `Cancel` no escribe nada y `Create Sequence` autoriza únicamente los pares proyecto/nombre mostrados, que se revalidan antes de crear y continuar.
 - **Carpetas v1.57**: Después de crear Shot y Tasks, calcula la ruta base con el helper del módulo de folders. Si no logra crear ni encontrar carpetas, conserva las entidades de Flow y reporta el resultado como parcial en vez de lanzar un error genérico.
+- **Thumbnail v1.58**: Antes de capturar el viewer deshabilita temporalmente cualquier track cuyo nombre normalizado sea `burn-in` y restaura su estado original aunque falle la captura. Si no puede ocultarlo, cancela el thumbnail para no subir una imagen con overlay.
 - **Acceso Client v1.55**: `SUP` es interno y se omite del nombre del Shot en Flow (`PROJA_010_020_SUP_comp` crea `PROJA_010_020` + Task `comp`). No recibe Group ni altas en `Project.users`, pero cada Task habilitada se asigna a Lega y la UI lo muestra en un `Flow Assignee` separado del reviewer. Un vendor externo conserva su código y se valida completo antes de escribir; el Shot nace con `sg_vendor_groups`, sus Tasks con `task_assignees` y `Project.users` suma los usuarios prevalidos sin quitar miembros existentes. Una colisión `SUP`/`vendors[]`, un Group incompleto o un token inequívoco desconocido abortan sin crear un shot largo.
 - **Resultado**: las etapas se clasifican como `complete`, `partial` o `failed`; una Task, membresía o carga secundaria fallida no se anuncia como éxito total y no se hace rollback destructivo.
 
@@ -40,6 +41,7 @@ La carpeta privada del panel es `LGA_NKS_Flow_S3_Panel_py/`. El nombre viejo
 - **Click normal**: Genera un snapshot del viewer, abre la comparación contra el thumbnail actual y, al confirmar, lo reemplaza en Flow en un hilo de fondo
 - **Shift+Click**: Guarda el snapshot localmente en `N:/<proyecto>/Thumbs`
 - **Script utilizado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_Thumbs.py` y, para el reemplazo en Flow, `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_UpdateThumb.py`
+- **Burn-in**: Ambos gestos deshabilitan temporalmente `BurnIn`, `burn-in`, `burn_in` y variantes de mayúsculas/espaciado antes de leer el viewer; luego restauran el estado previo, incluso ante un error.
 - **Presentación**: Es el cuarto botón y comparte color con Create Shot, Modify Shot y Check Shots Exist porque las cuatro acciones pertenecen al mismo flujo de gestión del shot
 
 ### 5. Shot Priority
@@ -151,6 +153,7 @@ La lectura visual es intencional:
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py` - Funcionalidad de Reveal in Flow
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_Thumbs.py` - `main()` guarda el snapshot local; `zoom_to_fill_simple()` y `crop_to_aspect_ratio()` preparan la imagen
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_UpdateThumb.py` - `update_thumbnail_in_flow()` inicia el reemplazo; `ThumbReplaceDialog` presenta la comparación; `UploadThumbWorker` sube sin bloquear la UI
+- `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_ThumbnailCapture.py` - `capture_viewer_image_without_burnin()` protege la lectura del viewer; `temporarily_disable_burnin_tracks()` identifica, apaga y restaura todos los tracks de burn-in.
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py` - Funcionalidad de Create Shot
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ModifyShot.py` - Funcionalidad de Modify Shot
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py` - Funcionalidad de Check Shots Exist

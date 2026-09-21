@@ -74,7 +74,10 @@ Todas las tasks del pipeline están disponibles con sus colores específicos:
 ### ✅ Características Avanzadas
 - Creación de thumbnails automática desde Hiero. Primero usa
   `viewer.zoomToFill()` y conserva el fallback legacy del player; si ninguna
-  API de zoom está disponible, captura igualmente `viewer.image()`.
+  API de zoom está disponible, captura igualmente `viewer.image()`. Antes de
+  leer el viewer deshabilita temporalmente cualquier track `BurnIn`/`burn-in`
+  y restaura su estado anterior incluso si la captura falla; si no puede
+  ocultarlo, no genera el thumbnail.
 - Configuración de estados de shot y task
 - Copia de descripción del shot a las tasks
 - Reducción automática del 30% en tiempo estimado (v1.30)
@@ -127,7 +130,7 @@ Para cada clip seleccionado:
 - En Client, si el naming contiene `SUP`, cada task habilitada se asigna a Lega
   como `task_assignees`; `SUP` sigue sin grupo vendor ni altas de acceso al proyecto.
 - Se aplica reducción del 30% al tiempo estimado antes de subirlo
-- Se sube thumbnail desde Hiero
+- Se sube thumbnail desde Hiero sin incluir el track de burn-in
 - Se actualizan estados según configuración
 - **Se crea automáticamente la estructura de carpetas** para cada task habilitada (ver sección "Estructura de Carpetas Automática")
 - Tasks deshabilitadas no se crean (ni en ShotGrid ni carpetas)
@@ -714,6 +717,7 @@ El script utiliza un sistema de logging seguro para entornos multi-hilo que evit
 - **LGA_NKS_Flow_Pull.py:** Descarga de datos
 - **LGA_NKS_Flow_NamingUtils.py:** Utilidades de naming
 - **LGA_NKS_Utils/LGA_NKS_GetClip.py:** Módulo centralizado para selección de clips (método híbrido)
+- **LGA_NKS_Shared/LGA_NKS_ThumbnailCapture.py:** `capture_viewer_image_without_burnin()` apaga y restaura los tracks de burn-in alrededor de la lectura del viewer
 - **LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ModifyShot.py:** Modificación segura de shots ya existentes
 
 ## Conclusión
