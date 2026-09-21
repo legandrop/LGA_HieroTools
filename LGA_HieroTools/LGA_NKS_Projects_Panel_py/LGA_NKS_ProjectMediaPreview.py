@@ -2,12 +2,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectMediaPreview v1.05 | Lega
+  LGA_NKS_ProjectMediaPreview v1.06 | Lega
 
   Dialogo de decision para insertar media arrastrada desde el Projects Panel.
   Reproduce la lectura visual de Import Shot: cada track se ve alrededor del
   punto de insercion antes de modificar el timeline.
 
+  v1.06: El switch de placement usa una capsula mas oscura y los errores de
+         gap se reducen a una sola frase accionable.
   v1.05: El switch replica el pill Studio/Client en la fila de acciones y el
          playhead se dibuja continuo sobre todas las filas del preview.
   v1.04: El preview ajusta su alto sin scrollbar vertical, deja solo el
@@ -241,7 +243,7 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
         self._placement_switch = QtWidgets.QWidget()
         self._placement_switch.setObjectName("placementToggle")
         self._placement_switch.setAttribute(Qt.WA_StyledBackground, True)
-        self._placement_switch.setStyleSheet(Style.PILL_CONTAINER)
+        self._placement_switch.setStyleSheet(Style.PILL_CONTAINER_SUNKEN)
         placement_layout = QtWidgets.QHBoxLayout(self._placement_switch)
         placement_layout.setContentsMargins(2, 2, 2, 2)
         placement_layout.setSpacing(2)

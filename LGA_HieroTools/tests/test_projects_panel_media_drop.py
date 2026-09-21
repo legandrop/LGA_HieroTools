@@ -409,8 +409,14 @@ class ProjectsPanelMediaDropTests(unittest.TestCase):
         self.assertIn("track_item.setBackground", source)
         self.assertIn("Style.PILL_ACTIVE", source)
         self.assertIn("Style.PILL_INACTIVE", source)
+        self.assertIn("Style.PILL_CONTAINER_SUNKEN", source)
         for label in ("Use available gap", "Open space", "Timeline end"):
             self.assertIn(label, source)
+
+    def test_short_gap_error_is_concise_for_the_action_row(self):
+        source = PANEL_PATH.read_text(encoding="utf-8-sig")
+        self.assertIn('"message": "The selected gap is too short."', source)
+        self.assertNotIn("Choose ripple, another track, or timeline end.", source)
 
     def test_preview_matches_hiero_wrappers_without_relying_on_python_identity(self):
         source = PANEL_PATH.read_text(encoding="utf-8-sig")

@@ -1,5 +1,7 @@
 v3.96:
 
+        - El placement de Drop media gana contraste sin modificar Studio/Client (`LGA_NKS_Projects_Panel v2.47`, `LGA_NKS_ProjectMediaPreview v1.06`, `LGA_UI_Style_HieroTools v1.29`): su cápsula usa `#161616` en vez del mismo fondo de la ventana y el error de gap corto se reduce a `The selected gap is too short.` para permanecer en una línea. [ Projects Panel - Afinar cápsula y error del preview ]
+
         - Reload Panel también recarga el estilo del preview antes de redockear (`LGA_NKS_Projects_Panel_Smart_Reload v2.25`): el nuevo switch PILL vivía en `LGA_UI_Style_HieroTools`; reimportar solo el diálogo podía conservar ese módulo viejo durante la sesión y no aplicar el cambio hasta reiniciar Nuke. [ Projects Panel - Recargar estilo del preview ]
 
         - El placement de Drop media deja de imitar mal el switch de contexto (`LGA_NKS_Projects_Panel v2.46`, `LGA_NKS_UIManager v1.09`, `LGA_NKS_ProjectMediaPreview v1.05`, `LGA_UI_Style_HieroTools v1.28`): el pill reutiliza exactamente los estilos centralizados de Studio/Client, sin rótulo, y comparte la fila de Cancel e Import. La instrucción de destino destaca su acción en color informativo y el playhead pasa de una línea por celda a una capa única continua sobre todo el preview. [ Projects Panel - Igualar switch y playhead del preview ]

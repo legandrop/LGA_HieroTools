@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.46 | Lega
+  LGA_NKS_Projects_Panel v2.47 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,8 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.47: El error de hueco corto del preview se reduce a una frase para que no
+         ocupe una segunda línea en la fila de acciones.
   v2.46: El toggle Studio/Client toma el estilo PILL compartido, igual que el
          switch de placement del preview de importacion.
   v2.45: El preview usa un eje continuo, selector de track en su tabla y clip
@@ -901,7 +903,7 @@ class ProjectsPanel(QtWidgets.QWidget):
                 }
             return {
                 "valid": False,
-                "message": "The selected gap is too short. Choose ripple, another track, or timeline end.",
+                "message": "The selected gap is too short.",
                 "action_label": "Import media",
                 "rows": rows,
                 "playhead": playhead,

@@ -122,12 +122,14 @@
     calcula su alto con cabecera y filas para no introducir un scrollbar
     vertical que esconda tracks. El texto `Click a track name` usa el color
     informativo de la app para identificar la acción requerida. El switch
-    compacto replica el pill Studio/Client, no lleva título y comparte la fila
+    compacto replica el pill Studio/Client, con una cápsula `#161616` para
+    separarse del fondo del diálogo, no lleva título y comparte la fila
     con Cancel e Import: ordena `Open space`, `Use available gap`, `Timeline
     end` y recalcula la posición de la media nueva y de los clips desplazados
     antes de importar. Los
     mensajes junto al switch solo aparecen en rojo cuando el plan no se puede
-    ejecutar, no como explicación redundante de una inserción válida.
+    ejecutar; un gap corto informa únicamente `The selected gap is too short.`
+    para mantener esa fila en una línea.
     Reload Panel recarga primero `LGA_UI_Style_HieroTools` y después el propio
     preview, de modo que un cambio del switch o de sus tokens se aplica en la
     sesión actual y no queda retenido por un import previo.
