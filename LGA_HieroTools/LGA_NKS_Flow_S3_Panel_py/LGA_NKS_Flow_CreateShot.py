@@ -1,11 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CreateShot v1.59 | Lega
+  LGA_NKS_Flow_CreateShot v1.60 | Lega
 
   Script para crear shots en ShotGrid basado en el nombre del clip seleccionado en Hiero.
   SIN usar templates predefinidos - crea tasks manualmente para mayor control.
 
+  v1.60: El thumbnail vuelve a esperar el refresco del viewer sin fallar:
+         create_shot_thumbnail() usa el import global de time, en vez de
+         sombrearlo con un import local despues de time.sleep().
   v1.59: SUP vuelve a formar parte del Shot Code de Flow, como los vendors
          externos. Conserva su semantica interna de acceso: no recibe Group ni
          altas en Project.users y las Tasks habilitadas se asignan a Lega.
@@ -592,8 +595,6 @@ def create_shot_thumbnail():
     )
 
     # Generar nombre de archivo único
-    import time
-
     timestamp = int(time.time())
     filename = f"{shot_name}_{timestamp}.jpg"
     full_path = os.path.join(cache_dir, filename)
