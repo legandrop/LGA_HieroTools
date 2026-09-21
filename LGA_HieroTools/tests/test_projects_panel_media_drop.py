@@ -383,6 +383,21 @@ class ProjectsPanelMediaDropTests(unittest.TestCase):
         )
         populate_source = ast.get_source_segment(source, populate_method)
         self.assertIn("self._timeline_range(rows, playhead)", populate_source)
+        self.assertIn("self._playhead_overlay.set_projection", populate_source)
+
+        overlay_class = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "_TimelinePlayheadOverlay"
+        )
+        overlay_paint = next(
+            node
+            for node in overlay_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "paintEvent"
+        )
+        overlay_source = ast.get_source_segment(source, overlay_paint)
+        self.assertIn("last_rect.bottom()", overlay_source)
+        self.assertIn("painter.drawLine", overlay_source)
 
     def test_preview_chooses_destination_in_the_table_and_uses_three_placement_buttons(self):
         source = PREVIEW_PATH.read_text(encoding="utf-8-sig")
@@ -392,6 +407,8 @@ class ProjectsPanelMediaDropTests(unittest.TestCase):
         self.assertIn("button.setCheckable(True)", source)
         self.assertIn("QHeaderView.ResizeToContents", source)
         self.assertIn("track_item.setBackground", source)
+        self.assertIn("Style.PILL_ACTIVE", source)
+        self.assertIn("Style.PILL_INACTIVE", source)
         for label in ("Use available gap", "Open space", "Timeline end"):
             self.assertIn(label, source)
 

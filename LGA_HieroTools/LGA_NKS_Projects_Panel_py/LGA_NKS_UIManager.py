@@ -1,11 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_UIManager v1.08 | Lega
+  LGA_NKS_UIManager v1.09 | Lega
 
   Gestor de interfaz de usuario para el panel de proyectos LGA.
   Centraliza creación de widgets, conexión de señales, y manejo de eventos.
 
+  v1.09: El toggle Studio/Client usa el estilo compartido PILL y fuerza el
+         fondo del contenedor para que la capsula se pinte en cualquier host.
   v1.08: Reordenado el rail a Refresh, Reload Panel y Settings; Refresh usa
          la variante bold de PipeSync, Reload Panel una silueta llena de
          reinicio y todos los tooltips usan la hoja compartida del pack. Sus
@@ -341,13 +343,8 @@ class UIManager:
 
         container = QtWidgets.QWidget()
         container.setObjectName("ctxToggle")
-        container.setStyleSheet("""
-            QWidget#ctxToggle {
-                background: %s;
-                border: none;
-                border-radius: 13px;
-            }
-        """ % Color.WINDOW)
+        container.setAttribute(Qt.WA_StyledBackground, True)
+        container.setStyleSheet(Style.PILL_CONTAINER)
         h = QtWidgets.QHBoxLayout(container)
         h.setContentsMargins(2, 2, 2, 2)
         h.setSpacing(2)

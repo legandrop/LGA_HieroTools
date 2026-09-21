@@ -2,12 +2,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectMediaPreview v1.04 | Lega
+  LGA_NKS_ProjectMediaPreview v1.05 | Lega
 
   Dialogo de decision para insertar media arrastrada desde el Projects Panel.
   Reproduce la lectura visual de Import Shot: cada track se ve alrededor del
   punto de insercion antes de modificar el timeline.
 
+  v1.05: El switch replica el pill Studio/Client en la fila de acciones y el
+         playhead se dibuja continuo sobre todas las filas del preview.
   v1.04: El preview ajusta su alto sin scrollbar vertical, deja solo el
          resumen de media y usa un switch compacto debajo del timeline.
   v1.03: El track se elige en la tabla, placement usa tres botones y cada fila
@@ -109,6 +111,60 @@ class _TimelineCell(QtWidgets.QWidget):
         painter.end()
 
 
+class _TimelinePlayheadOverlay(QtWidgets.QWidget):
+    """Dibuja una sola linea de playhead por encima de todas las filas."""
+
+    def __init__(self, timeline_table):
+        super(_TimelinePlayheadOverlay, self).__init__(timeline_table.viewport())
+        self._timeline_table = timeline_table
+        self._time_range = None
+        self._playhead = None
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.hide()
+        timeline_table.viewport().installEventFilter(self)
+
+    def set_projection(self, time_range, playhead):
+        self._time_range = time_range
+        self._playhead = playhead
+        self.setVisible(playhead is not None and self._has_rows())
+        self._sync_geometry()
+
+    def eventFilter(self, watched, event):
+        if watched is self._timeline_table.viewport() and event.type() in (
+            QtCore.QEvent.Resize,
+            QtCore.QEvent.Show,
+        ):
+            self._sync_geometry()
+        return super(_TimelinePlayheadOverlay, self).eventFilter(watched, event)
+
+    def _has_rows(self):
+        return bool(self._timeline_table.rowCount())
+
+    def _sync_geometry(self):
+        self.setGeometry(self._timeline_table.viewport().rect())
+        self.raise_()
+        self.update()
+
+    def paintEvent(self, event):
+        super(_TimelinePlayheadOverlay, self).paintEvent(event)
+        if self._playhead is None or self._time_range is None or not self._has_rows():
+            return
+        model = self._timeline_table.model()
+        first_rect = self._timeline_table.visualRect(model.index(0, 2))
+        last_row = self._timeline_table.rowCount() - 1
+        last_rect = self._timeline_table.visualRect(model.index(last_row, 2))
+        if first_rect.isEmpty() or last_rect.isEmpty():
+            return
+        first, last = self._time_range
+        span = max(1, last - first + 1)
+        ratio = min(1.0, max(0.0, float(self._playhead - first) / span))
+        playhead_x = first_rect.left() + int((first_rect.width() - 1) * ratio)
+        painter = QtGui.QPainter(self)
+        painter.setPen(QtGui.QPen(QtGui.QColor(Color.TEXT_STRONG), 2))
+        painter.drawLine(playhead_x, first_rect.top(), playhead_x, last_rect.bottom())
+        painter.end()
+
+
 class ProjectMediaPreviewDialog(QtWidgets.QDialog):
     """Preview interactivo de una insercion; no toca el timeline por si solo."""
 
@@ -156,7 +212,8 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
         layout.addWidget(self._summary)
 
         instruction = QtWidgets.QLabel(
-            "Click a track name to choose a destination track."
+            "<span style='color:%s'>Click a track name</span> to choose a destination track."
+            % Color.INFO
         )
         instruction.setStyleSheet(Style.DETAIL)
         layout.addWidget(instruction)
@@ -179,15 +236,13 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
         header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
         header.setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
         layout.addWidget(self._timeline_table)
+        self._playhead_overlay = _TimelinePlayheadOverlay(self._timeline_table)
 
-        footer_row = QtWidgets.QHBoxLayout()
-        footer_row.setSpacing(6)
-        placement_label = QtWidgets.QLabel("Placement")
-        footer_row.addWidget(placement_label)
-
-        placement_switch = QtWidgets.QWidget()
-        placement_switch.setStyleSheet(Style.PANEL)
-        placement_layout = QtWidgets.QHBoxLayout(placement_switch)
+        self._placement_switch = QtWidgets.QWidget()
+        self._placement_switch.setObjectName("placementToggle")
+        self._placement_switch.setAttribute(Qt.WA_StyledBackground, True)
+        self._placement_switch.setStyleSheet(Style.PILL_CONTAINER)
+        placement_layout = QtWidgets.QHBoxLayout(self._placement_switch)
         placement_layout.setContentsMargins(2, 2, 2, 2)
         placement_layout.setSpacing(2)
         self._placement_buttons = {}
@@ -203,11 +258,13 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
                 )
             )
             self._placement_group.addButton(button)
-            button.setStyleSheet(Style.BTN_SMALL)
+            button.setCursor(QtCore.Qt.PointingHandCursor)
+            button.setFlat(True)
+            button.setMinimumHeight(22)
+            button.setStyleSheet(Style.PILL_INACTIVE)
             self._placement_buttons[mode] = button
             self._placement_button_labels[mode] = label
             placement_layout.addWidget(button)
-        footer_row.addWidget(placement_switch)
 
         self._status = QtWidgets.QLabel()
         self._status.setWordWrap(True)
@@ -215,11 +272,10 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
             "QLabel { color: %s; }" % Color.ERROR_TEXT
         )
         self._status.hide()
-        footer_row.addWidget(self._status, 1)
-        footer_row.addStretch(1)
-        layout.addLayout(footer_row)
 
         buttons = QtWidgets.QHBoxLayout()
+        buttons.addWidget(self._placement_switch, 0, Qt.AlignLeft)
+        buttons.addWidget(self._status, 1)
         buttons.addStretch(1)
         cancel_button = QtWidgets.QPushButton("Cancel")
         cancel_button.setStyleSheet(Style.BTN_SECONDARY)
@@ -268,10 +324,10 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
         for button_mode, button in self._placement_buttons.items():
             selected = button_mode == mode
             button.setChecked(selected)
-            button.setText(
-                ("✓ " if selected else "") + self._placement_button_labels[button_mode]
+            button.setText(self._placement_button_labels[button_mode])
+            button.setStyleSheet(
+                Style.PILL_ACTIVE if selected else Style.PILL_INACTIVE
             )
-            button.setStyleSheet(Style.BTN_SMALL)
         if refresh:
             self._refresh()
 
@@ -336,12 +392,13 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
                 _TimelineCell(
                     row.get("clips", []),
                     time_range,
-                    playhead,
+                    None,
                     self._timeline_table,
                 ),
             )
             self._row_tracks.append((track, selectable))
             self._timeline_table.setRowHeight(row_index, 38)
+        self._playhead_overlay.set_projection(time_range, playhead)
 
     def _fit_timeline_table_height(self):
         """Reserva exactamente cabecera y filas para que no aparezca scroll."""

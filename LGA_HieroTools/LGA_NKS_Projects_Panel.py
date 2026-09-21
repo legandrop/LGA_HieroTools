@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.45 | Lega
+  LGA_NKS_Projects_Panel v2.46 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,8 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.46: El toggle Studio/Client toma el estilo PILL compartido, igual que el
+         switch de placement del preview de importacion.
   v2.45: El preview usa un eje continuo, selector de track en su tabla y clip
          nuevo rojo con nombre real para representar cada placement sin huecos.
   v2.44: El preview dibuja color real, playhead y proyeccion por opcion; el
@@ -1196,21 +1198,12 @@ class ProjectsPanel(QtWidgets.QWidget):
         if not hasattr(self, "ctx_client_btn") or self.ctx_client_btn is None:
             return
         current_mode = get_context_mode()
-        active_style = (
-            "QPushButton { background: #443a91; color: #cccccc; border: none;"
-            " border-radius: 11px; padding: 3px 14px; font-size: 12px; }"
-        )
-        inactive_style = (
-            "QPushButton { background: transparent; color: #8a8a8a; border: none;"
-            " border-radius: 11px; padding: 3px 14px; font-size: 12px; }"
-            " QPushButton:hover { color: #c8c8c8; }"
-        )
         if current_mode == "client":
-            self.ctx_client_btn.setStyleSheet(active_style)
-            self.ctx_studio_btn.setStyleSheet(inactive_style)
+            self.ctx_client_btn.setStyleSheet(Style.PILL_ACTIVE)
+            self.ctx_studio_btn.setStyleSheet(Style.PILL_INACTIVE)
         else:
-            self.ctx_studio_btn.setStyleSheet(active_style)
-            self.ctx_client_btn.setStyleSheet(inactive_style)
+            self.ctx_studio_btn.setStyleSheet(Style.PILL_ACTIVE)
+            self.ctx_client_btn.setStyleSheet(Style.PILL_INACTIVE)
         self.ctx_client_btn.setToolTip("Contexto Client (PipeSyncClient)")
         self.ctx_studio_btn.setToolTip("Contexto Studio (PipeSync normal)")
 
