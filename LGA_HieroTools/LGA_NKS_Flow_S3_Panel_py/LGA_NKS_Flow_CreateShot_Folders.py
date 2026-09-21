@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CreateShot_Folders v1.36 | Lega
+  LGA_NKS_Flow_CreateShot_Folders v1.37 | Lega
 
   Módulo para creación automática de estructura de carpetas por task.
   Se integra con CreateShot y ModifyShot para mantener consistencia.
@@ -10,6 +10,9 @@ ____________________________________________________________________
   - Logging detallado de carpetas creadas/existentes
   - Normalización de paths para verificación de existencia
 
+  v1.37: Centraliza calculate_shot_base_path() para que Create Shot no llame
+         un metodo de otra clase; ademas separa carpetas creadas, existentes
+         y fallidas para que un error real produzca resultado parcial.
   v1.36: Las carpetas de las tasks 2D pasan a capitalizadas (`Comp`, `Roto`,
          `Cleanup`, `CG`), que es como arman la ruta TODOS los lectores del
          pipeline; esta tool era la unica que las creaba en minuscula. En
@@ -35,6 +38,34 @@ from typing import List, Dict, Set
 
 # Configuración de logging
 logger = logging.getLogger(__name__)
+
+
+def calculate_shot_base_path(file_path: str):
+    """Calcula el directorio del shot subiendo cuatro niveles desde el media."""
+    if not file_path:
+        return None
+
+    normalized_path = os.path.normpath(file_path)
+    if not os.path.isabs(normalized_path):
+        return None
+
+    shot_base_path = normalized_path
+    for _level in range(4):
+        parent = os.path.dirname(shot_base_path)
+        if not parent or parent == shot_base_path:
+            return None
+        shot_base_path = parent
+    return shot_base_path
+
+
+def folder_summary_has_results(summary: Dict[str, List[str]]) -> bool:
+    """Valida que haya rutas resueltas y ninguna carpeta fallida."""
+    if not isinstance(summary, dict):
+        return False
+    return bool(
+        (summary.get("created") or summary.get("existing"))
+        and not summary.get("failed")
+    )
 
 # Estructura de carpetas por task
 # Formato: task_name -> lista de subcarpetas relativas
@@ -190,7 +221,7 @@ def normalize_path(path: str) -> str:
     return os.path.normpath(path)
 
 
-def ensure_folder_exists(folder_path: str) -> tuple[bool, str]:
+def ensure_folder_exists(folder_path: str) -> tuple[str, str]:
     """
     Asegura que una carpeta existe, creándola si es necesario.
 
@@ -198,20 +229,20 @@ def ensure_folder_exists(folder_path: str) -> tuple[bool, str]:
         folder_path: Path completo de la carpeta
 
     Returns:
-        tuple: (bool: True si la carpeta fue creada, False si ya existía, str: mensaje de log)
+        tuple: (estado: "created", "existing" o "error", mensaje de log)
     """
     folder_path = normalize_path(folder_path)
 
     if os.path.exists(folder_path):
-        return False, f"📁 Carpeta ya existe: {folder_path}"
+        return "existing", f"📁 Carpeta ya existe: {folder_path}"
     else:
         try:
             os.makedirs(folder_path, exist_ok=True)
-            return True, f"✅ Carpeta creada: {folder_path}"
+            return "created", f"✅ Carpeta creada: {folder_path}"
         except Exception as e:
             error_msg = f"❌ Error creando carpeta {folder_path}: {e}"
             logger.error(error_msg)
-            return False, error_msg
+            return "error", error_msg
 
 
 def create_task_folders(shot_base_path: str, task_names: List[str]) -> tuple[Dict[str, List[str]], List[str]]:
@@ -231,6 +262,7 @@ def create_task_folders(shot_base_path: str, task_names: List[str]) -> tuple[Dic
 
     created_folders = []
     existing_folders = []
+    failed_folders = []
 
     for task_name in task_names:
         if task_name not in TASK_FOLDER_STRUCTURE:
@@ -252,25 +284,30 @@ def create_task_folders(shot_base_path: str, task_names: List[str]) -> tuple[Dic
             full_folder_path = os.path.join(shot_base_path, relative_folder)
 
             # Crear la carpeta
-            was_created, log_msg = ensure_folder_exists(full_folder_path)
+            folder_status, log_msg = ensure_folder_exists(full_folder_path)
             log_messages.append(log_msg)
 
-            if was_created:
+            if folder_status == "created":
                 created_folders.append(full_folder_path)
-            else:
+            elif folder_status == "existing":
                 existing_folders.append(full_folder_path)
+            else:
+                failed_folders.append(full_folder_path)
 
     # Resumen final
     summary = {
         "created": created_folders,
-        "existing": existing_folders
+        "existing": existing_folders,
+        "failed": failed_folders,
     }
 
     total_created = len(created_folders)
     total_existing = len(existing_folders)
+    total_failed = len(failed_folders)
     log_messages.append("🎯 Resumen de carpetas:")
     log_messages.append(f"   ✅ Creadas: {total_created}")
     log_messages.append(f"   📁 Existentes: {total_existing}")
+    log_messages.append(f"   ❌ Fallidas: {total_failed}")
 
     if created_folders:
         log_messages.append("📂 Carpetas creadas:")
@@ -362,7 +399,7 @@ def create_folders_for_shot_tasks(shot_path: str, enabled_tasks: List[str]) -> t
     all_log_messages.extend(validation_logs)
 
     if not is_valid:
-        return {"created": [], "existing": []}, all_log_messages
+        return {"created": [], "existing": [], "failed": []}, all_log_messages
 
     # Crear las carpetas
     all_log_messages.append("validate_shot_base_path passed, calling create_task_folders")
@@ -371,13 +408,13 @@ def create_folders_for_shot_tasks(shot_path: str, enabled_tasks: List[str]) -> t
         
         if not isinstance(task_result, tuple) or len(task_result) != 2:
             all_log_messages.append(f"ERROR: create_task_folders devolvió formato inválido: {type(task_result)}")
-            return {"created": [], "existing": []}, all_log_messages
+            return {"created": [], "existing": [], "failed": []}, all_log_messages
         
         summary, folder_logs = task_result
         
         if not isinstance(summary, dict) or not isinstance(folder_logs, (list, tuple)):
             all_log_messages.append(f"ERROR: Tipos inválidos - summary: {type(summary)}, folder_logs: {type(folder_logs)}")
-            return {"created": [], "existing": []}, all_log_messages
+            return {"created": [], "existing": [], "failed": []}, all_log_messages
         
         all_log_messages.extend(folder_logs)
         return summary, all_log_messages
@@ -387,7 +424,7 @@ def create_folders_for_shot_tasks(shot_path: str, enabled_tasks: List[str]) -> t
         error_msg = f"ERROR creando carpetas: {e}"
         all_log_messages.append(error_msg)
         all_log_messages.append(traceback.format_exc())
-        return {"created": [], "existing": []}, all_log_messages
+        return {"created": [], "existing": [], "failed": []}, all_log_messages
 
 
 if __name__ == "__main__":

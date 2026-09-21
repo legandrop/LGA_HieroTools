@@ -1,15 +1,17 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_ModifyShot v1.40 | Lega
+  LGA_NKS_Flow_ModifyShot v1.41 | Lega
 
   Script para modificar shots existentes en ShotGrid sin afectar estados.
   - Carga información actual del shot (descripción, tasks) desde Flow.
   - Reutiliza la UI compacta del script de creación para garantizar consistencia.
   - Permite agregar o eliminar tasks y actualizar la descripción de forma segura.
-  - El número de versión siempre coincide con Create Shot para compatibilidad.
+  - Reutiliza los componentes de Create Shot sin compartir su versionado interno.
   - Desde v1.33, Create Shot dispara este flujo automáticamente cuando detecta un shot único que ya existe.
 
+  v1.41: Usa calculate_shot_base_path() desde el modulo de folders al crear
+         carpetas para Tasks nuevas; evita llamar un metodo ya inexistente.
   v1.40: Los carteles de aviso pasan al helper LGA_NKS_MessageBox con el
          estilo del pack.
   v1.39: Campos EDITABLES y prefilled con datos reales de Flow (estado del shot y
@@ -67,7 +69,10 @@ from LGA_NKS_Flow_CreateShot import (
 )
 
 # Importar módulo de creación de carpetas
-from LGA_NKS_Flow_CreateShot_Folders import create_folders_for_shot_tasks
+from LGA_NKS_Flow_CreateShot_Folders import (
+    calculate_shot_base_path,
+    create_folders_for_shot_tasks,
+)
 
 
 def _download_thumbnail(image_url):
@@ -259,8 +264,9 @@ class ModifyShotWorker(QRunnable):
                 debug_print(f"Creando carpetas - tasks_to_create: {len(tasks_to_create)}, file_path: {self.clip_info.get('file_path')}")
 
                 # Calcular shot_base_path
-                hiero_ops = HieroOperations(None)
-                shot_base_path = hiero_ops.calculate_shot_base_path(self.clip_info["file_path"])
+                shot_base_path = calculate_shot_base_path(
+                    self.clip_info["file_path"]
+                )
                 debug_print(f"shot_base_path calculado: {shot_base_path}")
 
                 if shot_base_path:

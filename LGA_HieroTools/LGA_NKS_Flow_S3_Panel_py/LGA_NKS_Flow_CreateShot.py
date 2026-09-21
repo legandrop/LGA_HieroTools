@@ -1,11 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CreateShot v1.56 | Lega
+  LGA_NKS_Flow_CreateShot v1.57 | Lega
 
   Script para crear shots en ShotGrid basado en el nombre del clip seleccionado en Hiero.
   SIN usar templates predefinidos - crea tasks manualmente para mayor control.
 
+  v1.57: Corrige el postproceso de carpetas: usa el helper del modulo de
+         folders y reporta como parcial un resumen sin rutas.
   v1.56: Si una Sequence no existe en Flow, pregunta antes de crearla y solo
          continua con los Shots cuando el usuario confirma.
   v1.55: La UI Client muestra por separado el reviewer editable y el Flow
@@ -237,7 +239,11 @@ TASK_ROLE_UI = {
 # Importar módulo de creación de carpetas
 folders_path = Path(__file__).parent
 sys.path.insert(0, str(folders_path))
-from LGA_NKS_Flow_CreateShot_Folders import create_folders_for_shot_tasks
+from LGA_NKS_Flow_CreateShot_Folders import (
+    calculate_shot_base_path,
+    create_folders_for_shot_tasks,
+    folder_summary_has_results,
+)
 
 
 DEBUG = True
@@ -2010,8 +2016,9 @@ class ShotGridManager:
             # CREAR CARPETAS PARA LAS TASKS HABILITADAS
             # ==================================================================================
             if file_path and shot_config:
-                shot_base_path = self.calculate_shot_base_path(file_path)
+                shot_base_path = calculate_shot_base_path(file_path)
                 if shot_base_path:
+                    debug_print(f"Shot base path calculado: {shot_base_path}")
                     # Obtener lista de tasks habilitadas
                     enabled_tasks = []
                     tasks_config = shot_config.get("tasks", {})
@@ -2027,7 +2034,10 @@ class ShotGridManager:
                         # Loguear todos los mensajes del proceso de carpetas
                         for log_msg in folder_logs:
                             debug_print(log_msg)
-                        if not folder_result and self.last_create_result:
+                        if (
+                            not folder_summary_has_results(folder_result)
+                            and self.last_create_result
+                        ):
                             self.last_create_result["errors"].append(
                                 "Task folders could not be created."
                             )
@@ -2036,6 +2046,11 @@ class ShotGridManager:
                         debug_print("No hay tasks habilitadas para crear carpetas")
                 else:
                     debug_print("No se pudo calcular shot_base_path para crear carpetas")
+                    if self.last_create_result:
+                        self.last_create_result["errors"].append(
+                            "The task folder base path could not be resolved."
+                        )
+                        self.last_create_result["status"] = "partial"
 
             return created_shot, tasks, True  # True = fue creado
         return None, None, False
@@ -2576,35 +2591,6 @@ class HieroOperations:
                 continue
         
         return clips_info
-
-    def calculate_shot_base_path(self, file_path):
-        """
-        Calcula el path base del shot desde un archivo EXR.
-        Similar a la lógica en Push.py: 4 niveles arriba del archivo.
-
-        Args:
-            file_path: Path completo del archivo EXR
-
-        Returns:
-            str: Path base del shot o None si no se puede calcular
-        """
-        try:
-            normalized_path = os.path.normpath(file_path)
-            path_parts = normalized_path.split(os.sep)
-
-            if os.path.isabs(file_path) and len(path_parts) >= 5:
-                # Calcular 4 niveles arriba: dirname(dirname(dirname(dirname(file_path))))
-                shot_base_path = os.path.dirname(
-                    os.path.dirname(os.path.dirname(os.path.dirname(file_path)))
-                )
-                debug_print(f"Shot base path calculado: {shot_base_path}")
-                return shot_base_path
-            else:
-                debug_print("No se puede calcular shot_base_path (ruta inválida)")
-                return None
-        except Exception as e:
-            debug_print(f"Error calculando shot_base_path para {file_path}: {e}")
-            return None
 
     def process_selected_clips(self, shot_config, thumbnail_path=None):
         """Procesa los clips seleccionados en el timeline de Hiero."""

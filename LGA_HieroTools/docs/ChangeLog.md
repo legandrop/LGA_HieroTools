@@ -1,5 +1,7 @@
 v3.95:
 
+        - Create Shot corrige el cierre posterior a una creacion exitosa en Flow (`LGA_NKS_Flow_CreateShot v1.57`, `LGA_NKS_Flow_ModifyShot v1.41`, `LGA_NKS_Flow_CreateShot_Folders v1.37`): Create y Modify calculan `shot_base_path` desde el modulo de folders en vez de llamar un metodo inexistente. Sequence, Shot, Task y thumbnail creados dejan de terminar anunciados como error; las carpetas creadas, existentes y fallidas se distinguen para que un postproceso sin rutas validas quede parcial. [ Create Shot - Corregir postproceso de carpetas ]
+
         - Create Shot deja de fallar cuando la Sequence aun no existe (`LGA_NKS_Flow_CreateShot v1.56`, `LGA_NKS_Flow_Sequence v1.00`): antes de cualquier Shot consulta las Sequences en un worker y pregunta si debe crear las faltantes. `Cancel` no escribe; la confirmacion autoriza solo los pares proyecto/nombre mostrados, que se revalidan para evitar duplicados o crear otra Sequence por carrera. En Client, vendor, assignee, Step y reviewers se validan antes de crear la Sequence confirmada. [ Create Shot - Preguntar y crear Sequence faltante ]
 
         - Create Shot hace visible la asignacion automatica de SUP (`LGA_NKS_Flow_CreateShot v1.55`): cada Task habilitada muestra ahora `Reviewers` y `Flow Assignee` por separado, con Lega chequeado y bloqueado en el segundo. Asi queda claro que destildar el reviewer no quita el assignee fijo que se escribe en Flow. [ Create Shot - Mostrar assignee SUP en la UI ]

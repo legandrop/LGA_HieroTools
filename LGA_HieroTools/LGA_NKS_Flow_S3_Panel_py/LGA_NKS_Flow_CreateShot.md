@@ -1,7 +1,7 @@
 > **Regla de documentacion**: este archivo describe el estado actual del codigo. No es un historial de cambios, changelog ni bitacora temporal.
 > **Regla de documentacion**: este archivo debe incluir una seccion de referencias tecnicas con rutas completas a los archivos mas importantes relacionados, y para cada archivo nombrar las funciones, clases o metodos clave vinculados a este tema.
 
-# LGA_NKS_Flow_CreateShot v1.53
+# LGA_NKS_Flow_CreateShot v1.57
 
 Script para crear shots en ShotGrid/Flow Production Tracking basado en clips seleccionados en Hiero/Nuke Studio.
 
@@ -86,6 +86,9 @@ Todas las tasks del pipeline están disponibles con sus colores específicos:
 - **Tasks 2D y 3D:** Soporte completo para ambas jerarquías (comp, roto, cleanup, DMP directamente en SHOTNAME/, tasks 3D bajo SHOTNAME/3D/)
 - **Detección inteligente:** Verifica existencia de carpetas antes de crearlas
 - **Logging detallado:** Muestra exactamente qué carpetas se crean y cuáles ya existían
+- **Cierre verificable:** El cálculo de `shot_base_path` vive en el módulo de
+  carpetas; un resumen sin rutas se reporta como resultado parcial y no convierte
+  en error una creación de Flow que ya terminó correctamente.
 - **Normalización de paths:** Manejo consistente de rutas para evitar conflictos
 - **Integración completa:** Funciona tanto en creación como en modificación de shots
 
@@ -335,7 +338,7 @@ SHOTNAME/
 - **Integración automática:** 
 - En `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py`: Se ejecuta después de crear el shot y las tasks
 - En `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ModifyShot.py`: Se ejecuta cuando se agregan nuevas tasks a shots existentes
-- **Cálculo de path base:** El `shot_base_path` se calcula como 4 niveles arriba del archivo EXR del clip usando `HieroOperations.calculate_shot_base_path()`
+- **Cálculo de path base:** El `shot_base_path` se calcula como 4 niveles arriba del archivo EXR mediante `LGA_NKS_Flow_CreateShot_Folders.calculate_shot_base_path()`
 
 ### Ejemplo de Output en Logs
 
@@ -368,13 +371,18 @@ LGA_NKS_Flow_CreateShot.py
 ├── ShotGridManager (lógica de negocio)
 │   └── create_shot() - Crea shot y llama a creación de carpetas
 ├── HieroOperations (operaciones en Hiero)
-│   └── calculate_shot_base_path() - Calcula path base del shot (4 niveles arriba del archivo)
 ├── Worker (procesamiento en background)
 └── Integración con LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py
+    ├── calculate_shot_base_path() - Calcula la ruta base (4 niveles arriba)
     └── create_folders_for_shot_tasks() - Crea estructura de carpetas automáticamente
 ```
 
-**Integración:** Después de crear el shot y las tasks en ShotGrid, el script calcula el `shot_base_path` desde el archivo EXR del clip y llama automáticamente a `create_folders_for_shot_tasks()` para crear todas las carpetas necesarias.
+**Integración:** Después de crear el shot y las tasks en ShotGrid, el script usa
+`calculate_shot_base_path()` del mismo módulo de folders para resolver el
+`shot_base_path` desde el archivo EXR y llama a
+`create_folders_for_shot_tasks()`. El resultado sólo se considera completo si
+hay carpetas creadas o existentes; una ruta base no resoluble también deja el
+resultado como parcial sin ocultar que el Shot ya fue creado en Flow.
 
 ### Módulo de Carpetas
 
@@ -384,6 +392,8 @@ Módulo dedicado a la creación automática de estructura de carpetas. Se integr
 
 **Funciones principales:**
 - `create_folders_for_shot_tasks(shot_path, enabled_tasks)` - Función principal de integración, devuelve `(dict, list)` con resumen y logs
+- `calculate_shot_base_path(file_path)` - Resuelve el directorio base del shot sin depender de una instancia de UI
+- `folder_summary_has_results(summary)` - Valida que haya rutas resueltas y ninguna carpeta fallida
 - `create_task_folders(shot_base_path, task_names)` - Crea estructura completa para múltiples tasks
 - `ensure_folder_exists(folder_path)` - Crea carpeta individual si no existe
 - `validate_shot_base_path(shot_base_path)` - Valida permisos y existencia del path base
