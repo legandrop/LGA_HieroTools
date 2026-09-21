@@ -10,6 +10,8 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.44: El preview dibuja color real, playhead y proyeccion por opcion; el
+         modal conserva la secuencia capturada sin consultar activeSequence.
   v2.43: El ripple del drop reutiliza push_clips_right de Import Shot, que abre
          espacio desde el clip real, y el preview muestra clips por track.
   v2.42: El drop analiza el hueco real desde el playhead. Si no cabe, abre un
@@ -770,7 +772,18 @@ class ProjectsPanel(QtWidgets.QWidget):
         return items
 
     @staticmethod
-    def _preview_item(item, shift_frames=0, is_new=False, name=None, duration=None):
+    def _timeline_item_color(item):
+        """Lee el color de BinItem que Hiero muestra en el timeline."""
+        try:
+            color = item.source().binItem().color()
+            if color is not None and color.isValid():
+                return color.name()
+        except Exception:
+            pass
+        return Color.SURFACE_RAISED
+
+    @classmethod
+    def _preview_item(cls, item, shift_frames=0, is_new=False, name=None, duration=None):
         """Normaliza un clip para la tabla grafica sin tocar la API de Hiero."""
         if is_new:
             timeline_in = 0
@@ -784,6 +797,7 @@ class ProjectsPanel(QtWidgets.QWidget):
             "preview_out": timeline_out + shift_frames,
             "shift_frames": shift_frames,
             "is_new": is_new,
+            "color": Color.ACCENT if is_new else cls._timeline_item_color(item),
         }
 
     @classmethod
@@ -799,6 +813,8 @@ class ProjectsPanel(QtWidgets.QWidget):
         end_insert_frame = 0 if end_frame is None else end_frame + 1
         preview_entries = cls._track_entries_for_preview(sequence)
         preview_entries.extend(cls._audio_entries_for_preview(sequence))
+        visual_ripple = mode == "ripple" and target_track is not None
+        insert_frame = effective_insert_frame if visual_ripple else playhead
         for entry in preview_entries:
             track = entry["track"]
             before = []
@@ -813,10 +829,10 @@ class ProjectsPanel(QtWidgets.QWidget):
                 if item_out < playhead:
                     before.append(cls._preview_item(item))
                 elif item_in >= playhead:
-                    shift = duration if mode == "ripple" and id(item) in ripple_ids else 0
+                    shift = duration if visual_ripple and id(item) in ripple_ids else 0
                     after.append(cls._preview_item(item, shift))
                 else:
-                    shift = duration if mode == "ripple" and id(item) in ripple_ids else 0
+                    shift = duration if visual_ripple and id(item) in ripple_ids else 0
                     at_playhead.append(cls._preview_item(item, shift))
             if track is target_track:
                 new_item = cls._preview_item(
@@ -830,8 +846,8 @@ class ProjectsPanel(QtWidgets.QWidget):
                     new_item["preview_out"] = end_insert_frame + duration - 1
                     after.append(new_item)
                 else:
-                    new_item["preview_in"] = effective_insert_frame
-                    new_item["preview_out"] = effective_insert_frame + duration - 1
+                    new_item["preview_in"] = insert_frame
+                    new_item["preview_out"] = insert_frame + duration - 1
                     at_playhead.append(new_item)
             rows.append(
                 {
@@ -855,6 +871,7 @@ class ProjectsPanel(QtWidgets.QWidget):
                 "message": "Choose a video track to preview the insertion.",
                 "action_label": "Import media",
                 "rows": rows,
+                "playhead": playhead,
             }
         if mode == "gap":
             if self._track_has_free_interval(target_track, playhead, duration):
@@ -863,12 +880,14 @@ class ProjectsPanel(QtWidgets.QWidget):
                     "message": "The media fits in the selected gap. No clips will move.",
                     "action_label": "Import media",
                     "rows": rows,
+                    "playhead": playhead,
                 }
             return {
                 "valid": False,
                 "message": "The selected gap is too short. Choose ripple, another track, or timeline end.",
                 "action_label": "Import media",
                 "rows": rows,
+                "playhead": playhead,
             }
 
         if mode == "end":
@@ -879,6 +898,7 @@ class ProjectsPanel(QtWidgets.QWidget):
                 "message": "The media will start at frame %d. No clips will move." % insert_frame,
                 "action_label": "Import at timeline end",
                 "rows": rows,
+                "playhead": playhead,
             }
 
         ripple_items = self._import_shot_ripple_items(sequence, playhead)
@@ -891,6 +911,7 @@ class ProjectsPanel(QtWidgets.QWidget):
             % (duration, len(ripple_items), effective_insert_frame),
             "action_label": "Import and shift timeline",
             "rows": rows,
+            "playhead": playhead,
         }
 
     def _warn_drop_import(self, text):
@@ -1039,11 +1060,11 @@ class ProjectsPanel(QtWidgets.QWidget):
         if dialog.exec() != QtWidgets.QDialog.Accepted or not dialog.result_data:
             debug_print("[Drop media] Preview cancelado.")
             return
-        if hiero.ui.activeSequence() is not sequence:
-            self._warn_drop_import("The active timeline changed. Drop the media again.")
-            return
         target_track = dialog.result_data["track"]
         mode = dialog.result_data["mode"]
+        # Un QDialog modal deja activeSequence() en None aunque el mismo
+        # timeline siga abierto. Import Shot opera sobre la secuencia capturada;
+        # hacemos lo mismo y revalidamos el plan contra ese objeto vivo.
         debug_print(
             "[Drop media] Preview confirmado | modo=%s | track='%s' | playhead=%d | duracion=%d"
             % (mode, target_track.name(), playhead, duration)

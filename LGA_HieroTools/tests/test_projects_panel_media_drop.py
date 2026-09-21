@@ -335,6 +335,73 @@ class ProjectsPanelMediaDropTests(unittest.TestCase):
         self.assertIn("_populate_timeline", refresh_calls)
         self.assertNotIn("setRowCount", refresh_calls)
 
+    def test_preview_uses_real_clip_colors_and_projects_the_new_media(self):
+        source = PANEL_PATH.read_text(encoding="utf-8-sig")
+        tree = ast.parse(source)
+        panel_class = next(
+            node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "ProjectsPanel"
+        )
+        methods = {
+            node.name: ast.get_source_segment(source, node)
+            for node in panel_class.body
+            if isinstance(node, ast.FunctionDef)
+        }
+        self.assertIn("binItem", methods["_timeline_item_color"])
+        self.assertIn("color", methods["_timeline_item_color"])
+        self.assertIn("is_new", methods["_preview_item"])
+        self.assertIn("visual_ripple", methods["_preview_timeline_rows"])
+        self.assertIn("new_item", methods["_preview_timeline_rows"])
+        self.assertIn("shift = duration", methods["_preview_timeline_rows"])
+
+    def test_preview_draws_the_playhead_even_when_its_cell_has_no_clips(self):
+        source = PREVIEW_PATH.read_text(encoding="utf-8-sig")
+        tree = ast.parse(source)
+        cell_class = next(
+            node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "_TimelineCell"
+        )
+        paint_method = next(
+            node for node in cell_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "paintEvent"
+        )
+        paint_source = ast.get_source_segment(source, paint_method)
+        self.assertIn("self._playhead is None", paint_source)
+        self.assertIn("painter.drawLine", paint_source)
+
+        dialog_class = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "ProjectMediaPreviewDialog"
+        )
+        populate_method = next(
+            node for node in dialog_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_populate_timeline"
+        )
+        populate_source = ast.get_source_segment(source, populate_method)
+        self.assertIn('ranges["at_playhead"] = (playhead, playhead)', populate_source)
+
+    def test_confirming_preview_keeps_the_sequence_captured_before_the_modal(self):
+        source = PANEL_PATH.read_text(encoding="utf-8-sig")
+        tree = ast.parse(source)
+        panel_class = next(
+            node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "ProjectsPanel"
+        )
+        confirm_method = next(
+            node
+            for node in panel_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_show_media_insert_preview"
+        )
+        confirm_source = ast.get_source_segment(source, confirm_method)
+        active_sequence_calls = [
+            node
+            for node in ast.walk(confirm_method)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "activeSequence"
+        ]
+        self.assertEqual([], active_sequence_calls)
+        self.assertIn("_analyze_media_insert", confirm_source)
+        self.assertIn("_import_media_at", confirm_source)
+
     def test_ripple_uses_a_cancellable_undo_after_media_is_validated(self):
         source = PANEL_PATH.read_text(encoding="utf-8-sig")
         tree = ast.parse(source)

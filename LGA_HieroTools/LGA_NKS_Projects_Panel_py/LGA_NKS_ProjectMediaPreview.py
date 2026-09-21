@@ -2,12 +2,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectMediaPreview v1.01 | Lega
+  LGA_NKS_ProjectMediaPreview v1.02 | Lega
 
   Dialogo de decision para insertar media arrastrada desde el Projects Panel.
   Reproduce la lectura visual de Import Shot: cada track se ve alrededor del
   punto de insercion antes de modificar el timeline.
 
+  v1.02: Chips con color real, playhead visible y proyeccion de cada opcion.
   v1.01: Preview grafico por track y seleccion inicial de ripple cuando falta
          espacio; el plan sigue siendo propiedad del Projects Panel.
   v1.00: Version inicial.
@@ -29,22 +30,26 @@ class _TimelineCell(QtWidgets.QWidget):
     _MARGIN = 3
     _MIN_WIDTH = 1
 
-    def __init__(self, clips, time_range=None, parent=None):
+    def __init__(self, clips, time_range=None, playhead=None, parent=None):
         super(_TimelineCell, self).__init__(parent)
         self._clips = list(clips or [])
         self._time_range = time_range
+        self._playhead = playhead
         self.setMinimumHeight(30)
 
     def paintEvent(self, event):
         super(_TimelineCell, self).paintEvent(event)
-        if not self._clips:
+        if not self._clips and self._playhead is None:
             return
 
         if self._time_range is None:
-            starts = [clip["preview_in"] for clip in self._clips]
-            ends = [clip["preview_out"] for clip in self._clips]
-            first = min(starts)
-            last = max(ends)
+            if self._clips:
+                starts = [clip["preview_in"] for clip in self._clips]
+                ends = [clip["preview_out"] for clip in self._clips]
+                first = min(starts)
+                last = max(ends)
+            else:
+                first = last = self._playhead
         else:
             first, last = self._time_range
         span = max(1, last - first + 1)
@@ -62,15 +67,20 @@ class _TimelineCell(QtWidgets.QWidget):
             width = min(width, rect.right() - left + 1)
             clip_rect = QtCore.QRect(left, rect.top(), width, rect.height())
             is_new = bool(clip.get("is_new"))
+            fill = QtGui.QColor(
+                clip.get("color") or (Color.ACCENT if is_new else Color.SURFACE_RAISED)
+            )
             painter.setPen(QtGui.QPen(QtGui.QColor(Color.ACCENT if is_new else Color.BORDER_STRONG)))
-            painter.setBrush(QtGui.QBrush(QtGui.QColor(Color.ACCENT if is_new else Color.SURFACE_RAISED)))
+            painter.setBrush(QtGui.QBrush(fill))
             painter.drawRoundedRect(clip_rect, 3, 3)
 
             font = self.font()
             if is_new:
                 semibold(font)
             painter.setFont(font)
-            painter.setPen(QtGui.QColor(Color.TEXT_ON_ACCENT if is_new else Color.TEXT))
+            luminance = 0.299 * fill.red() + 0.587 * fill.green() + 0.114 * fill.blue()
+            text_color = Color.TEXT_ON_ACCENT if luminance < 145 else Color.WINDOW
+            painter.setPen(QtGui.QColor(text_color))
             label = str(clip.get("name") or "Untitled media")
             if clip.get("shift_frames"):
                 label += "  +%df" % int(clip["shift_frames"])
@@ -80,6 +90,16 @@ class _TimelineCell(QtWidgets.QWidget):
                 Qt.AlignVCenter | Qt.AlignLeft,
                 painter.fontMetrics().elidedText(label, Qt.ElideRight, max(0, label_rect.width())),
             )
+        if self._playhead is not None:
+            if self._playhead <= first:
+                playhead_x = rect.left()
+            elif self._playhead >= last:
+                playhead_x = rect.right()
+            else:
+                playhead_ratio = float(self._playhead - first) / span
+                playhead_x = rect.left() + int(rect.width() * playhead_ratio)
+            painter.setPen(QtGui.QPen(QtGui.QColor(Color.ERROR_TEXT), 2))
+            painter.drawLine(playhead_x, rect.top(), playhead_x, rect.bottom())
         painter.end()
 
 
@@ -209,11 +229,13 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
         self._status.setText(plan.get("message", "Couldn't analyze the timeline."))
         self._import_button.setEnabled(bool(plan.get("valid")))
         self._import_button.setText(plan.get("action_label", "Import media"))
-        self._populate_timeline(plan.get("rows", []))
+        self._populate_timeline(plan.get("rows", []), plan.get("playhead"))
 
-    def _populate_timeline(self, rows):
+    def _populate_timeline(self, rows, playhead=None):
         self._timeline_table.setRowCount(len(rows))
         ranges = self._column_time_ranges(rows)
+        if playhead is not None and "at_playhead" not in ranges:
+            ranges["at_playhead"] = (playhead, playhead)
         for row_index, row in enumerate(rows):
             color_item = QtWidgets.QTableWidgetItem()
             color_item.setBackground(QtGui.QColor(row.get("color", Color.ACCENT_TRACK)))
@@ -226,7 +248,12 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
                 self._timeline_table.setCellWidget(
                     row_index,
                     column,
-                    _TimelineCell(row.get(key, []), ranges.get(key), self._timeline_table),
+                    _TimelineCell(
+                        row.get(key, []),
+                        ranges.get(key),
+                        playhead if key == "at_playhead" else None,
+                        self._timeline_table,
+                    ),
                 )
             self._timeline_table.setRowHeight(row_index, 38)
 

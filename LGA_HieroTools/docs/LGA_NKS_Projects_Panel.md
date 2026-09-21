@@ -19,7 +19,7 @@
 - `LGA_NKS_Projects_Panel_py/LGA_Projects_Panel_ScanProjects.py` - `scan_projects_on_disk()`, `obtener_clave_proyecto()`, `_clave_agrupacion_proyecto()`, `_agrupar_hrox_por_proyecto()`, `_elegir_version_mas_alta()`, `is_path_under_root()`, `get_open_projects_info(base_path)`, `is_project_open()`, `get_project_sequences()`, `get_projects_with_newer_versions()`.
 - `LGA_NKS_Projects_Panel_py/LGA_Projects_Panel_SwitchSequence.py` - `switch_to_sequence_hybrid()` (V3 hibrida: preserva gain/gamma/saturation/playhead, optimiza UI, hace pre-cleanup del timeline nuevo, apaga `Frame_Only`, funciona cross-project y registra diagnostico post-event-loop de viewers/timelines). **Cierra el viewer+timeline viejos ANTES de abrir la secuencia nueva** (`CLOSE_BEFORE_OPEN`): al reves, la destruccion compite con el IO de la media recien abierta y el switch tarda entre 4 y 15 segundos en vez de menos de uno. Por eso el playhead se captura y restaura a mano, con `_get_current_playhead()` / `_restore_playhead()`. Detalle en `LGA_Projects_Panel_SwitchSequence_README.md`. `disable_frame_number_on_active_sequence()` desactiva el Frame Number del ViewerTL sin crearlo ni reposicionarlo.
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_ProjectsPanel_Logging.py` - Helper compartido de logging para todo el flujo del panel.
-- `LGA_NKS_Projects_Panel_py/LGA_NKS_ProjectMediaPreview.py` - Clase `ProjectMediaPreviewDialog` y `_TimelineCell`: selector de track y estrategia de inserción, con una tabla gráfica de clips antes, en y después del playhead, sin mutar el timeline.
+- `LGA_NKS_Projects_Panel_py/LGA_NKS_ProjectMediaPreview.py` - Clase `ProjectMediaPreviewDialog` y `_TimelineCell`: selector de track y estrategia de inserción, con una tabla gráfica de clips antes, en y después del playhead, con color real de BinItem, playhead visible y proyección de la media nueva, sin mutar el timeline.
 - `LGA_NKS_Shared/LGA_NKS_Timeline_PreCleanup.py` - `main()`, `remove_nukevfx_tracks()`, `extend_burnin_to_last_visible()`. Limpieza compartida de timeline para ViewerTL y Projects Panel.
 - `LGA_NKS_Shared/LGA_NKS_ScrollTo_TopTrack.py` - `main()`, `obtener_limites_scrollbar()`, `scroll_to_position()`. Scroll vertical al top track, integrado al log del panel cuando se usa desde Projects Panel. Busca primero el scrollbar por contenedor (`qt_scrollarea_vcontainer`) validando su rango negativo; el camino por indices de Nuke 15 queda de respaldo porque puede devolver otro `QScrollBar` sin tirar error.
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_Projects_Panel_Smart_Reload.py` - `main()` recarga y redockea el panel.
@@ -111,11 +111,15 @@
   - Sin track seleccionado, o si no entra, abre `ProjectMediaPreviewDialog` con
     ripple seleccionado de entrada. El diálogo conserva la identidad del track
     aunque haya nombres duplicados y muestra cada track de video y audio con
-    clips reales a la izquierda, sobre y a la derecha del playhead; el clip nuevo
-    y cualquier desplazamiento se dibujan en su posición prevista. Permite elegir
+    clips reales a la izquierda, sobre y a la derecha del playhead con el color
+    de su `BinItem`; una marca roja señala el playhead incluso si esa celda está
+    vacía. El clip nuevo y cualquier desplazamiento se dibujan en su posición
+    prevista para cada opción. Permite elegir
     otro hueco, insertar al final sin mover clips, o abrir espacio en el playhead.
-    Recalcula el plan al confirmar y cancela si cambió la secuencia activa; el
-    preview nunca ejecuta una decisión vieja.
+    Recalcula el plan al confirmar contra la secuencia capturada antes de abrir
+    el modal. No consulta `activeSequence()` tras cerrar el diálogo: Hiero puede
+    devolver `None` solo porque el modal tomó el foco, aunque ese timeline siga
+    siendo el mismo. El preview nunca ejecuta una decisión vieja.
   - El ripple reutiliza sin una variante propia `push_clips_right()` de Import
     Shot: mueve completos los clips y soft effects de video no-BurnIn cuyo final
     llega al playhead, de derecha a izquierda, y devuelve el primer frame real
