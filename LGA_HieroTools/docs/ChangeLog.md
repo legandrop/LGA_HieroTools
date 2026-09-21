@@ -1,3 +1,7 @@
+v3.96:
+
+        - El Shot Code conserva siempre el bloque de vendor, incluido el token interno `SUP` (`LGA_NKS_Flow_NamingUtils v1.21`, `LGA_NKS_Flow_CreateShot v1.59`): Import Shot, Create EXR v000, Set Shot Name y Create Shot usan la misma identidad `PROJA_010_020_SUP` o `PROJA_010_020_VEN`. `SUP` sigue separado de los vendors externos para permisos: no agrega grupos ni usuarios al proyecto y las Tasks habilitadas se asignan a Lega. Los vendors externos continúan saliendo de PipeSync para separar el Shot Code de la task siguiente. [ Naming - Conservar vendor en el Shot Code ]
+
 v3.95:
 
         - ClipColor recupera la geometria compacta de los paneles dockeados (`LGA_colorPanel v1.10`, `LGA_NKS_StyleUtils v1.03`): deja los margenes y botones de dialogo que lo hacian verse ajeno, y vuelve a usar el contenedor scrolleable, grilla 6 x 3, altura 20, radio 3 y texto regular de Edit y Flow Review. Conserva los colores de clip y el foco por teclado. [ ClipColor - Igualar botones de paneles ]

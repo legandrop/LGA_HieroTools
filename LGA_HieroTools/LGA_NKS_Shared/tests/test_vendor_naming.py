@@ -102,6 +102,16 @@ def _check_naming():
             "{0}: task {1!r}, esperada {2!r}".format(file_name, task, task_esperada),
         )
 
+    sup_shot, sup_task = _parse("PROJA_1013_0800_SUP_comp_v001_%04d.exr")
+    _expect(
+        sup_shot == "PROJA_1013_0800_SUP",
+        "SUP debe mantenerse en el Shot Code sin depender de vendors[]",
+    )
+    _expect(
+        sup_task == "comp",
+        "SUP debe seguir separando correctamente la task",
+    )
+
 
 def _check_shot_folder():
     casos = [

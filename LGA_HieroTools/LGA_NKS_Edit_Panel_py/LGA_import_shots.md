@@ -648,6 +648,8 @@ El tab Preview tiene sus propios botones de acción:
 
 En el flujo single, el post-import hacia CreateV000 ahora pasa contexto explícito del shot (`shot_root`, `shot_code`, `timeline_in/out`) para evitar depender del playhead.
 En contexto `client`, ese flujo abre CreateV000 con scope de task reducido a `comp` (sin `roto`/`cleanup`).
+El `shot_code` conserva el sufijo `SUP` o el vendor externo de la carpeta: es la
+misma identidad que usan el bin, el timeline y el nombre de salida de v000.
 
 #### Botones del footer Bulk Import
 
@@ -660,6 +662,7 @@ Notas:
 - El botón `Cancel` ya no se muestra en el footer Bulk (cancelar = cerrar ventana).
 - El payload hacia CreateV000 se arma por shot importado con `shot_root`, `shot_code` y rango timeline real colocado.
 - En contexto `client`, CreateV000 procesa solo task `comp` también en este flujo bulk.
+- Los suffixes `SUP` y vendor se conservan en cada `shot_code` del payload bulk.
 
 ### Logica de Import (comportamiento previsto)
 

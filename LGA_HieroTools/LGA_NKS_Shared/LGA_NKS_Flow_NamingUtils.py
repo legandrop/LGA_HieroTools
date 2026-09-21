@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_NamingUtils v1.20 | Lega
+  LGA_NKS_Flow_NamingUtils v1.21 | Lega
 
   Utilidades para detectar y extraer información de nombres de archivos/shots
   Compatible con sistemas de nomenclatura actuales y series:
@@ -40,6 +40,9 @@ ____________________________________________________________________
   - LGA_NKS_Review_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py
   - LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py
 
+  v1.21: SUP se conserva en el shot code de Flow y Hiero, igual que los
+         vendors externos. Sigue siendo un token interno solo para resolver
+         acceso y task, sin pasar a ser un vendor externo de PipeSync.
   v1.20: Actualiza la lista de consumidores tras mover las comparaciones al
          Review Panel; no cambia la logica de nombres.
   v1.19: SUP sigue resolviendo la task pero se omite del shot_code de Flow.
@@ -313,11 +316,6 @@ def extract_shot_code(base_name):
     target_count = base_count + desc_count
 
     selected = list(core_parts[:target_count]) if len(core_parts) >= target_count else list(core_parts)
-    internal_index = base_count - 1
-    if 0 <= internal_index < len(selected) and is_internal_vendor_token(
-        selected[internal_index]
-    ):
-        del selected[internal_index]
     return "_".join(selected)
 
 

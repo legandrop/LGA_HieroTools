@@ -1,11 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CreateShot v1.58 | Lega
+  LGA_NKS_Flow_CreateShot v1.59 | Lega
 
   Script para crear shots en ShotGrid basado en el nombre del clip seleccionado en Hiero.
   SIN usar templates predefinidos - crea tasks manualmente para mayor control.
 
+  v1.59: SUP vuelve a formar parte del Shot Code de Flow, como los vendors
+         externos. Conserva su semantica interna de acceso: no recibe Group ni
+         altas en Project.users y las Tasks habilitadas se asignan a Lega.
   v1.58: El thumbnail apaga temporalmente el VideoTrack BurnIn, espera el
          refresco del viewer y restaura su estado aun cuando la captura falle.
   v1.57: Corrige el postproceso de carpetas: usa el helper del modulo de

@@ -10,8 +10,8 @@ el acceso se resuelven por separado y todo el acceso externo es fail-closed.
 ## Contrato
 
 - `SUP` se compara con trim y sin distinguir mayúsculas. Sirve para reconocer el
-  naming interno, pero no forma parte del Shot en Flow:
-  `PROJA_010_020_SUP_comp` crea `PROJA_010_020` y la Task `comp`.
+  naming interno y forma parte del Shot en Flow:
+  `PROJA_010_020_SUP_comp` crea `PROJA_010_020_SUP` y la Task `comp`.
 - `SUP` nunca recibe `sg_vendor_groups` ni altas en `Project.users`. Es un
   falso vendor interno: cada Task habilitada nace asignada a Lega, resuelto por
   nombre desde la misma politica central que usa el reviewer. Si falta o hay

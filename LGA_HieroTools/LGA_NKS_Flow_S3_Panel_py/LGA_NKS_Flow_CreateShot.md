@@ -128,7 +128,8 @@ Para cada clip seleccionado:
 - Cada task se crea con su pipeline step correspondiente
 - Se asignan los reviewers seleccionados como `task_reviewers`
 - En Client, si el naming contiene `SUP`, cada task habilitada se asigna a Lega
-  como `task_assignees`; `SUP` sigue sin grupo vendor ni altas de acceso al proyecto.
+  como `task_assignees`; `SUP` sigue sin grupo vendor ni altas de acceso al proyecto,
+  pero se conserva en el Shot Code de Flow.
 - Se aplica reducción del 30% al tiempo estimado antes de subirlo
 - Se sube thumbnail desde Hiero sin incluir el track de burn-in
 - Se actualizan estados según configuración

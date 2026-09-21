@@ -86,9 +86,9 @@ class VendorSecurityTests(unittest.TestCase):
                     imported.add(node.module.split(".")[0])
             self.assertTrue(imported.isdisjoint({"hiero", "nuke", "PySide", "PySide2", "PySide6"}))
 
-    def test_sup_is_internal_case_insensitive_and_keeps_task_out_of_shot(self):
+    def test_sup_is_internal_case_insensitive_and_remains_in_shot(self):
         self.assertEqual("SUP", naming.extract_vendor_token("PROJA_010_020_sup_comp"))
-        self.assertEqual("PROJA_010_020", naming.extract_shot_code("PROJA_010_020_SUP_comp"))
+        self.assertEqual("PROJA_010_020_SUP", naming.extract_shot_code("PROJA_010_020_SUP_comp"))
         self.assertEqual("comp", naming.extract_task_name("PROJA_010_020_SUP_comp"))
 
     def test_external_vendor_remains_in_flow_shot_code(self):

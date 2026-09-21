@@ -90,8 +90,8 @@ Internal reference: [Flow | S3 Panel](LGA_HieroTools/docs/LGA_NKS_Flow_S3_Panel_
   Creates a shot in Flow based on the selected clip. In Client, external vendor
   suffixes are validated before any write and create the Shot/Task access links;
   `SUP` remains an internal naming suffix without a vendor group or project-access
-  grant, is omitted from the Flow Shot code, and assigns every enabled task to
-  Lega. External vendor suffixes remain part of the code.
+  grant, remains part of the Flow Shot code, and assigns every enabled task to
+  Lega. External vendor suffixes also remain part of the code.
   Comp is the only task enabled by default, CG remains available but disabled,
   and Lega is the only reviewer offered in Client. For SUP shots, every enabled
   task also shows a separate checked `Flow Assignee: Lega` indicator. If the
@@ -194,10 +194,12 @@ indicators.
   the playhead when fewer than two clips are selected. Shortcut: `Shift+L`.
 - **Import shot**  
   Imports shots into the project: plates and references into the shot bin and onto their tracks.
+  The shot name preserves `SUP` and external vendor codes.
 - **Set Shot Name**
-  Sets the shot name based on the file path.
+  Sets the shot name based on the file path, preserving `SUP` and PipeSync vendor codes.
 - **Create EXR v000**
-  Opens the validator that prepares black EXR `v000` sequences for one or more shots/tasks.
+  Opens the validator that prepares black EXR `v000` sequences for one or more shots/tasks,
+  preserving the vendor portion of the shot code.
 - **Create NK v000**  
   Builds the shot's Nuke comp script from the project template. See [Docu_CreateNKScript.md](LGA_HieroTools/docs/Docu_CreateNKScript.md).
 - **New Video Track**

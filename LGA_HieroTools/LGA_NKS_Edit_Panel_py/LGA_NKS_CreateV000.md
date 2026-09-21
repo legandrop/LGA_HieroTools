@@ -487,6 +487,12 @@ PROJA_1003_020_roto_v000_1429.exr
 El primer frame de salida siempre es `1001` (constante `START_FRAME`).
 La version siempre es `v000` (constante `VERSION`).
 
+`shot_code` conserva el bloque final de vendor. Para `SUP`, el token interno se
+resuelve en el helper central sin consultar PipeSync; por ejemplo, el nombre de
+archivo queda `PROJA_1003_020_SUP_comp_v000_1001.exr`. Un vendor externo
+configurado en la DB PipeSync del contexto activo también permanece; ese bloque
+permite separar el nombre del shot de la task que le sigue.
+
 ---
 
 ## Creacion de EXR en disco

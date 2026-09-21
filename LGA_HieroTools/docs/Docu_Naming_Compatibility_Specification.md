@@ -187,6 +187,19 @@ fallback estructural, a proposito.
 - **Shot Code:** incluye el bloque del vendor (ej: `PROJA_1013_0800_VEN`)
 - **Task:** el bloque que sigue al vendor (ej: `comp`)
 
+### Token interno SUP
+
+`SUP` ocupa la misma posición que un vendor externo y también forma parte del
+Shot Code en Hiero y Flow: `PROJA_1013_0800_SUP_comp` crea o encuentra el shot
+`PROJA_1013_0800_SUP` y resuelve la task `comp`. No viene de `vendors[]`: vive
+como `INTERNAL_VENDOR_TOKEN` en el helper central para que siga reconociéndose
+sin depender de la sincronización de PipeSync.
+
+Es interno solo para los permisos: no crea `sg_vendor_groups` ni altas en
+`Project.users`; las Tasks habilitadas se asignan a Lega. Los vendors externos
+siguen requiriendo la validación de PipeSync para distinguirlos de una task o
+descripción.
+
 ### Formato historico (vendor adelante)
 Existe tambien la variante `PROYECTO_VENDOR_SEQ_SHOT`, con el vendor pegado al
 proyecto. Se sigue soportando por estructura (`_is_vendor_format`), sin
@@ -241,6 +254,9 @@ Sino:
 Si el bloque que sigue al bloque base es un vendor code conocido (DB de PipeSync):
     → El bloque base crece 1 (PROYECTO_SEQ_SHOT_VENDOR)
 
+Si el bloque es SUP:
+    → El bloque base también crece 1, sin consultar PipeSync
+
 Si existen al menos 2 bloques adicionales tras el bloque base:
     → Formato con Descripción
 Sino:
@@ -250,6 +266,7 @@ Sino:
 **Casos de Uso:**
 - `PROJA_000_140_comp_v19.exr` → **Simplificado** → Shot Code: `PROJA_000_140`
 - `PROJA_1013_0800_VEN_comp_v001.exr` → **Vendor** → Shot Code: `PROJA_1013_0800_VEN`
+- `PROJA_1013_0800_SUP_comp_v001.exr` → **Interno** → Shot Code: `PROJA_1013_0800_SUP`
 - `PROJA_000_140_Chroma_Auto_comp_v19.exr` → **Con Descripción** → Shot Code: `PROJA_000_140_Chroma_Auto`
 - `PROJB_101_060_010_comp_v05.exr` → **Serie Simplificado** → Shot Code: `PROJB_101_060_010`
 - `PROJB_101_060_010_Chroma_Auto_comp_v05.exr` → **Serie con Descripción** → Shot Code: `PROJB_101_060_010_Chroma_Auto`
