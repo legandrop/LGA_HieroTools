@@ -114,9 +114,15 @@
     nombre de un track de video en la tabla, no en un dropdown. Cada fila usa el
     MISMO eje temporal continuo para que los huecos que se ven sean solo los que
     existen en el timeline; una marca blanca señala el playhead incluso dentro
-    del clip nuevo rojo. Un switch de tres botones (`Use available gap`, `Open
-    space`, `Timeline end`) recalcula la posición de la media nueva y de los
-    clips desplazados antes de importar.
+    del clip nuevo rojo. El título de la ventana identifica la importación y
+    el resumen conserva solo nombre y duración de la media; una instrucción
+    fija explica que el destino se elige en el nombre del track. La tabla
+    calcula su alto con cabecera y filas para no introducir un scrollbar
+    vertical que esconda tracks. Debajo queda un switch compacto en orden
+    `Open space`, `Use available gap`, `Timeline end`; recalcula la posición
+    de la media nueva y de los clips desplazados antes de importar. Los
+    mensajes junto al switch solo aparecen en rojo cuando el plan no se puede
+    ejecutar, no como explicación redundante de una inserción válida.
     Recalcula el plan al confirmar contra la secuencia capturada antes de abrir
     el modal. No consulta `activeSequence()` tras cerrar el diálogo: Hiero puede
     devolver `None` solo porque el modal tomó el foco, aunque ese timeline siga

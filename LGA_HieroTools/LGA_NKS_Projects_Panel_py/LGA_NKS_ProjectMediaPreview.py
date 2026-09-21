@@ -2,12 +2,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectMediaPreview v1.03 | Lega
+  LGA_NKS_ProjectMediaPreview v1.04 | Lega
 
   Dialogo de decision para insertar media arrastrada desde el Projects Panel.
   Reproduce la lectura visual de Import Shot: cada track se ve alrededor del
   punto de insercion antes de modificar el timeline.
 
+  v1.04: El preview ajusta su alto sin scrollbar vertical, deja solo el
+         resumen de media y usa un switch compacto debajo del timeline.
   v1.03: El track se elige en la tabla, placement usa tres botones y cada fila
          comparte un eje temporal continuo con la media nueva en rojo.
   v1.02: Chips con color real, playhead visible y proyeccion de cada opcion.
@@ -111,8 +113,8 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
     """Preview interactivo de una insercion; no toca el timeline por si solo."""
 
     _PLACEMENT_LABELS = (
-        ("gap", "Use available gap"),
         ("ripple", "Open space"),
+        ("gap", "Use available gap"),
         ("end", "Timeline end"),
     )
 
@@ -124,7 +126,7 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
         tracks,
         analyze_callback,
         selected_track=None,
-        initial_mode="gap",
+        initial_mode="ripple",
         parent=None,
     ):
         super(ProjectMediaPreviewDialog, self).__init__(parent)
@@ -136,36 +138,58 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
         self._selected_mode_value = initial_mode
         self._row_tracks = []
 
-        self.setWindowTitle("Import media")
+        self.setWindowTitle("Import Media into Timeline")
         self.setModal(True)
         self.setMinimumWidth(1040)
-        self.setMinimumHeight(430)
         self.setStyleSheet(Style.FORM)
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
 
-        title = QtWidgets.QLabel("Import media into timeline")
-        title.setProperty("lgaSectionTitle", True)
-        layout.addWidget(title)
-
         self._summary = QtWidgets.QLabel(
-            "<b>%s</b> · %d frames · playhead %d"
-            % (media_name, duration, playhead)
+            "<b>%s</b> <span style='color:%s'>· %d frames</span>"
+            % (self._escape_html(media_name), Color.TEXT_DIM, duration)
         )
         self._summary.setWordWrap(True)
         self._summary.setStyleSheet(Style.DETAIL)
         layout.addWidget(self._summary)
 
-        self._destination = QtWidgets.QLabel()
-        self._destination.setStyleSheet(Style.DETAIL)
-        layout.addWidget(self._destination)
+        instruction = QtWidgets.QLabel(
+            "Click a track name to choose a destination track."
+        )
+        instruction.setStyleSheet(Style.DETAIL)
+        layout.addWidget(instruction)
 
-        placement_row = QtWidgets.QHBoxLayout()
-        placement_row.setSpacing(4)
+        self._timeline_table = QtWidgets.QTableWidget(0, 3)
+        self._timeline_table.setHorizontalHeaderLabels(
+            ["", "Track", "Timeline preview"]
+        )
+        self._timeline_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self._timeline_table.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
+        self._timeline_table.setFocusPolicy(Qt.NoFocus)
+        self._timeline_table.verticalHeader().setVisible(False)
+        self._timeline_table.setShowGrid(False)
+        self._timeline_table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._timeline_table.setStyleSheet(Style.TABLE)
+        header = self._timeline_table.horizontalHeader()
+        header.setMinimumSectionSize(1)
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.Fixed)
+        self._timeline_table.setColumnWidth(0, 5)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
+        layout.addWidget(self._timeline_table)
+
+        footer_row = QtWidgets.QHBoxLayout()
+        footer_row.setSpacing(6)
         placement_label = QtWidgets.QLabel("Placement")
-        placement_row.addWidget(placement_label)
+        footer_row.addWidget(placement_label)
+
+        placement_switch = QtWidgets.QWidget()
+        placement_switch.setStyleSheet(Style.PANEL)
+        placement_layout = QtWidgets.QHBoxLayout(placement_switch)
+        placement_layout.setContentsMargins(2, 2, 2, 2)
+        placement_layout.setSpacing(2)
         self._placement_buttons = {}
         self._placement_button_labels = {}
         self._placement_group = QtWidgets.QButtonGroup(self)
@@ -179,34 +203,21 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
                 )
             )
             self._placement_group.addButton(button)
+            button.setStyleSheet(Style.BTN_SMALL)
             self._placement_buttons[mode] = button
             self._placement_button_labels[mode] = label
-            placement_row.addWidget(button)
-        placement_row.addStretch(1)
-        layout.addLayout(placement_row)
+            placement_layout.addWidget(button)
+        footer_row.addWidget(placement_switch)
 
         self._status = QtWidgets.QLabel()
         self._status.setWordWrap(True)
-        self._status.setStyleSheet(Style.DETAIL)
-        layout.addWidget(self._status)
-
-        self._timeline_table = QtWidgets.QTableWidget(0, 3)
-        self._timeline_table.setHorizontalHeaderLabels(
-            ["", "Destination", "Timeline preview"]
+        self._status.setStyleSheet(
+            "QLabel { color: %s; }" % Color.ERROR_TEXT
         )
-        self._timeline_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        self._timeline_table.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
-        self._timeline_table.setFocusPolicy(Qt.NoFocus)
-        self._timeline_table.verticalHeader().setVisible(False)
-        self._timeline_table.setShowGrid(False)
-        self._timeline_table.setStyleSheet(Style.TABLE)
-        header = self._timeline_table.horizontalHeader()
-        header.setMinimumSectionSize(1)
-        header.setSectionResizeMode(0, QtWidgets.QHeaderView.Fixed)
-        self._timeline_table.setColumnWidth(0, 5)
-        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
-        layout.addWidget(self._timeline_table, 1)
+        self._status.hide()
+        footer_row.addWidget(self._status, 1)
+        footer_row.addStretch(1)
+        layout.addLayout(footer_row)
 
         buttons = QtWidgets.QHBoxLayout()
         buttons.addStretch(1)
@@ -222,8 +233,8 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
 
         self._timeline_table.cellClicked.connect(self._on_timeline_cell_clicked)
         self._set_placement(initial_mode, refresh=False)
-        self._refresh()
         apply_ui_font(self)
+        self._refresh()
 
     def _selected_track(self):
         return self._selected_track_value
@@ -260,7 +271,7 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
             button.setText(
                 ("✓ " if selected else "") + self._placement_button_labels[button_mode]
             )
-            button.setStyleSheet(Style.BTN_SECONDARY)
+            button.setStyleSheet(Style.BTN_SMALL)
         if refresh:
             self._refresh()
 
@@ -279,22 +290,20 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
         mode = self._selected_mode()
         self._current_plan = self._analyze_callback(track, mode)
         plan = self._current_plan or {}
-        self._status.setText(plan.get("message", "Couldn't analyze the timeline."))
-        self._import_button.setEnabled(bool(plan.get("valid")))
+        valid = bool(plan.get("valid"))
+        self._import_button.setEnabled(valid)
         self._import_button.setText(plan.get("action_label", "Import media"))
-        if track is None:
-            self._destination.setText("Destination — select a video track in the preview")
+        if valid:
+            self._status.clear()
+            self._status.hide()
         else:
-            track_label = next(
-                (
-                    entry["label"]
-                    for entry in self._tracks
-                    if self._tracks_match(entry["track"], track)
-                ),
-                "Selected video track",
+            self._status.setText(
+                plan.get("message", "Couldn't analyze the timeline.")
             )
-            self._destination.setText("Destination — %s" % track_label)
+            self._status.show()
         self._populate_timeline(plan.get("rows", []), plan.get("playhead"))
+        self._fit_timeline_table_height()
+        self.adjustSize()
 
     def _populate_timeline(self, rows, playhead=None):
         self._timeline_table.clearContents()
@@ -333,6 +342,28 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
             )
             self._row_tracks.append((track, selectable))
             self._timeline_table.setRowHeight(row_index, 38)
+
+    def _fit_timeline_table_height(self):
+        """Reserva exactamente cabecera y filas para que no aparezca scroll."""
+        header = self._timeline_table.horizontalHeader()
+        header_height = max(header.height(), header.sizeHint().height())
+        rows_height = sum(
+            self._timeline_table.rowHeight(index)
+            for index in range(self._timeline_table.rowCount())
+        )
+        frame = self._timeline_table.frameWidth() * 2
+        table_height = header_height + rows_height + frame
+        self._timeline_table.setFixedHeight(table_height)
+
+    @staticmethod
+    def _escape_html(value):
+        """Evita que caracteres del nombre de archivo modifiquen el resumen."""
+        return (
+            str(value or "")
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
 
     @staticmethod
     def _timeline_range(rows, playhead=None):
