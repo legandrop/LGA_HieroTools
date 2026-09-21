@@ -2,12 +2,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectMediaPreview v1.02 | Lega
+  LGA_NKS_ProjectMediaPreview v1.03 | Lega
 
   Dialogo de decision para insertar media arrastrada desde el Projects Panel.
   Reproduce la lectura visual de Import Shot: cada track se ve alrededor del
   punto de insercion antes de modificar el timeline.
 
+  v1.03: El track se elige en la tabla, placement usa tres botones y cada fila
+         comparte un eje temporal continuo con la media nueva en rojo.
   v1.02: Chips con color real, playhead visible y proyeccion de cada opcion.
   v1.01: Preview grafico por track y seleccion inicial de ripple cuando falta
          espacio; el plan sigue siendo propiedad del Projects Panel.
@@ -25,7 +27,7 @@ from LGA_NKS_Shared.LGA_UI_Style_HieroTools import (
 
 
 class _TimelineCell(QtWidgets.QWidget):
-    """Dibuja clips reales de una zona del timeline, como el preview de Import Shot."""
+    """Dibuja un tramo continuo del timeline, sin cortar el playhead en celdas."""
 
     _MARGIN = 3
     _MIN_WIDTH = 1
@@ -98,7 +100,9 @@ class _TimelineCell(QtWidgets.QWidget):
             else:
                 playhead_ratio = float(self._playhead - first) / span
                 playhead_x = rect.left() + int(rect.width() * playhead_ratio)
-            painter.setPen(QtGui.QPen(QtGui.QColor(Color.ERROR_TEXT), 2))
+            # La media nueva es roja: el playhead usa blanco para seguir
+            # leyendose cuando cae dentro de ese chip.
+            painter.setPen(QtGui.QPen(QtGui.QColor(Color.TEXT_STRONG), 2))
             painter.drawLine(playhead_x, rect.top(), playhead_x, rect.bottom())
         painter.end()
 
@@ -107,9 +111,9 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
     """Preview interactivo de una insercion; no toca el timeline por si solo."""
 
     _PLACEMENT_LABELS = (
-        ("gap", "At playhead — use available gap"),
-        ("ripple", "At playhead — open space and shift timeline"),
-        ("end", "At timeline end — do not move clips"),
+        ("gap", "Use available gap"),
+        ("ripple", "Open space"),
+        ("end", "Timeline end"),
     )
 
     def __init__(
@@ -128,6 +132,9 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
         self._analyze_callback = analyze_callback
         self.result_data = None
         self._current_plan = None
+        self._selected_track_value = selected_track
+        self._selected_mode_value = initial_mode
+        self._row_tracks = []
 
         self.setWindowTitle("Import media")
         self.setModal(True)
@@ -151,36 +158,41 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
         self._summary.setStyleSheet(Style.DETAIL)
         layout.addWidget(self._summary)
 
-        form = QtWidgets.QFormLayout()
-        form.setSpacing(8)
-        self._track_combo = QtWidgets.QComboBox()
-        self._track_combo.setStyleSheet(Style.COMBO)
-        self._track_combo.addItem("Select a video track", None)
-        selected_index = 0
-        for index, track_data in enumerate(self._tracks, start=1):
-            self._track_combo.addItem(track_data["label"], track_data["track"])
-            if track_data["track"] is selected_track:
-                selected_index = index
-        self._track_combo.setCurrentIndex(selected_index)
-        form.addRow("Destination", self._track_combo)
+        self._destination = QtWidgets.QLabel()
+        self._destination.setStyleSheet(Style.DETAIL)
+        layout.addWidget(self._destination)
 
-        self._placement_combo = QtWidgets.QComboBox()
-        self._placement_combo.setStyleSheet(Style.COMBO)
+        placement_row = QtWidgets.QHBoxLayout()
+        placement_row.setSpacing(4)
+        placement_label = QtWidgets.QLabel("Placement")
+        placement_row.addWidget(placement_label)
+        self._placement_buttons = {}
+        self._placement_button_labels = {}
+        self._placement_group = QtWidgets.QButtonGroup(self)
+        self._placement_group.setExclusive(True)
         for mode, label in self._PLACEMENT_LABELS:
-            self._placement_combo.addItem(label, mode)
-        initial_index = self._placement_combo.findData(initial_mode)
-        self._placement_combo.setCurrentIndex(max(0, initial_index))
-        form.addRow("Placement", self._placement_combo)
-        layout.addLayout(form)
+            button = QtWidgets.QPushButton(label)
+            button.setCheckable(True)
+            button.clicked.connect(
+                lambda _checked=False, placement_mode=mode: self._set_placement(
+                    placement_mode
+                )
+            )
+            self._placement_group.addButton(button)
+            self._placement_buttons[mode] = button
+            self._placement_button_labels[mode] = label
+            placement_row.addWidget(button)
+        placement_row.addStretch(1)
+        layout.addLayout(placement_row)
 
         self._status = QtWidgets.QLabel()
         self._status.setWordWrap(True)
         self._status.setStyleSheet(Style.DETAIL)
         layout.addWidget(self._status)
 
-        self._timeline_table = QtWidgets.QTableWidget(0, 5)
+        self._timeline_table = QtWidgets.QTableWidget(0, 3)
         self._timeline_table.setHorizontalHeaderLabels(
-            ["", "Track", "Before playhead", "At playhead", "After playhead"]
+            ["", "Destination", "Timeline preview"]
         )
         self._timeline_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self._timeline_table.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
@@ -194,8 +206,7 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
         self._timeline_table.setColumnWidth(0, 5)
         header.setSectionResizeMode(1, QtWidgets.QHeaderView.Fixed)
         self._timeline_table.setColumnWidth(1, 150)
-        for column in (2, 3, 4):
-            header.setSectionResizeMode(column, QtWidgets.QHeaderView.Stretch)
+        header.setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
         layout.addWidget(self._timeline_table, 1)
 
         buttons = QtWidgets.QHBoxLayout()
@@ -210,16 +221,39 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
         buttons.addWidget(self._import_button)
         layout.addLayout(buttons)
 
-        self._track_combo.currentIndexChanged.connect(self._refresh)
-        self._placement_combo.currentIndexChanged.connect(self._refresh)
+        self._timeline_table.cellClicked.connect(self._on_timeline_cell_clicked)
+        self._set_placement(initial_mode, refresh=False)
         self._refresh()
         apply_ui_font(self)
 
     def _selected_track(self):
-        return self._track_combo.currentData()
+        return self._selected_track_value
 
     def _selected_mode(self):
-        return self._placement_combo.currentData()
+        return self._selected_mode_value
+
+    def _set_placement(self, mode, refresh=True):
+        """Actualiza el switch de placement y la proyeccion que controla."""
+        self._selected_mode_value = mode
+        for button_mode, button in self._placement_buttons.items():
+            selected = button_mode == mode
+            button.setChecked(selected)
+            button.setText(
+                ("✓ " if selected else "") + self._placement_button_labels[button_mode]
+            )
+            button.setStyleSheet(Style.BTN_SECONDARY)
+        if refresh:
+            self._refresh()
+
+    def _on_timeline_cell_clicked(self, row_index, column):
+        """El nombre del track es el control de destino, no un dropdown aparte."""
+        if column != 1 or row_index >= len(self._row_tracks):
+            return
+        track, selectable = self._row_tracks[row_index]
+        if not selectable:
+            return
+        self._selected_track_value = track
+        self._refresh()
 
     def _refresh(self):
         track = self._selected_track()
@@ -229,46 +263,68 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
         self._status.setText(plan.get("message", "Couldn't analyze the timeline."))
         self._import_button.setEnabled(bool(plan.get("valid")))
         self._import_button.setText(plan.get("action_label", "Import media"))
+        if track is None:
+            self._destination.setText("Destination — select a video track in the preview")
+        else:
+            track_label = next(
+                (
+                    entry["label"]
+                    for entry in self._tracks
+                    if entry["track"] is track
+                ),
+                "Selected video track",
+            )
+            self._destination.setText("Destination — %s" % track_label)
         self._populate_timeline(plan.get("rows", []), plan.get("playhead"))
 
     def _populate_timeline(self, rows, playhead=None):
+        self._timeline_table.clearContents()
         self._timeline_table.setRowCount(len(rows))
-        ranges = self._column_time_ranges(rows)
-        if playhead is not None and "at_playhead" not in ranges:
-            ranges["at_playhead"] = (playhead, playhead)
+        time_range = self._timeline_range(rows, playhead)
+        self._row_tracks = []
         for row_index, row in enumerate(rows):
             color_item = QtWidgets.QTableWidgetItem()
             color_item.setBackground(QtGui.QColor(row.get("color", Color.ACCENT_TRACK)))
             color_item.setFlags(Qt.NoItemFlags)
             self._timeline_table.setItem(row_index, 0, color_item)
-            self._timeline_table.setItem(
-                row_index, 1, QtWidgets.QTableWidgetItem(str(row.get("track", "")))
+            track = row.get("track_ref")
+            selectable = bool(row.get("selectable"))
+            selected = track is self._selected_track_value
+            track_text = str(row.get("track", ""))
+            if selected:
+                track_text = "✓ " + track_text
+            track_item = QtWidgets.QTableWidgetItem(track_text)
+            track_item.setFlags(Qt.ItemIsEnabled if not selectable else Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            if selected:
+                track_item.setForeground(QtGui.QBrush(QtGui.QColor(Color.ACCENT)))
+                track_font = track_item.font()
+                semibold(track_font)
+                track_item.setFont(track_font)
+            self._timeline_table.setItem(row_index, 1, track_item)
+            self._timeline_table.setCellWidget(
+                row_index,
+                2,
+                _TimelineCell(
+                    row.get("clips", []),
+                    time_range,
+                    playhead,
+                    self._timeline_table,
+                ),
             )
-            for column, key in enumerate(("before", "at_playhead", "after"), start=2):
-                self._timeline_table.setCellWidget(
-                    row_index,
-                    column,
-                    _TimelineCell(
-                        row.get(key, []),
-                        ranges.get(key),
-                        playhead if key == "at_playhead" else None,
-                        self._timeline_table,
-                    ),
-                )
+            self._row_tracks.append((track, selectable))
             self._timeline_table.setRowHeight(row_index, 38)
 
     @staticmethod
-    def _column_time_ranges(rows):
-        """Comparte el eje temporal de cada columna entre todos los tracks."""
-        ranges = {}
-        for key in ("before", "at_playhead", "after"):
-            clips = [clip for row in rows for clip in row.get(key, [])]
-            if clips:
-                ranges[key] = (
-                    min(clip["preview_in"] for clip in clips),
-                    max(clip["preview_out"] for clip in clips),
-                )
-        return ranges
+    def _timeline_range(rows, playhead=None):
+        """Un solo eje real evita huecos falsos alrededor del playhead."""
+        clips = [clip for row in rows for clip in row.get("clips", [])]
+        points = [playhead] if playhead is not None else []
+        if clips:
+            points.extend(clip["preview_in"] for clip in clips)
+            points.extend(clip["preview_out"] for clip in clips)
+        if not points:
+            return (0, 0)
+        return min(points), max(points)
 
     def _accept_plan(self):
         if not self._current_plan or not self._current_plan.get("valid"):

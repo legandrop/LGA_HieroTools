@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.42 | Lega
+  LGA_NKS_Projects_Panel v2.45 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,8 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.45: El preview usa un eje continuo, selector de track en su tabla y clip
+         nuevo rojo con nombre real para representar cada placement sin huecos.
   v2.44: El preview dibuja color real, playhead y proyeccion por opcion; el
          modal conserva la secuencia capturada sin consultar activeSequence.
   v2.43: El ripple del drop reutiliza push_clips_right de Import Shot, que abre
@@ -801,8 +803,10 @@ class ProjectsPanel(QtWidgets.QWidget):
         }
 
     @classmethod
-    def _preview_timeline_rows(cls, sequence, target_track, playhead, duration, mode):
-        """Construye la vista grafica antes / playhead / despues de Import Shot."""
+    def _preview_timeline_rows(
+        cls, sequence, target_track, playhead, duration, mode, media_name="New media"
+    ):
+        """Construye el timeline proyectado continuo con el mismo ripple de Import Shot."""
         rows = []
         ripple_items = cls._import_shot_ripple_items(sequence, playhead)
         ripple_ids = {id(item) for item in ripple_items}
@@ -811,59 +815,59 @@ class ProjectsPanel(QtWidgets.QWidget):
         )
         end_frame = cls._last_timeline_frame(sequence)
         end_insert_frame = 0 if end_frame is None else end_frame + 1
-        preview_entries = cls._track_entries_for_preview(sequence)
-        preview_entries.extend(cls._audio_entries_for_preview(sequence))
+        preview_entries = [
+            dict(entry, selectable=True)
+            for entry in cls._track_entries_for_preview(sequence)
+        ]
+        preview_entries.extend(
+            dict(entry, selectable=False)
+            for entry in cls._audio_entries_for_preview(sequence)
+        )
         visual_ripple = mode == "ripple" and target_track is not None
         insert_frame = effective_insert_frame if visual_ripple else playhead
         for entry in preview_entries:
             track = entry["track"]
-            before = []
-            at_playhead = []
-            after = []
+            clips = []
             for item in cls._real_track_items(track):
                 try:
-                    item_in = int(item.timelineIn())
-                    item_out = int(item.timelineOut())
+                    int(item.timelineOut())
                 except Exception:
                     continue
-                if item_out < playhead:
-                    before.append(cls._preview_item(item))
-                elif item_in >= playhead:
-                    shift = duration if visual_ripple and id(item) in ripple_ids else 0
-                    after.append(cls._preview_item(item, shift))
-                else:
-                    shift = duration if visual_ripple and id(item) in ripple_ids else 0
-                    at_playhead.append(cls._preview_item(item, shift))
+                shift = duration if visual_ripple and id(item) in ripple_ids else 0
+                clips.append(cls._preview_item(item, shift))
             if track is target_track:
                 new_item = cls._preview_item(
                     None,
                     is_new=True,
-                    name="New media · %df" % duration,
+                    name="%s · %df" % (media_name, duration),
                     duration=duration,
                 )
+                new_item["color"] = Color.ERROR_TEXT
                 if mode == "end":
                     new_item["preview_in"] = end_insert_frame
                     new_item["preview_out"] = end_insert_frame + duration - 1
-                    after.append(new_item)
                 else:
                     new_item["preview_in"] = insert_frame
                     new_item["preview_out"] = insert_frame + duration - 1
-                    at_playhead.append(new_item)
+                clips.append(new_item)
+            clips.sort(key=lambda clip: (clip["preview_in"], clip["preview_out"]))
             rows.append(
                 {
                     "track": entry["label"],
+                    "track_ref": track,
+                    "selectable": entry["selectable"],
                     "color": Color.ACCENT_TRACK if track is target_track else Color.SURFACE_RAISED,
-                    "before": before,
-                    "at_playhead": at_playhead,
-                    "after": after,
+                    "clips": clips,
                 }
             )
         return rows
 
-    def _analyze_media_insert(self, sequence, target_track, playhead, duration, mode):
+    def _analyze_media_insert(
+        self, sequence, target_track, playhead, duration, mode, media_name="New media"
+    ):
         """Plan puro de UI; se vuelve a calcular inmediatamente antes del Undo."""
         rows = self._preview_timeline_rows(
-            sequence, target_track, playhead, duration, mode
+            sequence, target_track, playhead, duration, mode, media_name
         )
         if target_track is None:
             return {
@@ -1051,7 +1055,12 @@ class ProjectsPanel(QtWidgets.QWidget):
             playhead,
             self._track_entries_for_preview(sequence),
             lambda track, mode: self._analyze_media_insert(
-                sequence, track, playhead, duration, mode
+                sequence,
+                track,
+                playhead,
+                duration,
+                mode,
+                os.path.splitext(os.path.basename(media_path))[0],
             ),
             selected_track=selected_track,
             initial_mode="ripple",
@@ -1070,7 +1079,12 @@ class ProjectsPanel(QtWidgets.QWidget):
             % (mode, target_track.name(), playhead, duration)
         )
         plan = self._analyze_media_insert(
-            sequence, target_track, playhead, duration, mode
+            sequence,
+            target_track,
+            playhead,
+            duration,
+            mode,
+            os.path.splitext(os.path.basename(media_path))[0],
         )
         if not plan.get("valid"):
             self._warn_drop_import("The timeline changed. Review the updated preview.")

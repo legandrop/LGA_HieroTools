@@ -287,25 +287,23 @@ class ProjectsPanelMediaDropTests(unittest.TestCase):
         selected = panel._import_shot_ripple_items(sequence, 100)
         self.assertEqual([100, 250], [item.timelineIn() for item in selected])
 
-    def test_preview_shares_each_time_axis_between_tracks(self):
-        column_time_ranges = _load_preview_static_method("_column_time_ranges", {})
-        ranges = column_time_ranges(
+    def test_preview_uses_one_continuous_time_axis_between_tracks(self):
+        timeline_range = _load_preview_static_method("_timeline_range", {})
+        time_range = timeline_range(
             [
                 {
-                    "before": [{"preview_in": 100, "preview_out": 199}],
-                    "at_playhead": [{"preview_in": 200, "preview_out": 219}],
-                    "after": [],
+                    "clips": [{"preview_in": 100, "preview_out": 199}],
                 },
                 {
-                    "before": [{"preview_in": 150, "preview_out": 349}],
-                    "at_playhead": [{"preview_in": 190, "preview_out": 239}],
-                    "after": [{"preview_in": 300, "preview_out": 399}],
+                    "clips": [
+                        {"preview_in": 150, "preview_out": 349},
+                        {"preview_in": 300, "preview_out": 399},
+                    ],
                 },
-            ]
+            ],
+            220,
         )
-        self.assertEqual((100, 349), ranges["before"])
-        self.assertEqual((190, 239), ranges["at_playhead"])
-        self.assertEqual((300, 399), ranges["after"])
+        self.assertEqual((100, 399), time_range)
 
     def test_preview_keeps_timeline_context_visible_without_a_destination(self):
         panel_tree = ast.parse(PANEL_PATH.read_text(encoding="utf-8-sig"))
@@ -357,6 +355,8 @@ class ProjectsPanelMediaDropTests(unittest.TestCase):
         self.assertIn("visual_ripple", methods["_preview_timeline_rows"])
         self.assertIn("new_item", methods["_preview_timeline_rows"])
         self.assertIn("shift = duration", methods["_preview_timeline_rows"])
+        self.assertIn("Color.ERROR_TEXT", methods["_preview_timeline_rows"])
+        self.assertIn("media_name", methods["_preview_timeline_rows"])
 
     def test_preview_draws_the_playhead_even_when_its_cell_has_no_clips(self):
         source = PREVIEW_PATH.read_text(encoding="utf-8-sig")
@@ -382,7 +382,16 @@ class ProjectsPanelMediaDropTests(unittest.TestCase):
             if isinstance(node, ast.FunctionDef) and node.name == "_populate_timeline"
         )
         populate_source = ast.get_source_segment(source, populate_method)
-        self.assertIn('ranges["at_playhead"] = (playhead, playhead)', populate_source)
+        self.assertIn("self._timeline_range(rows, playhead)", populate_source)
+
+    def test_preview_chooses_destination_in_the_table_and_uses_three_placement_buttons(self):
+        source = PREVIEW_PATH.read_text(encoding="utf-8-sig")
+        self.assertNotIn("QComboBox", source)
+        self.assertIn("cellClicked.connect", source)
+        self.assertIn("_on_timeline_cell_clicked", source)
+        self.assertIn("button.setCheckable(True)", source)
+        for label in ("Use available gap", "Open space", "Timeline end"):
+            self.assertIn(label, source)
 
     def test_confirming_preview_keeps_the_sequence_captured_before_the_modal(self):
         source = PANEL_PATH.read_text(encoding="utf-8-sig")
