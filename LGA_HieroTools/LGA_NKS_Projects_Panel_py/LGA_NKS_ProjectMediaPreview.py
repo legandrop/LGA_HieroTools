@@ -2,12 +2,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectMediaPreview v1.06 | Lega
+  LGA_NKS_ProjectMediaPreview v1.07 | Lega
 
   Dialogo de decision para insertar media arrastrada desde el Projects Panel.
   Reproduce la lectura visual de Import Shot: cada track se ve alrededor del
   punto de insercion antes de modificar el timeline.
 
+  v1.07: El estado de error no vuelve a ajustar el dialogo: conserva la
+         geometria inicial y el label ignora su sizeHint horizontal.
   v1.06: El switch de placement usa una capsula mas oscura y los errores de
          gap se reducen a una sola frase accionable.
   v1.05: El switch replica el pill Studio/Client en la fila de acciones y el
@@ -195,6 +197,7 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
         self._selected_track_value = self._normalize_track(selected_track)
         self._selected_mode_value = initial_mode
         self._row_tracks = []
+        self._initial_geometry_set = False
 
         self.setWindowTitle("Import Media into Timeline")
         self.setModal(True)
@@ -269,7 +272,11 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
             placement_layout.addWidget(button)
 
         self._status = QtWidgets.QLabel()
-        self._status.setWordWrap(True)
+        self._status.setWordWrap(False)
+        self._status.setSizePolicy(
+            QtWidgets.QSizePolicy.Ignored,
+            QtWidgets.QSizePolicy.Preferred,
+        )
         self._status.setStyleSheet(
             "QLabel { color: %s; }" % Color.ERROR_TEXT
         )
@@ -361,7 +368,11 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
             self._status.show()
         self._populate_timeline(plan.get("rows", []), plan.get("playhead"))
         self._fit_timeline_table_height()
-        self.adjustSize()
+        if not self._initial_geometry_set:
+            # El primer calculo incorpora tabla, cabecera y margenes reales.
+            # Luego un error no puede redimensionar una ventana ya abierta.
+            self.adjustSize()
+            self._initial_geometry_set = True
 
     def _populate_timeline(self, rows, playhead=None):
         self._timeline_table.clearContents()

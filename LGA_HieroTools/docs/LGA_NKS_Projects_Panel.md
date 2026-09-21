@@ -130,6 +130,8 @@
     mensajes junto al switch solo aparecen en rojo cuando el plan no se puede
     ejecutar; un gap corto informa únicamente `The selected gap is too short.`
     para mantener esa fila en una línea.
+    El diálogo calcula su tamaño una sola vez al abrir; ese label ignora su
+    `sizeHint` horizontal y no vuelve a agrandar la ventana al mostrarse.
     Reload Panel recarga primero `LGA_UI_Style_HieroTools` y después el propio
     preview, de modo que un cambio del switch o de sus tokens se aplica en la
     sesión actual y no queda retenido por un import previo.

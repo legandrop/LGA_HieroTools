@@ -418,6 +418,13 @@ class ProjectsPanelMediaDropTests(unittest.TestCase):
         self.assertIn('"message": "The selected gap is too short."', source)
         self.assertNotIn("Choose ripple, another track, or timeline end.", source)
 
+    def test_preview_error_does_not_recalculate_the_open_dialog_size(self):
+        source = PREVIEW_PATH.read_text(encoding="utf-8-sig")
+        self.assertIn("self._initial_geometry_set = False", source)
+        self.assertIn("self._status.setWordWrap(False)", source)
+        self.assertIn("QtWidgets.QSizePolicy.Ignored", source)
+        self.assertIn("if not self._initial_geometry_set:", source)
+
     def test_preview_matches_hiero_wrappers_without_relying_on_python_identity(self):
         source = PANEL_PATH.read_text(encoding="utf-8-sig")
         tree = ast.parse(source)

@@ -1,5 +1,7 @@
 v3.96:
 
+        - El error de Drop media ya no redimensiona la ventana abierta (`LGA_NKS_ProjectMediaPreview v1.07`): el tamaño se calcula al construir el diálogo y el label de estado ignora su `sizeHint` horizontal; alternar a una opción inválida conserva exactamente la geometría de la preview. [ Projects Panel - Fijar tamaño ante error del preview ]
+
         - El placement de Drop media gana contraste sin modificar Studio/Client (`LGA_NKS_Projects_Panel v2.47`, `LGA_NKS_ProjectMediaPreview v1.06`, `LGA_UI_Style_HieroTools v1.29`): su cápsula usa `#161616` en vez del mismo fondo de la ventana y el error de gap corto se reduce a `The selected gap is too short.` para permanecer en una línea. [ Projects Panel - Afinar cápsula y error del preview ]
 
         - Reload Panel también recarga el estilo del preview antes de redockear (`LGA_NKS_Projects_Panel_Smart_Reload v2.25`): el nuevo switch PILL vivía en `LGA_UI_Style_HieroTools`; reimportar solo el diálogo podía conservar ese módulo viejo durante la sesión y no aplicar el cambio hasta reiniciar Nuke. [ Projects Panel - Recargar estilo del preview ]
