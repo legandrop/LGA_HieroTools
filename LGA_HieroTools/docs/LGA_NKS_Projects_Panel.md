@@ -5,7 +5,7 @@
 
 ## Concepto rapido
 - Panel `com.lega.ProjectsPanel` para Hiero/Nuke Studio que escanea `T:\` (`VFX-*/*_SUP`), detecta la ultima version `.hrox` de cada proyecto, y permite abrir proyectos y sus secuencias.
-- Barra lateral derecha, en orden: `Refresh` reescanea en background; `Reload Panel` ejecuta el smart reload; `Settings` abre la configuracion. Debajo de un separador, `Organize Project` y `Clean Project` actuan sobre el proyecto completo con botones de icono y tooltip.
+- Barra lateral derecha, en orden: `Refresh` reescanea en background; `Reload Panel` ejecuta el smart reload del dock y de sus ventanas privadas, incluido el preview de Drop media; `Settings` abre la configuracion. Debajo de un separador, `Organize Project` y `Clean Project` actuan sobre el proyecto completo con botones de icono y tooltip.
 - Click en proyecto lo abre; click en secuencia la abre en timeline (cross-project) preservando ajustes de viewer y dejando apagado el Frame Number del ViewerTL.
 - Boton `Update`: aparece al lado de proyectos abiertos cuando existe version mas nueva en disco y permite actualizar automaticamente.
 
@@ -22,7 +22,7 @@
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_ProjectMediaPreview.py` - Clase `ProjectMediaPreviewDialog` y `_TimelineCell`: selector de track y estrategia de inserción, con una tabla gráfica de clips antes, en y después del playhead, con color real de BinItem, playhead visible y proyección de la media nueva, sin mutar el timeline.
 - `LGA_NKS_Shared/LGA_NKS_Timeline_PreCleanup.py` - `main()`, `remove_nukevfx_tracks()`, `extend_burnin_to_last_visible()`. Limpieza compartida de timeline para ViewerTL y Projects Panel.
 - `LGA_NKS_Shared/LGA_NKS_ScrollTo_TopTrack.py` - `main()`, `obtener_limites_scrollbar()`, `scroll_to_position()`. Scroll vertical al top track, integrado al log del panel cuando se usa desde Projects Panel. Busca primero el scrollbar por contenedor (`qt_scrollarea_vcontainer`) validando su rango negativo; el camino por indices de Nuke 15 queda de respaldo porque puede devolver otro `QScrollBar` sin tirar error.
-- `LGA_NKS_Projects_Panel_py/LGA_NKS_Projects_Panel_Smart_Reload.py` - `main()` recarga y redockea el panel.
+- `LGA_NKS_Projects_Panel_py/LGA_NKS_Projects_Panel_Smart_Reload.py` - `main()` recarga y redockea el panel, y reimporta sus módulos privados antes de crear el dock para que las ventanas auxiliares —incluido `ProjectMediaPreviewDialog`— no conserven clases viejas.
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_OrganizeProject.py` - `OrganizeProject.organize_project()` y `main()` reorganizan los clips en bins derivados de la ruta de media.
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_CleanProject.py` - `cleanAllUnusedClips()`, `cleanOfflineVersions()` y `main()` limpian BinItems sin uso y versiones offline.
 - `LGA_NKS_Projects_Panel.ini` - Configuracion. Solo queda `[General] AutoRefreshInterval` para los re-escaneos periodicos; la seccion `[Colors]` se elimino.
@@ -64,7 +64,7 @@
 - En el cambio de secuencia se ejecuta un pre-cleanup sobre el timeline nuevo antes de los ajustes finales de UI: elimina tracks NukeVFX y extiende BurnIn hasta el ultimo clip visible.
 - Al final de cada cambio de secuencia, `disable_frame_number_on_active_sequence()` busca `Frame_Only` en el track `BurnIn` de la secuencia activa y lo deshabilita si estaba activo. No llama al toggle de posicionamiento, por lo que no crea el efecto ni lo enciende por accidente.
 - Contadores: etiqueta inferior muestra totales de proyectos encontrados y abiertos.
-- Reload Panel: ejecuta el smart reload externo para probar cambios sin reiniciar Hiero. Su tooltip dice `Recargar panel`; el mecanismo interno no forma parte del nombre visible.
+- Reload Panel: ejecuta el smart reload externo para probar cambios sin reiniciar Hiero. Antes de recrear el dock reimporta sus dependencias privadas, incluido el diálogo de preview de Drop media, para que el siguiente popup use el código actual. Su tooltip dice `Recargar panel`; el mecanismo interno no forma parte del nombre visible.
 - Acciones de proyecto: los iconos debajo del separador llaman `ProjectsPanel.organize_project()` y `ProjectsPanel.clean_project()`. El loader comun `_run_project_tool()` valida ruta, loader y `main()` antes de ejecutar, y avisa si falla.
 
 ## Logging y debug

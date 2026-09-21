@@ -289,7 +289,7 @@ Project browser and sequence switcher built around the studio's project structur
 - **Close project (×)**  
   Appears when hovering an open project. Asks before discarding unsaved changes, and jumps to another open project if the closed one was active.
 - **Refresh** — Bold circular-arrow icon. Re-scans projects.
-- **Reload Panel** — Solid two-arrow icon. Reloads and re-docks the panel using the external smart-reload script.
+- **Reload Panel** — Solid two-arrow icon. Reloads and re-docks the panel together with its private windows, including the Drop media preview.
 - **Settings** — Gear icon. Opens the panel configuration.
 - **Organize Project** — Folder-with-arrow icon in the right rail. Organizes clips into bins based on their file path; its original Spanish tooltip is preserved.
 - **Clean Project** — Trash icon in the right rail. Removes unused clips from the project; its original Spanish tooltip is preserved.

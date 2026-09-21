@@ -1,12 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel_Smart_Reload v2.23 | Lega
+  LGA_NKS_Projects_Panel_Smart_Reload v2.24 | Lega
 
   Script para recarga inteligente del panel Projects
   Destruye el panel actual, crea uno nuevo y lo dockea automáticamente
   usando el método nativo de Hiero wm.showWindow().
 
+  v2.24: Recarga las ventanas privadas junto al panel, incluido
+         ProjectMediaPreview; sin ese modulo, Drop media conservaba la clase
+         anterior despues de Reload Panel.
   v2.23: Recarga tambien LGA_NKS_TimelineMemory. No estaba en la lista y un
          reimport dejaba corriendo la version vieja del modulo.
   v2.22: Migrado al logger compartido del Projects Panel y removidos prints directos de análisis y resultado
@@ -308,10 +311,17 @@ def create_new_panel_anyway(wm):
         # 🔄 RECARGAR MÓDULOS DEPENDIENTES ANTES DE EXEC_MODULE
         debug_print("🔄 Recargando módulos dependientes...")
         modules_to_reload = [
+            # Estos módulos se importan directamente en el panel: recargarlos
+            # antes garantiza que sus diálogos y logs salgan de esta pasada.
+            'LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectsPanel_Logging',
             'LGA_NKS_Projects_Panel_py.LGA_Projects_Panel_ScanProjects',
             # Antes que el switch y el panel, que lo importan: sin esto un
             # reimport sigue corriendo la version vieja de la memoria.
             'LGA_NKS_Projects_Panel_py.LGA_NKS_TimelineMemory',
+            # El panel importa la clase directamente. Si no se recarga antes de
+            # exec_module(), el siguiente Drop media abre el dialogo viejo.
+            'LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectMediaPreview',
+            'LGA_NKS_Projects_Panel_py.LGA_NKS_TrackNames_Section',
             'LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectItem',
             'LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectHandler',
             'LGA_NKS_Projects_Panel_py.LGA_NKS_ScanManager',

@@ -12,6 +12,11 @@ PREVIEW_PATH = (
     / "LGA_NKS_Projects_Panel_py"
     / "LGA_NKS_ProjectMediaPreview.py"
 )
+SMART_RELOAD_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "LGA_NKS_Projects_Panel_py"
+    / "LGA_NKS_Projects_Panel_Smart_Reload.py"
+)
 
 
 def _load_static_method(name, namespace):
@@ -401,6 +406,18 @@ class ProjectsPanelMediaDropTests(unittest.TestCase):
         self.assertEqual([], active_sequence_calls)
         self.assertIn("_analyze_media_insert", confirm_source)
         self.assertIn("_import_media_at", confirm_source)
+
+    def test_reload_panel_reimports_the_media_preview_before_creating_the_dock(self):
+        source = SMART_RELOAD_PATH.read_text(encoding="utf-8-sig")
+        exec_index = source.index("spec.loader.exec_module(panel_module)")
+        for module_name in (
+            "LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectsPanel_Logging",
+            "LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectMediaPreview",
+            "LGA_NKS_Projects_Panel_py.LGA_NKS_TrackNames_Section",
+        ):
+            self.assertIn(module_name, source)
+            self.assertLess(source.index(module_name), exec_index)
+        self.assertIn("importlib.reload(sys.modules[module_name])", source)
 
     def test_ripple_uses_a_cancellable_undo_after_media_is_validated(self):
         source = PANEL_PATH.read_text(encoding="utf-8-sig")
