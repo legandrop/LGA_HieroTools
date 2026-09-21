@@ -27,6 +27,29 @@ def _load_static_method(name, namespace):
     return namespace[name]
 
 
+def _load_panel_methods(names, namespace):
+    tree = ast.parse(PANEL_PATH.read_text(encoding="utf-8-sig"))
+    panel_class = next(
+        node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "ProjectsPanel"
+    )
+    selected = [
+        copy.deepcopy(node)
+        for node in panel_class.body
+        if isinstance(node, ast.FunctionDef) and node.name in names
+    ]
+    panel = ast.ClassDef(
+        name="ProjectsPanel",
+        bases=[],
+        keywords=[],
+        body=selected or [ast.Pass()],
+        decorator_list=[],
+    )
+    module = ast.Module(body=[panel], type_ignores=[])
+    ast.fix_missing_locations(module)
+    exec(compile(module, str(PANEL_PATH), "exec"), namespace)
+    return namespace["ProjectsPanel"]
+
+
 class _FakeUrl:
     def __init__(self, path, local=True):
         self.path = path
@@ -82,6 +105,55 @@ class _FakeClip:
         return self.source
 
 
+class _FakeEffect:
+    pass
+
+
+class _FakeTrackItem:
+    def __init__(self, first, last):
+        self.first = first
+        self.last = last
+
+    def timelineIn(self):
+        return self.first
+
+    def timelineOut(self):
+        return self.last
+
+
+class _FakeTrack:
+    def __init__(self, name, items):
+        self.track_name = name
+        self.track_items = items
+
+    def name(self):
+        return self.track_name
+
+    def items(self):
+        return self.track_items
+
+
+class _FakeLinkedTrackItem:
+    def __init__(self, guid, linked=None, copyable=True):
+        self.item_guid = guid
+        self.links = linked or []
+        self.track = object()
+        if not copyable:
+            self.copy = None
+
+    def guid(self):
+        return self.item_guid
+
+    def linkedItems(self):
+        return self.links
+
+    def parentTrack(self):
+        return self.track
+
+    def copy(self):
+        return self
+
+
 class ProjectsPanelMediaDropTests(unittest.TestCase):
     def setUp(self):
         namespace = {
@@ -132,6 +204,76 @@ class ProjectsPanelMediaDropTests(unittest.TestCase):
             and node.func.attr == "rescan"
         ]
         self.assertEqual([], rescan_calls)
+
+    def test_gap_accepts_a_playhead_in_the_middle_of_a_long_enough_gap(self):
+        fake_hiero = type(
+            "FakeHiero",
+            (),
+            {"core": type("FakeCore", (), {"EffectTrackItem": _FakeEffect})},
+        )
+        panel = _load_panel_methods(
+            {"_real_track_items", "_track_has_free_interval"},
+            {"hiero": fake_hiero},
+        )
+        track = _FakeTrack(
+            "Edit",
+            [_FakeTrackItem(0, 99), _FakeTrackItem(200, 299)],
+        )
+        self.assertTrue(panel._track_has_free_interval(track, 120, 80))
+        self.assertFalse(panel._track_has_free_interval(track, 120, 81))
+        self.assertFalse(panel._track_has_free_interval(track, 50, 10))
+
+    def test_ripple_contract_includes_audio_and_excludes_burnin(self):
+        source = PANEL_PATH.read_text(encoding="utf-8-sig")
+        tree = ast.parse(source)
+        panel_class = next(
+            node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "ProjectsPanel"
+        )
+        all_tracks = next(
+            node
+            for node in panel_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_all_edit_tracks"
+        )
+        calls = [
+            node.func.attr
+            for node in ast.walk(all_tracks)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        ]
+        self.assertIn("videoTracks", calls)
+        self.assertIn("audioTracks", calls)
+        self.assertIn("_is_burnin_track", calls)
+
+    def test_split_rejects_partial_link_and_accepts_a_complete_link_pair(self):
+        panel = _load_panel_methods({"_split_link_error"}, {})
+        video = _FakeLinkedTrackItem("video")
+        audio = _FakeLinkedTrackItem("audio")
+        video.links = [audio]
+        audio.links = [video]
+        self.assertIsNone(panel._split_link_error([video, audio]))
+        self.assertIn("does not cross", panel._split_link_error([video]))
+
+    def test_ripple_uses_a_cancellable_undo_after_media_is_validated(self):
+        source = PANEL_PATH.read_text(encoding="utf-8-sig")
+        tree = ast.parse(source)
+        panel_class = next(
+            node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "ProjectsPanel"
+        )
+        import_method = next(
+            node
+            for node in panel_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_import_media_at"
+        )
+        calls = [
+            node.func.attr
+            for node in ast.walk(import_method)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        ]
+        self.assertIn("cancelUndo", calls)
+        method_source = ast.get_source_segment(source, import_method)
+        self.assertLess(
+            method_source.index("hiero.core.Clip"),
+            method_source.index("project.beginUndo"),
+        )
 
 
 if __name__ == "__main__":

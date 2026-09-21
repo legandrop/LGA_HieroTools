@@ -19,6 +19,7 @@
 - `LGA_NKS_Projects_Panel_py/LGA_Projects_Panel_ScanProjects.py` - `scan_projects_on_disk()`, `obtener_clave_proyecto()`, `_clave_agrupacion_proyecto()`, `_agrupar_hrox_por_proyecto()`, `_elegir_version_mas_alta()`, `is_path_under_root()`, `get_open_projects_info(base_path)`, `is_project_open()`, `get_project_sequences()`, `get_projects_with_newer_versions()`.
 - `LGA_NKS_Projects_Panel_py/LGA_Projects_Panel_SwitchSequence.py` - `switch_to_sequence_hybrid()` (V3 hibrida: preserva gain/gamma/saturation/playhead, optimiza UI, hace pre-cleanup del timeline nuevo, apaga `Frame_Only`, funciona cross-project y registra diagnostico post-event-loop de viewers/timelines). **Cierra el viewer+timeline viejos ANTES de abrir la secuencia nueva** (`CLOSE_BEFORE_OPEN`): al reves, la destruccion compite con el IO de la media recien abierta y el switch tarda entre 4 y 15 segundos en vez de menos de uno. Por eso el playhead se captura y restaura a mano, con `_get_current_playhead()` / `_restore_playhead()`. Detalle en `LGA_Projects_Panel_SwitchSequence_README.md`. `disable_frame_number_on_active_sequence()` desactiva el Frame Number del ViewerTL sin crearlo ni reposicionarlo.
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_ProjectsPanel_Logging.py` - Helper compartido de logging para todo el flujo del panel.
+- `LGA_NKS_Projects_Panel_py/LGA_NKS_ProjectMediaPreview.py` - Clase `ProjectMediaPreviewDialog`: selector de track y estrategia de inserción, sin mutar el timeline.
 - `LGA_NKS_Shared/LGA_NKS_Timeline_PreCleanup.py` - `main()`, `remove_nukevfx_tracks()`, `extend_burnin_to_last_visible()`. Limpieza compartida de timeline para ViewerTL y Projects Panel.
 - `LGA_NKS_Shared/LGA_NKS_ScrollTo_TopTrack.py` - `main()`, `obtener_limites_scrollbar()`, `scroll_to_position()`. Scroll vertical al top track, integrado al log del panel cuando se usa desde Projects Panel. Busca primero el scrollbar por contenedor (`qt_scrollarea_vcontainer`) validando su rango negativo; el camino por indices de Nuke 15 queda de respaldo porque puede devolver otro `QScrollBar` sin tirar error.
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_Projects_Panel_Smart_Reload.py` - `main()` recarga y redockea el panel.
@@ -93,24 +94,39 @@
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel_py\LGA_NKS_UIManager.py`: `setup_ui()`, `_add_project_action_button()`, `setup_connections()`, `eventFilter()`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel_py\LGA_NKS_OrganizeProject.py`: `OrganizeProject`, `main()`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel_py\LGA_NKS_CleanProject.py`: `cleanAllUnusedClips()`, `cleanOfflineVersions()`, `main()`.
+- `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel_py\LGA_NKS_ProjectMediaPreview.py`: `ProjectMediaPreviewDialog`, actualización visual de estrategia, track y plan antes del Undo.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_ViewerTL_Panel_py\LGA_NKS_FrameNumber.py`: `find_frame_only_effect()`, `print_box_values()`.
 
 ## UI del panel
 - Titulo centrado `Projects`.
-- **Drop media (primer paso):** al arrastrar un único archivo local `.mp4`,
-  `.mov`, `.mxf`, `.jpg`, `.png` o `.exr` aparece un borde punteado. Al
-  soltarlo, el panel lo importa en el bin raíz del proyecto de la secuencia
-  activa y lo coloca en el track de video seleccionado desde el playhead.
-  Hiero recibe directamente el frame arrastrado y detecta de forma nativa las
-  secuencias JPG, PNG y EXR al crear el Clip; no se llama `rescan()` porque
-  esa API crea una entrada Undo separada. El log registra el rango y duración
-  detectados.
-  Esta primera etapa solo procede si ese track no tiene clips que lleguen al
-  playhead ni clips a su derecha; si no hay secuencia, track o playhead, o si
-  hay una colisión, muestra el motivo y no modifica el proyecto. Carpetas,
-  múltiples archivos, elección de track y corrimiento de clips quedan para el
-  preview de la segunda etapa. La mutación se agrupa en un único Undo
-  `Import media: <nombre>` y el clip nuevo queda seleccionado.
+- **Drop media:** al arrastrar un único archivo local `.mp4`, `.mov`, `.mxf`,
+  `.jpg`, `.png` o `.exr` aparece un borde punteado. Hiero recibe directamente
+  el frame arrastrado y detecta de forma nativa las secuencias JPG, PNG y EXR
+  al crear el `Clip`; no se llama `rescan()` porque esa API crea una entrada
+  Undo separada. El log registra el rango y duración detectados.
+  - Si el track de video seleccionado tiene libre todo el intervalo
+    `[playhead, playhead + duración - 1]`, se importa de inmediato. Esto admite
+    correctamente un playhead en medio de un hueco: no rechaza un clip posterior
+    si el hueco alcanza.
+  - Sin track seleccionado, o si no entra, abre `ProjectMediaPreviewDialog`.
+    El diálogo conserva la identidad del track aunque haya nombres duplicados y
+    permite: elegir otro hueco, insertar al final sin mover clips, o insertar en
+    el playhead con ripple. Recalcula el plan al confirmar y cancela si cambió
+    la secuencia activa o el estado dejó de ser válido; el preview nunca ejecuta
+    una decisión vieja.
+  - El ripple parte primero cada clip de video o audio que cruza el playhead,
+    recompone los enlaces entre las mitades derechas y desplaza todos los clips
+    posteriores de todos los tracks de video y audio. Si un enlace no puede
+    conservarse, bloquea el ripple antes de mutar. El track `BurnIn` queda fuera
+    del movimiento: sus soft effects se extienden al último clip visible con el
+    helper ya probado de Import Shot. Los efectos independientes no-BurnIn que
+    cruzan el playhead bloquean ese camino para no cortar un efecto sin política
+    explícita.
+  - Importar bin, split, movimiento, colocación y extensión de BurnIn quedan en
+    un único Undo `Import media: <nombre>`; si falla cualquier paso, se cancela
+    el grupo en vez de cerrar un montaje parcialmente desplazado. Al final queda
+    seleccionado el clip nuevo. Carpetas y drops de múltiples archivos siguen
+    rechazados.
 - Toolbar derecha: `Refresh`, `Reload Panel` (opcional), `Settings`; separador; `Organize Project` (carpeta con flecha) y `Clean Project` (papelera). Refresh usa la silueta bold derivada del asset de PipeSync y Reload Panel la opcion aprobada de dos flechas llenas. Los cinco botones conservan una caja de icono comun de 20 px; el aire interno se corrige en los `viewBox` de Refresh y Reload para igualar su tamano optico sin cambiar alineacion ni area clickeable. Todos los tooltips salen del diccionario `TOOLTIPS` y el panel instala `Style.TOOLTIP`, la misma hoja compartida que usan las otras interfaces del pack.
 - Lista con scroll: proyectos cerrados/abiertos y boton `Update` cuando corresponde.
 - Etiqueta inferior con resumen de conteos.

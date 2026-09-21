@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.41 | Lega
+  LGA_NKS_Projects_Panel v2.42 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,9 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.42: El drop analiza el hueco real desde el playhead. Si no cabe, abre un
+         preview para elegir track y colocar en el hueco, insertar con ripple
+         global o importar al final; el ripple excluye BurnIn y lo extiende.
   v2.41: El drop acepta MOV, MXF, JPG, PNG y EXR ademas de MP4. Para las
          imagenes, Hiero detecta automaticamente si el archivo representa una
          secuencia; el log deja el rango detectado para diagnosticarlo.
@@ -122,6 +125,10 @@ from LGA_NKS_Shared.LGA_NKS_Project_Colors_Config import (
 )
 from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning, ask_save_discard_cancel
 from LGA_NKS_Projects_Panel_py import LGA_NKS_TimelineMemory as timeline_memory
+from LGA_NKS_Edit_Panel_py import LGA_import_shots_timeline as timeline_mod
+from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectMediaPreview import (
+    ProjectMediaPreviewDialog,
+)
 from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectsPanel_Logging import (
     DEBUG,
     DEBUG_CONSOLE,
@@ -641,17 +648,276 @@ class ProjectsPanel(QtWidgets.QWidget):
         return None
 
     @staticmethod
-    def _track_has_media_from(track, frame):
-        """True si el track contiene un clip que llega al playhead o sigue despues."""
-        for item in track.items():
-            if isinstance(item, hiero.core.EffectTrackItem):
+    def _is_burnin_track(track):
+        """Identifica BurnIn sin depender de la instancia concreta del track."""
+        try:
+            return track.name().lower().strip().replace(" ", "").replace("_", "") == "burnin"
+        except Exception:
+            return False
+
+    @staticmethod
+    def _real_track_items(track):
+        """TrackItems reales; los EffectTrackItems se leen por subtrack aparte."""
+        try:
+            return [
+                item
+                for item in list(track.items() or [])
+                if not isinstance(item, hiero.core.EffectTrackItem)
+            ]
+        except Exception:
+            return []
+
+    @staticmethod
+    def _effect_track_items(track):
+        """Soft effects de subtracks, sin confundirlos con clips reales."""
+        effects = []
+        try:
+            for group in list(track.subTrackItems() or []):
+                effects.extend(
+                    item
+                    for item in list(group or [])
+                    if isinstance(item, hiero.core.EffectTrackItem)
+                )
+        except Exception:
+            pass
+        return effects
+
+    @classmethod
+    def _all_edit_tracks(cls, sequence):
+        """Video y audio editables, excluyendo el overlay de BurnIn."""
+        tracks = []
+        for collection in (sequence.videoTracks(), sequence.audioTracks()):
+            for track in list(collection or []):
+                if not cls._is_burnin_track(track):
+                    tracks.append(track)
+        return tracks
+
+    @classmethod
+    def _track_entries_for_preview(cls, sequence):
+        """Tracks de video con etiqueta unica aunque Hiero repita nombres."""
+        entries = []
+        video_tracks = list(sequence.videoTracks() or [])
+        occurrences = {}
+        for index, track in enumerate(video_tracks):
+            if cls._is_burnin_track(track):
                 continue
             try:
-                if int(item.timelineOut()) >= frame:
-                    return True
+                name = track.name()
             except Exception:
+                name = "Video track"
+            occurrences[name] = occurrences.get(name, 0) + 1
+            entries.append({"track": track, "name": name, "index": index})
+
+        totals = {}
+        for entry in entries:
+            totals[entry["name"]] = totals.get(entry["name"], 0) + 1
+        seen = {}
+        for entry in entries:
+            name = entry["name"]
+            seen[name] = seen.get(name, 0) + 1
+            suffix = " (%d)" % seen[name] if totals[name] > 1 else ""
+            entry["label"] = "%s%s" % (name, suffix)
+        return list(reversed(entries))
+
+    @classmethod
+    def _audio_entries_for_preview(cls, sequence):
+        """Tracks de audio solo para explicar el alcance del ripple."""
+        entries = []
+        audio_tracks = list(sequence.audioTracks() or [])
+        totals = {}
+        for track in audio_tracks:
+            if cls._is_burnin_track(track):
                 continue
-        return False
+            try:
+                name = track.name()
+            except Exception:
+                name = "Audio track"
+            totals[name] = totals.get(name, 0) + 1
+            entries.append({"track": track, "name": name})
+        seen = {}
+        for entry in entries:
+            name = entry["name"]
+            seen[name] = seen.get(name, 0) + 1
+            suffix = " (%d)" % seen[name] if totals[name] > 1 else ""
+            entry["label"] = "Audio · %s%s" % (name, suffix)
+        return list(reversed(entries))
+
+    @classmethod
+    def _track_has_free_interval(cls, track, first_frame, duration):
+        """True si [first_frame, first_frame + duration - 1] no pisa un clip."""
+        last_frame = first_frame + duration - 1
+        for item in cls._real_track_items(track):
+            try:
+                if int(item.timelineIn()) <= last_frame and int(item.timelineOut()) >= first_frame:
+                    return False
+            except Exception:
+                return False
+        return True
+
+    @classmethod
+    def _last_timeline_frame(cls, sequence):
+        """Ultimo frame de clips reales de video y audio, sin contar BurnIn."""
+        last_frame = None
+        for track in cls._all_edit_tracks(sequence):
+            for item in cls._real_track_items(track):
+                try:
+                    value = int(item.timelineOut())
+                except Exception:
+                    continue
+                last_frame = value if last_frame is None else max(last_frame, value)
+        return last_frame
+
+    @classmethod
+    def _ripple_obstacles(cls, sequence, playhead):
+        """Items que requieren split o que no se puede mover con seguridad."""
+        split_items = []
+        effect_obstacles = []
+        for track in cls._all_edit_tracks(sequence):
+            for item in cls._real_track_items(track):
+                try:
+                    if int(item.timelineIn()) < playhead <= int(item.timelineOut()):
+                        split_items.append(item)
+                except Exception:
+                    effect_obstacles.append("unreadable clip")
+            for effect in cls._effect_track_items(track):
+                try:
+                    effect_in = int(effect.timelineIn())
+                    effect_out = int(effect.timelineOut())
+                except Exception:
+                    effect_obstacles.append("unreadable soft effect")
+                    continue
+                if effect_in < playhead <= effect_out:
+                    effect_obstacles.append("soft effect crossing playhead")
+        return split_items, effect_obstacles
+
+    @staticmethod
+    def _split_link_error(split_items):
+        """Valida que las copias derechas puedan conservar cada enlace original."""
+        split_by_guid = {}
+        for item in split_items:
+            try:
+                if item.parentTrack() is None or not callable(getattr(item, "copy", None)):
+                    return "A clip crossing the playhead cannot be copied safely."
+                split_by_guid[item.guid()] = item
+            except Exception:
+                return "Couldn't inspect a clip crossing the playhead."
+        for item in split_items:
+            try:
+                linked_items = list(item.linkedItems() or [])
+            except Exception:
+                return "Couldn't inspect links before splitting clips."
+            for linked_item in linked_items:
+                try:
+                    if linked_item.guid() not in split_by_guid:
+                        return "A linked clip does not cross the playhead. Choose timeline end or another track."
+                except Exception:
+                    return "Couldn't inspect a linked clip before splitting."
+        return None
+
+    @classmethod
+    def _preview_timeline_rows(cls, sequence, target_track, playhead, duration, mode):
+        """Construye la vista compacta de antes / insercion / despues."""
+        rows = []
+        preview_entries = cls._track_entries_for_preview(sequence)
+        preview_entries.extend(cls._audio_entries_for_preview(sequence))
+        for entry in preview_entries:
+            track = entry["track"]
+            before = after = 0
+            crossing = 0
+            for item in cls._real_track_items(track):
+                try:
+                    item_in = int(item.timelineIn())
+                    item_out = int(item.timelineOut())
+                except Exception:
+                    continue
+                if item_out < playhead:
+                    before += 1
+                elif item_in >= playhead:
+                    after += 1
+                else:
+                    crossing += 1
+            if mode == "end":
+                at_playhead = "No change"
+                after_text = "%d clip(s) unchanged" % (before + after + crossing)
+            elif track is target_track:
+                at_playhead = "New media · %d f" % duration
+                after_text = "%d clip(s) shift" % after if mode == "ripple" else "%d clip(s)" % after
+            elif mode == "ripple":
+                at_playhead = "%d split" % crossing if crossing else "Gap"
+                after_text = "%d clip(s) shift" % after
+            else:
+                at_playhead = "Unchanged"
+                after_text = "%d clip(s)" % after
+            rows.append(
+                {
+                    "track": entry["label"],
+                    "before": "%d clip(s)" % before,
+                    "at_playhead": at_playhead,
+                    "after": after_text,
+                }
+            )
+        return rows
+
+    def _analyze_media_insert(self, sequence, target_track, playhead, duration, mode):
+        """Plan puro de UI; se vuelve a calcular inmediatamente antes del Undo."""
+        rows = self._preview_timeline_rows(
+            sequence, target_track, playhead, duration, mode
+        )
+        if mode == "gap":
+            if self._track_has_free_interval(target_track, playhead, duration):
+                return {
+                    "valid": True,
+                    "message": "The media fits in the selected gap. No clips will move.",
+                    "action_label": "Import media",
+                    "rows": rows,
+                }
+            return {
+                "valid": False,
+                "message": "The selected gap is too short. Choose ripple, another track, or timeline end.",
+                "action_label": "Import media",
+                "rows": rows,
+            }
+
+        if mode == "end":
+            end_frame = self._last_timeline_frame(sequence)
+            insert_frame = 0 if end_frame is None else end_frame + 1
+            return {
+                "valid": True,
+                "message": "The media will start at frame %d. No clips will move." % insert_frame,
+                "action_label": "Import at timeline end",
+                "rows": rows,
+            }
+
+        split_items, effect_obstacles = self._ripple_obstacles(sequence, playhead)
+        if effect_obstacles:
+            return {
+                "valid": False,
+                "message": "Ripple is unavailable because a non-BurnIn soft effect crosses the playhead.",
+                "action_label": "Import and shift timeline",
+                "rows": rows,
+            }
+        split_link_error = self._split_link_error(split_items)
+        if split_link_error:
+            return {
+                "valid": False,
+                "message": split_link_error,
+                "action_label": "Import and shift timeline",
+                "rows": rows,
+            }
+        if not hasattr(hiero.core.TrackItem, "moveTrackItems"):
+            return {
+                "valid": False,
+                "message": "This Nuke Studio version cannot safely move all timeline clips together.",
+                "action_label": "Import and shift timeline",
+                "rows": rows,
+            }
+        return {
+            "valid": True,
+            "message": "The media will start at the playhead. %d crossing clip(s) will split and every later video and audio clip will shift %d frames. BurnIn will extend over the new end."
+            % (len(split_items), duration),
+            "action_label": "Import and shift timeline",
+            "rows": rows,
+        }
 
     def _warn_drop_import(self, text):
         debug_print("[Drop media] %s" % text, level="warning")
@@ -704,8 +970,215 @@ class ProjectsPanel(QtWidgets.QWidget):
             )
         return kind
 
+    def _import_media_at(self, sequence, timeline_editor, target_track, media_path, playhead, duration, mode):
+        """Ejecuta un plan ya revalidado dentro de un unico Undo de proyecto."""
+        extension = os.path.splitext(media_path)[1].lower()
+        clip_name = os.path.splitext(os.path.basename(media_path))[0]
+        project = sequence.project()
+        if project is None:
+            raise RuntimeError("Couldn't resolve the project for the active timeline.")
+
+        if mode == "end":
+            end_frame = self._last_timeline_frame(sequence)
+            insert_frame = 0 if end_frame is None else end_frame + 1
+        else:
+            insert_frame = playhead
+
+        # Crear y validar la media ANTES de tocar el timeline. Si esto falla,
+        # no hay split, movimiento ni BinItem que cancelar.
+        clip = hiero.core.Clip(str(media_path))
+        clip.setName(clip_name)
+        actual_duration = int(clip.mediaSource().duration())
+        if actual_duration != duration or actual_duration <= 0:
+            raise RuntimeError("The media duration changed before it was imported.")
+        if mode == "ripple":
+            split_items, effect_obstacles = self._ripple_obstacles(sequence, playhead)
+            split_link_error = self._split_link_error(split_items)
+            if effect_obstacles or split_link_error:
+                raise RuntimeError("The timeline changed and can no longer ripple safely.")
+
+        project.beginUndo("Import media: %s" % clip_name)
+        try:
+            project.clipsBin().addItem(hiero.core.BinItem(clip))
+            if mode == "ripple":
+                self._split_crossing_clips(sequence, playhead)
+                self._move_timeline_after_playhead(sequence, playhead, duration)
+
+            # No llamar clip.rescan(): crea otra entrada Undo aunque este dentro
+            # de beginUndo. Clip() detecta secuencias desde cualquier frame.
+            media_kind = self._log_detected_drop_media(clip, extension, media_path)
+
+            track_item = target_track.addTrackItem(clip, insert_frame)
+            track_item.setName(clip_name)
+            track_item.setTimes(
+                insert_frame,
+                insert_frame + duration - 1,
+                0,
+                duration - 1,
+            )
+            track_item.setVersionLinkedToBin(True)
+
+            if mode == "ripple":
+                timeline_mod.set_debug_print(debug_print)
+                timeline_mod.stretch_burnin(sequence)
+        except Exception:
+            # cancelUndo revierte el grupo abierto; endUndo solamente lo cierra
+            # y dejaria un ripple parcial si falla una operacion posterior.
+            try:
+                project.cancelUndo()
+            except Exception as cancel_exc:
+                debug_print(
+                    "[Drop media] No se pudo cancelar el Undo tras un fallo: %s"
+                    % cancel_exc,
+                    level="error",
+                )
+            raise
+        else:
+            project.endUndo()
+
+        timeline_editor.setSelection([track_item])
+        debug_print(
+            "[Drop media] %s importado '%s' | modo=%s | track='%s' | tl=%d-%d"
+            % (
+                media_kind,
+                media_path,
+                mode,
+                target_track.name(),
+                insert_frame,
+                insert_frame + duration - 1,
+            )
+        )
+
+    @classmethod
+    def _split_crossing_clips(cls, sequence, playhead):
+        """Parte todos los clips que cruzan el playhead antes del ripple global."""
+        split_items, effect_obstacles = cls._ripple_obstacles(sequence, playhead)
+        if effect_obstacles:
+            raise RuntimeError("A non-BurnIn soft effect crosses the playhead.")
+        split_link_error = cls._split_link_error(split_items)
+        if split_link_error:
+            raise RuntimeError(split_link_error)
+        split_by_guid = {}
+        for item in split_items:
+            try:
+                guid = item.guid()
+                links = list(item.linkedItems() or [])
+            except Exception as exc:
+                raise RuntimeError("Couldn't inspect links before splitting: %s" % exc)
+            split_by_guid[guid] = {"item": item, "links": links}
+
+        for guid, split_data in split_by_guid.items():
+            for linked_item in split_data["links"]:
+                try:
+                    linked_guid = linked_item.guid()
+                except Exception as exc:
+                    raise RuntimeError("Couldn't inspect a linked clip: %s" % exc)
+                if linked_guid not in split_by_guid:
+                    raise RuntimeError(
+                        "A linked clip does not cross the playhead; ripple was cancelled to preserve its link."
+                    )
+
+        for item in split_items:
+            track = item.parentTrack()
+            if track is None or not callable(getattr(item, "copy", None)):
+                raise RuntimeError("Couldn't split a clip that crosses the playhead.")
+            old_in = int(item.timelineIn())
+            old_out = int(item.timelineOut())
+            if not old_in < playhead <= old_out:
+                continue
+            right_item = item.copy()
+            item.setTimelineOut(playhead - 1)
+            right_item.setTimelineIn(playhead)
+            track.addTrackItem(right_item)
+            split_by_guid[item.guid()]["right_item"] = right_item
+            debug_print(
+                "[Drop media] Split '%s' at %d | %d-%d"
+                % (item.name(), playhead, old_in, old_out)
+            )
+
+        linked_pairs = set()
+        for guid, split_data in split_by_guid.items():
+            right_item = split_data["right_item"]
+            for linked_item in split_data["links"]:
+                linked_guid = linked_item.guid()
+                pair_key = tuple(sorted((guid, linked_guid)))
+                if pair_key in linked_pairs:
+                    continue
+                right_item.link(split_by_guid[linked_guid]["right_item"])
+                linked_pairs.add(pair_key)
+
+    @classmethod
+    def _move_timeline_after_playhead(cls, sequence, playhead, duration):
+        """Desplaza clips de todos los tracks y efectos independientes seguros."""
+        clips_to_move = []
+        independent_effects = []
+        for track in cls._all_edit_tracks(sequence):
+            for item in cls._real_track_items(track):
+                if int(item.timelineIn()) >= playhead:
+                    clips_to_move.append(item)
+            for effect in cls._effect_track_items(track):
+                try:
+                    linked_items = list(effect.linkedItems() or [])
+                    effect_in = int(effect.timelineIn())
+                except Exception as exc:
+                    raise RuntimeError("Couldn't inspect a timeline soft effect: %s" % exc)
+                if not linked_items and effect_in >= playhead:
+                    independent_effects.append(effect)
+
+        if clips_to_move:
+            hiero.core.TrackItem.moveTrackItems(clips_to_move, duration)
+        for effect in independent_effects:
+            effect.move(duration)
+        debug_print(
+            "[Drop media] Ripple %d frames | clips=%d | efectos independientes=%d"
+            % (duration, len(clips_to_move), len(independent_effects))
+        )
+
+    def _show_media_insert_preview(
+        self, sequence, timeline_editor, media_path, playhead, duration, selected_track
+    ):
+        """Muestra las opciones y revalida el plan antes de modificar el proyecto."""
+        dialog = ProjectMediaPreviewDialog(
+            os.path.basename(media_path),
+            duration,
+            playhead,
+            self._track_entries_for_preview(sequence),
+            lambda track, mode: self._analyze_media_insert(
+                sequence, track, playhead, duration, mode
+            ),
+            selected_track=selected_track,
+            parent=self,
+        )
+        if dialog.exec() != QtWidgets.QDialog.Accepted or not dialog.result_data:
+            debug_print("[Drop media] Preview cancelado.")
+            return
+        if hiero.ui.activeSequence() is not sequence:
+            self._warn_drop_import("The active timeline changed. Drop the media again.")
+            return
+        target_track = dialog.result_data["track"]
+        mode = dialog.result_data["mode"]
+        debug_print(
+            "[Drop media] Preview confirmado | modo=%s | track='%s' | playhead=%d | duracion=%d"
+            % (mode, target_track.name(), playhead, duration)
+        )
+        plan = self._analyze_media_insert(
+            sequence, target_track, playhead, duration, mode
+        )
+        if not plan.get("valid"):
+            self._warn_drop_import("The timeline changed. Review the updated preview.")
+            return
+        self._import_media_at(
+            sequence,
+            timeline_editor,
+            target_track,
+            media_path,
+            playhead,
+            duration,
+            mode,
+        )
+
     def _import_dropped_media(self, media_path):
-        """Importa media soportada al bin raiz y la coloca desde el playhead."""
+        """Analiza el drop y usa import directo o preview segun el riesgo."""
         if not os.path.isfile(media_path):
             self._warn_drop_import("The dropped media is no longer available.")
             return
@@ -730,58 +1203,43 @@ class ProjectsPanel(QtWidgets.QWidget):
             self._warn_drop_import("Couldn't read the active playhead.")
             return
 
-        target_track = self._selected_video_track(sequence, timeline_editor)
-        if target_track is None:
-            self._warn_drop_import("Select a video track before dropping media.")
-            return
-
-        if self._track_has_media_from(target_track, playhead):
-            self._warn_drop_import(
-                "The selected track has media at or after the playhead. "
-                "This first version only imports into empty space."
-            )
-            return
-
         try:
-            project = sequence.project()
-        except Exception:
-            project = None
-        if project is None:
-            self._warn_drop_import("Couldn't resolve the project for the active timeline.")
-            return
-
-        clip_name = os.path.splitext(os.path.basename(media_path))[0]
-        try:
-            with project.beginUndo("Import media: %s" % clip_name):
-                clip = hiero.core.Clip(str(media_path))
-                clip.setName(clip_name)
-                project.clipsBin().addItem(hiero.core.BinItem(clip))
-                # No llamar clip.rescan(): Hiero crea una entrada Undo propia
-                # aun dentro de beginUndo. Clip() ya detecta una secuencia
-                # desde cualquiera de sus frames, igual que Import Shot.
-                media_kind = self._log_detected_drop_media(
-                    clip, extension, media_path
-                )
-
-                duration = int(clip.mediaSource().duration())
-                if duration <= 0:
-                    raise RuntimeError("Hiero reported an invalid media duration.")
-
-                track_item = target_track.addTrackItem(clip, playhead)
-                track_item.setName(clip_name)
-                track_item.setTimes(playhead, playhead + duration - 1, 0, duration - 1)
-                track_item.setVersionLinkedToBin(True)
-
-            timeline_editor.setSelection([track_item])
+            probe_clip = hiero.core.Clip(str(media_path))
+            duration = int(probe_clip.mediaSource().duration())
+            if duration <= 0:
+                raise RuntimeError("Hiero reported an invalid media duration.")
+            self._log_detected_drop_media(probe_clip, extension, media_path)
+            target_track = self._selected_video_track(sequence, timeline_editor)
             debug_print(
-                "[Drop media] %s importado '%s' | track='%s' | tl=%d-%d"
+                "[Drop media] Contexto | playhead=%d | duracion=%d | track=%s"
                 % (
-                    media_kind,
-                    media_path,
-                    target_track.name(),
                     playhead,
-                    playhead + duration - 1,
+                    duration,
+                    target_track.name() if target_track is not None else "<sin seleccionar>",
                 )
+            )
+            if target_track is not None and self._track_has_free_interval(
+                target_track, playhead, duration
+            ):
+                debug_print("[Drop media] Insercion directa: hueco suficiente.")
+                self._import_media_at(
+                    sequence,
+                    timeline_editor,
+                    target_track,
+                    media_path,
+                    playhead,
+                    duration,
+                    "gap",
+                )
+                return
+            debug_print("[Drop media] Abriendo preview: falta track o el hueco no alcanza.")
+            self._show_media_insert_preview(
+                sequence,
+                timeline_editor,
+                media_path,
+                playhead,
+                duration,
+                target_track,
             )
         except Exception as exc:
             self._warn_drop_import("Couldn't import the media.\n\n%s" % exc)
