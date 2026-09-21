@@ -19,7 +19,7 @@
 - `LGA_NKS_Projects_Panel_py/LGA_Projects_Panel_ScanProjects.py` - `scan_projects_on_disk()`, `obtener_clave_proyecto()`, `_clave_agrupacion_proyecto()`, `_agrupar_hrox_por_proyecto()`, `_elegir_version_mas_alta()`, `is_path_under_root()`, `get_open_projects_info(base_path)`, `is_project_open()`, `get_project_sequences()`, `get_projects_with_newer_versions()`.
 - `LGA_NKS_Projects_Panel_py/LGA_Projects_Panel_SwitchSequence.py` - `switch_to_sequence_hybrid()` (V3 hibrida: preserva gain/gamma/saturation/playhead, optimiza UI, hace pre-cleanup del timeline nuevo, apaga `Frame_Only`, funciona cross-project y registra diagnostico post-event-loop de viewers/timelines). **Cierra el viewer+timeline viejos ANTES de abrir la secuencia nueva** (`CLOSE_BEFORE_OPEN`): al reves, la destruccion compite con el IO de la media recien abierta y el switch tarda entre 4 y 15 segundos en vez de menos de uno. Por eso el playhead se captura y restaura a mano, con `_get_current_playhead()` / `_restore_playhead()`. Detalle en `LGA_Projects_Panel_SwitchSequence_README.md`. `disable_frame_number_on_active_sequence()` desactiva el Frame Number del ViewerTL sin crearlo ni reposicionarlo.
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_ProjectsPanel_Logging.py` - Helper compartido de logging para todo el flujo del panel.
-- `LGA_NKS_Projects_Panel_py/LGA_NKS_ProjectMediaPreview.py` - Clase `ProjectMediaPreviewDialog`: selector de track y estrategia de inserción, sin mutar el timeline.
+- `LGA_NKS_Projects_Panel_py/LGA_NKS_ProjectMediaPreview.py` - Clase `ProjectMediaPreviewDialog` y `_TimelineCell`: selector de track y estrategia de inserción, con una tabla gráfica de clips antes, en y después del playhead, sin mutar el timeline.
 - `LGA_NKS_Shared/LGA_NKS_Timeline_PreCleanup.py` - `main()`, `remove_nukevfx_tracks()`, `extend_burnin_to_last_visible()`. Limpieza compartida de timeline para ViewerTL y Projects Panel.
 - `LGA_NKS_Shared/LGA_NKS_ScrollTo_TopTrack.py` - `main()`, `obtener_limites_scrollbar()`, `scroll_to_position()`. Scroll vertical al top track, integrado al log del panel cuando se usa desde Projects Panel. Busca primero el scrollbar por contenedor (`qt_scrollarea_vcontainer`) validando su rango negativo; el camino por indices de Nuke 15 queda de respaldo porque puede devolver otro `QScrollBar` sin tirar error.
 - `LGA_NKS_Projects_Panel_py/LGA_NKS_Projects_Panel_Smart_Reload.py` - `main()` recarga y redockea el panel.
@@ -108,21 +108,22 @@
     `[playhead, playhead + duración - 1]`, se importa de inmediato. Esto admite
     correctamente un playhead en medio de un hueco: no rechaza un clip posterior
     si el hueco alcanza.
-  - Sin track seleccionado, o si no entra, abre `ProjectMediaPreviewDialog`.
-    El diálogo conserva la identidad del track aunque haya nombres duplicados y
-    permite: elegir otro hueco, insertar al final sin mover clips, o insertar en
-    el playhead con ripple. Recalcula el plan al confirmar y cancela si cambió
-    la secuencia activa o el estado dejó de ser válido; el preview nunca ejecuta
-    una decisión vieja.
-  - El ripple parte primero cada clip de video o audio que cruza el playhead,
-    recompone los enlaces entre las mitades derechas y desplaza todos los clips
-    posteriores de todos los tracks de video y audio. Si un enlace no puede
-    conservarse, bloquea el ripple antes de mutar. El track `BurnIn` queda fuera
-    del movimiento: sus soft effects se extienden al último clip visible con el
-    helper ya probado de Import Shot. Los efectos independientes no-BurnIn que
-    cruzan el playhead bloquean ese camino para no cortar un efecto sin política
-    explícita.
-  - Importar bin, split, movimiento, colocación y extensión de BurnIn quedan en
+  - Sin track seleccionado, o si no entra, abre `ProjectMediaPreviewDialog` con
+    ripple seleccionado de entrada. El diálogo conserva la identidad del track
+    aunque haya nombres duplicados y muestra cada track de video y audio con
+    clips reales a la izquierda, sobre y a la derecha del playhead; el clip nuevo
+    y cualquier desplazamiento se dibujan en su posición prevista. Permite elegir
+    otro hueco, insertar al final sin mover clips, o abrir espacio en el playhead.
+    Recalcula el plan al confirmar y cancela si cambió la secuencia activa; el
+    preview nunca ejecuta una decisión vieja.
+  - El ripple reutiliza sin una variante propia `push_clips_right()` de Import
+    Shot: mueve completos los clips y soft effects de video no-BurnIn cuyo final
+    llega al playhead, de derecha a izquierda, y devuelve el primer frame real
+    donde debe entrar la media. No corta clips ni recompone enlaces. `BurnIn` no
+    se mueve: sus soft effects se extienden al último clip visible con el helper
+    compartido de Import Shot. Los tracks de audio se muestran como contexto en
+    el preview y no se alteran, igual que el contrato de Import Shot.
+  - Importar bin, movimiento, colocación y extensión de BurnIn quedan en
     un único Undo `Import media: <nombre>`; si falla cualquier paso, se cancela
     el grupo en vez de cerrar un montaje parcialmente desplazado. Al final queda
     seleccionado el clip nuevo. Carpetas y drops de múltiples archivos siguen

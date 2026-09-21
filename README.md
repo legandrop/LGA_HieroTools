@@ -280,7 +280,7 @@ opening related Nuke scripts.
 Project browser and sequence switcher built around the studio's project structure and PipeSync storage.
 
 - **Drop media**
-  Drag one local MP4, MOV, MXF, JPG, PNG or EXR over the panel to import it into the active project's root bin. If the selected video track has a long enough gap at the playhead, it is placed immediately. Otherwise an interactive preview lets you choose a video track and place the media in a gap, at the timeline end, or at the playhead with a global ripple. Ripple splits clips that cross the playhead, shifts later video and audio clips, and extends BurnIn over the new timeline end. Hiero detects JPG, PNG and EXR sequences from any dropped frame.
+  Drag one local MP4, MOV, MXF, JPG, PNG or EXR over the panel to import it into the active project's root bin. If the selected video track has a long enough gap at the playhead, it is placed immediately. Otherwise an interactive preview shows every video and audio track around the playhead and lets you choose a gap, timeline end, or a ripple. The ripple uses the same Import Shot helper: it moves complete non-BurnIn video clips and soft effects to open space, places the media at the returned effective frame, and extends BurnIn. Hiero detects JPG, PNG and EXR sequences from any dropped frame.
 
 - **Project list**  
   Scans projects on disk, shows open projects, and lets you switch sequences without losing viewer state. Each timeline remembers its zoom, horizontal scroll and playhead across sessions and project versions, and opening a project goes back to its last timeline.

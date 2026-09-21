@@ -7,6 +7,11 @@ from pathlib import Path
 
 
 PANEL_PATH = Path(__file__).resolve().parents[1] / "LGA_NKS_Projects_Panel.py"
+PREVIEW_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "LGA_NKS_Projects_Panel_py"
+    / "LGA_NKS_ProjectMediaPreview.py"
+)
 
 
 def _load_static_method(name, namespace):
@@ -24,6 +29,26 @@ def _load_static_method(name, namespace):
     function.decorator_list = []
     module = ast.Module(body=[function], type_ignores=[])
     exec(compile(module, str(PANEL_PATH), "exec"), namespace)
+    return namespace[name]
+
+
+def _load_preview_static_method(name, namespace):
+    tree = ast.parse(PREVIEW_PATH.read_text(encoding="utf-8-sig"))
+    preview_class = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "ProjectMediaPreviewDialog"
+    )
+    function = copy.deepcopy(
+        next(
+            node
+            for node in preview_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == name
+        )
+    )
+    function.decorator_list = []
+    module = ast.Module(body=[function], type_ignores=[])
+    exec(compile(module, str(PREVIEW_PATH), "exec"), namespace)
     return namespace[name]
 
 
@@ -133,25 +158,12 @@ class _FakeTrack:
         return self.track_items
 
 
-class _FakeLinkedTrackItem:
-    def __init__(self, guid, linked=None, copyable=True):
-        self.item_guid = guid
-        self.links = linked or []
-        self.track = object()
-        if not copyable:
-            self.copy = None
+class _FakeSequence:
+    def __init__(self, video_tracks):
+        self.video_tracks = video_tracks
 
-    def guid(self):
-        return self.item_guid
-
-    def linkedItems(self):
-        return self.links
-
-    def parentTrack(self):
-        return self.track
-
-    def copy(self):
-        return self
+    def videoTracks(self):
+        return self.video_tracks
 
 
 class ProjectsPanelMediaDropTests(unittest.TestCase):
@@ -223,34 +235,105 @@ class ProjectsPanelMediaDropTests(unittest.TestCase):
         self.assertFalse(panel._track_has_free_interval(track, 120, 81))
         self.assertFalse(panel._track_has_free_interval(track, 50, 10))
 
-    def test_ripple_contract_includes_audio_and_excludes_burnin(self):
+    def test_ripple_reuses_import_shot_helper_instead_of_custom_move_api(self):
         source = PANEL_PATH.read_text(encoding="utf-8-sig")
         tree = ast.parse(source)
         panel_class = next(
             node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "ProjectsPanel"
         )
-        all_tracks = next(
+        import_method = next(
             node
             for node in panel_class.body
-            if isinstance(node, ast.FunctionDef) and node.name == "_all_edit_tracks"
+            if isinstance(node, ast.FunctionDef) and node.name == "_import_media_at"
         )
         calls = [
             node.func.attr
-            for node in ast.walk(all_tracks)
+            for node in ast.walk(import_method)
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
         ]
-        self.assertIn("videoTracks", calls)
-        self.assertIn("audioTracks", calls)
-        self.assertIn("_is_burnin_track", calls)
+        self.assertIn("push_clips_right", calls)
+        self.assertNotIn("moveTrackItems", calls)
+        method_names = {
+            node.name for node in panel_class.body if isinstance(node, ast.FunctionDef)
+        }
+        self.assertNotIn("_split_crossing_clips", method_names)
+        self.assertNotIn("_move_timeline_after_playhead", method_names)
 
-    def test_split_rejects_partial_link_and_accepts_a_complete_link_pair(self):
-        panel = _load_panel_methods({"_split_link_error"}, {})
-        video = _FakeLinkedTrackItem("video")
-        audio = _FakeLinkedTrackItem("audio")
-        video.links = [audio]
-        audio.links = [video]
-        self.assertIsNone(panel._split_link_error([video, audio]))
-        self.assertIn("does not cross", panel._split_link_error([video]))
+    def test_preview_uses_the_same_clip_selection_as_import_shot_ripple(self):
+        fake_hiero = type(
+            "FakeHiero",
+            (),
+            {"core": type("FakeCore", (), {"EffectTrackItem": _FakeEffect})},
+        )
+        panel_class = _load_panel_methods(
+            {"_is_burnin_track", "_real_track_items", "_import_shot_ripple_items"},
+            {"hiero": fake_hiero},
+        )
+        panel = panel_class()
+        sequence = _FakeSequence(
+            [
+                _FakeTrack("BurnIn", [_FakeTrackItem(0, 400)]),
+                _FakeTrack(
+                    "Edit",
+                    [_FakeTrackItem(0, 99), _FakeTrackItem(100, 199), _FakeTrackItem(250, 300)],
+                ),
+            ]
+        )
+        selected = panel._import_shot_ripple_items(sequence, 100)
+        self.assertEqual([100, 250], [item.timelineIn() for item in selected])
+
+    def test_preview_shares_each_time_axis_between_tracks(self):
+        column_time_ranges = _load_preview_static_method("_column_time_ranges", {})
+        ranges = column_time_ranges(
+            [
+                {
+                    "before": [{"preview_in": 100, "preview_out": 199}],
+                    "at_playhead": [{"preview_in": 200, "preview_out": 219}],
+                    "after": [],
+                },
+                {
+                    "before": [{"preview_in": 150, "preview_out": 349}],
+                    "at_playhead": [{"preview_in": 190, "preview_out": 239}],
+                    "after": [{"preview_in": 300, "preview_out": 399}],
+                },
+            ]
+        )
+        self.assertEqual((100, 349), ranges["before"])
+        self.assertEqual((190, 239), ranges["at_playhead"])
+        self.assertEqual((300, 399), ranges["after"])
+
+    def test_preview_keeps_timeline_context_visible_without_a_destination(self):
+        panel_tree = ast.parse(PANEL_PATH.read_text(encoding="utf-8-sig"))
+        panel_class = next(
+            node for node in panel_tree.body if isinstance(node, ast.ClassDef) and node.name == "ProjectsPanel"
+        )
+        analyze_method = next(
+            node
+            for node in panel_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_analyze_media_insert"
+        )
+        analyze_source = ast.get_source_segment(PANEL_PATH.read_text(encoding="utf-8-sig"), analyze_method)
+        self.assertIn("if target_track is None", analyze_source)
+        self.assertLess(analyze_source.index("if target_track is None"), analyze_source.index("if mode == \"gap\""))
+
+        preview_tree = ast.parse(PREVIEW_PATH.read_text(encoding="utf-8-sig"))
+        preview_class = next(
+            node
+            for node in preview_tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "ProjectMediaPreviewDialog"
+        )
+        refresh_method = next(
+            node
+            for node in preview_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_refresh"
+        )
+        refresh_calls = [
+            node.func.attr
+            for node in ast.walk(refresh_method)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        ]
+        self.assertIn("_populate_timeline", refresh_calls)
+        self.assertNotIn("setRowCount", refresh_calls)
 
     def test_ripple_uses_a_cancellable_undo_after_media_is_validated(self):
         source = PANEL_PATH.read_text(encoding="utf-8-sig")

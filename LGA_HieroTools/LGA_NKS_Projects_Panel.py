@@ -10,6 +10,8 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.43: El ripple del drop reutiliza push_clips_right de Import Shot, que abre
+         espacio desde el clip real, y el preview muestra clips por track.
   v2.42: El drop analiza el hueco real desde el playhead. Si no cabe, abre un
          preview para elegir track y colocar en el hueco, insertar con ripple
          global o importar al final; el ripple excluye BurnIn y lo extiende.
@@ -667,21 +669,6 @@ class ProjectsPanel(QtWidgets.QWidget):
         except Exception:
             return []
 
-    @staticmethod
-    def _effect_track_items(track):
-        """Soft effects de subtracks, sin confundirlos con clips reales."""
-        effects = []
-        try:
-            for group in list(track.subTrackItems() or []):
-                effects.extend(
-                    item
-                    for item in list(group or [])
-                    if isinstance(item, hiero.core.EffectTrackItem)
-                )
-        except Exception:
-            pass
-        return effects
-
     @classmethod
     def _all_edit_tracks(cls, sequence):
         """Video y audio editables, excluyendo el overlay de BurnIn."""
@@ -768,62 +755,55 @@ class ProjectsPanel(QtWidgets.QWidget):
         return last_frame
 
     @classmethod
-    def _ripple_obstacles(cls, sequence, playhead):
-        """Items que requieren split o que no se puede mover con seguridad."""
-        split_items = []
-        effect_obstacles = []
-        for track in cls._all_edit_tracks(sequence):
+    def _import_shot_ripple_items(cls, sequence, playhead):
+        """Replica la seleccion de push_clips_right antes de alterar el timeline."""
+        items = []
+        for track in list(sequence.videoTracks() or []):
+            if cls._is_burnin_track(track):
+                continue
             for item in cls._real_track_items(track):
                 try:
-                    if int(item.timelineIn()) < playhead <= int(item.timelineOut()):
-                        split_items.append(item)
+                    if int(item.timelineOut()) >= playhead:
+                        items.append(item)
                 except Exception:
-                    effect_obstacles.append("unreadable clip")
-            for effect in cls._effect_track_items(track):
-                try:
-                    effect_in = int(effect.timelineIn())
-                    effect_out = int(effect.timelineOut())
-                except Exception:
-                    effect_obstacles.append("unreadable soft effect")
                     continue
-                if effect_in < playhead <= effect_out:
-                    effect_obstacles.append("soft effect crossing playhead")
-        return split_items, effect_obstacles
+        return items
 
     @staticmethod
-    def _split_link_error(split_items):
-        """Valida que las copias derechas puedan conservar cada enlace original."""
-        split_by_guid = {}
-        for item in split_items:
-            try:
-                if item.parentTrack() is None or not callable(getattr(item, "copy", None)):
-                    return "A clip crossing the playhead cannot be copied safely."
-                split_by_guid[item.guid()] = item
-            except Exception:
-                return "Couldn't inspect a clip crossing the playhead."
-        for item in split_items:
-            try:
-                linked_items = list(item.linkedItems() or [])
-            except Exception:
-                return "Couldn't inspect links before splitting clips."
-            for linked_item in linked_items:
-                try:
-                    if linked_item.guid() not in split_by_guid:
-                        return "A linked clip does not cross the playhead. Choose timeline end or another track."
-                except Exception:
-                    return "Couldn't inspect a linked clip before splitting."
-        return None
+    def _preview_item(item, shift_frames=0, is_new=False, name=None, duration=None):
+        """Normaliza un clip para la tabla grafica sin tocar la API de Hiero."""
+        if is_new:
+            timeline_in = 0
+            timeline_out = max(0, int(duration or 1) - 1)
+        else:
+            timeline_in = int(item.timelineIn())
+            timeline_out = int(item.timelineOut())
+        return {
+            "name": name if name is not None else item.name(),
+            "preview_in": timeline_in + shift_frames,
+            "preview_out": timeline_out + shift_frames,
+            "shift_frames": shift_frames,
+            "is_new": is_new,
+        }
 
     @classmethod
     def _preview_timeline_rows(cls, sequence, target_track, playhead, duration, mode):
-        """Construye la vista compacta de antes / insercion / despues."""
+        """Construye la vista grafica antes / playhead / despues de Import Shot."""
         rows = []
+        ripple_items = cls._import_shot_ripple_items(sequence, playhead)
+        ripple_ids = {id(item) for item in ripple_items}
+        effective_insert_frame = min(
+            (int(item.timelineIn()) for item in ripple_items), default=playhead
+        )
+        end_frame = cls._last_timeline_frame(sequence)
+        end_insert_frame = 0 if end_frame is None else end_frame + 1
         preview_entries = cls._track_entries_for_preview(sequence)
         preview_entries.extend(cls._audio_entries_for_preview(sequence))
         for entry in preview_entries:
             track = entry["track"]
-            before = after = 0
-            crossing = 0
+            before = []
+            at_playhead = []
+            after = []
             for item in cls._real_track_items(track):
                 try:
                     item_in = int(item.timelineIn())
@@ -831,29 +811,35 @@ class ProjectsPanel(QtWidgets.QWidget):
                 except Exception:
                     continue
                 if item_out < playhead:
-                    before += 1
+                    before.append(cls._preview_item(item))
                 elif item_in >= playhead:
-                    after += 1
+                    shift = duration if mode == "ripple" and id(item) in ripple_ids else 0
+                    after.append(cls._preview_item(item, shift))
                 else:
-                    crossing += 1
-            if mode == "end":
-                at_playhead = "No change"
-                after_text = "%d clip(s) unchanged" % (before + after + crossing)
-            elif track is target_track:
-                at_playhead = "New media · %d f" % duration
-                after_text = "%d clip(s) shift" % after if mode == "ripple" else "%d clip(s)" % after
-            elif mode == "ripple":
-                at_playhead = "%d split" % crossing if crossing else "Gap"
-                after_text = "%d clip(s) shift" % after
-            else:
-                at_playhead = "Unchanged"
-                after_text = "%d clip(s)" % after
+                    shift = duration if mode == "ripple" and id(item) in ripple_ids else 0
+                    at_playhead.append(cls._preview_item(item, shift))
+            if track is target_track:
+                new_item = cls._preview_item(
+                    None,
+                    is_new=True,
+                    name="New media · %df" % duration,
+                    duration=duration,
+                )
+                if mode == "end":
+                    new_item["preview_in"] = end_insert_frame
+                    new_item["preview_out"] = end_insert_frame + duration - 1
+                    after.append(new_item)
+                else:
+                    new_item["preview_in"] = effective_insert_frame
+                    new_item["preview_out"] = effective_insert_frame + duration - 1
+                    at_playhead.append(new_item)
             rows.append(
                 {
                     "track": entry["label"],
-                    "before": "%d clip(s)" % before,
+                    "color": Color.ACCENT_TRACK if track is target_track else Color.SURFACE_RAISED,
+                    "before": before,
                     "at_playhead": at_playhead,
-                    "after": after_text,
+                    "after": after,
                 }
             )
         return rows
@@ -863,6 +849,13 @@ class ProjectsPanel(QtWidgets.QWidget):
         rows = self._preview_timeline_rows(
             sequence, target_track, playhead, duration, mode
         )
+        if target_track is None:
+            return {
+                "valid": False,
+                "message": "Choose a video track to preview the insertion.",
+                "action_label": "Import media",
+                "rows": rows,
+            }
         if mode == "gap":
             if self._track_has_free_interval(target_track, playhead, duration):
                 return {
@@ -888,33 +881,14 @@ class ProjectsPanel(QtWidgets.QWidget):
                 "rows": rows,
             }
 
-        split_items, effect_obstacles = self._ripple_obstacles(sequence, playhead)
-        if effect_obstacles:
-            return {
-                "valid": False,
-                "message": "Ripple is unavailable because a non-BurnIn soft effect crosses the playhead.",
-                "action_label": "Import and shift timeline",
-                "rows": rows,
-            }
-        split_link_error = self._split_link_error(split_items)
-        if split_link_error:
-            return {
-                "valid": False,
-                "message": split_link_error,
-                "action_label": "Import and shift timeline",
-                "rows": rows,
-            }
-        if not hasattr(hiero.core.TrackItem, "moveTrackItems"):
-            return {
-                "valid": False,
-                "message": "This Nuke Studio version cannot safely move all timeline clips together.",
-                "action_label": "Import and shift timeline",
-                "rows": rows,
-            }
+        ripple_items = self._import_shot_ripple_items(sequence, playhead)
+        effective_insert_frame = min(
+            (int(item.timelineIn()) for item in ripple_items), default=playhead
+        )
         return {
             "valid": True,
-            "message": "The media will start at the playhead. %d crossing clip(s) will split and every later video and audio clip will shift %d frames. BurnIn will extend over the new end."
-            % (len(split_items), duration),
+            "message": "The media will open %d frames of space at the playhead. %d video clip(s) will shift right and the media will start at frame %d."
+            % (duration, len(ripple_items), effective_insert_frame),
             "action_label": "Import and shift timeline",
             "rows": rows,
         }
@@ -985,24 +959,22 @@ class ProjectsPanel(QtWidgets.QWidget):
             insert_frame = playhead
 
         # Crear y validar la media ANTES de tocar el timeline. Si esto falla,
-        # no hay split, movimiento ni BinItem que cancelar.
+        # no hay movimiento ni BinItem que cancelar.
         clip = hiero.core.Clip(str(media_path))
         clip.setName(clip_name)
         actual_duration = int(clip.mediaSource().duration())
         if actual_duration != duration or actual_duration <= 0:
             raise RuntimeError("The media duration changed before it was imported.")
-        if mode == "ripple":
-            split_items, effect_obstacles = self._ripple_obstacles(sequence, playhead)
-            split_link_error = self._split_link_error(split_items)
-            if effect_obstacles or split_link_error:
-                raise RuntimeError("The timeline changed and can no longer ripple safely.")
-
         project.beginUndo("Import media: %s" % clip_name)
         try:
             project.clipsBin().addItem(hiero.core.BinItem(clip))
             if mode == "ripple":
-                self._split_crossing_clips(sequence, playhead)
-                self._move_timeline_after_playhead(sequence, playhead, duration)
+                # Mismo helper, orden y punto efectivo que Import Shot. El helper
+                # desplaza desde el borde real del clip y devuelve donde encaja.
+                timeline_mod.set_debug_print(debug_print)
+                _moved, insert_frame = timeline_mod.push_clips_right(
+                    sequence, playhead, duration
+                )
 
             # No llamar clip.rescan(): crea otra entrada Undo aunque este dentro
             # de beginUndo. Clip() detecta secuencias desde cualquier frame.
@@ -1019,7 +991,6 @@ class ProjectsPanel(QtWidgets.QWidget):
             track_item.setVersionLinkedToBin(True)
 
             if mode == "ripple":
-                timeline_mod.set_debug_print(debug_print)
                 timeline_mod.stretch_burnin(sequence)
         except Exception:
             # cancelUndo revierte el grupo abierto; endUndo solamente lo cierra
@@ -1049,91 +1020,6 @@ class ProjectsPanel(QtWidgets.QWidget):
             )
         )
 
-    @classmethod
-    def _split_crossing_clips(cls, sequence, playhead):
-        """Parte todos los clips que cruzan el playhead antes del ripple global."""
-        split_items, effect_obstacles = cls._ripple_obstacles(sequence, playhead)
-        if effect_obstacles:
-            raise RuntimeError("A non-BurnIn soft effect crosses the playhead.")
-        split_link_error = cls._split_link_error(split_items)
-        if split_link_error:
-            raise RuntimeError(split_link_error)
-        split_by_guid = {}
-        for item in split_items:
-            try:
-                guid = item.guid()
-                links = list(item.linkedItems() or [])
-            except Exception as exc:
-                raise RuntimeError("Couldn't inspect links before splitting: %s" % exc)
-            split_by_guid[guid] = {"item": item, "links": links}
-
-        for guid, split_data in split_by_guid.items():
-            for linked_item in split_data["links"]:
-                try:
-                    linked_guid = linked_item.guid()
-                except Exception as exc:
-                    raise RuntimeError("Couldn't inspect a linked clip: %s" % exc)
-                if linked_guid not in split_by_guid:
-                    raise RuntimeError(
-                        "A linked clip does not cross the playhead; ripple was cancelled to preserve its link."
-                    )
-
-        for item in split_items:
-            track = item.parentTrack()
-            if track is None or not callable(getattr(item, "copy", None)):
-                raise RuntimeError("Couldn't split a clip that crosses the playhead.")
-            old_in = int(item.timelineIn())
-            old_out = int(item.timelineOut())
-            if not old_in < playhead <= old_out:
-                continue
-            right_item = item.copy()
-            item.setTimelineOut(playhead - 1)
-            right_item.setTimelineIn(playhead)
-            track.addTrackItem(right_item)
-            split_by_guid[item.guid()]["right_item"] = right_item
-            debug_print(
-                "[Drop media] Split '%s' at %d | %d-%d"
-                % (item.name(), playhead, old_in, old_out)
-            )
-
-        linked_pairs = set()
-        for guid, split_data in split_by_guid.items():
-            right_item = split_data["right_item"]
-            for linked_item in split_data["links"]:
-                linked_guid = linked_item.guid()
-                pair_key = tuple(sorted((guid, linked_guid)))
-                if pair_key in linked_pairs:
-                    continue
-                right_item.link(split_by_guid[linked_guid]["right_item"])
-                linked_pairs.add(pair_key)
-
-    @classmethod
-    def _move_timeline_after_playhead(cls, sequence, playhead, duration):
-        """Desplaza clips de todos los tracks y efectos independientes seguros."""
-        clips_to_move = []
-        independent_effects = []
-        for track in cls._all_edit_tracks(sequence):
-            for item in cls._real_track_items(track):
-                if int(item.timelineIn()) >= playhead:
-                    clips_to_move.append(item)
-            for effect in cls._effect_track_items(track):
-                try:
-                    linked_items = list(effect.linkedItems() or [])
-                    effect_in = int(effect.timelineIn())
-                except Exception as exc:
-                    raise RuntimeError("Couldn't inspect a timeline soft effect: %s" % exc)
-                if not linked_items and effect_in >= playhead:
-                    independent_effects.append(effect)
-
-        if clips_to_move:
-            hiero.core.TrackItem.moveTrackItems(clips_to_move, duration)
-        for effect in independent_effects:
-            effect.move(duration)
-        debug_print(
-            "[Drop media] Ripple %d frames | clips=%d | efectos independientes=%d"
-            % (duration, len(clips_to_move), len(independent_effects))
-        )
-
     def _show_media_insert_preview(
         self, sequence, timeline_editor, media_path, playhead, duration, selected_track
     ):
@@ -1147,6 +1033,7 @@ class ProjectsPanel(QtWidgets.QWidget):
                 sequence, track, playhead, duration, mode
             ),
             selected_track=selected_track,
+            initial_mode="ripple",
             parent=self,
         )
         if dialog.exec() != QtWidgets.QDialog.Accepted or not dialog.result_data:
