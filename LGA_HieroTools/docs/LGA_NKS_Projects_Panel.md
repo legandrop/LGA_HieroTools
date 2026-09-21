@@ -97,6 +97,16 @@
 
 ## UI del panel
 - Titulo centrado `Projects`.
+- **Drop MP4 (primer paso):** al arrastrar un único archivo `.mp4` local válido
+  sobre el panel aparece un borde punteado. Al soltarlo, el panel lo importa en
+  el bin raíz del proyecto de la secuencia activa y lo coloca en el track de
+  video seleccionado desde el playhead. Esta primera etapa solo procede si ese
+  track no tiene clips que lleguen al playhead ni clips a su derecha; si no hay
+  secuencia, track o playhead, o si hay una colisión, muestra el motivo y no
+  modifica el proyecto. Carpetas, secuencias de imágenes, otros formatos,
+  múltiples archivos, elección de track y corrimiento de clips quedan para el
+  preview de la segunda etapa. La mutación se agrupa en un único Undo
+  `Import MP4: <nombre>` y el clip nuevo queda seleccionado.
 - Toolbar derecha: `Refresh`, `Reload Panel` (opcional), `Settings`; separador; `Organize Project` (carpeta con flecha) y `Clean Project` (papelera). Refresh usa la silueta bold derivada del asset de PipeSync y Reload Panel la opcion aprobada de dos flechas llenas. Los cinco botones conservan una caja de icono comun de 20 px; el aire interno se corrige en los `viewBox` de Refresh y Reload para igualar su tamano optico sin cambiar alineacion ni area clickeable. Todos los tooltips salen del diccionario `TOOLTIPS` y el panel instala `Style.TOOLTIP`, la misma hoja compartida que usan las otras interfaces del pack.
 - Lista con scroll: proyectos cerrados/abiertos y boton `Update` cuando corresponde.
 - Etiqueta inferior con resumen de conteos.

@@ -2,13 +2,18 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.39 | Lega
+  LGA_NKS_Projects_Panel v2.40 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
   - Permite abrir proyectos y secuencias (cross-project) sin perder ajustes de viewer.
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
+
+  v2.40: El panel acepta un unico MP4 local arrastrado. Si hay una secuencia,
+         track y playhead validos y el track esta libre desde ese frame, lo
+         importa al bin raiz y lo coloca desde el playhead. Los demas casos
+         quedan bloqueados hasta que exista el preview de resolucion.
 
   v2.39: Organize Project y Clean Project pasan del Edit Panel a la barra
          lateral de este panel. Los scripts se cargan desde Projects_Panel_py
@@ -101,6 +106,7 @@ import configparser
 import time
 from pathlib import Path
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt, is_widget_alive
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color, Style
 from LGA_NKS_Shared.LGA_NKS_ContextProfile import get_context_mode, find_context_ini
 from LGA_NKS_Shared.LGA_NKS_ContextSwitch import (
     SWITCH_USER_LOGIN,
@@ -459,9 +465,13 @@ class ProjectsPanel(QtWidgets.QWidget):
         # Proyectos abiertos que el usuario colapso (por nombre_base). Estado del
         # panel: sobrevive al rearmado de la lista, no a reabrir NKS.
         self.collapsed_projects = set()
+        self._drop_has_supported_media = False
+        self._drop_overlay = None
 
         UIManager.setup_ui(self)
         UIManager.setup_connections(self)
+        self.setAcceptDrops(True)
+        self._create_media_drop_overlay()
         try:
             _install_project_close_listener(self)
         except Exception as e:
@@ -473,6 +483,233 @@ class ProjectsPanel(QtWidgets.QWidget):
 
         # Delay antes de iniciar escaneo para que Qt esté completamente inicializado
         QtCore.QTimer.singleShot(500, self.start_scan)  # 500ms delay
+
+    # =========================
+    #       DROP DE MEDIA
+    # =========================
+    def _create_media_drop_overlay(self):
+        """Crea el cartel de drop que se muestra solo para un MP4 valido."""
+        overlay = QtWidgets.QWidget(self)
+        overlay.setObjectName("ProjectMediaDropOverlay")
+        overlay.setAttribute(Qt.WA_StyledBackground, True)
+        overlay.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        overlay.setStyleSheet(
+            "\n".join(
+                (
+                    Style.WINDOW,
+                    "QWidget#ProjectMediaDropOverlay {"
+                    " background-color: %s; border: 2px dashed %s; border-radius: 8px;"
+                    "} QLabel#ProjectMediaDropOverlayLabel {"
+                    " background: transparent; border: none; color: %s;"
+                    "}"
+                    % (Color.ACCENT_DISABLED, Color.ACCENT, Color.TEXT_STRONG),
+                )
+            )
+        )
+
+        layout = QtWidgets.QVBoxLayout(overlay)
+        label = QtWidgets.QLabel("Drop MP4 to import at the playhead", overlay)
+        label.setObjectName("ProjectMediaDropOverlayLabel")
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label)
+
+        overlay.setGeometry(self.rect())
+        overlay.hide()
+        self._drop_overlay = overlay
+
+    def _set_media_drop_overlay_visible(self, visible):
+        if self._drop_overlay is None:
+            return
+        if visible:
+            self._drop_overlay.setGeometry(self.rect())
+            self._drop_overlay.raise_()
+            self._drop_overlay.show()
+        else:
+            self._drop_overlay.hide()
+
+    @staticmethod
+    def _single_mp4_from_mime(mime_data):
+        """Devuelve el unico MP4 local del drop; esta primera etapa no acepta mas."""
+        if mime_data is None or not mime_data.hasUrls():
+            return None
+
+        paths = []
+        for url in mime_data.urls():
+            if not url.isLocalFile():
+                continue
+            path = url.toLocalFile()
+            if os.path.isfile(path) and os.path.splitext(path)[1].lower() == ".mp4":
+                paths.append(path)
+
+        return paths[0] if len(paths) == 1 and len(mime_data.urls()) == 1 else None
+
+    def dragEnterEvent(self, event):
+        media_path = self._single_mp4_from_mime(event.mimeData())
+        self._drop_has_supported_media = media_path is not None
+        if self._drop_has_supported_media:
+            event.acceptProposedAction()
+            self._set_media_drop_overlay_visible(True)
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if self._drop_has_supported_media:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        self._drop_has_supported_media = False
+        self._set_media_drop_overlay_visible(False)
+        event.accept()
+
+    def dropEvent(self, event):
+        self._drop_has_supported_media = False
+        self._set_media_drop_overlay_visible(False)
+        media_path = self._single_mp4_from_mime(event.mimeData())
+        if media_path is None:
+            debug_print("[Drop media] Drop ignorado: se espera un unico MP4 local.")
+            event.ignore()
+            return
+
+        event.acceptProposedAction()
+        # Un modal dentro de dropEvent puede dejar el loop nativo de Windows
+        # abierto. Se difiere toda la operacion al siguiente ciclo de Qt.
+        QtCore.QTimer.singleShot(
+            0,
+            lambda path=media_path: (
+                self._import_dropped_mp4(path) if is_widget_alive(self) else None
+            ),
+        )
+
+    def resizeEvent(self, event):
+        super(ProjectsPanel, self).resizeEvent(event)
+        if self._drop_overlay is not None:
+            self._drop_overlay.setGeometry(self.rect())
+
+    @staticmethod
+    def _current_playhead_time():
+        """Lee el playhead del viewer actual, con el fallback del player."""
+        viewer = hiero.ui.currentViewer()
+        if viewer is None:
+            return None
+        try:
+            return int(viewer.time())
+        except Exception:
+            try:
+                return int(viewer.player().time())
+            except Exception:
+                return None
+
+    @staticmethod
+    def _selected_video_track(sequence, timeline_editor):
+        """Resuelve el track seleccionado desde selección directa de track o clip."""
+        tracks = list(sequence.videoTracks())
+        try:
+            selection = list(timeline_editor.selection() or [])
+        except Exception:
+            selection = []
+
+        for item in selection:
+            if isinstance(item, hiero.core.TrackBase) and item in tracks:
+                return item
+            try:
+                parent_track = item.parentTrack()
+            except Exception:
+                parent_track = None
+            if parent_track in tracks:
+                return parent_track
+
+        # No usar selectedRow() como indice de videoTracks(): la vista puede
+        # incluir tracks de audio y no se midio aun una correspondencia 1:1.
+        # Es preferible pedir al usuario una seleccion explicita que colocar
+        # media en otro track. La sonda de esta feature deja el dato para una
+        # ampliacion posterior.
+        debug_print("[Drop media] No hay un track de video seleccionado explicitamente.")
+        return None
+
+    @staticmethod
+    def _track_has_media_from(track, frame):
+        """True si el track contiene un clip que llega al playhead o sigue despues."""
+        for item in track.items():
+            if isinstance(item, hiero.core.EffectTrackItem):
+                continue
+            try:
+                if int(item.timelineOut()) >= frame:
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def _warn_drop_import(self, text):
+        debug_print("[Drop media] %s" % text, level="warning")
+        show_warning(self, "Import MP4", text)
+
+    def _import_dropped_mp4(self, media_path):
+        """Importa un MP4 al bin raiz y lo coloca en un track vacio desde el playhead."""
+        if not os.path.isfile(media_path):
+            self._warn_drop_import("The dropped MP4 is no longer available.")
+            return
+
+        sequence = hiero.ui.activeSequence()
+        if sequence is None:
+            self._warn_drop_import("Open a timeline before dropping an MP4.")
+            return
+
+        timeline_editor = hiero.ui.getTimelineEditor(sequence)
+        if timeline_editor is None:
+            self._warn_drop_import("Couldn't access the active timeline editor.")
+            return
+
+        playhead = self._current_playhead_time()
+        if playhead is None:
+            self._warn_drop_import("Couldn't read the active playhead.")
+            return
+
+        target_track = self._selected_video_track(sequence, timeline_editor)
+        if target_track is None:
+            self._warn_drop_import("Select a video track before dropping an MP4.")
+            return
+
+        if self._track_has_media_from(target_track, playhead):
+            self._warn_drop_import(
+                "The selected track has media at or after the playhead. "
+                "This first version only imports into empty space."
+            )
+            return
+
+        try:
+            project = sequence.project()
+        except Exception:
+            project = None
+        if project is None:
+            self._warn_drop_import("Couldn't resolve the project for the active timeline.")
+            return
+
+        clip_name = os.path.splitext(os.path.basename(media_path))[0]
+        try:
+            with project.beginUndo("Import MP4: %s" % clip_name):
+                clip = hiero.core.Clip(str(media_path))
+                clip.setName(clip_name)
+                project.clipsBin().addItem(hiero.core.BinItem(clip))
+                clip.rescan()
+
+                duration = int(clip.mediaSource().duration())
+                if duration <= 0:
+                    raise RuntimeError("Hiero reported an invalid media duration.")
+
+                track_item = target_track.addTrackItem(clip, playhead)
+                track_item.setName(clip_name)
+                track_item.setTimes(playhead, playhead + duration - 1, 0, duration - 1)
+                track_item.setVersionLinkedToBin(True)
+
+            timeline_editor.setSelection([track_item])
+            debug_print(
+                "[Drop media] MP4 importado '%s' | track='%s' | tl=%d-%d"
+                % (media_path, target_track.name(), playhead, playhead + duration - 1)
+            )
+        except Exception as exc:
+            self._warn_drop_import("Couldn't import the MP4.\n\n%s" % exc)
 
 
     def _get_normal_pipesync_login(self):

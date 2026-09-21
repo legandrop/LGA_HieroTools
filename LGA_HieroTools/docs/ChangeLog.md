@@ -1,5 +1,7 @@
 v3.96:
 
+        - El Projects Panel acepta el primer drop de media (`LGA_NKS_Projects_Panel v2.40`): al arrastrar UN MP4 local aparece el borde punteado y, si hay timeline, playhead y track de video seleccionado sin clips desde ese frame, se importa al bin raíz y se coloca desde ahí en un único Undo. Si falta contexto o hay una colisión no toca nada y explica el motivo. Carpetas, secuencias de imágenes, otros formatos, elegir track, correr clips y el preview quedan explícitamente para la segunda etapa. [ Projects Panel - Importar MP4 arrastrado ]
+
         - Create Shot recupera la captura automática de thumbnail (`LGA_NKS_Flow_CreateShot v1.60`): el nuevo intervalo de refresco de BurnIn llamaba `time.sleep()` antes de un import local de `time`, por lo que Python lo resolvía como variable local sin valor y cancelaba la captura. Usa el import global ya disponible; el apagado, espera de 0,5 s y restauración del track se conservan. [ Create Shot - Reparar captura de thumbnail ]
 
         - El Shot Code conserva siempre el bloque de vendor, incluido el token interno `SUP` (`LGA_NKS_Flow_NamingUtils v1.21`, `LGA_NKS_Flow_CreateShot v1.59`): Import Shot, Create EXR v000, Set Shot Name y Create Shot usan la misma identidad `PROJA_010_020_SUP` o `PROJA_010_020_VEN`. `SUP` sigue separado de los vendors externos para permisos: no agrega grupos ni usuarios al proyecto y las Tasks habilitadas se asignan a Lega. Los vendors externos continúan saliendo de PipeSync para separar el Shot Code de la task siguiente. [ Naming - Conservar vendor en el Shot Code ]
