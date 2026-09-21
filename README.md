@@ -97,7 +97,7 @@ Internal reference: [Flow | S3 Panel](LGA_HieroTools/docs/LGA_NKS_Flow_S3_Panel_
   task also shows a separate checked `Flow Assignee: Lega` indicator. If the
   required Sequence is missing in Flow, Create Shot asks before creating it;
   cancelling leaves both the Sequence and Shot untouched. Its automatic viewer
-  thumbnail temporarily hides any `BurnIn`/`burn-in` track and restores it.
+  thumbnail temporarily disables the `BurnIn` video track and restores it.
 - **Modify Shot**  
   Modifies an existing shot in Flow. One clip at a time.
 - **Check Shots Exist**  
@@ -108,7 +108,7 @@ Internal reference: [Flow | S3 Panel](LGA_HieroTools/docs/LGA_NKS_Flow_S3_Panel_
   Click: replaces the shot's thumbnail in Flow with a viewer snapshot, after a
   confirmation window comparing the current and proposed images. The upload
   runs on a background thread. Before reading the viewer, the capture disables
-  any `BurnIn`/`burn-in` track and then restores its previous state.
+  the `BurnIn` video track, waits for the viewer refresh, then restores it.
 
   Shift+Click: saves the same zoom-to-fill snapshot, cropped to the sequence
   aspect, to `N:/<project>/Thumbs`, with the same temporary burn-in exclusion.

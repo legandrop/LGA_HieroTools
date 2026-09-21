@@ -63,9 +63,9 @@ class BurnInCaptureTests(unittest.TestCase):
     def setUp(self):
         self.helper = load_helper()
 
-    def test_disables_name_variants_during_capture_and_restores_them(self):
-        burnins = [
-            FakeTrack("BurnIn"),
+    def test_disables_exact_burnin_track_during_capture_and_restores_it(self):
+        burnin = FakeTrack("BurnIn")
+        lookalikes = [
             FakeTrack("burn-in"),
             FakeTrack("BURN_IN"),
             FakeTrack("burn in"),
@@ -74,24 +74,26 @@ class BurnInCaptureTests(unittest.TestCase):
         events = []
 
         def capture():
-            self.assertTrue(all(not track.isEnabled() for track in burnins))
+            self.assertFalse(burnin.isEnabled())
+            self.assertTrue(all(track.isEnabled() for track in lookalikes))
             self.assertTrue(other.isEnabled())
             self.assertEqual(1, len(events))
             return "image"
 
         result = self.helper.capture_viewer_image_without_burnin(
-            FakeSequence([other, *burnins]),
+            FakeSequence([other, burnin, *lookalikes]),
             capture,
             process_events=lambda: events.append("refresh"),
         )
 
         self.assertEqual("image", result)
-        self.assertTrue(all(track.isEnabled() for track in burnins))
+        self.assertTrue(burnin.isEnabled())
+        self.assertTrue(all(track.isEnabled() for track in lookalikes))
         self.assertEqual([], other.states)
         self.assertEqual(2, len(events))
 
     def test_preserves_a_burnin_that_was_already_disabled(self):
-        burnin = FakeTrack("burn-in", enabled=False)
+        burnin = FakeTrack("BurnIn", enabled=False)
 
         result = self.helper.capture_viewer_image_without_burnin(
             FakeSequence([burnin]), lambda: "image"
@@ -118,7 +120,7 @@ class BurnInCaptureTests(unittest.TestCase):
 
     def test_aborts_capture_and_restores_if_a_burnin_cannot_be_disabled(self):
         first = FakeTrack("BurnIn")
-        failing = FakeTrack("burn-in", fail_on_disable=True)
+        failing = FakeTrack("BurnIn", fail_on_disable=True)
         capture_calls = []
 
         with self.assertRaises(self.helper.BurnInTrackError):
@@ -132,7 +134,7 @@ class BurnInCaptureTests(unittest.TestCase):
         self.assertTrue(failing.isEnabled())
 
     def test_aborts_if_hiero_silently_keeps_the_burnin_enabled(self):
-        burnin = FakeTrack("burn-in", ignore_disable=True)
+        burnin = FakeTrack("BurnIn", ignore_disable=True)
         capture_calls = []
 
         with self.assertRaises(self.helper.BurnInTrackError):
@@ -196,6 +198,33 @@ class CaptureIntegrationTests(unittest.TestCase):
                     if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
                 }
                 self.assertIn("capture_viewer_image_without_burnin", calls)
+
+                guard_call = next(
+                    node
+                    for node in ast.walk(function)
+                    if isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id == "capture_viewer_image_without_burnin"
+                )
+                self.assertEqual(
+                    "capture_after_track_settles",
+                    getattr(guard_call.args[1], "id", None),
+                )
+
+                settle_function = next(
+                    node
+                    for node in ast.walk(function)
+                    if isinstance(node, ast.FunctionDef)
+                    and node.name == "capture_after_track_settles"
+                )
+                settle_calls = {
+                    (getattr(node.func.value, "id", None), node.func.attr)
+                    for node in ast.walk(settle_function)
+                    if isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                }
+                self.assertIn(("time", "sleep"), settle_calls)
+                self.assertIn(("viewer", "image"), settle_calls)
 
 
 if __name__ == "__main__":

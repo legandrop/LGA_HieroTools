@@ -10,8 +10,8 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
-  v1.03: La captura compartida reconoce BurnIn/burn-in sin importar
-         mayúsculas o separadores y restaura el estado aun si falla el viewer.
+  v1.03: La captura compartida apaga el VideoTrack BurnIn, espera el refresco
+         del viewer antes de leerlo y restaura el estado aun si falla.
   v1.02: Project name extraído desde el segmento VFX-NOMBRE del path del archivo
          (con fallback al primer bloque del filename si el path no contiene VFX-).
          Corrige proyectos como PROJALT cuyos shots tienen prefijo PROJA en el filename.
@@ -24,6 +24,7 @@ import os
 import re
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 QApplication = QtWidgets.QApplication
@@ -45,11 +46,35 @@ from LGA_NKS_Shared.LGA_NKS_ThumbnailCapture import (
 )
 
 DEBUG = False
+LOG_DIR = Path(__file__).parent / "logs"
+LOG_PATH = LOG_DIR / "DebugPy_LGA_NKS_Flow_Thumbs.log"
+_LOG_STARTED_AT = None
+
+
+def _reset_log():
+    global _LOG_STARTED_AT
+    _LOG_STARTED_AT = time.monotonic()
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        LOG_PATH.write_text(
+            f"Fecha: {datetime.now():%Y-%m-%d %H:%M:%S}\n",
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
 
 
 def debug_print(*message):
+    text = " ".join(str(part) for part in message)
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        elapsed = time.monotonic() - (_LOG_STARTED_AT or time.monotonic())
+        with LOG_PATH.open("a", encoding="utf-8") as handle:
+            handle.write(f"[{elapsed:.3f}s] {text}\n")
+    except Exception:
+        pass
     if DEBUG:
-        print(*message)
+        print(text)
 
 
 def get_work_root_drive():
@@ -300,6 +325,7 @@ def get_next_available_filename(base_path, shot_name):
 
 
 def main():
+    _reset_log()
     debug_print("🚀 Iniciando LGA_NKS_Flow_Thumbs v1.03...")
 
     # Obtener el nombre del proyecto
@@ -325,18 +351,8 @@ def main():
         return
 
     try:
-        # PASO 1: Aplicar zoom to fill con actualización del viewer
-        debug_print("🔍 PASO 1: Aplicando zoom to fill...")
-        if not zoom_to_fill_simple():
-            print("❌ No se pudo aplicar zoom to fill")
-            return
-
-        # PASO 2: Espera mínima sin refresh agresivo
-        debug_print("⏱️ PASO 2: Espera mínima antes de captura...")
-        time.sleep(0.5)  # Solo una espera, sin refresh adicional
-
-        # PASO 3: Obtener información del shot
-        debug_print("📸 PASO 3: Obteniendo información del shot...")
+        # PASO 1: Obtener información del shot
+        debug_print("📸 PASO 1: Obteniendo información del shot...")
         shot_name = get_shot_name_from_selected_clip()
         if not shot_name:
             print("❌ No se pudo obtener el nombre del shot")
@@ -348,17 +364,28 @@ def main():
         )  # Remover caracteres inválidos
         debug_print(f"🎬 Shot name limpio: {shot_name}")
 
-        # PASO 4: Capturar imagen del viewer sin burn-in
-        debug_print("📷 PASO 4: Capturando imagen del viewer sin burn-in...")
+        # PASO 2: Capturar imagen del viewer sin burn-in
+        debug_print("📷 PASO 2: Capturando imagen del viewer sin burn-in...")
         viewer = hiero.ui.currentViewer()
         if not viewer:
             print("❌ No hay viewer activo")
             return
 
         sequence = hiero.ui.activeSequence()
+
+        def capture_after_track_settles():
+            debug_print("Aplicando zoom con el track BurnIn apagado")
+            if not zoom_to_fill_simple():
+                debug_print("No se pudo aplicar zoom to fill; se captura igualmente")
+            debug_print("Esperando 0.5 s con el track BurnIn apagado")
+            QApplication.processEvents()
+            time.sleep(0.5)
+            QApplication.processEvents()
+            return viewer.image()
+
         qimage = capture_viewer_image_without_burnin(
             sequence,
-            viewer.image,
+            capture_after_track_settles,
             process_events=QApplication.processEvents,
             logger=debug_print,
         )
@@ -368,8 +395,8 @@ def main():
 
         debug_print(f"✅ Imagen capturada: {qimage.width()} × {qimage.height()}")
 
-        # PASO 5: Obtener relación de aspecto y crop
-        debug_print("✂️ PASO 5: Aplicando crop de aspecto...")
+        # PASO 3: Obtener relación de aspecto y crop
+        debug_print("✂️ PASO 3: Aplicando crop de aspecto...")
         if sequence is None:
             debug_print("⚠️ No hay ninguna secuencia activa, usando 16:9 por defecto")
             target_aspect = 16 / 9
@@ -388,8 +415,8 @@ def main():
             f"✅ Imagen cropped: {qimage_cropped.width()} × {qimage_cropped.height()}"
         )
 
-        # PASO 6: Guardar archivo
-        debug_print("💾 PASO 6: Guardando thumbnail...")
+        # PASO 4: Guardar archivo
+        debug_print("💾 PASO 4: Guardando thumbnail...")
         try:
             full_path, filename = get_next_available_filename(thumbs_dir, shot_name)
             debug_print(f"📄 Archivo de destino: {filename}")

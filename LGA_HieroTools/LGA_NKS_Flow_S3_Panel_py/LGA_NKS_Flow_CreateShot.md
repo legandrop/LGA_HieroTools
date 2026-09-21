@@ -75,9 +75,9 @@ Todas las tasks del pipeline están disponibles con sus colores específicos:
 - Creación de thumbnails automática desde Hiero. Primero usa
   `viewer.zoomToFill()` y conserva el fallback legacy del player; si ninguna
   API de zoom está disponible, captura igualmente `viewer.image()`. Antes de
-  leer el viewer deshabilita temporalmente cualquier track `BurnIn`/`burn-in`
-  y restaura su estado anterior incluso si la captura falla; si no puede
-  ocultarlo, no genera el thumbnail.
+  leer el viewer deshabilita temporalmente el VideoTrack `BurnIn` completo,
+  espera el refresco para no reutilizar un frame cacheado y restaura su estado
+  anterior incluso si la captura falla; no toca los textos individualmente.
 - Configuración de estados de shot y task
 - Copia de descripción del shot a las tasks
 - Reducción automática del 30% en tiempo estimado (v1.30)

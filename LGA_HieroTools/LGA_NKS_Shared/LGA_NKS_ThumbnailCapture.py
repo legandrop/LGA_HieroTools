@@ -6,8 +6,8 @@ ____________________________________________________________________
   Captura imagenes del viewer sin incluir el track de burn-in y restaura
   exactamente el estado previo del timeline al terminar.
 
-  v1.00: Proteccion compartida para Thumbnail y Create Shot. Reconoce
-         BurnIn, burn-in, burn_in y variantes de mayusculas/espaciado.
+  v1.00: Proteccion compartida para Thumbnail y Create Shot. Busca el
+         VideoTrack llamado exactamente BurnIn y conserva su estado.
 ____________________________________________________________________
 """
 
@@ -16,11 +16,6 @@ from contextlib import contextmanager
 
 class BurnInTrackError(RuntimeError):
     """Impide capturar si no se puede garantizar que el burn-in quede oculto."""
-
-
-def _normalized_track_name(name):
-    """Normaliza separadores y capitalizacion sin aceptar sufijos adicionales."""
-    return "".join(char for char in str(name).casefold() if char.isalnum())
 
 
 def _log(logger, message):
@@ -85,9 +80,11 @@ def temporarily_disable_burnin_tracks(sequence, process_events=None, logger=None
 
     try:
         tracks = list(sequence.videoTracks()) if sequence is not None else []
+        track_names = []
         for track in tracks:
             track_name = track.name()
-            if _normalized_track_name(track_name) != "burnin":
+            track_names.append(str(track_name))
+            if str(track_name) != "BurnIn":
                 continue
 
             matched_count += 1
@@ -99,6 +96,10 @@ def temporarily_disable_burnin_tracks(sequence, process_events=None, logger=None
             changed_tracks.append((track, original_state, track_name))
             _set_track_state(track, False, process_events)
             _log(logger, f"Track '{track_name}' deshabilitado para el thumbnail")
+
+        if matched_count == 0:
+            names = ", ".join(track_names) if track_names else "ninguno"
+            _log(logger, f"Track BurnIn no encontrado; tracks vistos: {names}")
 
         if changed_tracks and process_events is not None:
             process_events()

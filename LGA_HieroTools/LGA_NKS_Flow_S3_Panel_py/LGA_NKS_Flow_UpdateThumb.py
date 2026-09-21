@@ -7,8 +7,8 @@ ____________________________________________________________________
   del viewer actual de Hiero. Pensado para el click normal del boton "Thumbnail"
   del Flow S3 Panel.
 
-  v1.05: Oculta BurnIn/burn-in con el helper compartido durante la captura y
-         restaura el estado original aunque viewer.image() falle.
+  v1.05: Apaga el VideoTrack BurnIn, espera el refresco del viewer durante la
+         captura y restaura el estado original aunque viewer.image() falle.
   v1.04: La ventana lleva la fuente del pack (apply_ui_font); sin
          eso salia con la fuente del host.
   v1.03: ThumbReplaceDialog migra al modulo de estilo LGA_UI_Style_HieroTools:
@@ -42,6 +42,7 @@ import sys
 import tempfile
 import time
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 
 import hiero.core
@@ -102,11 +103,35 @@ from LGA_NKS_Flow_Thumbs import (  # noqa: E402
 
 
 DEBUG = False
+LOG_DIR = Path(__file__).parent / "logs"
+LOG_PATH = LOG_DIR / "DebugPy_LGA_NKS_Flow_UpdateThumb.log"
+_LOG_STARTED_AT = None
+
+
+def _reset_log():
+    global _LOG_STARTED_AT
+    _LOG_STARTED_AT = time.monotonic()
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        LOG_PATH.write_text(
+            f"Fecha: {datetime.now():%Y-%m-%d %H:%M:%S}\n",
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
 
 
 def debug_print(*message):
+    text = " ".join(str(part) for part in message)
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        elapsed = time.monotonic() - (_LOG_STARTED_AT or time.monotonic())
+        with LOG_PATH.open("a", encoding="utf-8") as handle:
+            handle.write(f"[{elapsed:.3f}s] {text}\n")
+    except Exception:
+        pass
     if DEBUG:
-        print("[UpdateThumb]", *message, file=sys.stderr)
+        print("[UpdateThumb]", text, file=sys.stderr)
 
 
 # ----------------------------------------------------------------------------
@@ -120,20 +145,25 @@ def capture_viewer_snapshot_to_temp():
         str | None: ruta del JPG temporal, o None si fallo la captura.
     """
     try:
-        if not zoom_to_fill_simple():
-            debug_print("No se pudo aplicar zoom to fill")
-            # Continuar igual: zoom to fill es deseable pero no critico
-        time.sleep(0.5)
-
         viewer = hiero.ui.currentViewer()
         if not viewer:
             debug_print("No hay viewer activo")
             return None
 
         sequence = hiero.ui.activeSequence()
+
+        def capture_after_track_settles():
+            if not zoom_to_fill_simple():
+                debug_print("No se pudo aplicar zoom to fill; se captura igualmente")
+            debug_print("Esperando 0.5 s con el track BurnIn apagado")
+            QApplication.processEvents()
+            time.sleep(0.5)
+            QApplication.processEvents()
+            return viewer.image()
+
         qimage = capture_viewer_image_without_burnin(
             sequence,
-            viewer.image,
+            capture_after_track_settles,
             process_events=QApplication.processEvents,
             logger=debug_print,
         )
@@ -615,6 +645,9 @@ def _on_dialog_finished(_result):
 def update_thumbnail_in_flow():
     """Entry point del click normal: captura el viewer y abre la ventana de
     reemplazo del thumbnail del shot en Flow."""
+    _reset_log()
+    debug_print("=== Iniciando Update Thumbnail ===")
+
     global _dialog, _load_worker, _upload_worker
     global _temp_new_thumb, _temp_current_thumb, _shot_id
 

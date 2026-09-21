@@ -71,7 +71,7 @@ class ThumbnailZoomTests(unittest.TestCase):
         create_function = functions["create_shot_thumbnail"]
         zoom_guard = next(
             node
-            for node in create_function.body
+            for node in ast.walk(create_function)
             if isinstance(node, ast.If)
             and isinstance(node.test, ast.UnaryOp)
             and isinstance(node.test.operand, ast.Call)

@@ -6,8 +6,8 @@ ____________________________________________________________________
   Script para crear shots en ShotGrid basado en el nombre del clip seleccionado en Hiero.
   SIN usar templates predefinidos - crea tasks manualmente para mayor control.
 
-  v1.58: El thumbnail apaga temporalmente cualquier track BurnIn/burn-in y
-         restaura su estado original aun cuando la captura falle.
+  v1.58: El thumbnail apaga temporalmente el VideoTrack BurnIn, espera el
+         refresco del viewer y restaura su estado aun cuando la captura falle.
   v1.57: Corrige el postproceso de carpetas: usa el helper del modulo de
          folders y reporta como parcial un resumen sin rutas.
   v1.56: Si una Sequence no existe en Flow, pregunta antes de crearla y solo
@@ -518,10 +518,6 @@ def get_shot_name_from_selected_clip():
 
 def create_shot_thumbnail():
     """Crea un thumbnail del shot actual y retorna la ruta del archivo creado."""
-    # El zoom mejora el encuadre, pero no es requisito para capturar viewer.image().
-    if not zoom_to_fill_in_viewer():
-        debug_print("⚠️ Continuando la captura sin zoom to fill")
-
     # Obtener el shot name
     shot_name = get_shot_name_from_selected_clip()
     if not shot_name:
@@ -547,10 +543,20 @@ def create_shot_thumbnail():
         return None
 
     sequence = hiero.ui.activeSequence()
+
+    def capture_after_track_settles():
+        if not zoom_to_fill_in_viewer():
+            debug_print("⚠️ Continuando la captura sin zoom to fill")
+        debug_print("Esperando 0.5 s con el track BurnIn apagado")
+        QApplication.processEvents()
+        time.sleep(0.5)
+        QApplication.processEvents()
+        return viewer.image()
+
     try:
         qimage = capture_viewer_image_without_burnin(
             sequence,
-            viewer.image,
+            capture_after_track_settles,
             process_events=QApplication.processEvents,
             logger=debug_print,
         )
