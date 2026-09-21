@@ -89,8 +89,9 @@ Internal reference: [Flow | S3 Panel](LGA_HieroTools/docs/LGA_NKS_Flow_S3_Panel_
 - **Create Shot**  
   Creates a shot in Flow based on the selected clip. In Client, external vendor
   suffixes are validated before any write and create the Shot/Task access links;
-  `SUP` remains an internal naming suffix without vendor access and is omitted
-  from the Flow Shot code; external vendor suffixes remain part of the code.
+  `SUP` remains an internal naming suffix without a vendor group or project-access
+  grant, is omitted from the Flow Shot code, and assigns every enabled task to
+  Lega. External vendor suffixes remain part of the code.
   Comp is the only task enabled by default, CG remains available but disabled,
   and Lega is the only reviewer offered in Client.
 - **Modify Shot**  

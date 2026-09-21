@@ -176,8 +176,10 @@ Por eso nada arma el nombre de la carpeta con un literal:
   `get_available_tasks()` de `LGA_NKS_Flow_Task_Config` en vez de iterar
   `AVAILABLE_TASKS` completo. En `client` eso ofrece únicamente `Comp` y
   `CG`; en `studio`, todo el catálogo salvo `CG`.
-  En `client`, además, `SUP` es un token interno de naming sin acceso vendor y
-  se omite del Shot en Flow (`PROJA_010_020_SUP_comp` crea `PROJA_010_020`).
+  En `client`, además, `SUP` es un token interno de naming sin Group ni altas
+  de acceso en `Project.users`, y se omite del Shot en Flow
+  (`PROJA_010_020_SUP_comp` crea `PROJA_010_020`). Cada Task habilitada del
+  falso vendor SUP se asigna siempre a Lega.
   Un vendor externo pasa un preflight de catálogo, Group, `sg_vendor_group`,
   `HumanUser.groups` y usuarios antes de toda mutación; el Shot nace con
   `sg_vendor_groups`, las Tasks con `task_assignees` y `Project.users` se amplía

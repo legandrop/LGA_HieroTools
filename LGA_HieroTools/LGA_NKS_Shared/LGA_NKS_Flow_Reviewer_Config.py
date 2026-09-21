@@ -1,10 +1,11 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Reviewer_Config v1.00 | Lega
+  LGA_NKS_Flow_Reviewer_Config v1.01 | Lega
 
   Politica compartida de reviewers visibles en Create/Modify Shot.
 
+  v1.01: Expone la clave canonica de Lega para el assignee fijo de SUP.
   v1.00: En Client solo se ofrece Lega; Studio conserva todos los
          reviewers del estudio.
 ____________________________________________________________________
@@ -54,6 +55,7 @@ REVIEWERS: List[Dict[str, str]] = [
 REVIEWER_KEY_TO_NAME = {
     reviewer["key"]: reviewer["flow_name"] for reviewer in REVIEWERS
 }
+INTERNAL_VENDOR_ASSIGNEE_KEY = "lega_pugliese"
 
 
 def get_available_reviewers(mode: Optional[str] = None) -> List[Dict[str, str]]:
@@ -66,4 +68,9 @@ def get_available_reviewers(mode: Optional[str] = None) -> List[Dict[str, str]]:
     ]
 
 
-__all__ = ["REVIEWERS", "REVIEWER_KEY_TO_NAME", "get_available_reviewers"]
+__all__ = [
+    "INTERNAL_VENDOR_ASSIGNEE_KEY",
+    "REVIEWERS",
+    "REVIEWER_KEY_TO_NAME",
+    "get_available_reviewers",
+]

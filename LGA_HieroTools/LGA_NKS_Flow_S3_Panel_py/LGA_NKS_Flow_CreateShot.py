@@ -1,11 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CreateShot v1.53 | Lega
+  LGA_NKS_Flow_CreateShot v1.54 | Lega
 
   Script para crear shots en ShotGrid basado en el nombre del clip seleccionado en Hiero.
   SIN usar templates predefinidos - crea tasks manualmente para mayor control.
 
+  v1.54: En Client, las Tasks habilitadas de un shot SUP se asignan siempre a
+         Lega, que ya aparece chequeado como reviewer en la UI.
   v1.53: En Client, CG queda apagada por defecto y el unico reviewer visible es
          Lega. La captura de thumbnail usa la API de zoom del viewer actual con
          fallback legacy y no aborta si el zoom no esta disponible.
@@ -190,6 +192,7 @@ from LGA_NKS_Shared.LGA_NKS_Flow_Task_Config import (
     get_available_tasks,
 )
 from LGA_NKS_Shared.LGA_NKS_Flow_Reviewer_Config import (
+    INTERNAL_VENDOR_ASSIGNEE_KEY,
     REVIEWER_KEY_TO_NAME,
     get_available_reviewers,
 )
@@ -201,6 +204,7 @@ from LGA_NKS_Shared.LGA_NKS_ClientVendorAccess import (
     resolve_selected_reviewers,
     shot_vendor_fields,
     task_vendor_fields,
+    with_internal_vendor_assignee,
 )
 from LGA_NKS_Shared.LGA_NKS_AssignmentSaga import (
     ContextChangedError,
@@ -2135,11 +2139,23 @@ class ShotGridManager:
             # acceso creado.
         task_preflight = {}
         try:
-            for task_name, task_cfg in (
-                (shot_config.get("tasks") or {}).items() if mode == "client" else []
-            ):
-                if not task_cfg.get("enabled", False):
-                    continue
+            client_tasks = (
+                [
+                    (task_name, task_cfg)
+                    for task_name, task_cfg in (shot_config.get("tasks") or {}).items()
+                    if task_cfg.get("enabled", False)
+                ]
+                if mode == "client"
+                else []
+            )
+            if client_tasks and (vendor_plan or {}).get("kind") == "internal":
+                vendor_plan = with_internal_vendor_assignee(
+                    self.sg,
+                    vendor_plan,
+                    REVIEWER_KEY_TO_NAME,
+                    INTERNAL_VENDOR_ASSIGNEE_KEY,
+                )
+            for task_name, task_cfg in client_tasks:
                 pipeline_step_name = next(
                     (cfg["pipeline_step"] for cfg in AVAILABLE_TASKS if cfg["name"] == task_name),
                     None,

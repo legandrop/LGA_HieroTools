@@ -27,6 +27,11 @@ from LGA_NKS_Shared.LGA_NKS_ClientVendorAccess import (
     resolve_client_vendor_access,
     shot_vendor_fields,
     task_vendor_fields,
+    with_internal_vendor_assignee,
+)
+from LGA_NKS_Shared.LGA_NKS_Flow_Reviewer_Config import (
+    INTERNAL_VENDOR_ASSIGNEE_KEY,
+    REVIEWER_KEY_TO_NAME,
 )
 
 
@@ -41,6 +46,7 @@ class FakeSG:
         }
         groups = [{"type": "Group", "id": 7}] if user_ok else []
         self.users = [{"id": 8, "name": "Vendor User", "sg_vendor_group": {"type": "Group", "id": 7}, "groups": groups}]
+        self.people = [{"id": 6, "name": "Lega Pugliese"}]
 
     def find_one(self, entity, filters, fields):
         if entity == "Project": return self.project
@@ -48,7 +54,15 @@ class FakeSG:
         return None
 
     def find(self, entity, filters, fields):
-        return list(self.users) if entity == "HumanUser" else []
+        if entity != "HumanUser":
+            return []
+        name_filter = next(
+            (item for item in filters if item[0] == "name" and item[1] == "is"),
+            None,
+        )
+        if name_filter:
+            return [item for item in self.people if item.get("name") == name_filter[2]]
+        return list(self.users)
 
     def update(self, entity, entity_id, data, **kwargs):
         self.writes.append((entity, entity_id, data, kwargs))
@@ -202,13 +216,62 @@ class VendorSecurityTests(unittest.TestCase):
             resolve_client_vendor_access(sg, 1, ["VEN", "VEX"])
         self.assertEqual([], sg.writes)
 
-    def test_sup_has_no_vendor_payload(self):
+    def test_sup_assigns_tasks_to_lega_without_vendor_or_project_access(self):
         sg = FakeSG()
         plan = resolve_client_vendor_access(sg, 1, ["sup"])
+        self.assertEqual("internal", plan["kind"])
+        self.assertEqual([], plan["users"])
+        plan = with_internal_vendor_assignee(
+            sg,
+            plan,
+            REVIEWER_KEY_TO_NAME,
+            INTERNAL_VENDOR_ASSIGNEE_KEY,
+        )
+        self.assertEqual(
+            [{"type": "HumanUser", "id": 6}],
+            plan["users"],
+        )
         self.assertEqual({}, shot_vendor_fields(plan))
-        self.assertEqual({}, task_vendor_fields(plan))
+        self.assertEqual(
+            {"task_assignees": [{"type": "HumanUser", "id": 6}]},
+            task_vendor_fields(plan),
+        )
         self.assertEqual([], add_project_users(sg, 1, plan))
         self.assertEqual([], sg.writes)
+
+    def test_sup_missing_or_ambiguous_assignee_aborts_without_writes(self):
+        for people in (
+            [],
+            [
+                {"id": 6, "name": "Lega Pugliese"},
+                {"id": 9, "name": "Lega Pugliese"},
+            ],
+        ):
+            sg = FakeSG()
+            sg.people = people
+            with self.assertRaises(VendorAccessError):
+                plan = resolve_client_vendor_access(sg, 1, ["SUP"])
+                with_internal_vendor_assignee(
+                    sg,
+                    plan,
+                    REVIEWER_KEY_TO_NAME,
+                    INTERNAL_VENDOR_ASSIGNEE_KEY,
+                )
+            self.assertEqual([], sg.writes)
+
+    def test_plain_client_plan_does_not_gain_the_sup_assignee(self):
+        sg = FakeSG()
+        plan = resolve_client_vendor_access(sg, 1, [])
+        self.assertIs(
+            plan,
+            with_internal_vendor_assignee(
+                sg,
+                plan,
+                REVIEWER_KEY_TO_NAME,
+                INTERNAL_VENDOR_ASSIGNEE_KEY,
+            ),
+        )
+        self.assertEqual({}, task_vendor_fields(plan))
 
     def test_saga_orders_main_stats_grant_and_reports_partial(self):
         calls = []

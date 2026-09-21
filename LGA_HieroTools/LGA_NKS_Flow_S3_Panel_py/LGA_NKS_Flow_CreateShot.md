@@ -119,6 +119,8 @@ Para cada clip seleccionado:
 - Se crean todas las tasks habilitadas (ej: Comp, Roto)
 - Cada task se crea con su pipeline step correspondiente
 - Se asignan los reviewers seleccionados como `task_reviewers`
+- En Client, si el naming contiene `SUP`, cada task habilitada se asigna a Lega
+  como `task_assignees`; `SUP` sigue sin grupo vendor ni altas de acceso al proyecto.
 - Se aplica reducción del 30% al tiempo estimado antes de subirlo
 - Se sube thumbnail desde Hiero
 - Se actualizan estados según configuración
@@ -164,6 +166,8 @@ Cada task tiene su propia fila con:
 - **Reviewers:** Checkboxes horizontales (solo nombres en UI)
   - Client: únicamente ☑️ Lega.
   - Studio: ☑️ Lega, ☑️ Sebas, ☑️ Juano, ☑️ Charly y ☑️ Javi.
+  - Para un shot SUP en Client, Lega aparece chequeado como reviewer y además
+    es el assignee fijo de cada task habilitada.
 
 **Comportamiento (v1.29 - Diseño Compacto):**
 - **Task DESHABILITADA (☐):**
