@@ -93,7 +93,8 @@ Internal reference: [Flow | S3 Panel](LGA_HieroTools/docs/LGA_NKS_Flow_S3_Panel_
   grant, is omitted from the Flow Shot code, and assigns every enabled task to
   Lega. External vendor suffixes remain part of the code.
   Comp is the only task enabled by default, CG remains available but disabled,
-  and Lega is the only reviewer offered in Client.
+  and Lega is the only reviewer offered in Client. For SUP shots, every enabled
+  task also shows a separate checked `Flow Assignee: Lega` indicator.
 - **Modify Shot**  
   Modifies an existing shot in Flow. One clip at a time.
 - **Check Shots Exist**  

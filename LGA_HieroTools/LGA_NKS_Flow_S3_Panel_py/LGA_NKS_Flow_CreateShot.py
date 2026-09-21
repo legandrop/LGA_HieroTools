@@ -1,11 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CreateShot v1.54 | Lega
+  LGA_NKS_Flow_CreateShot v1.55 | Lega
 
   Script para crear shots en ShotGrid basado en el nombre del clip seleccionado en Hiero.
   SIN usar templates predefinidos - crea tasks manualmente para mayor control.
 
+  v1.55: La UI Client muestra por separado el reviewer editable y el Flow
+         Assignee fijo de SUP, con Lega chequeado en cada Task habilitada.
   v1.54: En Client, las Tasks habilitadas de un shot SUP se asignan siempre a
          Lega, que ya aparece chequeado como reviewer en la UI.
   v1.53: En Client, CG queda apagada por defecto y el unico reviewer visible es
@@ -175,6 +177,7 @@ from LGA_NKS_Flow_NamingUtils import (
     extract_vendor_token,
     extract_shot_code_with_vendor_candidate,
     find_unknown_vendor_slot,
+    is_internal_vendor_token,
     TASK_NAME_ALIASES,
 )
 
@@ -211,6 +214,17 @@ from LGA_NKS_Shared.LGA_NKS_AssignmentSaga import (
     load_in_stable_context,
 )
 from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import filter_states_for_mode
+
+
+TASK_ROLE_UI = {
+    "reviewers_label": "Reviewers",
+    "flow_assignee_label": "Flow Assignee",
+    "sup_assignee_label": "SUP Assignee",
+    "sup_assignee_tooltip": (
+        "En los shots SUP, esta task se asigna siempre a Lega en Flow. "
+        "Es independiente del checkbox de reviewer."
+    ),
+}
 
 # Importar módulo de creación de carpetas
 folders_path = Path(__file__).parent
@@ -837,6 +851,22 @@ class ShotConfigDialog(QDialog):
         self.sequence_name = sequence_name
         self.shot_config = None
         self.existing_tasks = set()
+        internal_flags = [
+            is_internal_vendor_token(clip_info.get("vendor_token"))
+            for clip_info in self.clips_info
+        ]
+        self.show_sup_assignee = (
+            self.dialog_mode == "create"
+            and self.context_mode == "client"
+            and any(internal_flags)
+        )
+        if self.show_sup_assignee:
+            self.setMinimumWidth(820)
+        self.sup_assignee_label = (
+            TASK_ROLE_UI["flow_assignee_label"]
+            if internal_flags and all(internal_flags)
+            else TASK_ROLE_UI["sup_assignee_label"]
+        )
         
         # Diccionario para almacenar widgets de tasks dinámicamente
         # Estructura: {task_name: {widget_key: widget_object}}
@@ -1116,7 +1146,7 @@ class ShotConfigDialog(QDialog):
         self.task_widgets[task_name] = {}
         self.task_widgets[task_name]["separator"] = task_separator
         
-        # Layout principal de 5 columnas
+        # Layout principal de 5 columnas; la ultima agrupa roles de Flow.
         task_layout = QHBoxLayout()
 
         # ===== Columna 1: Checkbox Enable y Nombre de Task =====
@@ -1222,12 +1252,15 @@ class ShotConfigDialog(QDialog):
         # Espacio entre columnas
         task_layout.addSpacing(30)
 
-        # ===== Columna 5: Reviewers (más ancha) =====
+        # ===== Columna 5: Reviewers y assignee fijo de SUP =====
         reviewers_widget = QFrame()  # Widget contenedor para poder ocultarlo
         reviewers_widget.setFrameShape(QFrame.NoFrame)  # Sin borde visible
-        reviewers_layout = QVBoxLayout(reviewers_widget)
+        roles_layout = QHBoxLayout(reviewers_widget)
+        roles_layout.setContentsMargins(0, 0, 0, 0)
+
+        reviewers_layout = QVBoxLayout()
         reviewers_layout.setContentsMargins(0, 0, 0, 0)  # Sin márgenes adicionales
-        reviewers_label = QLabel("Reviewers")
+        reviewers_label = QLabel(TASK_ROLE_UI["reviewers_label"])
         reviewers_label.setStyleSheet(
             f"color: {Color.TEXT_STRONG}; font-weight: bold; padding-top: 0px;"
         )
@@ -1245,11 +1278,42 @@ class ShotConfigDialog(QDialog):
             reviewer_checkboxes[reviewer["key"]] = reviewer_cb
 
         reviewers_layout.addLayout(reviewers_checkboxes_layout)
-        task_layout.addWidget(reviewers_widget, 2)  # Stretch factor 2 para hacerla más ancha
+        roles_layout.addLayout(reviewers_layout)
+
+        flow_assignee_label = None
+        flow_assignee_checkbox = None
+        if self.show_sup_assignee:
+            roles_layout.addSpacing(20)
+            assignee_layout = QVBoxLayout()
+            assignee_layout.setContentsMargins(0, 0, 0, 0)
+            flow_assignee_label = QLabel(self.sup_assignee_label)
+            flow_assignee_label.setStyleSheet(
+                f"color: {Color.TEXT_STRONG}; font-weight: bold; padding-top: 0px;"
+            )
+            assignee_layout.addWidget(flow_assignee_label)
+
+            assignee = next(
+                reviewer
+                for reviewer in get_available_reviewers("client")
+                if reviewer["key"] == INTERNAL_VENDOR_ASSIGNEE_KEY
+            )
+            flow_assignee_checkbox = QCheckBox(assignee["label"])
+            flow_assignee_checkbox.setChecked(True)
+            flow_assignee_checkbox.setProperty("lgaLabeled", True)
+            flow_assignee_checkbox.setEnabled(False)
+            flow_assignee_checkbox.setToolTip(
+                TASK_ROLE_UI["sup_assignee_tooltip"]
+            )
+            assignee_layout.addWidget(flow_assignee_checkbox)
+            roles_layout.addLayout(assignee_layout)
+
+        task_layout.addWidget(reviewers_widget, 3)
         
         self.task_widgets[task_name]["reviewer_checkboxes"] = reviewer_checkboxes
         self.task_widgets[task_name]["reviewers_label"] = reviewers_label
         self.task_widgets[task_name]["reviewers_widget"] = reviewers_widget
+        self.task_widgets[task_name]["flow_assignee_label"] = flow_assignee_label
+        self.task_widgets[task_name]["flow_assignee_checkbox"] = flow_assignee_checkbox
 
         # ===== Conectar checkbox de enable para habilitar/deshabilitar campos =====
         enabled_cb.toggled.connect(

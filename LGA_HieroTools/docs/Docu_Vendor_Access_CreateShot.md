@@ -29,7 +29,10 @@ el acceso se resuelven por separado y todo el acceso externo es fail-closed.
   disponible pero apagada. El único reviewer ofrecido es Lega. Los reviewers
   de Studio no se construyen como checkboxes en Client. El checkbox de Lega
   aparece marcado desde el inicio; en shots SUP, el assignee fijo no depende de
-  que ese checkbox de reviewer permanezca marcado.
+  que ese checkbox de reviewer permanezca marcado. Para que esa diferencia sea
+  visible, cada Task habilitada muestra dos controles separados: `Reviewers`
+  conserva el checkbox editable y `Flow Assignee` muestra a Lega chequeado y
+  bloqueado porque la asignacion es automatica.
 - En Client, la familia CG se resuelve por exclusión. Una forma exacta
   `PROJA_010_020_X_stream` trata `X` como candidato vendor aunque `stream` sea
   una disciplina nueva; si `X` no es vendor live ni token interno, se rechaza y

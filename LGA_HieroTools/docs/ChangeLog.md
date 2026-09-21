@@ -1,5 +1,7 @@
 v3.95:
 
+        - Create Shot hace visible la asignacion automatica de SUP (`LGA_NKS_Flow_CreateShot v1.55`): cada Task habilitada muestra ahora `Reviewers` y `Flow Assignee` por separado, con Lega chequeado y bloqueado en el segundo. Asi queda claro que destildar el reviewer no quita el assignee fijo que se escribe en Flow. [ Create Shot - Mostrar assignee SUP en la UI ]
+
         - Create Shot completa el falso vendor SUP (`LGA_NKS_Flow_CreateShot v1.54`, `LGA_NKS_ClientVendorAccess v1.01`, `LGA_NKS_Flow_Reviewer_Config v1.01`): conserva el token solo para reconocer el naming interno y sigue sin grupo vendor ni altas en `Project.users`, pero ahora resuelve de forma univoca a Lega en el preflight y crea cada Task habilitada con ese `task_assignees`. El checkbox de Lega ya aparece marcado como reviewer en Client; el assignee fijo no depende de que se conserve esa seleccion. [ Create Shot - Asignar SUP a Lega ]
 
         - Los titulos visibles explicitan la estructura de los tres docks sin cambiar modulos, clases, carpetas ni `objectName`: `Flow Review` describe un unico recorrido de review conectado con Flow; `Flow | S3` separa las herramientas de Flow de las de almacenamiento; `Viewer | TL` separa Viewer de Timeline (`LGA_NKS_Flow_Panel v2.61`, `LGA_NKS_Flow_FlowProd_Panel v1.31`, `LGA_ViewerPanel v1.76`). [ Paneles - Aclarar titulos visibles ]

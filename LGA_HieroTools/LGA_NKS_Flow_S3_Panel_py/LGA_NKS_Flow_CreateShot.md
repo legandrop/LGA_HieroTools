@@ -166,8 +166,9 @@ Cada task tiene su propia fila con:
 - **Reviewers:** Checkboxes horizontales (solo nombres en UI)
   - Client: únicamente ☑️ Lega.
   - Studio: ☑️ Lega, ☑️ Sebas, ☑️ Juano, ☑️ Charly y ☑️ Javi.
-  - Para un shot SUP en Client, Lega aparece chequeado como reviewer y además
-    es el assignee fijo de cada task habilitada.
+- **Flow Assignee:** En un shot SUP de Client aparece como un control separado,
+  con Lega chequeado y bloqueado en cada task habilitada. No se confunde con el
+  reviewer: destildar el reviewer no cambia el assignee fijo.
 
 **Comportamiento (v1.29 - Diseño Compacto):**
 - **Task DESHABILITADA (☐):**
@@ -179,7 +180,8 @@ Cada task tiene su propia fila con:
 - **Task HABILITADA (☑):**
   - Muestra separador
   - Muestra: `☑ [NOMBRE TASK]`
-  - Muestra todas las columnas: Est. Days, Status, Description, Reviewers
+  - Muestra todas las columnas: Est. Days, Status, Description y roles de Flow
+    (Reviewers; además Flow Assignee cuando corresponde a SUP)
   - Ocupa ~3 líneas
 
 - **Comp:** única task habilitada por defecto (muestra columnas).
