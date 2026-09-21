@@ -784,6 +784,18 @@ class ProjectsPanel(QtWidgets.QWidget):
             pass
         return Color.SURFACE_RAISED
 
+    @staticmethod
+    def _tracks_match(first, second):
+        """Compara wrappers de Hiero sin asumir identidad Python persistente."""
+        if first is second:
+            return True
+        if first is None or second is None:
+            return False
+        try:
+            return bool(first == second)
+        except Exception:
+            return False
+
     @classmethod
     def _preview_item(cls, item, shift_frames=0, is_new=False, name=None, duration=None):
         """Normaliza un clip para la tabla grafica sin tocar la API de Hiero."""
@@ -809,7 +821,6 @@ class ProjectsPanel(QtWidgets.QWidget):
         """Construye el timeline proyectado continuo con el mismo ripple de Import Shot."""
         rows = []
         ripple_items = cls._import_shot_ripple_items(sequence, playhead)
-        ripple_ids = {id(item) for item in ripple_items}
         effective_insert_frame = min(
             (int(item.timelineIn()) for item in ripple_items), default=playhead
         )
@@ -833,9 +844,9 @@ class ProjectsPanel(QtWidgets.QWidget):
                     int(item.timelineOut())
                 except Exception:
                     continue
-                shift = duration if visual_ripple and id(item) in ripple_ids else 0
+                shift = duration if visual_ripple and int(item.timelineOut()) >= playhead else 0
                 clips.append(cls._preview_item(item, shift))
-            if track is target_track:
+            if cls._tracks_match(track, target_track):
                 new_item = cls._preview_item(
                     None,
                     is_new=True,

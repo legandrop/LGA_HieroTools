@@ -132,7 +132,7 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
         self._analyze_callback = analyze_callback
         self.result_data = None
         self._current_plan = None
-        self._selected_track_value = selected_track
+        self._selected_track_value = self._normalize_track(selected_track)
         self._selected_mode_value = initial_mode
         self._row_tracks = []
 
@@ -204,8 +204,7 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
         header.setMinimumSectionSize(1)
         header.setSectionResizeMode(0, QtWidgets.QHeaderView.Fixed)
         self._timeline_table.setColumnWidth(0, 5)
-        header.setSectionResizeMode(1, QtWidgets.QHeaderView.Fixed)
-        self._timeline_table.setColumnWidth(1, 150)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
         header.setSectionResizeMode(2, QtWidgets.QHeaderView.Stretch)
         layout.addWidget(self._timeline_table, 1)
 
@@ -228,6 +227,26 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
 
     def _selected_track(self):
         return self._selected_track_value
+
+    def _normalize_track(self, track):
+        """Devuelve el wrapper de la tabla aunque Hiero haya creado otro wrapper."""
+        for entry in self._tracks:
+            candidate = entry["track"]
+            if self._tracks_match(candidate, track):
+                return candidate
+        return None
+
+    @staticmethod
+    def _tracks_match(first, second):
+        """Compara wrappers de Hiero que pueden no conservar identidad Python."""
+        if first is second:
+            return True
+        if first is None or second is None:
+            return False
+        try:
+            return bool(first == second)
+        except Exception:
+            return False
 
     def _selected_mode(self):
         return self._selected_mode_value
@@ -252,7 +271,7 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
         track, selectable = self._row_tracks[row_index]
         if not selectable:
             return
-        self._selected_track_value = track
+        self._selected_track_value = self._normalize_track(track)
         self._refresh()
 
     def _refresh(self):
@@ -270,7 +289,7 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
                 (
                     entry["label"]
                     for entry in self._tracks
-                    if entry["track"] is track
+                    if self._tracks_match(entry["track"], track)
                 ),
                 "Selected video track",
             )
@@ -289,14 +308,15 @@ class ProjectMediaPreviewDialog(QtWidgets.QDialog):
             self._timeline_table.setItem(row_index, 0, color_item)
             track = row.get("track_ref")
             selectable = bool(row.get("selectable"))
-            selected = track is self._selected_track_value
+            selected = self._tracks_match(track, self._selected_track_value)
             track_text = str(row.get("track", ""))
             if selected:
                 track_text = "✓ " + track_text
             track_item = QtWidgets.QTableWidgetItem(track_text)
             track_item.setFlags(Qt.ItemIsEnabled if not selectable else Qt.ItemIsEnabled | Qt.ItemIsSelectable)
             if selected:
-                track_item.setForeground(QtGui.QBrush(QtGui.QColor(Color.ACCENT)))
+                track_item.setBackground(QtGui.QColor(Color.ACCENT_TRACK))
+                track_item.setForeground(QtGui.QBrush(QtGui.QColor(Color.TEXT_STRONG)))
                 track_font = track_item.font()
                 semibold(track_font)
                 track_item.setFont(track_font)

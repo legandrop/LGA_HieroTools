@@ -390,8 +390,25 @@ class ProjectsPanelMediaDropTests(unittest.TestCase):
         self.assertIn("cellClicked.connect", source)
         self.assertIn("_on_timeline_cell_clicked", source)
         self.assertIn("button.setCheckable(True)", source)
+        self.assertIn("QHeaderView.ResizeToContents", source)
+        self.assertIn("track_item.setBackground", source)
         for label in ("Use available gap", "Open space", "Timeline end"):
             self.assertIn(label, source)
+
+    def test_preview_matches_hiero_wrappers_without_relying_on_python_identity(self):
+        source = PANEL_PATH.read_text(encoding="utf-8-sig")
+        tree = ast.parse(source)
+        panel_class = next(
+            node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "ProjectsPanel"
+        )
+        method = next(
+            node
+            for node in panel_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_tracks_match"
+        )
+        method_source = ast.get_source_segment(source, method)
+        self.assertIn("first == second", method_source)
+        self.assertNotIn("id(first)", method_source)
 
     def test_confirming_preview_keeps_the_sequence_captured_before_the_modal(self):
         source = PANEL_PATH.read_text(encoding="utf-8-sig")
