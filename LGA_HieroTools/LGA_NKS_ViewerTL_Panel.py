@@ -1,10 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_ViewerPanel v1.77 | Lega
+  LGA_ViewerPanel v1.78 | Lega
 
   Panel con herramientas para el viewer y el timeline de Hiero
 
+  v1.78: La apertura del Shot Info pasa al helper compartido
+         LGA_NKS_ShotInfoOnReview (que tambien usa el Flow Pull) y se decide
+         por reviewer con REVIEWERS_WITH_AUTO_SHOT_INFO en vez de estar clavada
+         en los metodos de Lega. Hoy sigue habilitado solo para Lega.
   v1.77: Prev/Next Rev Lega abren el Shot Info del Flow Review Panel al
          terminar el salto. Si ya habia uno abierto desde este flujo, lo
          reemplaza en la misma posicion en vez de apilar ventanas.
@@ -52,6 +56,10 @@ import time
 import importlib.util
 from logging.handlers import QueueHandler, QueueListener
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
+from LGA_NKS_Shared.LGA_NKS_ShotInfoOnReview import (
+    is_enabled_for as shot_info_on_review_enabled,
+    open_shot_info as open_shot_info_on_review,
+)
 
 # Importar funciones de utilidad de estilos
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "LGA_NKS_Shared"))
@@ -386,10 +394,10 @@ class ViewerPanel(QtWidgets.QWidget):
             # Verificar si el usuario está en la configuración
             if usuario_normalizado in usuarios_config:
                 config = usuarios_config[usuario_normalizado]
-                # Solo los de Lega encadenan el Shot Info (ver next_rev_lega).
+                # Reviewers habilitados en LGA_NKS_ShotInfoOnReview encadenan el Shot Info.
                 extra_tip = (
                     "\nAl terminar abre el Shot Info del shot"
-                    if usuario_normalizado == "lega"
+                    if shot_info_on_review_enabled(usuario_normalizado)
                     else ""
                 )
 
@@ -768,14 +776,11 @@ class ViewerPanel(QtWidgets.QWidget):
     def next_rev_sup(self):
         self.execute_prevnext_rev("next", "sup")
 
-    # Solo en los de Lega: al saltar se abre ademas el Shot Info del shot nuevo.
     def prev_rev_lega(self):
-        if self.execute_prevnext_rev("prev", "lega"):
-            self._schedule_shot_info_after_rev()
+        self.execute_prevnext_rev("prev", "lega")
 
     def next_rev_lega(self):
-        if self.execute_prevnext_rev("next", "lega"):
-            self._schedule_shot_info_after_rev()
+        self.execute_prevnext_rev("next", "lega")
 
     def prev_rev_javi(self):
         self.execute_prevnext_rev("prev", "javi")
@@ -820,6 +825,10 @@ class ViewerPanel(QtWidgets.QWidget):
                     f"Ejecutado LGA_NKS_PrevNext_Rev script con dirección {direction} y tipo {rev_type}. "
                     f"Salto: {moved}"
                 )
+                # Sebas usa el rev_type "sup"; el resto coincide con su clave de usuario.
+                reviewer = "sebas" if rev_type == "sup" else rev_type
+                if moved and shot_info_on_review_enabled(reviewer):
+                    self._schedule_shot_info_after_rev()
                 return moved
             else:
                 debug_print(f"Script no encontrado en la ruta: {script_path}")
@@ -834,51 +843,8 @@ class ViewerPanel(QtWidgets.QWidget):
         QtCore.QTimer.singleShot(0, self._open_shot_info_after_rev)
 
     def _open_shot_info_after_rev(self):
-        """Abre el Shot Info del Flow Review Panel para el shot del playhead.
-
-        Si sigue abierta la ventana de un salto anterior, se cierra y la nueva
-        toma su geometria: al recorrer revs no se apilan ventanas y la info
-        aparece siempre en el mismo lugar.
-        """
-        previous_geometry = None
-        previous = getattr(self, "_rev_shot_info_window", None)
-        self._rev_shot_info_window = None
-        if previous is not None:
-            try:
-                if previous.isVisible():
-                    previous_geometry = previous.geometry()
-                    previous.close()
-            except RuntimeError:
-                # El objeto C++ ya no existe (la ventana se destruyo antes).
-                pass
-
-        try:
-            script_path = os.path.join(
-                os.path.dirname(__file__),
-                "LGA_NKS_Flow_Rev_Panel_py",
-                "LGA_NKS_Flow_Shot_info.py",
-            )
-            if not os.path.exists(script_path):
-                debug_print(f"Shot Info no encontrado en la ruta: {script_path}")
-                return
-
-            spec = importlib.util.spec_from_file_location(
-                "LGA_NKS_Flow_Shot_info", script_path
-            )
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            module.main()
-
-            window = getattr(module, "window", None)
-            self._rev_shot_info_window = window
-            if window is not None and previous_geometry is not None:
-                window.setGeometry(previous_geometry)
-            debug_print(
-                f"Shot Info abierto tras Prev/Next Rev Lega "
-                f"(reemplaza anterior: {previous_geometry is not None})"
-            )
-        except Exception as e:
-            debug_print(f"Error al abrir Shot Info tras Prev/Next Rev Lega: {e}")
+        # Reemplaza la ventana del salto anterior en la misma posicion (ver helper).
+        open_shot_info_on_review("ViewerTL")
 
     ###### SnapShot
     def snapshot(self, open_in_editor=False):

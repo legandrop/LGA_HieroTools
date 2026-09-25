@@ -1,10 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Shot_info v2.00 | Lega
+  LGA_NKS_Flow_Shot_info v2.01 | Lega
 
   Imprime informacion del shot y las versiones de la task seleccionada
   (comp, roto o cleanup) en el playhead.
+
+  v2.01: main() acepta task_name opcional. Si viene, no se resuelve la task
+         en el playhead ni se abre el selector: la usa el Flow Pull, que ya
+         sabe la task de la fila clickeada (ver LGA_NKS_ShotInfoOnReview).
 
   v2.00: Se elimina el desvio al Shot Info del Playlist Panel, que se borro
          del repo. En timelines de vendor con usuario Master, Shot Info le
@@ -1335,7 +1339,7 @@ class HieroOperations:
         version_number = version_match.group(1) if version_match else "Unknown"
         return base_name, version_number
 
-    def process_selected_clips(self):
+    def process_selected_clips(self, task_override=None):
         """Procesa el clip del playhead resolviendo la task entre las disponibles.
 
         Si en el playhead hay clips de varias tasks (`_comp_`, `_roto_`, `_cleanup_`),
@@ -1350,8 +1354,15 @@ class HieroOperations:
             return []
 
         seq = hiero.ui.activeSequence()
-        resolved_task = resolve_task_at_playhead(seq, title="Select task") if seq else None
-        debug_print(f"Task resuelta para Shot_info: {resolved_task}")
+        if task_override:
+            # El llamador ya sabe la task (fila del Pull): no se pregunta.
+            resolved_task = str(task_override).strip("_").lower()
+            debug_print(f"Task indicada por el llamador: {resolved_task}")
+        else:
+            resolved_task = (
+                resolve_task_at_playhead(seq, title="Select task") if seq else None
+            )
+            debug_print(f"Task resuelta para Shot_info: {resolved_task}")
 
         if resolved_task:
             target_track = track_for_task(resolved_task)
@@ -2141,7 +2152,7 @@ class GUIWindow(QWidget):
         debug_print("Results displayed successfully.")
 
 
-def main():
+def main(task_name=None):
     global app, window
     db_path = get_pipesync_db_path("pipesync.db")
 
@@ -2155,7 +2166,7 @@ def main():
     else:
         app = QApplication.instance()
     window = GUIWindow(hiero_ops)
-    results = hiero_ops.process_selected_clips()
+    results = hiero_ops.process_selected_clips(task_override=task_name)
     debug_print(f"Results: {results}")
     window.display_results(results)
     window.show()

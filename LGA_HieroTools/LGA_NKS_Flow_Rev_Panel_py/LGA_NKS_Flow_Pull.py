@@ -1,11 +1,18 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.66 | Lega
+  LGA_NKS_Flow_Pull v3.67 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
+
+  v3.67: Click en una fila cuyo estado es el review del usuario actual abre,
+         ademas de navegar, el Shot Info de ese shot y task, arriba de la
+         ventana del Pull (topmost si el Pull lo es). Solo para los reviewers
+         de REVIEWERS_WITH_AUTO_SHOT_INFO (LGA_NKS_ShotInfoOnReview), hoy
+         Lega. Cada fila guarda su codigo de estado y un Push lo actualiza,
+         asi una fila que dejo de estar en review ya no lo abre.
 
   v3.66: La fila seleccionada de la tabla de resultados perdia todos los
          colores: fondo gris y texto negro. Con hoja de estilo en la tabla Qt
@@ -245,6 +252,15 @@ try:
 except ImportError:
     find_editref_clip_at_position = None
 
+try:
+    from LGA_NKS_Shared.LGA_NKS_ShotInfoOnReview import (
+        is_enabled_for as shot_info_on_review_enabled,
+        open_shot_info as open_shot_info_on_review,
+    )
+except ImportError:
+    shot_info_on_review_enabled = None
+    open_shot_info_on_review = None
+
 
 def _normalize_flow_login(login):
     if not login:
@@ -270,17 +286,24 @@ def _normalize_flow_login(login):
     return aliases.get(user, user)
 
 
-def _current_user_review_status_codes():
-    """Devuelve los codigos Flow de review que corresponden al usuario actual."""
+def _current_flow_user():
+    """(login, clave normalizada) del usuario de Flow actual, o (None, None)."""
     try:
         from LGA_NKS_Shared.SecureConfig_Reader import get_flow_credentials
 
         _url, login, _password = get_flow_credentials()
     except Exception as e:
         debug_print(f"No se pudo obtener usuario actual para filas de review: {e}")
-        return set()
+        return None, None
+    return login, _normalize_flow_login(login)
 
-    user = _normalize_flow_login(login)
+
+def _current_user_review_status_codes(login=None, user=None):
+    """Devuelve los codigos Flow de review que corresponden al usuario actual."""
+    if user is None:
+        login, user = _current_flow_user()
+    if not user:
+        return set()
     user_to_status = {
         "lega": {"revleg"},
         "sebas": {"rev_su"},
@@ -781,6 +804,7 @@ def update_open_pull_windows_after_push(
                 task_name=task_name,
                 status_name=status_name,
                 status_color=status_color,
+                status_code=status_code,
             ):
                 updated += 1
         except Exception as e:
@@ -1280,6 +1304,7 @@ class GUI_Table(QtWidgets.QDialog):
         task_name=None,
         status_name=None,
         status_color=None,
+        status_code=None,
     ):
         if not status_name or not status_color:
             return False
@@ -1305,6 +1330,9 @@ class GUI_Table(QtWidgets.QDialog):
             self._apply_status_item(prev_status_item, old_new_status, old_new_color)
             self._apply_status_item(new_status_item, status_name, status_color)
 
+            if row < len(self.row_navigation_data):
+                self.row_navigation_data[row]["status_code"] = status_code
+
             if row < len(self.row_background_colors):
                 while len(self.row_background_colors[row]) <= 6:
                     self.row_background_colors[row].append("#8a8a8a")
@@ -1324,7 +1352,28 @@ class GUI_Table(QtWidgets.QDialog):
         if row < 0 or row >= len(self.row_navigation_data):
             debug_print(f"Fila sin datos de navegacion: {row}")
             return
-        navigate_to_pull_result(self.row_navigation_data[row])
+        nav_data = self.row_navigation_data[row]
+        if navigate_to_pull_result(nav_data) and self._row_opens_shot_info(nav_data):
+            # navigate_to_pull_result deja encolado el Zoom to Fit con un
+            # singleShot(0); este va detras y lee el playhead ya movido.
+            task_name = nav_data.get("task_name")
+            QtCore.QTimer.singleShot(
+                0,
+                lambda: open_shot_info_on_review(
+                    "Pull", task_name=task_name, keep_on_top=self._keep_on_top
+                ),
+            )
+
+    def _row_opens_shot_info(self, nav_data):
+        """True si la fila esta en el review del usuario y el tiene Shot Info automatico."""
+        if not self.hiero_ops or open_shot_info_on_review is None:
+            return False
+        if not shot_info_on_review_enabled(getattr(self.hiero_ops, "current_user_key", None)):
+            return False
+        status_code = str(nav_data.get("status_code") or "").lower()
+        opens = status_code in self.hiero_ops.current_user_review_status_codes
+        debug_print(f"Click en fila: status_code='{status_code}' abre Shot Info={opens}")
+        return opens
 
     def initUI(self):
         self.setWindowTitle("Read Nodes EXR Info")
@@ -1678,7 +1727,10 @@ class HieroOperations:
         # Contadores para distinguir "sin cambios" de "shots no encontrados en la DB"
         self.shots_found_in_db = 0
         self.shots_not_found = 0
-        self.current_user_review_status_codes = _current_user_review_status_codes()
+        login, self.current_user_key = _current_flow_user()
+        self.current_user_review_status_codes = _current_user_review_status_codes(
+            login, self.current_user_key
+        )
         self.task_mismatches = []
         # Shots con task CG en la DB y sin ningun clip en un track de CG en el
         # timeline: [(shot_code, version_code_de_la_ultima_subida), ...]
@@ -1734,6 +1786,7 @@ class HieroOperations:
         clip=None,
         sequence=None,
         file_path=None,
+        status_code=None,
     ):
         row_count = table.rowCount()
         table.insertRow(row_count)
@@ -1823,6 +1876,8 @@ class HieroOperations:
                 or track_for_task_from_registered_tracks(task_name),
                 "timeline_in": timeline_in,
                 "timeline_out": timeline_out,
+                # Codigo de Flow del New Status; decide si el click abre Shot Info.
+                "status_code": status_code,
             }
         )
         table.resizeColumnsToContents()
@@ -2279,6 +2334,7 @@ class HieroOperations:
                                     clip=clip,
                                     sequence=seq,
                                     file_path=file_path,
+                                    status_code=task_status_code,
                                 )
                                 changes_made = True
                                 # Recordar si el clip estaba offline antes del cambio de versión

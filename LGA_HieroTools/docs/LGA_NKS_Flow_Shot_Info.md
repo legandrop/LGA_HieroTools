@@ -11,14 +11,32 @@ Archivo: [LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py](../LGA_NKS_Flow_R
 3. Se consulta `pipesync.db` (`ShotGridManager`) y se arma una estructura `shot -> tasks -> versions -> comments -> replies`.
 4. La GUI (`GUIWindow`) lista cabecera del shot, franja **Task history**, descripcion, versiones, comentarios con thumbnails clickeables y replies anidados.
 
-## Apertura automatica desde Prev/Next Rev Lega
+## Apertura automatica al llegar a un shot en review
 
-Ademas del boton del Flow Review Panel, el Shot Info lo abre el panel Viewer | TL (`LGA_NKS_ViewerTL_Panel.py`, `_open_shot_info_after_rev`) cuando **Prev Rev Lega** o **Next Rev Lega** saltan a otro clip. Existe para revisar en cadena: cada salto trae la info del shot nuevo sin un segundo click.
+Ademas del boton del Flow Review Panel, el Shot Info se abre solo cuando un reviewer llega a un shot que esta en SU estado de review. Existe para revisar en cadena: cada shot nuevo trae su info sin un segundo click. Hay dos puntos de entrada:
 
-- Solo en los botones de Lega; los de los demas reviewers no cambian.
-- Solo si hubo salto: `LGA_NKS_PrevNext_Rev.main()` devuelve `True`/`False` y sin clip siguiente no se abre nada.
-- Corre con un `QTimer.singleShot(0)` encolado despues del `Zoom to Fit` que deja PrevNext, asi lee el playhead ya movido.
-- La ventana de un salto anterior, si sigue abierta, se cierra y la nueva toma su geometria: no se apilan ventanas al recorrer revs.
+1. **Prev/Next Rev** del panel Viewer | TL (`LGA_NKS_ViewerTL_Panel.py`), al terminar el salto.
+2. **Click en una fila del Flow Pull** (`LGA_NKS_Flow_Pull.py`, `navigate_to_table_row`) cuyo New Status es el review del usuario actual. La ventana queda arriba de la del Pull.
+
+Los dos pasan por `LGA_NKS_Shared/LGA_NKS_ShotInfoOnReview.py` (`open_shot_info`).
+
+### Quien lo tiene habilitado
+
+Hoy solo Lega. La lista es `REVIEWERS_WITH_AUTO_SHOT_INFO` en `LGA_NKS_ShotInfoOnReview.py`. **Para habilitarlo a otro reviewer basta con agregar su clave a ese set**, sin tocar nada mas: ViewerTL y Pull consultan `is_enabled_for()`. Las claves son las normalizadas que ya usan los dos paneles: `lega`, `sebas`, `juano`, `javi`, `charly`. Ojo con Sebas: en ViewerTL su `rev_type` es `sup`, y `execute_prevnext_rev` lo traduce a `sebas` antes de consultar.
+
+Para habilitarlo a todos, poner las cinco claves. Para que un reviewer nuevo lo tenga, primero tiene que existir en los dos mapas de usuario: `usuarios_config` de ViewerTL y `user_to_status` / `_normalize_flow_login` del Pull.
+
+### Como decide cada entrada
+
+- **ViewerTL**: solo si hubo salto. `LGA_NKS_PrevNext_Rev.main()` devuelve `True`/`False`; sin clip siguiente no se abre nada. La task se resuelve en el playhead como en el boton normal (si hay varias, pregunta).
+- **Pull**: cada fila guarda el codigo de Flow de su New Status (`status_code` en `row_navigation_data`). Al click abre si ese codigo esta en `current_user_review_status_codes`. Un Push desde el panel actualiza el codigo de la fila (`update_row_after_push`), asi una fila que dejo de estar en review ya no lo abre. La task sale de la fila y se pasa a `main(task_name=...)`, asi el Shot Info no pregunta.
+
+### Detalles que costo resolver
+
+- Corre con un `QTimer.singleShot(0)` encolado despues del `Zoom to Fit` que deja la navegacion (PrevNext y Pull hacen lo mismo), asi el Shot Info lee el playhead ya movido.
+- Una sola ventana compartida entre las dos entradas: si sigue abierta la anterior se cierra y la nueva toma su geometria. No se apilan ventanas al recorrer revs.
+- La ventana del Pull es topmost via `SetWindowPos` (Windows). Una ventana normal nunca queda arriba de una topmost, asi que desde el Pull el Shot Info se abre topmost tambien cuando "Keep this window on top" esta prendido. Fuera de Windows se usa `WindowStaysOnTopHint`, como el Pull.
+- Log de cada apertura: `LGA_HieroTools/logs/DebugPy_ShotInfoOnReview.log`.
 
 ## Origen de los datos
 

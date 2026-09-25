@@ -24,6 +24,9 @@ nueva.
 ## Botones fijos
 
 1. **Flow Pull** — click procesa todos los shots del timeline; Shift+click solo el seleccionado.
+   Click en una fila de resultados navega al shot; si la fila está en el review del usuario y
+   ese reviewer está habilitado (hoy Lega), abre además el Shot Info arriba de la ventana. Ver
+   [LGA_NKS_Flow_Shot_Info.md](LGA_NKS_Flow_Shot_Info.md#apertura-automatica-al-llegar-a-un-shot-en-review).
 2. **Shot Info** — muestra datos del shot y comentarios/versiones de la task; shortcut `Shift+T`.
 3. **Review Pic** — captura el viewer con número de frame para acompañar notas de review.
 
