@@ -186,6 +186,15 @@ Ante el error **no se cae al camino viejo**, aunque sea lo intuitivo: correr el 
 sobre un proyecto managed es justo lo que el filtro del camino viejo existe para evitar. Fallar
 ruidoso es mejor que arreglar mal.
 
+## Donde queda el resumen: en el log, no en la consola
+
+El resumen de cada corrida (corregidos, ya bien, en conflicto, sin transform, con clip y track)
+va **solo** a `LGA_NKS_Edit_Panel_py/logs/DebugPy_LGA_NKS_FixColorspaces.log`, pisado en cada
+corrida. Hasta la v1.22 salia por consola, y como el Pull dispara la correccion al terminar, cada
+pull con cambios la llenaba de decenas de lineas por proyecto. Por consola quedan solo los avisos
+de ERROR (la corrida managed que falla, o un clip que no se pudo setear en el camino viejo), que son
+justamente los que no tienen que pasar desapercibidos.
+
 ## Como agregar un espacio de color nuevo
 
 Sumar la entrada `token -> nombre a buscar` al mapa de tokens de

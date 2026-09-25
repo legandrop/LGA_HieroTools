@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_FixColorspaces v1.22 | Lega
+  LGA_NKS_FixColorspaces v1.23 | Lega
 
   Corrige el color transform de los clips del timeline activo.
 
@@ -38,7 +38,7 @@ ____________________________________________________________________
        se toca.
     5. Si clip.sourceMediaColourTransform() ya es ese nombre, se saltea (no
        se reescribe). Si no, se aplica con setSourceMediaColourTransform().
-    6. Al final se imprime un resumen: corregidos, ya-estaban-bien,
+    6. Al final se escribe al .log un resumen: corregidos, ya-estaban-bien,
        en-conflicto, sin-transform-disponible, con el nombre del clip y el
        track en cada caso.
 
@@ -51,6 +51,10 @@ ____________________________________________________________________
   adentro de las funciones que los usan: este archivo se puede importar en
   un proceso sin Nuke/Hiero sin que explote y sin que haga nada.
 
+  v1.23: Los resumenes (corregidos, ya bien, en conflicto, sin transform) dejan
+         de imprimirse en la consola y van solo al .log. El Flow Pull corre esto
+         al terminar cada pull y llenaba la consola con decenas de lineas por
+         proyecto. Los avisos de ERROR siguen saliendo por consola.
   v1.22: El camino managed se extrae a `run_if_color_managed()`, que ahora
          comparten el boton del Edit Panel y el Flow Pull -que lo dispara al
          terminar, porque cada bump de version cambia el clip a otra Version,
@@ -243,7 +247,6 @@ def corregir_clips_con_colorspace_rec709():
 
     proyectos = hiero.core.projects()
     if not proyectos:
-        print("No hay proyectos abiertos.")
         debug_print("[legacy] No hay proyectos abiertos.")
         return
 
@@ -255,14 +258,14 @@ def corregir_clips_con_colorspace_rec709():
         buscar_y_cambiar_clips_rec709_en_todos(proyecto, corregidos, saltados_managed)
 
     if corregidos:
-        print("Clips corregidos con nuevo colorspace:")
+        debug_print("Clips corregidos con nuevo colorspace:")
         for nombre, ruta, cs in corregidos:
-            print(" - {0}: {1} -> {2} ({3})".format(nombre, cs, COLORSPACE_CORRECTO, ruta))
+            debug_print(" - {0}: {1} -> {2} ({3})".format(nombre, cs, COLORSPACE_CORRECTO, ruta))
     else:
-        print("No se encontraron clips con colorspace 'rec709' o 'gamma2.2'.")
+        debug_print("No se encontraron clips con colorspace 'rec709' o 'gamma2.2'.")
 
     if saltados_managed:
-        print(
+        debug_print(
             "Se saltearon los clips de estos proyectos, que tienen color management: {0}".format(
                 ", ".join(sorted(saltados_managed))
             )
@@ -482,7 +485,7 @@ def corregir_clips_con_color_management(project_name, cm_config, seq):
 
 
 def _imprimir_resumen_managed(project_name, corregidos, ya_bien, conflictos, sin_transform):
-    print(
+    debug_print(
         "Color management ({0}): {1} corregidos, {2} ya estaban bien, {3} en conflicto, "
         "{4} sin transform disponible.".format(
             project_name, len(corregidos), len(ya_bien), len(conflictos), len(sin_transform)
@@ -490,21 +493,21 @@ def _imprimir_resumen_managed(project_name, corregidos, ya_bien, conflictos, sin
     )
 
     if corregidos:
-        print("Corregidos:")
+        debug_print("Corregidos:")
         for nombre, track_name, antes, despues in corregidos:
-            print(" - {0} [{1}]: {2} -> {3}".format(nombre, track_name, antes, despues))
+            debug_print(" - {0} [{1}]: {2} -> {3}".format(nombre, track_name, antes, despues))
 
     if conflictos:
-        print("En conflicto (no tocados):")
+        debug_print("En conflicto (no tocados):")
         for clip, reglas in conflictos:
             nombre = _nombre_clip_seguro(clip)
             tracks = ", ".join("{0}:{1}".format(token, track_name) for token, track_name in reglas)
-            print(" - {0}: aparece bajo reglas distintas ({1})".format(nombre, tracks))
+            debug_print(" - {0}: aparece bajo reglas distintas ({1})".format(nombre, tracks))
 
     if sin_transform:
-        print("Sin transform disponible (no tocados):")
+        debug_print("Sin transform disponible (no tocados):")
         for nombre, track_name, token in sin_transform:
-            print(" - {0} [{1}]: token '{2}' no resolvio".format(nombre, track_name, token))
+            debug_print(" - {0} [{1}]: token '{2}' no resolvio".format(nombre, track_name, token))
 
 
 # ============================

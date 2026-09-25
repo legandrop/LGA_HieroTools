@@ -1,5 +1,7 @@
 v3.97:
 
+        - Fix Colorspaces deja de llenar la consola (`LGA_NKS_FixColorspaces v1.23`): el Flow Pull lo corre al terminar cada pull con cambios y el resumen de clips corregidos, ya bien, en conflicto y sin transform salía por consola con decenas de líneas por proyecto. Ahora ese resumen va solo a `DebugPy_LGA_NKS_FixColorspaces.log`; por consola siguen saliendo únicamente los errores. [ Fix Colorspaces - Resumen solo al log ]
+
         - Prev Rev Lega y Next Rev Lega abren el Shot Info del shot al terminar el salto (`LGA_ViewerPanel v1.77`, `LGA_NKS_PrevNext_Rev v1.28`): antes había que ir al Flow Review Panel y apretar Shot Info en cada shot. PrevNext ahora informa si efectivamente saltó, y solo en ese caso el panel encadena el Shot Info despues del Zoom to Fit. Si sigue abierta la ventana del salto anterior se reemplaza en la misma posicion. Los botones de los demas reviewers no cambian. [ Viewer TL - Abrir Shot Info al saltar Rev Lega ]
 
 v3.96:
