@@ -1,10 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_ViewerPanel v1.76 | Lega
+  LGA_ViewerPanel v1.77 | Lega
 
   Panel con herramientas para el viewer y el timeline de Hiero
 
+  v1.77: Prev/Next Rev Lega abren el Shot Info del Flow Review Panel al
+         terminar el salto. Si ya habia uno abierto desde este flujo, lo
+         reemplaza en la misma posicion en vez de apilar ventanas.
   v1.76: La etiqueta visible pasa de ViewerTL a Viewer | TL para separar con
          claridad las herramientas del Viewer y del Timeline.
   v1.75: Separa nombres Viewer | y TL |, recibe los tres toggles de clips del
@@ -383,6 +386,12 @@ class ViewerPanel(QtWidgets.QWidget):
             # Verificar si el usuario está en la configuración
             if usuario_normalizado in usuarios_config:
                 config = usuarios_config[usuario_normalizado]
+                # Solo los de Lega encadenan el Shot Info (ver next_rev_lega).
+                extra_tip = (
+                    "\nAl terminar abre el Shot Info del shot"
+                    if usuario_normalizado == "lega"
+                    else ""
+                )
 
                 user_buttons.extend([
                     (
@@ -390,14 +399,14 @@ class ViewerPanel(QtWidgets.QWidget):
                         getattr(self, f"prev_rev_{usuario_normalizado}"),
                         config['color'],
                         config['prev_shortcut'],
-                        f"{config['prev_shortcut']}\nBusca el clip anterior con estado Rev {config['nombre']} y ajusta la vista\n(establece In/Out desde EditRef, selecciona clip, ajusta zoom)",
+                        f"{config['prev_shortcut']}\nBusca el clip anterior con estado Rev {config['nombre']} y ajusta la vista\n(establece In/Out desde EditRef, selecciona clip, ajusta zoom)" + extra_tip,
                     ),
                     (
                         f"TL | Next Rev {config['nombre']}",
                         getattr(self, f"next_rev_{usuario_normalizado}"),
                         config['color'],
                         config['next_shortcut'],
-                        f"{config['next_shortcut']}\nBusca el clip siguiente con estado Rev {config['nombre']} y ajusta la vista\n(establece In/Out desde EditRef, selecciona clip, ajusta zoom)",
+                        f"{config['next_shortcut']}\nBusca el clip siguiente con estado Rev {config['nombre']} y ajusta la vista\n(establece In/Out desde EditRef, selecciona clip, ajusta zoom)" + extra_tip,
                     ),
                 ])
                 debug_print(f"Mostrando botones para usuario: {config['nombre']}")
@@ -759,11 +768,14 @@ class ViewerPanel(QtWidgets.QWidget):
     def next_rev_sup(self):
         self.execute_prevnext_rev("next", "sup")
 
+    # Solo en los de Lega: al saltar se abre ademas el Shot Info del shot nuevo.
     def prev_rev_lega(self):
-        self.execute_prevnext_rev("prev", "lega")
+        if self.execute_prevnext_rev("prev", "lega"):
+            self._schedule_shot_info_after_rev()
 
     def next_rev_lega(self):
-        self.execute_prevnext_rev("next", "lega")
+        if self.execute_prevnext_rev("next", "lega"):
+            self._schedule_shot_info_after_rev()
 
     def prev_rev_javi(self):
         self.execute_prevnext_rev("prev", "javi")
@@ -803,14 +815,70 @@ class ViewerPanel(QtWidgets.QWidget):
                 )
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
-                module.main(direction, rev_type)
+                moved = bool(module.main(direction, rev_type))
                 debug_print(
-                    f"Ejecutado LGA_NKS_PrevNext_Rev script con dirección {direction} y tipo {rev_type}."
+                    f"Ejecutado LGA_NKS_PrevNext_Rev script con dirección {direction} y tipo {rev_type}. "
+                    f"Salto: {moved}"
                 )
+                return moved
             else:
                 debug_print(f"Script no encontrado en la ruta: {script_path}")
         except Exception as e:
             debug_print(f"Error al ejecutar el script PrevNext Rev: {e}")
+        return False
+
+    def _schedule_shot_info_after_rev(self):
+        # PrevNext deja encolado el Zoom to Fit con un singleShot(0); este va
+        # detras, asi el Shot Info corre con el salto ya asentado y lee el
+        # clip del playhead nuevo.
+        QtCore.QTimer.singleShot(0, self._open_shot_info_after_rev)
+
+    def _open_shot_info_after_rev(self):
+        """Abre el Shot Info del Flow Review Panel para el shot del playhead.
+
+        Si sigue abierta la ventana de un salto anterior, se cierra y la nueva
+        toma su geometria: al recorrer revs no se apilan ventanas y la info
+        aparece siempre en el mismo lugar.
+        """
+        previous_geometry = None
+        previous = getattr(self, "_rev_shot_info_window", None)
+        self._rev_shot_info_window = None
+        if previous is not None:
+            try:
+                if previous.isVisible():
+                    previous_geometry = previous.geometry()
+                    previous.close()
+            except RuntimeError:
+                # El objeto C++ ya no existe (la ventana se destruyo antes).
+                pass
+
+        try:
+            script_path = os.path.join(
+                os.path.dirname(__file__),
+                "LGA_NKS_Flow_Rev_Panel_py",
+                "LGA_NKS_Flow_Shot_info.py",
+            )
+            if not os.path.exists(script_path):
+                debug_print(f"Shot Info no encontrado en la ruta: {script_path}")
+                return
+
+            spec = importlib.util.spec_from_file_location(
+                "LGA_NKS_Flow_Shot_info", script_path
+            )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            module.main()
+
+            window = getattr(module, "window", None)
+            self._rev_shot_info_window = window
+            if window is not None and previous_geometry is not None:
+                window.setGeometry(previous_geometry)
+            debug_print(
+                f"Shot Info abierto tras Prev/Next Rev Lega "
+                f"(reemplaza anterior: {previous_geometry is not None})"
+            )
+        except Exception as e:
+            debug_print(f"Error al abrir Shot Info tras Prev/Next Rev Lega: {e}")
 
     ###### SnapShot
     def snapshot(self, open_in_editor=False):

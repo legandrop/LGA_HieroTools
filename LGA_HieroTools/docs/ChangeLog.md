@@ -1,3 +1,7 @@
+v3.97:
+
+        - Prev Rev Lega y Next Rev Lega abren el Shot Info del shot al terminar el salto (`LGA_ViewerPanel v1.77`, `LGA_NKS_PrevNext_Rev v1.28`): antes había que ir al Flow Review Panel y apretar Shot Info en cada shot. PrevNext ahora informa si efectivamente saltó, y solo en ese caso el panel encadena el Shot Info despues del Zoom to Fit. Si sigue abierta la ventana del salto anterior se reemplaza en la misma posicion. Los botones de los demas reviewers no cambian. [ Viewer TL - Abrir Shot Info al saltar Rev Lega ]
+
 v3.96:
 
         - El error de Drop media ya no redimensiona la ventana abierta (`LGA_NKS_ProjectMediaPreview v1.07`): el tamaño se calcula al construir el diálogo y el label de estado ignora su `sizeHint` horizontal; alternar a una opción inválida conserva exactamente la geometría de la preview. [ Projects Panel - Fijar tamaño ante error del preview ]

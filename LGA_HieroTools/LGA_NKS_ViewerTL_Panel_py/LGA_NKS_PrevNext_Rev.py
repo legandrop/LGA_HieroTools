@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_PrevNext_Rev v1.27 | Lega
+  LGA_NKS_PrevNext_Rev v1.28 | Lega
 
   Busca el clip anterior o siguiente con estado Rev Lega, Rev Sebas, Rev Charly, Rev Juano o Rev Javi
   y ajusta la vista:
@@ -13,7 +13,10 @@ ____________________________________________________________________
   5. Mueve el playhead a la posición del In.
   6. Ajusta el zoom para que se ajuste al clip seleccionado.
   7. Deselecciona todos los clips.
+  main() devuelve True si efectivamente saltó a un clip, para que el panel
+  pueda encadenar acciones solo cuando hubo salto.
 
+  v1.28: main() devuelve True/False según haya saltado o no a un clip.
   v1.27: Corrige Rev Juano para buscar el color real #7F4B69, igual que Pull/Push.
   v1.26: Agrega soporte para Rev Charly (#a9909d).
   v1.25: Si no existe un track EditRef, usa el In/Out del clip del task en review
@@ -362,7 +365,7 @@ def main(direction, rev_type):
         debug_print(
             f"No se encontraron más clips con estado Rev_{rev_type.capitalize()}."
         )
-        return
+        return False
 
     # 2. Obtener la posición del clip
     clip_position = target_clip.timelineIn()
@@ -379,7 +382,7 @@ def main(direction, rev_type):
         reference_clip = find_editref_clip_at_position(clip_position)
         if not reference_clip:
             debug_print("No se encontró un clip EditRef correspondiente.")
-            return
+            return False
     else:
         reference_clip = target_clip
         debug_print(
@@ -391,7 +394,7 @@ def main(direction, rev_type):
     in_point, out_point = set_in_out_from_clip(reference_clip)
     if in_point is None:
         debug_print("No se pudieron establecer los puntos In/Out.")
-        return
+        return False
 
     # 5. Seleccionar el clip usado como referencia
     timeline_editor = hiero.ui.getTimelineEditor(hiero.ui.activeSequence())
@@ -409,6 +412,8 @@ def main(direction, rev_type):
     if timeline_editor:
         timeline_editor.selectNone()
         debug_print("Clips deseleccionados")
+
+    return True
 
 
 if __name__ == "__main__":

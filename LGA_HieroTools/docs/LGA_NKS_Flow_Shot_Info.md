@@ -11,6 +11,15 @@ Archivo: [LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py](../LGA_NKS_Flow_R
 3. Se consulta `pipesync.db` (`ShotGridManager`) y se arma una estructura `shot -> tasks -> versions -> comments -> replies`.
 4. La GUI (`GUIWindow`) lista cabecera del shot, franja **Task history**, descripcion, versiones, comentarios con thumbnails clickeables y replies anidados.
 
+## Apertura automatica desde Prev/Next Rev Lega
+
+Ademas del boton del Flow Review Panel, el Shot Info lo abre el panel Viewer | TL (`LGA_NKS_ViewerTL_Panel.py`, `_open_shot_info_after_rev`) cuando **Prev Rev Lega** o **Next Rev Lega** saltan a otro clip. Existe para revisar en cadena: cada salto trae la info del shot nuevo sin un segundo click.
+
+- Solo en los botones de Lega; los de los demas reviewers no cambian.
+- Solo si hubo salto: `LGA_NKS_PrevNext_Rev.main()` devuelve `True`/`False` y sin clip siguiente no se abre nada.
+- Corre con un `QTimer.singleShot(0)` encolado despues del `Zoom to Fit` que deja PrevNext, asi lee el playhead ya movido.
+- La ventana de un salto anterior, si sigue abierta, se cierra y la nueva toma su geometria: no se apilan ventanas al recorrer revs.
+
 ## Origen de los datos
 
 Tablas usadas en `pipesync.db`: `projects`, `shots`, `tasks`, `task_assignments`, `versions`, `version_notes`, `version_note_replies`, `task_timelogs`.
