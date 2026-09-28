@@ -62,6 +62,14 @@ if not project_name:
 - Recorre los segmentos de la ruta normalizada.
 - Devuelve el texto después del primer `VFX-` (case-insensitive).
 - Devuelve `None` si no encuentra el patrón → usar fallback.
+- **Conserva las mayúsculas tal como vienen en la ruta.** Windows no distingue
+  `N:/VFX-PROJA` de `N:/vfx-proja`, así que dos clips del mismo proyecto pueden
+  llegar con el nombre escrito distinto según cómo se importaron. La DB de
+  PipeSync guarda `PROJA`, y en SQLite `=` sí distingue: toda consulta a
+  `projects.project_name` con este valor va con `COLLATE NOCASE`. Sin eso el
+  shot "no existe" solo para esos clips y el resto anda bien, que es lo que
+  hace difícil detectarlo. No se resuelve con `.upper()`: hay proyectos con
+  nombre en mayúsculas y minúsculas mezcladas.
 
 ### `extract_project_name(base_name)` _(fallback)_
 - Devuelve el primer bloque del nombre base antes del primer `_`.

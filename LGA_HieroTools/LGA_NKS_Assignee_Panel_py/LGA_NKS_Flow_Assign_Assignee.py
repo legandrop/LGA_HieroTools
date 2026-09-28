@@ -1,10 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Assign_Assignee v1.29 | Lega
+  LGA_NKS_Flow_Assign_Assignee v1.30 | Lega
 
   Asigna un usuario a una tarea en ShotGrid (Flow) a partir del base_name y nombre de usuario
 
+  v1.30: El proyecto se busca en pipesync.db sin distinguir mayusculas:
+         en Client la ruta llega en minuscula (N:/vfx-proja) y la DB
+         guarda PROJA, asi que el shot no aparecia.
   v1.29: La asignación espeja main/stats y recién después ejecuta el grant
          canónico de PipeSync; las fallas parciales ya no se informan como éxito.
   v1.28: La ventana lleva la fuente del pack (apply_ui_font), al
@@ -124,7 +127,7 @@ class DBManager:
                 """
                 SELECT s.* FROM shots s
                 JOIN projects p ON s.project_id = p.id
-                WHERE p.project_name = ? AND s.shot_name = ?
+                WHERE p.project_name COLLATE NOCASE = ? AND s.shot_name = ?
                 """,
                 (project_name, shot_code),
             )

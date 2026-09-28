@@ -1,11 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Shot_info v2.01 | Lega
+  LGA_NKS_Flow_Shot_info v2.02 | Lega
 
   Imprime informacion del shot y las versiones de la task seleccionada
   (comp, roto o cleanup) en el playhead.
 
+  v2.02: El proyecto se busca en pipesync.db sin distinguir mayusculas:
+         en Client la ruta llega en minuscula (N:/vfx-proja) y la DB
+         guarda PROJA, asi que el shot no aparecia.
   v2.01: main() acepta task_name opcional. Si viene, no se resuelve la task
          en el playhead ni se abre el selector: la usa el Flow Pull, que ya
          sabe la task de la fila clickeada (ver LGA_NKS_ShotInfoOnReview).
@@ -1147,7 +1150,10 @@ class ShotGridManager:
 
     def find_project(self, project_name):
         cur = self.conn.cursor()
-        cur.execute("SELECT * FROM projects WHERE project_name = ?", (project_name,))
+        cur.execute(
+            "SELECT * FROM projects WHERE project_name COLLATE NOCASE = ?",
+            (project_name,),
+        )
         return cur.fetchone()
 
     def find_shot(self, project_name, shot_code):
@@ -1156,7 +1162,7 @@ class ShotGridManager:
             """
             SELECT s.* FROM shots s
             JOIN projects p ON s.project_id = p.id
-            WHERE p.project_name = ? AND s.shot_name = ?
+            WHERE p.project_name COLLATE NOCASE = ? AND s.shot_name = ?
             """,
             (project_name, shot_code),
         )

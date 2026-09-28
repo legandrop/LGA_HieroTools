@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push v4.16 | Lega
+  LGA_NKS_Flow_Push v4.17 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -12,6 +12,9 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v4.17: El proyecto se busca en pipesync.db sin distinguir mayusculas:
+         en Client la ruta llega en minuscula (N:/vfx-proja) y la DB
+         guarda PROJA, asi que el shot no aparecia.
   v4.16: Borrar ReviewPic_Cache ya no da por borrado lo que sigue ahi:
          los fallos se juntan, un archivo de solo lectura se destraba, y
          si la carpeta es un enlace no se toca. Devuelve True solo si ya
@@ -652,7 +655,7 @@ class DBManager:
                 """
                 SELECT s.* FROM shots s
                 JOIN projects p ON s.project_id = p.id
-                WHERE p.project_name = ? AND s.shot_name = ?
+                WHERE p.project_name COLLATE NOCASE = ? AND s.shot_name = ?
                 """,
                 (project_name, shot_code),
             )

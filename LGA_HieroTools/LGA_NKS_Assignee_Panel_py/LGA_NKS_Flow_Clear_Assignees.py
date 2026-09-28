@@ -1,10 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Clear_Assignees v1.28 | Lega
+  LGA_NKS_Flow_Clear_Assignees v1.29 | Lega
 
   Elimina los asignados de una tarea en ShotGrid (Flow) a partir del base_name
 
+  v1.29: El proyecto se busca en pipesync.db sin distinguir mayusculas:
+         en Client la ruta llega en minuscula (N:/vfx-proja) y la DB
+         guarda PROJA, asi que el shot no aparecia.
   v1.28: La ventana lleva la fuente del pack (apply_ui_font), al
          armarla y de nuevo al sumar las filas de task; sin eso
          salia con la fuente del host.
@@ -114,7 +117,7 @@ class DBManager:
                 """
                 SELECT s.* FROM shots s
                 JOIN projects p ON s.project_id = p.id
-                WHERE p.project_name = ? AND s.shot_name = ?
+                WHERE p.project_name COLLATE NOCASE = ? AND s.shot_name = ?
                 """,
                 (project_name, shot_code),
             )
