@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_TrackNames_Section v1.01 | Lega
+  LGA_NKS_TrackNames_Section v1.02 | Lega
 
   Seccion read-only del panel de Settings con los nombres de track que el
   pack espera para cada task del contexto activo.
@@ -15,6 +15,8 @@ ____________________________________________________________________
   Vive en su propio modulo y NO importa hiero, asi que el harness de capturas
   puede construir la seccion sin levantar NKS.
 
+  v1.02: El nombre de la task sale de task_display_name() (`Comp`, `CG`):
+         la carpeta paso a minuscula y ya no sirve como etiqueta.
   v1.01: Las filas se pueden rehacer sin rearmar la seccion
          (populate_track_names_section). La vista de Settings se construye
          una sola vez y el toggle Studio/Client cambia el scope de tasks en
@@ -50,7 +52,7 @@ def _tasks_del_contexto():
             active_track_tasks,
             exr_track_for_task,
             rev_track_for_task,
-            task_folder_name,
+            task_display_name,
         )
     except Exception:
         return []
@@ -59,7 +61,7 @@ def _tasks_del_contexto():
     for task in active_track_tasks():
         filas.append(
             (
-                task_folder_name(task),
+                task_display_name(task),
                 exr_track_for_task(task),
                 rev_track_for_task(task),
             )

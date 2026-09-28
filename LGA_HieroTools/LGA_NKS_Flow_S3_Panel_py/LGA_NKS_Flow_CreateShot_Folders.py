@@ -1,15 +1,21 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CreateShot_Folders v1.37 | Lega
+  LGA_NKS_Flow_CreateShot_Folders v1.38 | Lega
 
   Módulo para creación automática de estructura de carpetas por task.
   Se integra con CreateShot y ModifyShot para mantener consistencia.
   - Creación automática de carpetas según task
-  - Estructura jerárquica para 2D (comp, roto, cleanup, DMP) y 3D
+  - Estructura jerárquica para 2D (comp, roto, cleanup, dmp) y 3D
   - Logging detallado de carpetas creadas/existentes
   - Normalización de paths para verificación de existencia
 
+  v1.38: Las carpetas se CREAN en minuscula (`comp`, `dmp`, `cg`,
+         `3d/1_matchmove`, `3d/6_animation`), que pasa a ser la convencion
+         unica del pipeline: Wasabi distingue mayusculas y hacian falta un
+         solo nombre para crear. Las consultas siguen resolviendo sin
+         distinguir mayusculas (resolve_existing_case), asi que un shot con
+         `Comp/` o `3D/` existentes no se parte en dos.
   v1.37: Centraliza calculate_shot_base_path() para que Create Shot no llame
          un metodo de otra clase; ademas separa carpetas creadas, existentes
          y fallidas para que un error real produzca resultado parcial.
@@ -69,103 +75,106 @@ def folder_summary_has_results(summary: Dict[str, List[str]]) -> bool:
 
 # Estructura de carpetas por task
 # Formato: task_name -> lista de subcarpetas relativas
+# Las rutas van SIEMPRE en minuscula: es el nombre con el que se CREA. Leer
+# nunca depende de esto (se resuelve sin distinguir mayusculas). Espejo de
+# TaskVersioningManager::initializeConfigs() de LGA_FileManagerS3.
 TASK_FOLDER_STRUCTURE = {
     # Tasks 2D - van directamente bajo SHOTNAME/
     "Comp": [
-        "Comp/0_assets",
-        "Comp/1_projects",
-        "Comp/2_prerenders",
-        "Comp/3_review",
-        "Comp/4_publish"
+        "comp/0_assets",
+        "comp/1_projects",
+        "comp/2_prerenders",
+        "comp/3_review",
+        "comp/4_publish"
     ],
     "Roto": [
-        "Roto/0_assets",
-        "Roto/1_projects",
-        "Roto/2_prerenders",
-        "Roto/3_review",
-        "Roto/4_publish"
+        "roto/0_assets",
+        "roto/1_projects",
+        "roto/2_prerenders",
+        "roto/3_review",
+        "roto/4_publish"
     ],
     "Cleanup": [
-        "Cleanup/0_assets",
-        "Cleanup/1_projects",
-        "Cleanup/2_prerenders",
-        "Cleanup/3_review",
-        "Cleanup/4_publish"
+        "cleanup/0_assets",
+        "cleanup/1_projects",
+        "cleanup/2_prerenders",
+        "cleanup/3_review",
+        "cleanup/4_publish"
     ],
     # CG (solo client): una sola task agrupa todas las entregas 3D de los
     # vendors (layout, lighting, anim, fx, ...), asi que lleva UNA carpeta,
     # no una por disciplina. Los streams se distinguen por el nombre de la
     # version, no por la ruta.
     "CG": [
-        "CG/0_assets",
-        "CG/1_projects",
-        "CG/2_prerenders",
-        "CG/3_review",
-        "CG/4_publish"
+        "cg/0_assets",
+        "cg/1_projects",
+        "cg/2_prerenders",
+        "cg/3_review",
+        "cg/4_publish"
     ],
     "DMP": [
-        "DMP/0_assets",
-        "DMP/1_projects",
-        "DMP/2_prerenders",
-        "DMP/3_review",
-        "DMP/4_publish"
+        "dmp/0_assets",
+        "dmp/1_projects",
+        "dmp/2_prerenders",
+        "dmp/3_review",
+        "dmp/4_publish"
     ],
-    # Tasks 3D - van bajo SHOTNAME/3D/
+    # Tasks 3D - van bajo SHOTNAME/3d/
     "Model": [
-        "3D/2_model/0_assets",
-        "3D/2_model/1_projects",
-        "3D/2_model/2_prerenders",
-        "3D/2_model/3_review",
-        "3D/2_model/4_publish"
+        "3d/2_model/0_assets",
+        "3d/2_model/1_projects",
+        "3d/2_model/2_prerenders",
+        "3d/2_model/3_review",
+        "3d/2_model/4_publish"
     ],
     "Retopo": [
-        "3D/3_retopo/0_assets",
-        "3D/3_retopo/1_projects",
-        "3D/3_retopo/2_prerenders",
-        "3D/3_retopo/3_review",
-        "3D/3_retopo/4_publish"
+        "3d/3_retopo/0_assets",
+        "3d/3_retopo/1_projects",
+        "3d/3_retopo/2_prerenders",
+        "3d/3_retopo/3_review",
+        "3d/3_retopo/4_publish"
     ],
     "Rigging": [
-        "3D/4_rigging/0_assets",
-        "3D/4_rigging/1_projects",
-        "3D/4_rigging/2_prerenders",
-        "3D/4_rigging/3_review",
-        "3D/4_rigging/4_publish"
+        "3d/4_rigging/0_assets",
+        "3d/4_rigging/1_projects",
+        "3d/4_rigging/2_prerenders",
+        "3d/4_rigging/3_review",
+        "3d/4_rigging/4_publish"
     ],
     "Shaders": [
-        "3D/5_shaders/0_assets",
-        "3D/5_shaders/1_projects",
-        "3D/5_shaders/2_prerenders",
-        "3D/5_shaders/3_review",
-        "3D/5_shaders/4_publish"
+        "3d/5_shaders/0_assets",
+        "3d/5_shaders/1_projects",
+        "3d/5_shaders/2_prerenders",
+        "3d/5_shaders/3_review",
+        "3d/5_shaders/4_publish"
     ],
     "Match Move": [
-        "3D/1_matchMove/0_assets",
-        "3D/1_matchMove/1_projects",
-        "3D/1_matchMove/2_prerenders",
-        "3D/1_matchMove/3_review",
-        "3D/1_matchMove/4_publish"
+        "3d/1_matchmove/0_assets",
+        "3d/1_matchmove/1_projects",
+        "3d/1_matchmove/2_prerenders",
+        "3d/1_matchmove/3_review",
+        "3d/1_matchmove/4_publish"
     ],
     "Animation": [
-        "3D/6_animation/0_assets",
-        "3D/6_animation/1_projects",
-        "3D/6_animation/2_prerenders",
-        "3D/6_animation/3_review",
-        "3D/6_animation/4_publish"
+        "3d/6_animation/0_assets",
+        "3d/6_animation/1_projects",
+        "3d/6_animation/2_prerenders",
+        "3d/6_animation/3_review",
+        "3d/6_animation/4_publish"
     ],
     "FX": [
-        "3D/7_fx/0_assets",
-        "3D/7_fx/1_projects",
-        "3D/7_fx/2_prerenders",
-        "3D/7_fx/3_review",
-        "3D/7_fx/4_publish"
+        "3d/7_fx/0_assets",
+        "3d/7_fx/1_projects",
+        "3d/7_fx/2_prerenders",
+        "3d/7_fx/3_review",
+        "3d/7_fx/4_publish"
     ],
     "Lighting": [
-        "3D/8_lighting/0_assets",
-        "3D/8_lighting/1_projects",
-        "3D/8_lighting/2_prerenders",
-        "3D/8_lighting/3_review",
-        "3D/8_lighting/4_publish"
+        "3d/8_lighting/0_assets",
+        "3d/8_lighting/1_projects",
+        "3d/8_lighting/2_prerenders",
+        "3d/8_lighting/3_review",
+        "3d/8_lighting/4_publish"
     ]
 }
 
@@ -173,11 +182,11 @@ TASK_FOLDER_STRUCTURE = {
 def resolve_existing_case(base_path: str, relative_folder: str) -> str:
     """Devuelve `relative_folder` con el caso REAL de lo que ya existe en disco.
 
-    La tabla de arriba es la convencion canonica y va capitalizada (`Comp`,
-    `CG`), que es como arman la ruta todos los lectores del pipeline. Pero
-    esta herramienta creo carpetas en minuscula durante mucho tiempo, y en
-    macOS `comp/` y `Comp/` son DOS carpetas distintas: crear la canonica al
-    lado de la que ya existe partiria el shot en dos.
+    La tabla de arriba es la convencion canonica y va en minuscula (`comp`,
+    `cg`, `3d/1_matchmove`). Pero hay shots con carpetas en otro caso
+    (`Comp/`, `3D/`, de convenciones anteriores), y en un filesystem que
+    distingue mayusculas `comp/` y `Comp/` son DOS carpetas distintas: crear
+    la canonica al lado de la que ya existe partiria el shot en dos.
 
     Por eso, segmento por segmento, si ya hay uno que coincide sin importar
     mayusculas, se usa ese. Los segmentos que no existen se crean con el
@@ -278,7 +287,7 @@ def create_task_folders(shot_base_path: str, task_names: List[str]) -> tuple[Dic
 
         for relative_folder in task_folders:
             # Respetar el caso de las carpetas que ya existan en el shot, para
-            # no duplicar `Comp/` al lado de un `comp/` historico en macOS.
+            # no duplicar `comp/` al lado de un `Comp/` historico.
             relative_folder = resolve_existing_case(shot_base_path, relative_folder)
             # Construir path completo
             full_folder_path = os.path.join(shot_base_path, relative_folder)

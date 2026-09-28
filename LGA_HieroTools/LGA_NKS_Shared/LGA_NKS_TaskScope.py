@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_TaskScope v1.01 | Lega
+  LGA_NKS_TaskScope v1.02 | Lega
 
   Scope de tasks por contexto Studio/Client, en un solo lugar.
 
@@ -21,6 +21,12 @@ ____________________________________________________________________
   hiero). La consistencia entre las dos la verifica
   tests/test_task_scope.py leyendo GetClip.py como texto.
 
+  v1.02: La carpeta canonica de cada task pasa a minuscula (`comp`, `roto`,
+         `cleanup`, `cg`): es el nombre con el que se CREA en todo el
+         pipeline. resolve_task_folder() sigue devolviendo el caso REAL de lo
+         que ya existe, asi que los shots con `Comp/` se siguen leyendo.
+         task_display_name() da el nombre para mostrar (`Comp`, `CG`), que ya
+         no sale de la carpeta.
   v1.01: resolve_task_folder() devuelve el caso REAL de la carpeta de la
          task en disco. El creador de carpetas escribia en minuscula y los
          lectores arman la ruta en mayuscula: en macOS son dos carpetas
@@ -53,10 +59,10 @@ CLIENT_ONLY = (MODE_CLIENT,)
 # (layout, lighting, anim, fx, ...); roto y cleanup existen solo en studio.
 # Comp existe en los dos.
 TRACK_TASKS = (
-    ("comp", "Comp", BOTH),
-    ("roto", "Roto", STUDIO_ONLY),
-    ("cleanup", "Cleanup", STUDIO_ONLY),
-    ("cg", "CG", CLIENT_ONLY),
+    ("comp", "comp", BOTH),
+    ("roto", "roto", STUDIO_ONLY),
+    ("cleanup", "cleanup", STUDIO_ONLY),
+    ("cg", "cg", CLIENT_ONLY),
 )
 
 # Nombre de la task que agrupa las entregas 3D de los vendors en client.
@@ -135,12 +141,15 @@ def is_track_task_active(task_name, mode=None):
 
 
 def task_folder_name(task_name, default=_UNSET):
-    """Nombre de la carpeta de la task en el disco del shot ("cg" -> "CG").
+    """Nombre con el que se CREA la carpeta de la task en el shot ("cg").
+
+    Va siempre en minuscula: es la convencion unica del pipeline para crear
+    (Wasabi distingue mayusculas). Para LEER hay que pasar por
+    resolve_task_folder(), que respeta lo que ya existe en disco.
 
     Devuelve `default` si la task no esta registrada; si no se pasa uno,
-    devuelve el nombre capitalizado, que es la convencion del pipeline.
-    Pasar `default=None` explicitamente devuelve None, que es distinto de
-    no pasar nada.
+    devuelve el nombre en minuscula. Pasar `default=None` explicitamente
+    devuelve None, que es distinto de no pasar nada.
     """
     key = _clean_task_key(task_name)
     if key is None:
@@ -149,24 +158,35 @@ def task_folder_name(task_name, default=_UNSET):
         if task == key:
             return folder
     if default is _UNSET:
-        return key.capitalize()
+        return key
     return default
+
+
+def task_display_name(task_name):
+    """Nombre para MOSTRAR en la UI ("comp" -> "Comp", "cg" -> "CG").
+
+    Separado de task_folder_name() desde que la carpeta va en minuscula: la
+    carpeta es un dato de disco y la etiqueta es texto de interfaz.
+    """
+    key = _clean_task_key(task_name)
+    if key is None:
+        return ""
+    return "CG" if key == CG_TASK_NAME else key.capitalize()
 
 
 def resolve_task_folder(shot_root, task_name, default=_UNSET):
     """Carpeta de la task dentro de un shot, con el caso REAL que hay en disco.
 
-    Devuelve el nombre canonico capitalizado (`Comp`, `CG`), salvo que en el
+    Devuelve el nombre canonico en minuscula (`comp`, `cg`), salvo que en el
     shot ya exista una carpeta con ese mismo nombre en otro caso -por
-    ejemplo `comp/`, que es como las creaba Create Shot historicamente-, y
-    entonces devuelve la que existe.
+    ejemplo `Comp/`, de una convencion anterior-, y entonces devuelve la que
+    existe.
 
-    Existe porque el pipeline tuvo las dos convenciones a la vez: el creador
-    de carpetas escribia en minuscula y todos los lectores arman la ruta en
-    mayuscula. En Windows no se nota, porque el filesystem no distingue
-    mayusculas; en macOS son DOS carpetas distintas y el lector no encuentra
-    nada. Resolver contra el disco deja andar los shots que ya existen sin
-    tener que renombrarles nada.
+    Existe porque el pipeline tuvo varias convenciones de caso. En Windows no
+    se nota, porque el filesystem no distingue mayusculas; en un filesystem
+    que distingue son DOS carpetas distintas y el lector no encuentra nada.
+    Resolver contra el disco deja andar los shots que ya existen sin tener
+    que renombrarles nada.
     """
     canonico = task_folder_name(task_name, default=default)
     if not canonico or not shot_root:

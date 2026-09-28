@@ -150,15 +150,18 @@ problema distinto y con arreglo.
 
 ## Nombre de las carpetas de task en disco
 
-La carpeta de cada task dentro del shot va **capitalizada**: `Comp`, `Roto`,
-`Cleanup`, `CG`, `DMP`. Ese es el nombre canónico y sale de
-`LGA_NKS_TaskScope.task_folder_name()`.
+**Para crear, todo va en minúscula**: `comp`, `roto`, `cleanup`, `dmp`, `cg`,
+y las 3D bajo `3d/` (`3d/1_matchmove`, `3d/6_animation`, ...). Es la
+convención única del pipeline, compartida con PipeSync y FileManagerS3
+(`TaskVersioningManager::initializeConfigs()` en `LGA_FileManagerS3`): Wasabi
+distingue mayúsculas y hacía falta un solo nombre. El nombre de la carpeta de
+una task con track sale de `LGA_NKS_TaskScope.task_folder_name()`; el texto
+para mostrar en la UI (`Comp`, `CG`) sale de `task_display_name()`.
 
-Los shots creados antes de unificar esto las tienen en minúscula, porque
-`Create Shot Folders` era la única herramienta que las escribía así mientras
-todos los lectores armaban la ruta capitalizada. En Windows la diferencia no
-se nota porque el filesystem no distingue mayúsculas; **en macOS `comp/` y
-`Comp/` son dos carpetas distintas** y el lector no encuentra nada.
+**Para leer, nunca se depende del caso.** Hay shots con carpetas de
+convenciones anteriores (`Comp/`, `3D/1_matchMove/`), y en un filesystem que
+distingue mayúsculas `comp/` y `Comp/` son dos carpetas distintas: armar la
+ruta con un literal no encuentra nada.
 
 Por eso nada arma el nombre de la carpeta con un literal:
 

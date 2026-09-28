@@ -97,7 +97,7 @@ T:/VFX-PROYECTO/101/PROJA_1012C_010/          ← shot root (elegido por el usua
 │   ├── PROJA_1012C_010_EditRefComp_v01.mov    ← editref: va al track EditRef
 │   └── PROJA_1012C_010_SeqRef_v01.mov         ← seqref: solo va al bin, NO al timeline
 │
-├── Comp/                                    ← task folders (capitalizados en disco)
+├── comp/                                    ← task folders (en minúscula al crear; se leen sin distinguir mayúsculas)
 │   ├── 1_projects/
 │   ├── 2_prerenders/
 │   ├── 3_review/
@@ -114,7 +114,7 @@ T:/VFX-PROYECTO/101/PROJA_1012C_010/          ← shot root (elegido por el usua
 **Notas:**
 - Los EXR físicos empiezan en frame `1001`. Al colocarlos en el timeline, el source empieza en `0`
   y Hiero mapea internamente. Se usa `setTimes(tl_in, tl_out, 0, frame_count - 1)`.
-- Los task folders en disco están capitalizados (`Comp`, `Roto`) pero los tracks usan
+- Los task folders se crean en minúscula (`comp`, `roto`) y se leen sin distinguir mayúsculas; los tracks usan
   lowercase con guiones bajos (`_comp_`, `_roto_`).
 - Versiones en publish: `v00` = v000 (placeholder), `v001`, `v002`... Comparación numérica.
 

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateV000 v1.21 | Lega
+  LGA_NKS_CreateV000 v1.22 | Lega
 
   Crea una secuencia EXR negra v000 para el shot activo en Hiero/Nuke Studio.
   Permite elegir frame range, resolucion, handle persistente y una o varias
@@ -16,6 +16,9 @@ ____________________________________________________________________
   crear solo los EXRs, crear/importar al bin sin insertar, o reemplazar los
   clips solapados por la nueva v000.
 
+  v1.22: La carpeta de la task se CREA en minuscula (`comp`, `cg`), que
+         sale de task_folder_name(); la de un shot existente se sigue
+         resolviendo contra el disco.
   v1.21: Reemplazar una v000 existente pasa por guardas duras antes del
          rmtree: rutas absolutas, nunca la raiz de una unidad, contencion
          canonica en <shot>/<task>/4_publish/<shot>_<task>_v000 (nombre y
@@ -171,7 +174,7 @@ def _tasks_human_list():
 
 
 def _task_folder_map():
-    """Carpeta en disco por task ("cg" -> "CG"). No depende del contexto."""
+    """Carpeta con la que se crea cada task ("cg"). No depende del contexto."""
     try:
         try:
             from LGA_NKS_TaskScope import all_track_task_names, task_folder_name
@@ -182,7 +185,7 @@ def _task_folder_map():
             )
         return {task: task_folder_name(task) for task in all_track_task_names()}
     except Exception:
-        return {"comp": "Comp", "roto": "Roto", "cleanup": "Cleanup", "cg": "CG"}
+        return {"comp": "comp", "roto": "roto", "cleanup": "cleanup", "cg": "cg"}
 
 
 TASK_FOLDER = _task_folder_map()

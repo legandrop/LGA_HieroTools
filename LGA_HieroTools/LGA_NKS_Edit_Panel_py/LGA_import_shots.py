@@ -1,13 +1,16 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.45 | Lega
+  LGA_import_shots v1.46 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.46: TASK_FOLDERS lleva el nombre de carpeta en minuscula (`comp`,
+         `dmp`), la convencion unica para crear. La lectura no cambia: cada
+         carpeta se resuelve contra el disco con resolve_task_folder().
   v1.45: El aviso de un overwrite rechazado en el log del panel pasa a
          ingles ("Overwrite aborted"), igual que el mensaje que lo sigue.
   v1.44: La ultima version de CG sale de la DB de PipeSync, por fecha de
@@ -681,10 +684,10 @@ PLATE_KEYWORDS = [
 ]
 
 TASK_FOLDERS = {
-    "comp":    ("Comp",    "_comp_"),
-    "roto":    ("Roto",    "_roto_"),
-    "cleanup": ("Cleanup", "_cleanup_"),
-    "dmp":     ("DMP",     "_dmp_"),
+    "comp":    ("comp",    "_comp_"),
+    "roto":    ("roto",    "_roto_"),
+    "cleanup": ("cleanup", "_cleanup_"),
+    "dmp":     ("dmp",     "_dmp_"),
 }
 
 

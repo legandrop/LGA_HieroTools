@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateNKScript v1.13 | Lega
+  LGA_NKS_CreateNKScript v1.14 | Lega
 
   Crea el script de comp de Nuke de un shot a partir del template .nk
   del proyecto (<raiz>/ASSETS/*.nk), editandolo como texto plano:
@@ -12,6 +12,9 @@ ____________________________________________________________________
   el frame range del proyecto. El resultado se escribe en
   <shot>/Comp/1_projects/<shot>_comp_v000.nk (si existe, pregunta antes de pisar).
 
+  v1.14: Sin carpeta de comp en disco, la ruta se arma con `comp` en
+         minuscula (antes "Comp"): es la convencion unica para crear. Un shot
+         con `Comp/` existente se sigue resolviendo por resolve_task_folder().
   v1.13: La carpeta "Comp" de las tres rutas armadas a mano (2_prerenders,
          4_publish y el output del v000) se resuelve contra el disco del
          shot con resolve_task_folder() de LGA_NKS_TaskScope, para que los
@@ -358,13 +361,13 @@ def _comp_folder_name(shot_root):
             from LGA_NKS_TaskScope import resolve_task_folder
         except ImportError:
             from LGA_NKS_Shared.LGA_NKS_TaskScope import resolve_task_folder
-        return resolve_task_folder(shot_root, "comp", default="Comp")
+        return resolve_task_folder(shot_root, "comp", default="comp")
     except Exception as exc:
         # No se silencia del todo: resolve_task_folder solo atrapa OSError y
         # ValueError, asi que cualquier otra cosa que caiga aca es un error
         # de programacion y tiene que quedar en el log.
-        debug_print("No se pudo resolver la carpeta de comp, se usa 'Comp': %s" % exc)
-        return "Comp"
+        debug_print("No se pudo resolver la carpeta de comp, se usa 'comp': %s" % exc)
+        return "comp"
 
 
 def _projects_subpath(shot_root):
