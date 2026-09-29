@@ -39,6 +39,7 @@ MODULES = [
     "LGA_NKS_Edit_Panel",
     "LGA_NKS_Flow_Panel",
     "LGA_NKS_Projects_Panel",
+    "LGA_NKS_RemoteNav",
     "LGA_NKS_Review_Panel",
     "LGA_NKS_Shortcuts",
     "LGA_NKS_ViewerTL_Panel",

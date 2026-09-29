@@ -331,6 +331,15 @@ changing any Flow status.
 
 Internal reference: [ClipColor Panel](LGA_HieroTools/docs/Docu_ClipColor_Panel.md).
 
+### Remote Navigation (PipeSync)
+
+Not a panel: a small local service that starts with the tools.
+
+- **Show shot in NukeStudio**  
+  PipeSync can ask the open Hiero / Nuke Studio to jump to a shot. It finds the shot's clip in the open projects (opening the project first if needed), switches to its sequence, selects the clip, sets In/Out from EditRef, moves the playhead and zooms to fit. Listens only on `127.0.0.1:54327` and accepts a fixed list of commands.
+
+Internal reference: [Remote Nav](LGA_HieroTools/docs/Docu_RemoteNav.md).
+
 ## Pipeline-Specific Notes
 
 This repository is not a generic plug-and-play product. Many tools assume:

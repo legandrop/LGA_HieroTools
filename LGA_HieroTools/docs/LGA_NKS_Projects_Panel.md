@@ -46,6 +46,7 @@
   - Destino: el ultimo timeline usado en ese proyecto, si existe en la version abierta; si no, el que abrio Hiero; si no, la primera secuencia. Se corre `switch_to_sequence_hybrid(..., force_cleanup=True)`, que no corta con "Ya activa".
   - El ultimo timeline se anota en cada switch exitoso en `logs/ProjectsPanel_LastTimelines.json`, que sobrevive a reabrir NKS. Clave: carpeta del `.hrox` + nombre base sin version, asi que todas las versiones comparten memoria y studio/client quedan separados. Va en `logs/` porque guarda nombres reales de proyectos.
   - `File > Open` no dispara nada: solo el panel.
+  - `after_project_open(project, on_done=None)`: `on_done` se llama sin argumentos cuando la post-apertura termino, con o sin switch y ya con el repintado reactivado. Lo usa `LGA_NKS_ShotNavigation` para navegar a un shot recien cuando el proyecto que abrio quedo listo (ver `Docu_RemoteNav.md`).
   - El click congela el repintado de la ventana principal ANTES de `openProject()` (`begin_project_open()`, flag `FREEZE_DURING_PROJECT_OPEN`) y lo levanta al final de la post-apertura, tambien si falla o si el proyecto no tiene secuencias. Sin eso se veia el timeline que abre Hiero y los restos del proyecto anterior.
   - Si el destino es el timeline que Hiero ya dejo activo, el switch lo REUSA: no lo cierra ni lo reabre, solo corre la limpieza. Cerrar y reabrir el mismo timeline costaba ~1s y un parpadeo.
 - Colapsar y cerrar proyectos abiertos:

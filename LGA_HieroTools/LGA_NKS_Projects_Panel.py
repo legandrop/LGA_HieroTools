@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.47 | Lega
+  LGA_NKS_Projects_Panel v2.48 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,9 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.48: after_project_open() acepta on_done, que se llama al terminar la
+         post-apertura (con o sin switch). Lo usa LGA_NKS_RemoteNav para
+         navegar al shot recien cuando el proyecto quedo listo.
   v2.47: El error de hueco corto del preview se reduce a una frase para que no
          ocupe una segunda línea en la fila de acciones.
   v2.46: El toggle Studio/Client toma el estilo PILL compartido, igual que el
@@ -1284,17 +1287,28 @@ class ProjectsPanel(QtWidgets.QWidget):
         except Exception as e:
             debug_print(f"[Post-apertura] Error reactivando el repintado: {e}")
 
-    def after_project_open(self, project):
+    def after_project_open(self, project, on_done=None):
         """
         Deja un proyecto recien abierto como si se hubiera llegado con el switch:
         su ultimo timeline (o el que abrio Hiero), top track, LUT y sin restos
         del proyecto anterior. Espera a que Hiero termine de restaurar su
         timeline, porque limpiar antes lo haria reaparecer encima.
+
+        on_done: se llama sin argumentos cuando la post-apertura termino, haya
+        hecho el switch o no, ya con el repintado reactivado. Es para quien
+        necesita seguir trabajando sobre el proyecto (LGA_NKS_RemoteNav).
         """
         if project is None:
             self.end_project_open()
+            self._call_post_open_done(on_done)
             return
-        self._post_open = {"project": project, "start": time.time(), "last": None, "since": None}
+        self._post_open = {
+            "project": project,
+            "start": time.time(),
+            "last": None,
+            "since": None,
+            "on_done": on_done,
+        }
         QtCore.QTimer.singleShot(POST_OPEN_POLL_MS, self._poll_post_open)
 
     def _poll_post_open(self):
@@ -1317,6 +1331,17 @@ class ProjectsPanel(QtWidgets.QWidget):
             return
         self._post_open = None
         self._finish_project_open(project, current, elapsed_ms)
+        self._call_post_open_done(state.get("on_done"))
+
+    @staticmethod
+    def _call_post_open_done(on_done):
+        """Llama al on_done de after_project_open sin dejar que un error lo rompa."""
+        if on_done is None:
+            return
+        try:
+            on_done()
+        except Exception as e:
+            debug_print(f"[Post-apertura] Error en on_done: {e}")
 
     def _finish_project_open(self, project, active_name, elapsed_ms):
         """Elige el timeline de destino y corre el switch completo."""

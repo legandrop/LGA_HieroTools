@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_QtAdapter_HieroTools v1.00 | Lega
+  LGA_QtAdapter_HieroTools v1.01 | Lega
 
   Compatibilidad Qt para Hiero Panels - Nuke 15/16.
 
@@ -26,6 +26,7 @@ ____________________________________________________________________
   - LGA_NKS_Projects_Panel.py
   - LGA_NKS_Projects_Panel_py/LGA_Projects_Panel_ScanProjects.py
   - LGA_NKS_Projects_Panel_py/LGA_Projects_Panel_SwitchSequence.py
+  - LGA_NKS_RemoteNav.py (QtNetwork)
   - LGA_NKS_Review_Panel.py
   - LGA_NKS_Shared/LGA_NKS_Reduce_SeqWin.py
   - LGA_NKS_Shared/LGA_NKS_ScrollTo_TopTrack.py
@@ -41,6 +42,9 @@ ____________________________________________________________________
   - primary_screen_geometry() para geometría de pantalla
   - set_layout_margin() para márgenes de layout
 
+  v1.01: Expone QtNetwork (QTcpServer/QTcpSocket) para el server local
+         LGA_NKS_RemoteNav. Solo esta copia del adapter lo trae: los
+         packs de Nuke no tienen ningun server Qt.
   v1.00: Se empieza a versionar el header. Los cuatro adapters de los
          packs LGA son la misma API en cuatro copias y no tenian version
          interna, asi que no habia forma de ver de un vistazo si una
@@ -72,6 +76,17 @@ except ImportError:  # PySide2 (Nuke 15)
     from PySide2.QtWidgets import QApplication
 
     PYSIDE_VER = 2
+
+# QtNetwork va aparte y es opcional: si un build de Nuke no lo trajera, el
+# import de arriba romperia el adapter y con el TODAS las tools del pack. Sin
+# QtNetwork solo se pierde el server de LGA_NKS_RemoteNav, que lo chequea.
+try:
+    if PYSIDE_VER >= 6:
+        from PySide6 import QtNetwork
+    else:
+        from PySide2 import QtNetwork
+except ImportError:
+    QtNetwork = None
 
 
 def horizontal_advance(metrics: QtGui.QFontMetrics, text: str) -> int:
@@ -240,6 +255,7 @@ __all__ = [
     "QtWidgets",
     "QtGui",
     "QtCore",
+    "QtNetwork",
     "QAction",
     "QShortcut",
     "QGuiApplication",
