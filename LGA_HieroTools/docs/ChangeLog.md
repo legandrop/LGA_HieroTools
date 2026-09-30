@@ -1,5 +1,7 @@
 v3.97:
 
+        - La ventana del Flow Pull usa la fuente del pack (`LGA_NKS_Flow_Pull v3.69`): nunca llamaba a `apply_ui_font`, así que se dibujaba con la fuente del host, y el título pedía tamaño y negrita a mano en la hoja. Ahora aplica `Style.FORM` y la fuente del pack, y el título usa la regla `lgaTitle` del módulo de estilo. [ Flow Pull - Fuente y título del pack ]
+
         - El Flow Pull puede listar solo los shots en review (`LGA_NKS_Flow_Pull v3.68`): la ventana de resultados mezclaba todos los cambios y los shots para revisar quedaban perdidos entre ellos. Un checkbox nuevo, `Only in review`, a la izquierda de `Keep this window on top` y prendido al abrir, oculta las filas cuyo New Status no dice "review". Destildado vuelven todas y la ventana se reajusta sin moverse. Es solo vista: el Pull colorea y actualiza los clips igual. [ Flow Pull - Filtro Only in review ]
 
         - Remote Nav avisa en la consola qué sesión atiende a PipeSync (`LGA_NKS_RemoteNav v1.00`): igual que OpenInNukeX, al arrancar escribe `LGA_NKS_RemoteNav active on port 54327`, o `inactive` si otro Hiero / NukeStudio ya tiene el puerto. El server arranca con la ventana ya creada, cuando NKS ya redirige `print` al Script Editor, así que el aviso se escribe también en la salida original del proceso para que llegue a la ventana de consola. [ Remote Nav - Aviso del puerto en consola ]

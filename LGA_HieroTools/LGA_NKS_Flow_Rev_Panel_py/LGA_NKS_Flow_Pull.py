@@ -1,12 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.68 | Lega
+  LGA_NKS_Flow_Pull v3.69 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.69: La ventana toma la fuente del pack (apply_ui_font) y la hoja
+         Style.FORM. El titulo deja de pedir font-size y font-weight a mano:
+         usa la regla lgaTitle del modulo de estilo.
   v3.68: Checkbox "Only in review" en el header de la ventana de resultados,
          a la izquierda de "Keep this window on top", prendido al abrir (no
          persiste). Oculta las filas cuyo New Status no dice "review" (Review
@@ -559,7 +562,12 @@ from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import (
     get_task_status_dict,
 )
 from LGA_NKS_Shared.LGA_NKS_MessageBox import show_info, show_warning
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color as UIColor, Metric
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import (
+    Style,
+    Color as UIColor,
+    Metric,
+    apply_ui_font,
+)
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 QApplication = QtWidgets.QApplication
 QWidget = QtWidgets.QWidget
@@ -1409,9 +1417,9 @@ class GUI_Table(QtWidgets.QDialog):
 
     def initUI(self):
         self.setWindowTitle("Read Nodes EXR Info")
-        # Fondo y checkbox del pack (Style.WINDOW arrastra el estilo del
-        # checkbox "Keep this window on top")
-        self.setStyleSheet(Style.WINDOW)
+        # Hoja de ventana del pack: fondo, checkboxes y la regla lgaTitle del
+        # titulo. La tabla lleva su propia hoja (ver abajo).
+        self.setStyleSheet(Style.FORM)
         layout = QVBoxLayout(self)
 
         # Header: titulo a la izquierda y checkbox "Keep this window on top" a la derecha.
@@ -1420,10 +1428,10 @@ class GUI_Table(QtWidgets.QDialog):
         self.title_label = QtWidgets.QLabel("")
         self.title_label.setTextFormat(Qt.RichText)
         self.title_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.title_label.setStyleSheet(
-            "QLabel { background: transparent; font-size:14px; font-weight:bold; "
-            "padding:0 4px 4px 4px; }"
-        )
+        # Tamano y peso los pone la regla QLabel[lgaTitle] de Style.FORM; los
+        # colores de proyecto y secuencia van en el rich text de update_title.
+        self.title_label.setProperty("lgaTitle", True)
+        self.title_label.setStyleSheet("QLabel { padding: 0 4px 4px 4px; }")
         header_row.addWidget(self.title_label, 0, Qt.AlignLeft | Qt.AlignVCenter)
         header_row.addStretch(1)
         # Filtro de vista: prendido cada vez que se abre la ventana (no persiste).
@@ -1500,6 +1508,8 @@ class GUI_Table(QtWidgets.QDialog):
 
         # Aplicar flags iniciales segun el estado persistido (sin re-mostrar todavia).
         self._apply_window_flags(initial=True)
+        # Fuente del pack en toda la ventana: sin esto se dibuja con la del host.
+        apply_ui_font(self)
 
     def _row_is_review(self, row):
         """True si el New Status (columna 6) de la fila es algun review."""
