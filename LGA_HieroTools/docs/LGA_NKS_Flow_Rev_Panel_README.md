@@ -27,6 +27,17 @@ nueva.
    Click en una fila de resultados navega al shot; si la fila está en el review del usuario y
    ese reviewer está habilitado (hoy Lega), abre además el Shot Info arriba de la ventana. Ver
    [LGA_NKS_Flow_Shot_Info.md](LGA_NKS_Flow_Shot_Info.md#apertura-automatica-al-llegar-a-un-shot-en-review).
+
+   El header de la ventana de resultados trae **Only in review**, a la izquierda de
+   **Keep this window on top**. Arranca prendido cada vez (no persiste) y oculta las
+   filas cuyo New Status no contiene "review" en el nombre visible (Review Lega,
+   Review Hold, Pending Review...). Por qué: después de un Pull lo que se va a
+   mirar son los shots en review; el resto de los cambios ya quedó aplicado en el
+   timeline. Es solo vista, el Pull colorea y sube versiones igual. Se compara
+   contra el nombre y no contra códigos para que un estado de review nuevo entre
+   sin tocar una lista. Las filas se ocultan con `setRowHidden`, no se borran:
+   la navegación y la actualización tras un Push van por índice de fila. Una fila
+   que un Push saca de review sigue visible hasta volver a tocar el checkbox.
 2. **Shot Info** — muestra datos del shot y comentarios/versiones de la task; shortcut `Shift+T`.
 3. **Review Pic** — captura el viewer con número de frame para acompañar notas de review.
 

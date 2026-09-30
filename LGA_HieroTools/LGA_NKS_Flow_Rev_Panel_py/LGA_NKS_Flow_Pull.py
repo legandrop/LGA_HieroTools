@@ -1,11 +1,20 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.67 | Lega
+  LGA_NKS_Flow_Pull v3.68 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
+
+  v3.68: Checkbox "Only in review" en el header de la ventana de resultados,
+         a la izquierda de "Keep this window on top", prendido al abrir (no
+         persiste). Oculta las filas cuyo New Status no dice "review" (Review
+         Lega, Review Hold, Pending Review...). Es solo vista: el Pull colorea
+         y actualiza todo igual. Las filas se ocultan con setRowHidden, sin
+         sacarlas, asi los indices de navegacion y del Push no cambian. Una
+         fila que un Push saca de review queda visible hasta volver a tocar
+         el checkbox, para que no desaparezca debajo del cursor.
 
   v3.67: Click en una fila cuyo estado es el review del usuario actual abre,
          ademas de navegar, el Shot Info de ese shot y task, arriba de la
@@ -550,7 +559,7 @@ from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import (
     get_task_status_dict,
 )
 from LGA_NKS_Shared.LGA_NKS_MessageBox import show_info, show_warning
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color as UIColor
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color as UIColor, Metric
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 QApplication = QtWidgets.QApplication
 QWidget = QtWidgets.QWidget
@@ -1016,6 +1025,28 @@ _TITLE_PROJECT_COLOR = UIColor.INFO
 _TITLE_SEP_COLOR = UIColor.PATH_SEPARATOR
 _TITLE_SEQ_COLOR = UIColor.ENTITY
 
+# Palabra que tiene que aparecer en el New Status para que la fila se vea con
+# "Only in review" prendido. Se compara contra el nombre visible (sin distinguir
+# mayusculas), no contra el codigo de Flow: asi entra cualquier estado nuevo de
+# review sin tocar una lista de codigos.
+_REVIEW_STATUS_WORD = "review"
+
+# Tooltips de la ventana, fuera del widget para que pasar a bilingue sea un
+# cambio de datos.
+_TOOLTIPS = {
+    "only_in_review": {
+        "es": (
+            "Muestra solo los shots cuyo New Status es un review (Review Lega, "
+            "Review Hold, etc.). Destildado muestra todos. Es solo la vista: "
+            "el Pull actualiza todos los clips igual."
+        ),
+    },
+}
+
+
+def _tooltip(key, lang="es"):
+    return _TOOLTIPS.get(key, {}).get(lang, "")
+
 
 def _escape_html(text):
     return (
@@ -1170,6 +1201,7 @@ class GUI_Table(QtWidgets.QDialog):
 
             def show_pull_results():
                 self.update_title()
+                self.apply_review_filter()
                 self.adjust_window_size()
                 self.show()
                 # Estado inicial de "always on top" via Win32. Se difiere con
@@ -1394,6 +1426,14 @@ class GUI_Table(QtWidgets.QDialog):
         )
         header_row.addWidget(self.title_label, 0, Qt.AlignLeft | Qt.AlignVCenter)
         header_row.addStretch(1)
+        # Filtro de vista: prendido cada vez que se abre la ventana (no persiste).
+        self.only_review_chk = QtWidgets.QCheckBox("Only in review")
+        self.only_review_chk.setProperty("lgaLabeled", True)
+        self.only_review_chk.setToolTip(_tooltip("only_in_review"))
+        self.only_review_chk.setChecked(True)
+        self.only_review_chk.toggled.connect(self._on_only_review_toggled)
+        header_row.addWidget(self.only_review_chk, 0, Qt.AlignRight | Qt.AlignVCenter)
+        header_row.addSpacing(Metric.SPACING * 2)
         self.keep_on_top_chk = QtWidgets.QCheckBox("Keep this window on top")
         # Checkbox con texto: lgaLabeled le da aire entre el cuadrito y la
         # etiqueta (el default de la hoja del pack es spacing 0)
@@ -1460,6 +1500,37 @@ class GUI_Table(QtWidgets.QDialog):
 
         # Aplicar flags iniciales segun el estado persistido (sin re-mostrar todavia).
         self._apply_window_flags(initial=True)
+
+    def _row_is_review(self, row):
+        """True si el New Status (columna 6) de la fila es algun review."""
+        item = self.table.item(row, 6)
+        text = item.text() if item else ""
+        return _REVIEW_STATUS_WORD in text.lower()
+
+    def apply_review_filter(self):
+        """Oculta o muestra filas segun "Only in review". Solo vista.
+
+        Se ocultan con setRowHidden y no se sacan: row_navigation_data y
+        row_background_colors van por indice de fila, y el Push busca la fila
+        a actualizar recorriendo todas.
+        """
+        only_review = self.only_review_chk.isChecked()
+        visibles = 0
+        for row in range(self.table.rowCount()):
+            hidden = only_review and not self._row_is_review(row)
+            self.table.setRowHidden(row, hidden)
+            if not hidden:
+                visibles += 1
+        debug_print(
+            f"Filtro Only in review={only_review}: "
+            f"{visibles}/{self.table.rowCount()} filas visibles"
+        )
+
+    def _on_only_review_toggled(self, _checked):
+        self.apply_review_filter()
+        if self.isVisible():
+            # Se ajusta el tamano sin recentrar, para no mover la ventana.
+            self.adjust_window_size(recenter=False)
 
     def update_title(self):
         """Setea el titulo ProjectName / SeqNumber con los colores del Import Shot."""
@@ -1566,8 +1637,10 @@ class GUI_Table(QtWidgets.QDialog):
         mixed_color = ((r1 + r2) // 2, (g1 + g2) // 2, (b1 + b2) // 2)
         return mixed_color
 
-    def adjust_window_size(self):
-        # Ajustes para cambiar el tamano y posicion de la ventana de acuerdo a la pantalla
+    def adjust_window_size(self, recenter=True):
+        # Ajustes para cambiar el tamano y posicion de la ventana de acuerdo a la pantalla.
+        # recenter=False (toggle de "Only in review") conserva la posicion y solo
+        # corrige si la ventana nueva se sale de la pantalla.
         self.table.horizontalHeader().setStretchLastSection(False)
         self.table.resizeColumnsToContents()
         width = self.table.verticalHeader().width() - 30
@@ -1583,9 +1656,13 @@ class GUI_Table(QtWidgets.QDialog):
         gaps = max(0, layout.count() - 1) * spacing
 
         # El header puede ser mas ancho que la tabla: el ancho final debe
-        # contemplarlo para que titulo y checkbox no queden recortados.
+        # contemplarlo para que titulo y checkboxes no queden recortados.
         title_w = self.title_label.sizeHint().width()
-        checkbox_w = self.keep_on_top_chk.sizeHint().width()
+        checkbox_w = (
+            self.only_review_chk.sizeHint().width()
+            + Metric.SPACING * 2
+            + self.keep_on_top_chk.sizeHint().width()
+        )
         header_spacing = 12
         min_content_w = title_w + checkbox_w + header_spacing + layout_hmargins
         width = max(width, min_content_w)
@@ -1607,7 +1684,9 @@ class GUI_Table(QtWidgets.QDialog):
         frame = self.table.frameWidth() * 2
         rows_height = 0
         for i in range(self.table.rowCount()):
-            rows_height += self.table.rowHeight(i)
+            # Las filas que oculta "Only in review" no ocupan alto.
+            if not self.table.isRowHidden(i):
+                rows_height += self.table.rowHeight(i)
         header_h = max(
             self.title_label.sizeHint().height(),
             self.keep_on_top_chk.sizeHint().height(),
@@ -1632,10 +1711,21 @@ class GUI_Table(QtWidgets.QDialog):
             f"-> ventana_real={self.width()}x{self.height()} "
             f"tabla_real={self.table.height()} viewport={self.table.viewport().height()}"
         )
-        self.move(
-            (screen_rect.width() - final_width) // 2,
-            (screen_rect.height() - final_height) // 2,
-        )
+        if recenter:
+            self.move(
+                (screen_rect.width() - final_width) // 2,
+                (screen_rect.height() - final_height) // 2,
+            )
+            return
+        # Sin recentrar: si al crecer se sale por abajo o por la derecha, se sube
+        # o se corre lo justo para que entre en la pantalla.
+        frame = self.frameGeometry()
+        x = min(frame.x(), screen_rect.right() - frame.width())
+        y = min(frame.y(), screen_rect.bottom() - frame.height())
+        x = max(x, screen_rect.left())
+        y = max(y, screen_rect.top())
+        if (x, y) != (frame.x(), frame.y()):
+            self.move(x, y)
 
     def keyPressEvent(self, event):
         """Cierra la ventana cuando se presiona la tecla ESC."""
