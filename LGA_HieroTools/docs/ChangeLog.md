@@ -1,5 +1,7 @@
 v3.97:
 
+        - El Flow Pull puede listar solo los shots en review del usuario (`LGA_NKS_Flow_Pull v3.70`): un checkbox nuevo, `Only for me`, entre `Only in review` y `Keep this window on top`, deja solo las filas cuyo New Status es el review propio (Lega ve Review Lega, Sebas ve Review Sebas). Si los filtros no dejan filas, un mensaje reemplaza a la tabla y dice qué destildar. El usuario pasa a leerse del perfil normal de PipeSync, como en Prev/Next Rev del ViewerTL: en modo client el Pull tomaba el login de la editora y no reconocía los reviews propios. De paso, una tabla de una sola fila ya no deja espacio vacío debajo. [ Flow Pull - Filtro Only for me ]
+
         - La ventana del Flow Pull usa la fuente del pack (`LGA_NKS_Flow_Pull v3.69`): nunca llamaba a `apply_ui_font`, así que se dibujaba con la fuente del host, y el título pedía tamaño y negrita a mano en la hoja. Ahora aplica `Style.FORM` y la fuente del pack, y el título usa la regla `lgaTitle` del módulo de estilo. [ Flow Pull - Fuente y título del pack ]
 
         - El Flow Pull puede listar solo los shots en review (`LGA_NKS_Flow_Pull v3.68`): la ventana de resultados mezclaba todos los cambios y los shots para revisar quedaban perdidos entre ellos. Un checkbox nuevo, `Only in review`, a la izquierda de `Keep this window on top` y prendido al abrir, oculta las filas cuyo New Status no dice "review". Destildado vuelven todas y la ventana se reajusta sin moverse. Es solo vista: el Pull colorea y actualiza los clips igual. [ Flow Pull - Filtro Only in review ]

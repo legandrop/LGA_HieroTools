@@ -1,12 +1,23 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.69 | Lega
+  LGA_NKS_Flow_Pull v3.70 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.70: Checkbox "Only for me" entre "Only in review" y "Keep this window
+         on top", apagado al abrir: deja solo las filas cuyo New Status es el
+         review del usuario, comparando el codigo de Flow de la fila.
+         Si los filtros no dejan filas, un mensaje reemplaza a la tabla y dice
+         que destildar para ver el resto.
+         El usuario pasa a leerse como en el ViewerTL (get_normal_login, perfil
+         PipeSync normal) y no del contexto activo: en modo client ese perfil
+         es el de la editora y el Pull no reconocia los reviews propios, ni
+         para este filtro ni para el Shot Info automatico.
+         Una tabla de UNA fila quedaba con aire abajo: Qt le daba el
+         minimumSizeHint del scroll area. Ahora lleva minimo explicito.
   v3.69: La ventana toma la fuente del pack (apply_ui_font) y la hoja
          Style.FORM. El titulo deja de pedir font-size y font-weight a mano:
          usa la regla lgaTitle del modulo de estilo.
@@ -299,14 +310,29 @@ def _normalize_flow_login(login):
 
 
 def _current_flow_user():
-    """(login, clave normalizada) del usuario de Flow actual, o (None, None)."""
-    try:
-        from LGA_NKS_Shared.SecureConfig_Reader import get_flow_credentials
+    """(login, clave normalizada) del reviewer local, o (None, None).
 
-        _url, login, _password = get_flow_credentials()
+    Mismo origen que los botones Prev/Next Rev del ViewerTL: el login del perfil
+    PipeSync NORMAL (get_normal_login), no el del contexto activo. En modo client
+    el perfil activo es el de la editora, y con ese login el Pull no reconocia
+    los reviews de quien esta sentado en la maquina. Si el perfil normal no se
+    puede leer, cae al login del contexto activo como antes.
+    """
+    login = None
+    try:
+        from LGA_NKS_Shared.LGA_NKS_ContextSwitch import get_normal_login
+
+        login = get_normal_login()
     except Exception as e:
-        debug_print(f"No se pudo obtener usuario actual para filas de review: {e}")
-        return None, None
+        debug_print(f"No se pudo leer el login del perfil normal: {e}")
+    if not login:
+        try:
+            from LGA_NKS_Shared.SecureConfig_Reader import get_flow_credentials
+
+            _url, login, _password = get_flow_credentials()
+        except Exception as e:
+            debug_print(f"No se pudo obtener usuario actual para filas de review: {e}")
+            return None, None
     return login, _normalize_flow_login(login)
 
 
@@ -567,6 +593,7 @@ from LGA_NKS_Shared.LGA_UI_Style_HieroTools import (
     Color as UIColor,
     Metric,
     apply_ui_font,
+    semibold_css,
 )
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 QApplication = QtWidgets.QApplication
@@ -1049,6 +1076,40 @@ _TOOLTIPS = {
             "el Pull actualiza todos los clips igual."
         ),
     },
+    "only_for_me": {
+        "es": (
+            "Muestra solo los shots cuyo New Status es tu review (Lega ve Review "
+            "Lega, Sebas ve Review Sebas). El usuario sale del perfil de PipeSync, "
+            "igual que Prev/Next Rev del ViewerTL."
+        ),
+    },
+    "only_for_me_off": {
+        "es": (
+            "No se reconoce tu usuario de Flow como reviewer, asi que no hay un "
+            "review tuyo para filtrar."
+        ),
+    },
+}
+
+# Mensaje que reemplaza a la tabla cuando los filtros no dejan ninguna fila.
+# (titulo, detalle). {n}: filas que apareceran al destildar; {s}: plural de {n}.
+# El detalle dice QUE destildar: desde ese mensaje es lo unico que queda por hacer.
+_EMPTY_STATE_TEXTS = {
+    # Only for me prendido y hay otros cambios que ese filtro tapa.
+    "me": (
+        "Nothing waiting for your review",
+        "Untick Only for me to see the other {n} change{s}.",
+    ),
+    # Los dos prendidos y tampoco hay reviews de otros: destildar uno no alcanza.
+    "me_both": (
+        "Nothing waiting for your review",
+        "Untick both filters to see the other {n} change{s}.",
+    ),
+    # Solo Only in review, y el Pull no trajo ningun review.
+    "review": (
+        "Nothing waiting for review",
+        "Untick Only in review to see the other {n} change{s}.",
+    ),
 }
 
 
@@ -1176,6 +1237,9 @@ class GUI_Table(QtWidgets.QDialog):
         self.detected_seq_name = ""
         # Estado del "Keep this window on top" (persistido en INI)
         self._keep_on_top = _load_keep_on_top()
+        # Codigos de review del usuario, para "Only for me". Mismo usuario que
+        # usa HieroOperations para marcar las filas de review propias.
+        self._my_review_codes = _current_user_review_status_codes()
         self.initUI()
         register_flow_pull_window(self)
         self.last_selected_index = (
@@ -1439,8 +1503,21 @@ class GUI_Table(QtWidgets.QDialog):
         self.only_review_chk.setProperty("lgaLabeled", True)
         self.only_review_chk.setToolTip(_tooltip("only_in_review"))
         self.only_review_chk.setChecked(True)
-        self.only_review_chk.toggled.connect(self._on_only_review_toggled)
+        self.only_review_chk.toggled.connect(self._on_filter_toggled)
         header_row.addWidget(self.only_review_chk, 0, Qt.AlignRight | Qt.AlignVCenter)
+        header_row.addSpacing(Metric.SPACING)
+        # Segundo filtro: solo el review del usuario. Apagado al abrir.
+        self.only_me_chk = QtWidgets.QCheckBox("Only for me")
+        self.only_me_chk.setProperty("lgaLabeled", True)
+        self.only_me_chk.setChecked(False)
+        if self._my_review_codes:
+            self.only_me_chk.setToolTip(_tooltip("only_for_me"))
+        else:
+            self.only_me_chk.setEnabled(False)
+            self.only_me_chk.setToolTip(_tooltip("only_for_me_off"))
+        self.only_me_chk.toggled.connect(self._on_filter_toggled)
+        header_row.addWidget(self.only_me_chk, 0, Qt.AlignRight | Qt.AlignVCenter)
+        # Mas aire antes de Keep on top: separa los filtros de la opcion de ventana.
         header_row.addSpacing(Metric.SPACING * 2)
         self.keep_on_top_chk = QtWidgets.QCheckBox("Keep this window on top")
         # Checkbox con texto: lgaLabeled le da aire entre el cuadrito y la
@@ -1499,7 +1576,18 @@ class GUI_Table(QtWidgets.QDialog):
         # Asigna el delegado personalizado
         delegate = ColorMixDelegate(self.table, self.row_background_colors)
         self.table.setItemDelegate(delegate)
-        layout.addWidget(self.table)
+        # Minimo explicito de 1 px: sin minimo propio Qt usa el minimumSizeHint
+        # del scroll area, mas alto que una fila, y una tabla de UNA fila
+        # quedaba con aire abajo aunque adjust_window_size calcule justo.
+        self.table.setMinimumHeight(1)
+
+        # La tabla y el mensaje de "no hay filas" comparten lugar: un stack y no
+        # dos widgets con hide/show, para que el layout tenga siempre los mismos
+        # items y el calculo de alto de adjust_window_size no cambie.
+        self.results_stack = QtWidgets.QStackedWidget(self)
+        self.results_stack.addWidget(self.table)
+        self.results_stack.addWidget(self._build_empty_state())
+        layout.addWidget(self.results_stack)
 
         self.setLayout(layout)
         font = QFont()
@@ -1511,32 +1599,124 @@ class GUI_Table(QtWidgets.QDialog):
         # Fuente del pack en toda la ventana: sin esto se dibuja con la del host.
         apply_ui_font(self)
 
+    def _build_empty_state(self):
+        """Caja que reemplaza a la tabla cuando los filtros no dejan filas.
+
+        Mismo fondo y borde que la tabla, para que la ventana no cambie de
+        caracter al pasar de una a otra.
+        """
+        box = QtWidgets.QFrame()
+        box.setObjectName("pullEmptyState")
+        box.setStyleSheet(
+            "QFrame#pullEmptyState { background-color: %s; border: 1px solid %s; }"
+            % (UIColor.SURFACE, UIColor.BORDER)
+        )
+        box_layout = QVBoxLayout(box)
+        box_layout.setContentsMargins(
+            Metric.WINDOW_MARGIN, Metric.WINDOW_MARGIN,
+            Metric.WINDOW_MARGIN, Metric.WINDOW_MARGIN,
+        )
+        box_layout.setSpacing(4)
+        box_layout.addStretch(1)
+        self.empty_title = QtWidgets.QLabel("")
+        self.empty_title.setAlignment(Qt.AlignCenter)
+        self.empty_title.setStyleSheet(
+            "QLabel { color: %s; %s }" % (UIColor.TEXT_STRONG, semibold_css())
+        )
+        self.empty_detail = QtWidgets.QLabel("")
+        self.empty_detail.setAlignment(Qt.AlignCenter)
+        self.empty_detail.setStyleSheet("QLabel { color: %s; }" % UIColor.TEXT_DIM)
+        box_layout.addWidget(self.empty_title)
+        box_layout.addWidget(self.empty_detail)
+        box_layout.addStretch(1)
+        self.empty_state = box
+        return box
+
     def _row_is_review(self, row):
         """True si el New Status (columna 6) de la fila es algun review."""
         item = self.table.item(row, 6)
         text = item.text() if item else ""
         return _REVIEW_STATUS_WORD in text.lower()
 
+    def _row_is_mine(self, row):
+        """True si el New Status de la fila es el review del usuario actual.
+
+        Va por codigo de Flow (row_navigation_data), no por nombre: un Push
+        actualiza ese codigo junto con el texto de la celda.
+        """
+        if row >= len(self.row_navigation_data):
+            return False
+        code = str(self.row_navigation_data[row].get("status_code") or "").lower()
+        return code in self._my_review_codes
+
     def apply_review_filter(self):
-        """Oculta o muestra filas segun "Only in review". Solo vista.
+        """Oculta o muestra filas segun "Only in review" y "Only for me". Solo vista.
 
         Se ocultan con setRowHidden y no se sacan: row_navigation_data y
         row_background_colors van por indice de fila, y el Push busca la fila
-        a actualizar recorriendo todas.
+        a actualizar recorriendo todas. "Only for me" ya implica review, asi
+        que con el prendido el otro filtro no cambia nada.
+        Si no queda ninguna fila visible, el stack muestra el mensaje vacio.
         """
         only_review = self.only_review_chk.isChecked()
+        only_me = self.only_me_chk.isChecked() and bool(self._my_review_codes)
+        total = self.table.rowCount()
         visibles = 0
-        for row in range(self.table.rowCount()):
-            hidden = only_review and not self._row_is_review(row)
+        for row in range(total):
+            hidden = (only_review and not self._row_is_review(row)) or (
+                only_me and not self._row_is_mine(row)
+            )
             self.table.setRowHidden(row, hidden)
             if not hidden:
                 visibles += 1
+
+        if total and not visibles:
+            # Cuantas filas volverian al destildar Only for me (con Only in
+            # review como esta). Si son cero, el mensaje no puede prometerlas.
+            sin_only_me = sum(
+                1
+                for row in range(total)
+                if not (only_review and not self._row_is_review(row))
+            )
+            if only_me and sin_only_me:
+                clave, n = "me", sin_only_me
+            elif only_me:
+                clave, n = "me_both", total
+            else:
+                clave, n = "review", total
+            titulo, detalle = _EMPTY_STATE_TEXTS[clave]
+            self.empty_title.setText(titulo)
+            self.empty_detail.setText(detalle.format(n=n, s="" if n == 1 else "s"))
+            self._show_results_page(self.empty_state)
+        else:
+            self._show_results_page(self.table)
         debug_print(
-            f"Filtro Only in review={only_review}: "
-            f"{visibles}/{self.table.rowCount()} filas visibles"
+            f"Filtros Only in review={only_review} Only for me={only_me}: "
+            f"{visibles}/{total} filas visibles"
         )
 
-    def _on_only_review_toggled(self, _checked):
+    def _show_results_page(self, page):
+        """Muestra una pagina del stack y deja que solo ella imponga tamano.
+
+        QStackedWidget toma como minimo el de su pagina MAS grande aunque no se
+        vea: con el mensaje vacio de fondo, una tabla de una fila quedaba con
+        aire abajo. Las paginas ocultas pasan a Ignored, y el alto minimo del
+        mensaje se pone solo mientras se ve, porque un minimo explicito cuenta
+        aunque la politica sea Ignored.
+        """
+        self.empty_state.setMinimumHeight(
+            Metric.ROW_HEIGHT * 4 if page is self.empty_state else 0
+        )
+        Policy = QtWidgets.QSizePolicy
+        for i in range(self.results_stack.count()):
+            widget = self.results_stack.widget(i)
+            if widget is page:
+                widget.setSizePolicy(Policy.Expanding, Policy.Expanding)
+            else:
+                widget.setSizePolicy(Policy.Ignored, Policy.Ignored)
+        self.results_stack.setCurrentWidget(page)
+
+    def _on_filter_toggled(self, _checked):
         self.apply_review_filter()
         if self.isVisible():
             # Se ajusta el tamano sin recentrar, para no mover la ventana.
@@ -1670,6 +1850,8 @@ class GUI_Table(QtWidgets.QDialog):
         title_w = self.title_label.sizeHint().width()
         checkbox_w = (
             self.only_review_chk.sizeHint().width()
+            + Metric.SPACING
+            + self.only_me_chk.sizeHint().width()
             + Metric.SPACING * 2
             + self.keep_on_top_chk.sizeHint().width()
         )
@@ -1702,6 +1884,11 @@ class GUI_Table(QtWidgets.QDialog):
             self.keep_on_top_chk.sizeHint().height(),
         )
         content_height = header_height + rows_height + frame
+        if self.results_stack.currentWidget() is self.empty_state:
+            # Sin filas visibles se ve el mensaje en lugar de la tabla.
+            content_height = max(
+                self.empty_state.minimumHeight(), self.empty_state.sizeHint().height()
+            )
         height = content_height + header_h + gaps + layout_vmargins
         max_height = screen_rect.height() * 0.8
         final_height = min(height, max_height)

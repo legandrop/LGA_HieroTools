@@ -56,8 +56,10 @@ Internal reference: [Flow Review Panel](LGA_HieroTools/docs/LGA_NKS_Flow_Rev_Pan
   Review Lega, **Shot Info** for that shot and task also opens on top of the
   results window.
   **Only in review** (on by default) lists only the shots whose New Status is a
-  review; untick it to see every change. It only filters the list: the pull
-  updates all clips either way.
+  review; untick it to see every change. **Only for me** narrows it to the
+  shots waiting for your own review (Lega sees Review Lega, Sebas sees Review
+  Sebas). If the filters leave nothing to show, a message replaces the table.
+  Both only filter the list: the pull updates all clips either way.
 - **Shot Info**  
   Shows shot information and version comments for the task resolved from the
   active context (Comp, Roto, Cleanup, or another enabled task scope).

@@ -38,6 +38,28 @@ nueva.
    sin tocar una lista. Las filas se ocultan con `setRowHidden`, no se borran:
    la navegación y la actualización tras un Push van por índice de fila. Una fila
    que un Push saca de review sigue visible hasta volver a tocar el checkbox.
+
+   A su derecha, **Only for me** (apagado al abrir, no persiste) deja solo las
+   filas cuyo New Status es el review del usuario. Acá sí se compara el código de
+   Flow de la fila (`revleg`, `rev_su`...) contra los del usuario, porque el dato
+   es de quién es el review y no si la palabra aparece. Si el usuario no es un
+   reviewer conocido, el checkbox queda deshabilitado.
+
+   **De dónde sale el usuario:** de `get_normal_login()` (perfil PipeSync normal),
+   igual que los botones Prev/Next Rev del ViewerTL. No del contexto activo: en
+   modo client ese perfil es el de la editora, y con ese login el Pull no
+   reconocía los reviews de quien está en la máquina, ni para este filtro ni para
+   las filas de review propio ni para el Shot Info automático.
+
+   Si los filtros no dejan ninguna fila, un mensaje reemplaza a la tabla y dice
+   qué destildar. El número que muestra son las filas que realmente van a
+   aparecer: con los dos filtros prendidos y reviews de otros, cuenta solo esos.
+
+   Dos trampas de Qt en esa ventana, las dos por tamaños mínimos: un
+   `QStackedWidget` toma el mínimo de su página más grande aunque esté oculta
+   (por eso el alto mínimo del mensaje se pone solo mientras se ve), y una tabla
+   sin mínimo propio usa el `minimumSizeHint` del scroll area, más alto que una
+   fila (por eso lleva `setMinimumHeight(1)`).
 2. **Shot Info** — muestra datos del shot y comentarios/versiones de la task; shortcut `Shift+T`.
 3. **Review Pic** — captura el viewer con número de frame para acompañar notas de review.
 
