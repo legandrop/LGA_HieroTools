@@ -26,8 +26,8 @@ Empujar un codigo que el sitio no acepta falla con
 
 | | solo en studio (wanka) | solo en client (projbvfx) |
 |---|---|---|
-| Task | `rev_su`, `revcha`, `revjua`, `revjav` | `revprd` |
-| Shot | — | `revprd` no aplica; los Shot son identicos |
+| Task | `rev_su`, `revcha`, `revjua`, `revjav` | `revprd`, `revnfx`, `slapr` |
+| Shot | — | ninguno; los Shot son identicos |
 
 Trampas concretas que ya causaron bugs:
 
@@ -91,6 +91,8 @@ Render de los dropdowns (`ColoredStatusComboBox`):
 | Review Hold | `revhld` | Review Hold | `#9E6A15` | si | si |
 | Review Prod | `revprd` | Review Prod | `#8CBF3F` | **no** | si |
 | Review Dir | `rev_di` | Review Dir | `#B5DB4B` | si | si |
+| Review Netflix | `revnfx` | Review Netflix | `#B81D24` | **no** | si |
+| SL Approved | `slapr` | SL Approved | `#3FBF8F` | **no** | si |
 | OK for Delivery | `pubsh` | OK for Delivery | `#50BFC7` | si | si |
 | Delivered | `check` | Delivered | `#38A138` | si | si |
 | Delivery Apr | `apr` | Delivery Apr | `#266612` | si | si |
@@ -98,6 +100,12 @@ Render de los dropdowns (`ColoredStatusComboBox`):
 `revprd` en Flow viene con `bg_color` `#D7F2B1`, pero ese lima tiene mas
 luminancia que el gris de `noread` (`#d3d3d3`) y en un clip chico se lee como
 blanco. Se usa `#8CBF3F`, el mismo ajuste que ya hizo PipeSync.
+
+`revnfx` va en el rojo de Netflix oscurecido (`#B81D24`) para no confundirse
+con el `Error` (`#c25252`) del ClipColor Panel. `slapr` cae entre el lima de
+Review Dir y el cyan de OK for Delivery: ya aprobado, todavia no es entrega. En
+Flow tienen el mismo `bg_color` que el clip. `revnfx` pide nota en el push,
+como `rev_di`; `slapr` no.
 
 ## Estados de SHOT
 
@@ -120,9 +128,9 @@ Salen de `PUSH_BUTTONS` y se filtran con `get_push_buttons(mode)`. El **label es
 la clave** con la que viaja el push hasta el conector, asi que el label y el
 codigo tienen que definirse juntos y en un solo lugar.
 
-| studio (11) | client (8) |
+| studio (11) | client (10) |
 |---|---|
-| Corrections, Rev Sebas, Rev Charly, Rev Juano, Rev Javi, Rev Lega, Rev Hold, Rev Dir, OK for Delivery, Delivered, Delivery Apr | Corrections, Rev Lega, Rev Hold, **Rev Prod**, Rev Dir, OK for Delivery, Delivered, Delivery Apr |
+| Corrections, Rev Sebas, Rev Charly, Rev Juano, Rev Javi, Rev Lega, Rev Hold, Rev Dir, OK for Delivery, Delivered, Delivery Apr | Corrections, Rev Lega, Rev Hold, **Rev Prod**, Rev Dir, **Rev Netflix**, **SL Approved**, OK for Delivery, Delivered, Delivery Apr |
 
 El **orden** es el mismo que el del `sg_status_list` de Flow y el de PipeSync.
 Los labels de los botones van cortos (`Rev Sebas`) porque el panel es angosto;

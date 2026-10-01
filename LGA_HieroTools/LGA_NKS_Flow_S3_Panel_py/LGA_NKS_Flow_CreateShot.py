@@ -1,11 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_CreateShot v1.60 | Lega
+  LGA_NKS_Flow_CreateShot v1.61 | Lega
 
   Script para crear shots en ShotGrid basado en el nombre del clip seleccionado en Hiero.
   SIN usar templates predefinidos - crea tasks manualmente para mayor control.
 
+  v1.61: Review Netflix y SL Approved en la lista de estados de task (solo client).
   v1.60: El thumbnail vuelve a esperar el refresco del viewer sin fallar:
          create_shot_thumbnail() usa el import global de time, en vez de
          sombrearlo con un import local despues de time.sleep().
@@ -650,6 +651,8 @@ ALL_TASK_STATES = [
     ("Review Hold", "revhld", "#9e6a15"),
     ("Review Prod", "revprd", "#8cbf3f"),
     ("Review Dir", "rev_di", "#b5db4b"),
+    ("Review Netflix", "revnfx", "#b81d24"),
+    ("SL Approved", "slapr", "#3fbf8f"),
     ("OK for Delivery", "pubsh", "#50bfc7"),
     ("Delivered", "check", "#38a138"),
     ("Delivery Apr", "apr", "#266612"),

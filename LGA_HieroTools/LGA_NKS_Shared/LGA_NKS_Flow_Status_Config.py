@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Status_Config v1.02 | Lega
+  LGA_NKS_Flow_Status_Config v1.03 | Lega
 
   Fuente unica de los estados de Task de Flow para HieroTools: codigo,
   nombre visible, color de clip, tag de XYplorer y en que contexto
@@ -16,7 +16,7 @@ ____________________________________________________________________
   Los dos sitios de Flow NO tienen la misma lista de estados:
 
     solo studio (wanka) : rev_su, revcha, revjua, revjav
-    solo client (projb)  : revprd
+    solo client (projb)  : revprd, revnfx, slapr
     en los dos          : el resto, incluido pubsh (OK for Delivery)
 
   Empujar un codigo que el sitio no tiene falla con
@@ -29,6 +29,9 @@ ____________________________________________________________________
   los nombres tambien, salvo las divergencias declaradas en
   docs/Docu_Flow_Estados_Colores.md.
 
+  v1.03: Estados nuevos solo de client: Review Netflix (revnfx) y SL Approved
+         (slapr), despues de Review Dir. Botones "Rev Netflix" y "SL Approved"
+         en el Flow Rev Panel. revnfx pide nota como rev_di; slapr no.
   v1.02: NOTE_CAPABLE_CODES + is_note_capable: los estados que piden nota en el
          push y mandan la Version a `vwd` salen de aca. Estaban hardcodeados en
          cinco listas iguales que ya se habian desincronizado (`revhld` faltaba
@@ -85,6 +88,11 @@ TASK_STATUS_CATALOG = {
     # Comparte el tag de XYplorer con Review Dir.
     "revprd": ("Review Prod", "#8CBF3F", "ReviewDir"),
     "rev_di": ("Review Dir", "#B5DB4B", "ReviewDir"),
+    # Solo projb. Review Netflix va en el rojo de Netflix oscurecido, para no
+    # confundirse con el "Error" (#c25252) del ClipColor Panel. SL Approved cae
+    # entre el lima de Review Dir y el cyan de OK for Delivery.
+    "revnfx": ("Review Netflix", "#B81D24", "ReviewDir"),
+    "slapr": ("SL Approved", "#3FBF8F", "Approved"),
     # Cola de entrega: pubsh -> check -> apr. `apr` es el FINAL, lo da el cliente.
     # Se llamaba "Delivery OK", casi identico al "OK for Delivery" de pubsh, que es
     # el primero: las mismas palabras en los dos extremos opuestos.
@@ -126,6 +134,8 @@ PUSH_BUTTONS = [
     ("Rev Hold", "revhld", None, BOTH),
     ("Rev Prod", "revprd", None, CLIENT_ONLY),
     ("Rev Dir", "rev_di", None, BOTH),
+    ("Rev Netflix", "revnfx", None, CLIENT_ONLY),
+    ("SL Approved", "slapr", None, CLIENT_ONLY),
     ("OK for Delivery", "pubsh", None, BOTH),
     ("Delivered", "check", None, BOTH),
     ("Delivery Apr", "apr", None, BOTH),
@@ -156,7 +166,7 @@ LEGACY_LABEL_ALIASES = {
 #
 # Ojo: `revleg` en projb se llama "Review Sup" y es el unico reviewer del sitio.
 # Las listas de Shot son identicas en los dos; las de Task se diferencian solo en
-# los reviewers por persona (studio) y en `revprd` (client).
+# los reviewers por persona (studio) y en `revprd`, `revnfx` y `slapr` (client).
 TASK_STATUS_CODES_BY_MODE = {
     MODE_STUDIO: (
         "noread", "omit", "ready", "progre", "corr",
@@ -166,7 +176,7 @@ TASK_STATUS_CODES_BY_MODE = {
     MODE_CLIENT: (
         "noread", "omit", "ready", "progre", "corr",
         "revleg", "revhld", "revprd",
-        "rev_di", "pubsh", "check", "apr",
+        "rev_di", "revnfx", "slapr", "pubsh", "check", "apr",
     ),
 }
 
@@ -221,6 +231,7 @@ NOTE_CAPABLE_CODES = (
     "revhld",
     "revprd",
     "rev_di",
+    "revnfx",
 )
 
 
