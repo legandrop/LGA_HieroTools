@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push_connector v1.13 | Lega
+  LGA_NKS_Flow_Push_connector v1.14 | Lega
 
   Conector simple para operaciones de red con Flow
   Este script se ejecuta con Python personalizado para evitar problemas de dependencias
@@ -10,6 +10,12 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
   - PROYECTO_TEMP_EP_SEQ_SHOT_DESC1_DESC2 (6 bloques con descripción)
   - PROYECTO_TEMP_EP_SEQ_SHOT (4 bloques simplificado)
+
+  v1.14: Submission note del slate de entrega. execute_full_push acepta
+         `submission` (campos de Version de LGA_NKS_Slate_Config): exige la
+         Version exacta, la escribe ANTES que la Task y no crea Note. La
+         operacion nueva read_submission lee esos campos para precargar el
+         dialogo del supervisor.
 
   v1.13: La carpeta temporal de las imagenes adjuntas (mkdtemp) se borra
          contando los fallos: el log ya no dice "eliminada" si quedo algo.
@@ -160,6 +166,12 @@ except ImportError as e:
     raise
 
 status_translation = get_status_translation()
+
+try:
+    from LGA_NKS_Slate_Config import VERSION_SUBMISSION_FIELDS
+except ImportError as e:
+    debug_print(f"⚠️ ImportError: {e} - LGA_NKS_Slate_Config no disponible")
+    raise
 
 # Nombre de la task CG (contexto client). Import tolerante: sin GetClip el
 # conector sigue funcionando y la regla CG simplemente no aplica.
@@ -517,6 +529,30 @@ class ShotGridManager:
             f"list_versions_for_task: shot_id={shot_id}, task={task_name}, versiones={len(out)}"
         )
         return out
+
+    def read_version_fields(self, version_id, fields):
+        """Lee campos de una Version. Devuelve (dict, error)."""
+        if not self.sg:
+            return None, "ShotGrid no inicializado"
+        try:
+            version = self.sg.find_one(
+                "Version", [["id", "is", int(version_id)]], ["code"] + list(fields)
+            )
+        except Exception as e:
+            return None, f"No se pudieron leer los campos de la Version {version_id}: {e}"
+        if not version:
+            return None, f"No existe la Version {version_id}"
+        return version, None
+
+    def update_version_fields(self, version_id, data):
+        """Escribe campos de una Version en un solo update. Devuelve (ok, error)."""
+        if not self.sg:
+            return False, "ShotGrid no inicializado"
+        try:
+            self.sg.update("Version", int(version_id), dict(data))
+            return True, None
+        except Exception as e:
+            return False, f"No se pudieron escribir los campos de la Version {version_id}: {e}"
 
     def update_task_status(self, task_id, new_status):
         """Actualiza el estado de la Task en Flow.
@@ -960,9 +996,21 @@ def execute_full_push_operation(
     target_version_number=None,
     allow_task_only=False,
     extra_images=None,
+    submission=None,
+    submission_only=False,
 ):
     """
-    Ejecuta todo el proceso de push en una sola operación para mayor eficiencia
+    Ejecuta todo el proceso de push en una sola operación para mayor eficiencia.
+
+    submission: dict con los campos de Version del slate de entrega
+    (LGA_NKS_Slate_Config.VERSION_SUBMISSION_FIELDS). Si viene, el push exige la
+    Version EXACTA del clip, escribe esos campos ANTES de tocar la Task y no
+    crea Note: una Note le llega al autor y a los asignados, y la submission
+    note no la tienen que ver los artistas.
+
+    submission_only: con submission, guarda SOLO esos campos y no toca el estado
+    de la Task ni de la Version. Es para corregir la nota de un shot que ya esta
+    en la cola de entrega sin devolverlo a Review Dir.
     """
     try:
         debug_print(f"Ejecutando push completo: {button_name} para {base_name}")
@@ -1117,7 +1165,8 @@ def execute_full_push_operation(
             version_warnings.append(version_warning)
 
         # En modo Shift+Click (target_version_number), NO fallback silencioso.
-        if target_version_number is not None and not sg_specific_version:
+        # Tampoco con submission: la nota iria al slate de otra version.
+        if (target_version_number is not None or submission) and not sg_specific_version:
             return {
                 "success": False,
                 "error": (
@@ -1168,11 +1217,48 @@ def execute_full_push_operation(
                 ),
             }
 
+        # La submission note va primero: si Flow no la acepta (campo inexistente
+        # en este sitio, permisos), el push se corta sin haber tocado la Task.
+        # Y nunca sobre una version elegida a ciegas entre varias candidatas.
+        submission_applied = False
+        if submission and version_warnings:
+            return {"success": False, "error": AMBIGUOUS_SUBMISSION_ERROR}
+        if submission:
+            debug_print(
+                f"Escribiendo submission en Version {sg_specific_version['id']} "
+                f"({sg_specific_version.get('code')})"
+            )
+            sub_ok, sub_error = sg_manager.update_version_fields(
+                sg_specific_version["id"], submission
+            )
+            if not sub_ok:
+                return {"success": False, "error": sub_error}
+            submission_applied = True
+            if submission_only:
+                return {
+                    "success": True,
+                    "message": "Submission note guardada sin cambiar estados",
+                    "images_attached": 0,
+                    "applied": {
+                        "task_status": False,
+                        "version_status": False,
+                        "version_status_value": None,
+                        "note": False,
+                        "submission": True,
+                    },
+                    "warnings": [],
+                }
+
         debug_print(f"Actualizando tarea: {task_name} (ID: {task_id})")
         # La DB local es cache de Flow: si falla la escritura en Flow se aborta
         # el push y el caller no debe escribir nada en la DB.
         task_ok, task_error = sg_manager.update_task_status(task_id, sg_status)
         if not task_ok:
+            if submission_applied:
+                task_error = (
+                    f"{task_error}\n\nLa Submission Note SI quedo guardada en "
+                    f"{sg_specific_version.get('code')}; solo fallo el estado de la Task."
+                )
             return {"success": False, "error": task_error}
 
         # applied refleja qué se escribió realmente en Flow. El caller usa esto
@@ -1182,6 +1268,7 @@ def execute_full_push_operation(
             "version_status": False,
             "version_status_value": None,
             "note": False,
+            "submission": submission_applied,
         }
         # Los avisos del resolver de Version viajan al usuario: si quedaron
         # varias candidatas y ninguna coincidia con el nombre del clip, el push
@@ -1218,7 +1305,12 @@ def execute_full_push_operation(
             # haya mensaje O imagenes: arrastrar una referencia y apretar OK sin
             # escribir nada es un flujo normal, y si se pidiera mensaje la media
             # se perdia sin que el push diera un solo error.
-            if (message or review_images or extra_images) and sg_specific_version:
+            # Con submission no se crea Note: el texto ya quedo en la Version.
+            if (
+                (message or review_images or extra_images)
+                and sg_specific_version
+                and not submission
+            ):
                 debug_print(
                     f"Agregando comentario a versión específica {sg_specific_version['id']} "
                     f"(v{requested_version_number:02d})"
@@ -1356,6 +1448,92 @@ def execute_full_push_operation(
         return {"success": False, "error": error_msg}
 
 
+# Varias Versions con el mismo numero y ninguna con el nombre del clip. El
+# warning generico dice "Se usa la primera", que en submission es falso: no se
+# usa ninguna y no se guarda nada.
+AMBIGUOUS_SUBMISSION_ERROR = (
+    "Flow has more than one Version with this number and none matches the clip "
+    "name exactly. Nothing was saved."
+)
+
+
+def read_submission_operation(sg_manager, base_name, original_file_name=None, file_path=None):
+    """Lee los campos de submission de la Version EXACTA del clip.
+
+    Resuelve proyecto, shot, task y numero igual que execute_full_push_operation
+    pero sin fallback a la version mas alta: la submission note pertenece a una
+    version concreta y precargar la de otra seria escribir encima de ella.
+    """
+    base_name_for_detection = base_name
+    if original_file_name:
+        version_match = re.search(r"_v(\d+)", original_file_name)
+        if version_match and not any(
+            part.startswith("v") and part[1:].isdigit() for part in base_name.split("_")
+        ):
+            base_name_for_detection = base_name + version_match.group(0)
+
+    project_name = extract_project_name_from_path(file_path) or extract_project_name(
+        base_name_for_detection
+    )
+    shot_code = extract_shot_code(base_name_for_detection)
+    extracted_task = extract_task_name(base_name_for_detection or base_name)
+    task_name = normalize_task_name(extracted_task) if extracted_task else "comp"
+    version_token = version_filter_token(task_name, extracted_task)
+
+    version_match = re.search(r"_v(\d+)", base_name_for_detection, re.IGNORECASE)
+    if not version_match:
+        return {
+            "success": False,
+            "error": f"No se encontró número de versión en '{base_name_for_detection}'",
+        }
+    version_number = int(version_match.group(1))
+
+    _project, shot, tasks = sg_manager.find_shot_and_tasks(project_name, shot_code)
+    if not shot:
+        return {
+            "success": False,
+            "error": f"No se encontró el shot {shot_code} en el proyecto {project_name}",
+        }
+    task_status = next(
+        (
+            t.get("sg_status_list")
+            for t in tasks or []
+            if (t.get("content") or "").lower() == task_name
+        ),
+        None,
+    )
+
+    version, _num_str, _user_id, warning = sg_manager.find_specific_version_for_shot(
+        shot["id"], version_number, version_token, expected_code=base_name_for_detection
+    )
+    if not version:
+        return {
+            "success": False,
+            "error": (
+                f"No se encontró en Flow la versión v{version_number:03d} de la task "
+                f"'{task_name}' del shot {shot_code}"
+            ),
+        }
+
+    # Varias candidatas y ninguna con el nombre exacto del clip: elegir una
+    # seria guardar (o precargar) la nota de otra version. Se corta.
+    if warning:
+        debug_print(f"read_submission: {warning}")
+        return {"success": False, "error": AMBIGUOUS_SUBMISSION_ERROR}
+
+    fields, error = sg_manager.read_version_fields(version["id"], VERSION_SUBMISSION_FIELDS)
+    if error:
+        return {"success": False, "error": error}
+
+    return {
+        "success": True,
+        "version_id": version["id"],
+        "version_code": version.get("code"),
+        "task_status": task_status,
+        "fields": {name: fields.get(name) or "" for name in VERSION_SUBMISSION_FIELDS},
+    }
+
+
 def execute_flow_operation(operation, **kwargs):
     """
     Función principal que ejecuta operaciones de Flow
@@ -1427,6 +1605,14 @@ def execute_flow_operation(operation, **kwargs):
             file_path = kwargs.get("file_path")
             target_version_number = kwargs.get("target_version_number")
             allow_task_only = bool(kwargs.get("allow_task_only"))
+            submission = kwargs.get("submission") or None
+            submission_only = bool(kwargs.get("submission_only"))
+            if submission:
+                # Solo los campos conocidos: el dict llega por stdin desde NKS.
+                submission = {
+                    name: submission.get(name, "")
+                    for name in VERSION_SUBMISSION_FIELDS
+                }
 
             return execute_full_push_operation(
                 sg_manager,
@@ -1439,6 +1625,16 @@ def execute_flow_operation(operation, **kwargs):
                 target_version_number=target_version_number,
                 allow_task_only=allow_task_only,
                 extra_images=extra_images,
+                submission=submission,
+                submission_only=submission_only,
+            )
+
+        elif operation == "read_submission":
+            return read_submission_operation(
+                sg_manager,
+                kwargs.get("base_name", ""),
+                original_file_name=kwargs.get("original_file_name"),
+                file_path=kwargs.get("file_path"),
             )
 
         else:

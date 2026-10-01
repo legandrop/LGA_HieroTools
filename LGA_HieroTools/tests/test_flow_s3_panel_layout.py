@@ -43,6 +43,7 @@ class FlowS3PanelLayoutTests(unittest.TestCase):
                 "Modify Shot",
                 "Check Shots Exist",
                 "Thumbnail",
+                "Slate Frame",
                 "Shot Priority",
                 "Reveal in Flow",
                 "FileManagerS3",
@@ -53,13 +54,13 @@ class FlowS3PanelLayoutTests(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            [item.elts[2].id for item in buttons[:4]],
-            ["SHOT_WORKFLOW_COLOR"] * 4,
+            [item.elts[2].id for item in buttons[:5]],
+            ["SHOT_WORKFLOW_COLOR"] * 5,
         )
-        self.assertEqual(buttons[4].elts[2].value, "gradient_flow_priority")
-        self.assertEqual(buttons[5].elts[2].value, "gradient_flow_reveal")
+        self.assertEqual(buttons[5].elts[2].value, "gradient_flow_priority")
+        self.assertEqual(buttons[6].elts[2].value, "gradient_flow_reveal")
         self.assertEqual(
-            [item.elts[2].value for item in buttons[6:]],
+            [item.elts[2].value for item in buttons[7:]],
             ["gradient_magenta_violet"] * 5,
         )
         self.assertNotIn(".Psync", names)

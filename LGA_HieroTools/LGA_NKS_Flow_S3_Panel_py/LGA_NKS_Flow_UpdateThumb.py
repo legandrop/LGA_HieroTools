@@ -1,11 +1,21 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_UpdateThumb v1.05 | Lega
+  LGA_NKS_Flow_UpdateThumb v1.06 | Lega
 
-  Reemplaza el thumbnail de un shot existente en Flow (ShotGrid) con un snapshot
-  del viewer actual de Hiero. Pensado para el click normal del boton "Thumbnail"
-  del Flow S3 Panel.
+  Reemplaza una imagen de un shot existente en Flow (ShotGrid) con un snapshot
+  del viewer actual de Hiero. Dos destinos (TARGETS):
+  - "thumbnail": el thumbnail del shot. Click normal del boton "Thumbnail" del
+    panel Flow | S3.
+  - "slate_frame": el campo File/Link sg_slate_frame del shot, con el frame del
+    aPlate que va en el slate de entrega. Boton "Slate Frame" del mismo panel.
+    Es otra imagen a proposito: el thumbnail se pisa seguido y el slate frame
+    lo elige el coordinador una vez.
+
+  v1.06: Destino nuevo "slate_frame" (sg_slate_frame, solo sitio studio): misma
+         captura y misma ventana de comparacion, sube con sg.upload al campo y
+         baja el actual con download_attachment. JPG calidad 95. Los textos
+         visibles de la ventana pasan a ingles, como pide la regla de UI.
 
   v1.05: Apaga el VideoTrack BurnIn, espera el refresco del viewer durante la
          captura y restaura el estado original aunque viewer.image() falle.
@@ -73,6 +83,41 @@ Slot = QtCore.Slot
 # Poner 0 (o menos) para desactivar el auto-cierre.
 AUTO_CLOSE_SECONDS = 4
 
+# Destinos posibles de la imagen capturada. Los textos son los visibles de la
+# ventana (en ingles); jpeg_quality -1 es el default de Qt.
+TARGET_THUMBNAIL = "thumbnail"
+TARGET_SLATE_FRAME = "slate_frame"
+TARGETS = {
+    TARGET_THUMBNAIL: {
+        "window_title": "Flow | Update Thumbnail",
+        "title": "Replace the shot thumbnail in Flow",
+        "current_header": "Current in Flow",
+        "empty": "No thumbnail",
+        "ready": "The current thumbnail will be replaced with the new snapshot.",
+        "uploading": "Uploading thumbnail to Flow...",
+        "done": "Thumbnail updated in Flow.",
+        "upload_failed": "Could not upload the thumbnail to Flow.",
+        "jpeg_quality": -1,
+        "temp_prefix": "LGA_FlowThumb_",
+    },
+    TARGET_SLATE_FRAME: {
+        "window_title": "Flow | Slate Frame",
+        "title": "Replace the delivery slate frame in Flow",
+        "current_header": "Current slate frame",
+        "empty": "No slate frame",
+        "ready": "This frame will be used in the delivery slate of the shot.",
+        "uploading": "Uploading slate frame to Flow...",
+        "done": "Slate frame updated in Flow.",
+        "upload_failed": "Could not upload the slate frame to Flow.",
+        # El slate lo muestra grande (38 % del frame): calidad alta.
+        "jpeg_quality": 95,
+        "temp_prefix": "LGA_FlowSlateFrame_",
+        # En un slate de 1920 el thumbnail ocupa el 38 % del ancho (~730 px).
+        # Una captura mas chica se ve blanda: se avisa, no se bloquea.
+        "min_width": 730,
+    },
+}
+
 # shotgun_api3 + utilidades compartidas
 shared_dir = Path(__file__).parent.parent / "LGA_NKS_Shared"
 sys.path.insert(0, str(shared_dir))
@@ -89,6 +134,7 @@ from LGA_NKS_Flow_NamingUtils import (  # noqa: E402
     clean_base_name,
 )
 from LGA_NKS_Shared.LGA_NKS_GetClip import get_clip_to_process  # noqa: E402
+from LGA_NKS_Slate_Config import FIELD_SLATE_FRAME  # noqa: E402
 from LGA_NKS_Shared.LGA_NKS_ThumbnailCapture import (  # noqa: E402
     BurnInTrackError,
     capture_viewer_image_without_burnin,
@@ -137,7 +183,7 @@ def debug_print(*message):
 # ----------------------------------------------------------------------------
 # Captura del snapshot del viewer
 # ----------------------------------------------------------------------------
-def capture_viewer_snapshot_to_temp():
+def capture_viewer_snapshot_to_temp(target=TARGET_THUMBNAIL):
     """Captura el viewer actual a un JPG temporal (zoom to fill + crop al aspecto
     de la secuencia, con el track BurnIn deshabilitado temporalmente).
 
@@ -180,13 +226,17 @@ def capture_viewer_snapshot_to_temp():
         qimage_cropped = crop_to_aspect_ratio(qimage, target_aspect)
 
         # Guardar a archivo temporal
-        fd, temp_path = tempfile.mkstemp(prefix="LGA_FlowThumb_", suffix=".jpg")
+        config = TARGETS[target]
+        fd, temp_path = tempfile.mkstemp(prefix=config["temp_prefix"], suffix=".jpg")
         os.close(fd)
-        ok = qimage_cropped.save(temp_path, "JPEG")
+        ok = qimage_cropped.save(temp_path, "JPEG", config["jpeg_quality"])
         if not ok or not os.path.exists(temp_path):
             debug_print("No se pudo guardar el JPG temporal")
             return None
-        debug_print(f"Snapshot temporal guardado: {temp_path}")
+        debug_print(
+            f"Snapshot temporal guardado: {temp_path} "
+            f"({qimage_cropped.width()}x{qimage_cropped.height()})"
+        )
         return temp_path
 
     except BurnInTrackError as e:
@@ -251,8 +301,8 @@ class FlowThumbManager:
         projects = self.sg.find("Project", [["name", "is", project_name]], ["id"])
         return projects[0]["id"] if projects else None
 
-    def find_shot(self, project_name, shot_code):
-        """Devuelve el shot {id, code, image} o None si no existe."""
+    def find_shot(self, project_name, shot_code, extra_fields=()):
+        """Devuelve el shot {id, code, image, *extra_fields} o None si no existe."""
         if not self.sg:
             return None
         project_id = self.get_project_id(project_name)
@@ -263,7 +313,9 @@ class FlowThumbManager:
             ["project", "is", {"type": "Project", "id": project_id}],
             ["code", "is", shot_code],
         ]
-        shots = self.sg.find("Shot", filters, ["id", "code", "image"])
+        shots = self.sg.find(
+            "Shot", filters, ["id", "code", "image"] + list(extra_fields)
+        )
         return shots[0] if shots else None
 
     def upload_thumbnail(self, shot_id, thumbnail_path):
@@ -278,6 +330,42 @@ class FlowThumbManager:
         except Exception as e:
             debug_print(f"Error subiendo thumbnail: {e}")
             return False
+
+    def upload_slate_frame(self, shot_id, image_path, shot_code=""):
+        """Sube la imagen al campo File/Link del slate frame del shot."""
+        if not self.sg or not shot_id or not image_path:
+            return False
+        if not os.path.exists(image_path):
+            debug_print(f"No existe el archivo a subir: {image_path}")
+            return False
+        try:
+            self.sg.upload(
+                "Shot",
+                shot_id,
+                image_path,
+                field_name=FIELD_SLATE_FRAME,
+                display_name=f"{shot_code or shot_id}_slate_frame.jpg",
+            )
+            return True
+        except Exception as e:
+            debug_print(f"Error subiendo slate frame: {e}")
+            return False
+
+    def download_slate_frame(self, field_value):
+        """Baja el adjunto del campo slate frame a un JPG temporal, o None."""
+        if not self.sg or not isinstance(field_value, dict) or not field_value.get("id"):
+            return None
+        try:
+            fd, temp_path = tempfile.mkstemp(prefix="LGA_FlowSlateFrameCur_", suffix=".jpg")
+            os.close(fd)
+            self.sg.download_attachment(attachment=field_value, file_path=temp_path)
+            if os.path.getsize(temp_path) > 0:
+                return temp_path
+            _safe_remove(temp_path)
+            return None
+        except Exception as e:
+            debug_print(f"No se pudo descargar el slate frame actual: {e}")
+            return None
 
 
 def download_thumbnail(image_url):
@@ -323,10 +411,11 @@ class LoadSignals(QObject):
 class LoadShotWorker(QRunnable):
     """Conecta a Flow, busca el shot y baja su thumbnail actual (si tiene)."""
 
-    def __init__(self, project_name, shot_code):
+    def __init__(self, project_name, shot_code, target=TARGET_THUMBNAIL):
         super(LoadShotWorker, self).__init__()
         self.project_name = project_name
         self.shot_code = shot_code
+        self.target = target
         self.signals = LoadSignals()
 
     @Slot()
@@ -334,22 +423,41 @@ class LoadShotWorker(QRunnable):
         try:
             url, login, password = get_flow_credentials()
             if not url or not login or not password:
-                self.signals.failed.emit(
-                    "No se pudieron obtener las credenciales de Flow."
-                )
+                self.signals.failed.emit("Could not read the Flow credentials.")
                 return
             manager = FlowThumbManager(url, login, password)
             if not manager.sg:
-                self.signals.failed.emit("No se pudo conectar a Flow.")
+                self.signals.failed.emit("Could not connect to Flow.")
                 return
-            shot = manager.find_shot(self.project_name, self.shot_code)
+            is_slate = self.target == TARGET_SLATE_FRAME
+            try:
+                shot = manager.find_shot(
+                    self.project_name,
+                    self.shot_code,
+                    extra_fields=(FIELD_SLATE_FRAME,) if is_slate else (),
+                )
+            except Exception as e:
+                debug_print(f"Error buscando el shot: {e}")
+                if is_slate and FIELD_SLATE_FRAME in str(e):
+                    self.signals.failed.emit(
+                        "This Flow site has no Slate Frame field "
+                        "(it only exists on the studio site)."
+                    )
+                else:
+                    self.signals.failed.emit(f"Error searching the shot in Flow: {e}")
+                return
             if not shot:
                 self.signals.failed.emit(
-                    f"El shot '{self.shot_code}' no existe en el proyecto "
-                    f"'{self.project_name}' en Flow."
+                    f"Shot '{self.shot_code}' does not exist in project "
+                    f"'{self.project_name}' in Flow."
                 )
                 return
-            current_thumb_path = download_thumbnail(shot.get("image"))
+            if is_slate:
+                current_thumb_path = manager.download_slate_frame(
+                    shot.get(FIELD_SLATE_FRAME)
+                )
+            else:
+                current_thumb_path = download_thumbnail(shot.get("image"))
             self.signals.loaded.emit(
                 {
                     "shot_id": shot["id"],
@@ -358,7 +466,7 @@ class LoadShotWorker(QRunnable):
                 }
             )
         except Exception as e:
-            self.signals.failed.emit(f"Error buscando el shot en Flow: {e}")
+            self.signals.failed.emit(f"Error searching the shot in Flow: {e}")
 
 
 class UploadSignals(QObject):
@@ -369,10 +477,12 @@ class UploadSignals(QObject):
 class UploadThumbWorker(QRunnable):
     """Sube el nuevo thumbnail al shot en Flow."""
 
-    def __init__(self, shot_id, thumbnail_path):
+    def __init__(self, shot_id, thumbnail_path, target=TARGET_THUMBNAIL, shot_code=""):
         super(UploadThumbWorker, self).__init__()
         self.shot_id = shot_id
         self.thumbnail_path = thumbnail_path
+        self.target = target
+        self.shot_code = shot_code
         self.signals = UploadSignals()
 
     @Slot()
@@ -380,23 +490,26 @@ class UploadThumbWorker(QRunnable):
         try:
             url, login, password = get_flow_credentials()
             if not url or not login or not password:
-                self.signals.finished.emit(
-                    False, "No se pudieron obtener las credenciales de Flow."
-                )
+                self.signals.finished.emit(False, "Could not read the Flow credentials.")
                 return
             manager = FlowThumbManager(url, login, password)
             if not manager.sg:
-                self.signals.finished.emit(False, "No se pudo conectar a Flow.")
+                self.signals.finished.emit(False, "Could not connect to Flow.")
                 return
-            ok = manager.upload_thumbnail(self.shot_id, self.thumbnail_path)
-            if ok:
-                self.signals.finished.emit(True, "Thumbnail actualizado en Flow.")
-            else:
-                self.signals.finished.emit(
-                    False, "No se pudo subir el thumbnail a Flow."
+            config = TARGETS[self.target]
+            if self.target == TARGET_SLATE_FRAME:
+                ok = manager.upload_slate_frame(
+                    self.shot_id, self.thumbnail_path, self.shot_code
                 )
+            else:
+                ok = manager.upload_thumbnail(self.shot_id, self.thumbnail_path)
+            debug_print(f"Upload {self.target} shot_id={self.shot_id}: ok={ok}")
+            if ok:
+                self.signals.finished.emit(True, config["done"])
+            else:
+                self.signals.finished.emit(False, config["upload_failed"])
         except Exception as e:
-            self.signals.finished.emit(False, f"Error subiendo el thumbnail: {e}")
+            self.signals.finished.emit(False, f"Upload error: {e}")
 
 
 # ----------------------------------------------------------------------------
@@ -406,8 +519,11 @@ THUMB_W = 280
 
 
 class ThumbReplaceDialog(QDialog):
-    def __init__(self, project_name, shot_code, new_thumb_path, parent=None):
+    def __init__(
+        self, project_name, shot_code, new_thumb_path, parent=None, target=TARGET_THUMBNAIL
+    ):
         super(ThumbReplaceDialog, self).__init__(parent)
+        self.config = TARGETS[target]
         self.project_name = project_name
         self.shot_code = shot_code
         self.new_thumb_path = new_thumb_path
@@ -416,7 +532,7 @@ class ThumbReplaceDialog(QDialog):
         self._countdown_timer = None
         self._countdown_remaining = 0
 
-        self.setWindowTitle("Flow | Update Thumbnail")
+        self.setWindowTitle(self.config["window_title"])
         self.setModal(False)
         self.setWindowModality(Qt.NonModal)
         self.setAttribute(Qt.WA_DeleteOnClose, False)
@@ -426,7 +542,7 @@ class ThumbReplaceDialog(QDialog):
         self.setLayout(layout)
 
         # Titulo
-        title_label = QLabel("Reemplazar thumbnail del shot en Flow")
+        title_label = QLabel(self.config["title"])
         title_font = QFont()
         title_font.setPointSize(12)
         title_font.setBold(True)
@@ -449,7 +565,7 @@ class ThumbReplaceDialog(QDialog):
         images_layout = QHBoxLayout()
 
         images_layout.addStretch()
-        images_layout.addLayout(self._build_image_column("Actual en Flow", is_current=True))
+        images_layout.addLayout(self._build_image_column(self.config["current_header"], is_current=True))
 
         arrow = QLabel("→")  # flecha
         arrow_font = QFont()
@@ -460,7 +576,7 @@ class ThumbReplaceDialog(QDialog):
         arrow.setAlignment(Qt.AlignCenter)
         images_layout.addWidget(arrow)
 
-        images_layout.addLayout(self._build_image_column("Nuevo (snapshot)", is_current=False))
+        images_layout.addLayout(self._build_image_column("New (snapshot)", is_current=False))
         images_layout.addStretch()
 
         layout.addLayout(images_layout)
@@ -469,7 +585,7 @@ class ThumbReplaceDialog(QDialog):
         self._set_pixmap(self.new_image_label, self.new_thumb_path)
 
         # Etiqueta de estado/resultado
-        self.status_label = QLabel("Buscando el shot en Flow...")
+        self.status_label = QLabel("Searching the shot in Flow...")
         self.status_label.setAlignment(Qt.AlignCenter)
         self.status_label.setWordWrap(True)
         self.status_label.setTextFormat(Qt.RichText)
@@ -506,7 +622,7 @@ class ThumbReplaceDialog(QDialog):
         )
         col.addWidget(header)
 
-        image_label = QLabel("Cargando..." if is_current else "")
+        image_label = QLabel("Loading..." if is_current else "")
         image_label.setAlignment(Qt.AlignCenter)
         image_label.setFixedWidth(THUMB_W)
         image_label.setMinimumHeight(int(THUMB_W * 9 / 16))
@@ -536,16 +652,24 @@ class ThumbReplaceDialog(QDialog):
     # --- API publica usada por el orquestador ---
     def set_current_thumb(self, path):
         if not self._set_pixmap(self.current_image_label, path):
-            self.current_image_label.setText("Sin thumbnail")
+            self.current_image_label.setText(self.config["empty"])
 
     def set_replace_callback(self, callback):
         self.replace_callback = callback
 
     def show_ready(self):
         self.replace_button.setEnabled(True)
-        self.status_label.setText(
-            f"<span style='color: {Color.TEXT};'>Se reemplazara el thumbnail actual por el nuevo snapshot.</span>"
-        )
+        text = f"<span style='color: {Color.TEXT};'>{self.config['ready']}</span>"
+        min_width = self.config.get("min_width")
+        if min_width:
+            width = QPixmap(self.new_thumb_path).width()
+            if 0 < width < min_width:
+                text += (
+                    f"<br><span style='color: {Color.WARNING_TEXT};'>Low resolution "
+                    f"capture ({width} px wide, {min_width} px recommended). Enlarge "
+                    f"the viewer for a sharper slate frame.</span>"
+                )
+        self.status_label.setText(text)
 
     def show_step(self, message):
         self.status_label.setText(f"<span style='color: {Color.TEXT};'>{message}</span>")
@@ -587,7 +711,7 @@ class ThumbReplaceDialog(QDialog):
         self._uploading = True
         self.replace_button.setEnabled(False)
         self.cancel_button.setEnabled(False)
-        self.show_step("Subiendo thumbnail a Flow...")
+        self.show_step(self.config["uploading"])
 
     def _on_replace_clicked(self):
         if self.replace_callback:
@@ -615,6 +739,8 @@ _upload_worker = None
 _temp_new_thumb = None
 _temp_current_thumb = None
 _shot_id = None
+_target = TARGET_THUMBNAIL
+_shot_code = ""
 
 
 def _warn(message):
@@ -622,7 +748,7 @@ def _warn(message):
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
-    show_warning(None, "Flow | Update Thumbnail", message)
+    show_warning(None, TARGETS[_target]["window_title"], message)
 
 
 def _cleanup_temps():
@@ -642,14 +768,15 @@ def _on_dialog_finished(_result):
     _shot_id = None
 
 
-def update_thumbnail_in_flow():
-    """Entry point del click normal: captura el viewer y abre la ventana de
-    reemplazo del thumbnail del shot en Flow."""
+def update_thumbnail_in_flow(target=TARGET_THUMBNAIL):
+    """Captura el viewer y abre la ventana de reemplazo de la imagen del shot
+    en Flow: el thumbnail (click de Thumbnail) o el slate frame (Slate Frame)."""
     _reset_log()
-    debug_print("=== Iniciando Update Thumbnail ===")
+    debug_print(f"=== Iniciando Update {target} ===")
 
     global _dialog, _load_worker, _upload_worker
-    global _temp_new_thumb, _temp_current_thumb, _shot_id
+    global _temp_new_thumb, _temp_current_thumb, _shot_id, _target, _shot_code
+    _target = target
 
     app = QApplication.instance()
     if app is None:
@@ -658,29 +785,33 @@ def update_thumbnail_in_flow():
     # 1) Info del clip (playhead-first)
     info = get_playhead_clip_info()
     if not info:
-        _warn("No se encontro un clip bajo el playhead ni seleccionado.")
+        _warn("No clip under the playhead or selected.")
         return
     if not info["project_name"] or not info["shot_code"]:
-        _warn("No se pudo extraer el proyecto o el shot del clip seleccionado.")
+        _warn("Could not read the project or the shot from the selected clip.")
         return
 
     # 2) Capturar snapshot a temp
-    _temp_new_thumb = capture_viewer_snapshot_to_temp()
+    _shot_code = info["shot_code"]
+    debug_print(
+        f"Clip: {info['file_path']} | proyecto={info['project_name']} shot={_shot_code}"
+    )
+    _temp_new_thumb = capture_viewer_snapshot_to_temp(target)
     if not _temp_new_thumb:
-        _warn("No se pudo capturar el snapshot del viewer.")
+        _warn("Could not capture the viewer snapshot.")
         return
 
     # 3) Abrir ventana de comparacion
     _shot_id = None
     _temp_current_thumb = None
     _dialog = ThumbReplaceDialog(
-        info["project_name"], info["shot_code"], _temp_new_thumb
+        info["project_name"], info["shot_code"], _temp_new_thumb, target=target
     )
     _dialog.finished.connect(_on_dialog_finished)
     _dialog.show()
 
     # 4) Buscar shot + bajar thumbnail actual en hilo
-    _load_worker = LoadShotWorker(info["project_name"], info["shot_code"])
+    _load_worker = LoadShotWorker(info["project_name"], info["shot_code"], target)
     _load_worker.signals.loaded.connect(_on_shot_loaded)
     _load_worker.signals.failed.connect(_on_load_failed)
     QThreadPool.globalInstance().start(_load_worker)
@@ -708,7 +839,7 @@ def _on_replace_confirmed():
     if not _dialog or not _shot_id or not _temp_new_thumb:
         return
     _dialog.set_uploading()
-    _upload_worker = UploadThumbWorker(_shot_id, _temp_new_thumb)
+    _upload_worker = UploadThumbWorker(_shot_id, _temp_new_thumb, _target, _shot_code)
     _upload_worker.signals.finished.connect(_on_upload_finished)
     QThreadPool.globalInstance().start(_upload_worker)
 
@@ -726,6 +857,11 @@ def _on_upload_finished(success, message):
 def main():
     """Compatibilidad: el panel llama main() para el click normal."""
     update_thumbnail_in_flow()
+
+
+def main_slate_frame():
+    """Boton Slate Frame del panel Flow | S3."""
+    update_thumbnail_in_flow(TARGET_SLATE_FRAME)
 
 
 if __name__ == "__main__":

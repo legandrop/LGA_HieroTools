@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push v4.17 | Lega
+  LGA_NKS_Flow_Push v4.18 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -12,6 +12,11 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v4.18: Submission Note del slate de entrega (submission_mode, llamado por
+         Ctrl+Alt+Click en Rev Dir). Lee en background los valores que ya
+         tiene la Version exacta del clip, abre el dialogo de notas con los
+         selectores Submitting For y Media Color y sin imagenes, y el push
+         guarda los tres campos en la Version en vez de crear una Note.
   v4.17: El proyecto se busca en pipesync.db sin distinguir mayusculas:
          en Client la ruta llega en minuscula (N:/vfx-proja) y la DB
          guarda PROJA, asi que el shot no aparecia.
@@ -191,6 +196,15 @@ from LGA_NKS_Shared.LGA_NKS_MessageBox import (
     styled_message_box,
 )
 from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, Metric, apply_ui_font
+from LGA_NKS_Shared.LGA_NKS_Slate_Config import (
+    DELIVERY_QUEUE_CODES,
+    FIELD_MEDIA_COLOR,
+    FIELD_SUBMISSION_NOTE,
+    FIELD_SUBMITTING_FOR,
+    MEDIA_COLOR_OPTIONS,
+    SUBMITTING_FOR_OPTIONS,
+    submission_values,
+)
 
 # Reasignar clases para compatibilidad con código existente
 QRunnable = QtCore.QRunnable
@@ -209,6 +223,8 @@ QLabel = QtWidgets.QLabel
 QScrollArea = QtWidgets.QScrollArea
 QWidget = QtWidgets.QWidget
 QCheckBox = QtWidgets.QCheckBox
+QComboBox = QtWidgets.QComboBox
+QGridLayout = QtWidgets.QGridLayout
 
 QKeySequence = QtGui.QKeySequence
 QPixmap = QtGui.QPixmap
@@ -472,6 +488,10 @@ def call_flow_connector(operation, **kwargs):
                     f"Timeout ajustado para execute_full_push: {timeout_seconds}s "
                     f"({num_images} imágenes, {extra_bytes / (1024 * 1024):.1f} MB arrastrados)"
                 )
+            elif kwargs.get("submission"):
+                # Submission escribe la Version ademas de Task y estado (~6
+                # llamadas): con 10 s un Flow lento cortaba a mitad.
+                timeout_seconds = 25
             else:
                 timeout_seconds = 10  # Sin imágenes, timeout normal
         else:
@@ -925,9 +945,24 @@ class DBManager:
 
 
 class InputDialog(QDialog):
-    def __init__(self, base_name, original_file_name=None, task_name=None, file_path=None):
+    def __init__(
+        self,
+        base_name,
+        original_file_name=None,
+        task_name=None,
+        file_path=None,
+        submission=None,
+    ):
         super(InputDialog, self).__init__()
-        self.setWindowTitle("Input Dialog")
+        # submission: dict con los valores actuales de la Version en Flow
+        # (puede venir vacio). Si no es None, el dialogo pide la Submission Note
+        # del slate de entrega en vez de una nota: suma los selectores
+        # Submitting For y Media Color y no acepta imagenes, porque no se crea
+        # ninguna Note donde colgarlas.
+        self.submission_mode = submission is not None
+        self.submitting_for_combo = None
+        self.media_color_combo = None
+        self.setWindowTitle("Submission Note" if self.submission_mode else "Input Dialog")
         # Estilo del pack: fondo, labels, campos de texto y checkbox
         self.setStyleSheet(Style.FORM)
         self.base_name = base_name
@@ -964,7 +999,12 @@ class InputDialog(QDialog):
         # estilo: el shot es lo destacado (TEXT_STRONG), la task es una entidad
         # del pipeline (ENTITY) y el assignee es informativo (INFO).
         task_label = f"<span style='color:{Color.ENTITY}; font-weight:bold;'>[{self.task_name}]</span>"
-        if assignee:
+        if self.submission_mode:
+            label_text = (
+                f"Submission note for <b style='color:{Color.TEXT_STRONG};'>{base_name}</b> "
+                f"{task_label}:"
+            )
+        elif assignee:
             label_text = (
                 f"Message for <b style='color:{Color.TEXT_STRONG};'>{base_name}</b> {task_label} | "
                 f"<span style='color:{Color.INFO}; font-weight:bold;'>{assignee}</span>:"
@@ -976,23 +1016,36 @@ class InputDialog(QDialog):
         self.label.setTextFormat(Qt.RichText)  # Permitir formato HTML
         self.layout.addWidget(self.label)
 
+        if self.submission_mode:
+            # Sin thumbnails el dialogo se achica al label; la nota es un texto
+            # de varias lineas y necesita ancho para leerse.
+            self.setMinimumWidth(Metric.DIALOG_MIN_WIDTH + 100)
+            self._add_submission_selectors(submission)
+
         # Area de texto para el mensaje
         self.text_edit = QPlainTextEdit(self)
         self.text_edit.setFixedHeight(120)  # Ajustar la altura de la caja de texto
         self.layout.addWidget(self.text_edit)
+        if self.submission_mode:
+            self.text_edit.setPlainText(submission.get(FIELD_SUBMISSION_NOTE) or "")
 
         # El dialogo acepta media arrastrada. Al QPlainTextEdit hay que apagarle
         # los drops: acepta URLs por su cuenta y pegaria la ruta como texto en
         # vez de dejar que el evento suba al dialogo.
-        self.setAcceptDrops(True)
+        # En modo submission no: no hay Note donde adjuntar nada.
+        self.setAcceptDrops(not self.submission_mode)
         self.text_edit.setAcceptDrops(False)
         # QPlainTextEdit es un QAbstractScrollArea: quien recibe el drop es su
         # viewport, asi que se lo apagamos tambien y no dependemos de que Qt
         # propague el AcceptDropsChange al hijo.
         self.text_edit.viewport().setAcceptDrops(False)
 
-        # Buscar imagenes de ReviewPic y mostrar thumbnails si existen
-        self.review_images = find_review_images(base_name, original_file_name)
+        # Buscar imagenes de ReviewPic y mostrar thumbnails si existen. En
+        # modo submission no se muestran: no viajarian a ningun lado.
+        if self.submission_mode:
+            self.review_images = []
+        else:
+            self.review_images = find_review_images(base_name, original_file_name)
         debug_print(f"=== InputDialog: Búsqueda de imágenes completada ===")
         debug_print(
             f"InputDialog: Total de imágenes encontradas: {len(self.review_images)}"
@@ -1027,6 +1080,14 @@ class InputDialog(QDialog):
         # Conectar Ctrl+Enter al metodo accept
         shortcut = QShortcut(QKeySequence(Qt.CTRL | Qt.Key_Return), self)
         shortcut.activated.connect(self.accept)
+
+        if self.submission_mode:
+            # El primer widget es el combo editable: con OK como default, un
+            # Enter al escribir "Submitting For" aceptaba el dialogo sin nota.
+            # Solo Ctrl+Enter o el boton confirman; el foco arranca en el texto.
+            self.ok_button.setAutoDefault(False)
+            self.ok_button.setDefault(False)
+            self.text_edit.setFocus()
 
         # Cartel de drop, siempre por encima del resto del dialogo
         self._create_drop_overlay()
@@ -1704,6 +1765,48 @@ class InputDialog(QDialog):
                 self, "Error", f"No se pudo borrar la imagen:\n{str(e)}"
             )
 
+    def _add_submission_selectors(self, submission):
+        """Fila con Submitting For (editable) y Media Color, arriba del texto."""
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(Metric.SPACING)
+        grid.setVerticalSpacing(6)
+
+        self.submitting_for_combo = QComboBox(self)
+        self.submitting_for_combo.setEditable(True)
+        self.submitting_for_combo.addItems(list(SUBMITTING_FOR_OPTIONS))
+        self.submitting_for_combo.setStyleSheet(Style.COMBO)
+        current_for = (submission.get(FIELD_SUBMITTING_FOR) or "").strip()
+        # Un valor custom guardado antes se muestra tal cual en el campo editable.
+        self.submitting_for_combo.setCurrentText(current_for or SUBMITTING_FOR_OPTIONS[0])
+
+        self.media_color_combo = QComboBox(self)
+        self.media_color_combo.addItems(list(MEDIA_COLOR_OPTIONS))
+        self.media_color_combo.setStyleSheet(Style.COMBO)
+        current_color = (submission.get(FIELD_MEDIA_COLOR) or "").strip()
+        if current_color and current_color not in MEDIA_COLOR_OPTIONS:
+            # Valor escrito a mano en Flow: se conserva como opcion extra para
+            # no pisarlo sin que el supervisor lo vea.
+            self.media_color_combo.addItem(current_color)
+        if current_color:
+            self.media_color_combo.setCurrentText(current_color)
+
+        grid.addWidget(QLabel("Submitting For:"), 0, 0)
+        grid.addWidget(self.submitting_for_combo, 0, 1)
+        grid.addWidget(QLabel("Media Color:"), 1, 0)
+        grid.addWidget(self.media_color_combo, 1, 1)
+        grid.setColumnStretch(1, 1)
+        self.layout.addLayout(grid)
+
+    def get_submission(self):
+        """Dict de campos de Version con lo que eligio el supervisor."""
+        if not self.submission_mode:
+            return None
+        return submission_values(
+            self.text_edit.toPlainText(),
+            self.submitting_for_combo.currentText(),
+            self.media_color_combo.currentText(),
+        )
+
     def get_text(self):
         if self.exec_() == QDialog.Accepted:
             return self.text_edit.toPlainText()
@@ -1935,6 +2038,38 @@ class FlowVersionListSignals(QObject):
     error = Signal(str)
 
 
+class SubmissionLoadSignals(QObject):
+    loaded = Signal(dict)
+    error = Signal(str)
+
+
+class LoadSubmissionWorker(QRunnable):
+    """Lee en background los campos de submission de la Version exacta del clip."""
+
+    def __init__(self, base_name, original_file_name=None, file_path=None):
+        super(LoadSubmissionWorker, self).__init__()
+        self.base_name = base_name
+        self.original_file_name = original_file_name
+        self.file_path = file_path
+        self.signals = SubmissionLoadSignals()
+
+    @Slot()
+    def run(self):
+        try:
+            result = call_flow_connector(
+                "read_submission",
+                base_name=self.base_name,
+                original_file_name=self.original_file_name,
+                file_path=self.file_path,
+            )
+            if result.get("success"):
+                self.signals.loaded.emit(result)
+            else:
+                self.signals.error.emit(result.get("error", "Error desconocido"))
+        except Exception as exc:
+            self.signals.error.emit(str(exc))
+
+
 class LoadFlowVersionsWorker(QRunnable):
     """Worker en background para listar versiones Flow sin bloquear UI."""
 
@@ -1976,6 +2111,8 @@ class Worker(QRunnable):
         target_version_number=None,
         allow_task_only=False,
         extra_images=None,
+        submission=None,
+        submission_only=False,
     ):
         super(Worker, self).__init__()
         self.button_name = button_name
@@ -1985,6 +2122,10 @@ class Worker(QRunnable):
         # Media arrastrada al dialogo de notas: se adjunta a la misma nota que
         # las capturas, pero con su nombre original.
         self.extra_images = extra_images or []
+        # Campos del slate de entrega (Ctrl+Alt+Click en Rev Dir). Si vienen,
+        # el conector los escribe en la Version y no crea Note.
+        self.submission = submission
+        self.submission_only = submission_only
         self.should_delete_images = should_delete_images
         self.original_file_name = original_file_name
         self.file_path = file_path
@@ -2100,6 +2241,8 @@ class Worker(QRunnable):
                 file_path=getattr(self, "file_path", None),
                 target_version_number=getattr(self, "target_version_number", None),
                 allow_task_only=getattr(self, "allow_task_only", False),
+                submission=getattr(self, "submission", None),
+                submission_only=getattr(self, "submission_only", False),
             )
 
             # Capturar información para el resumen
@@ -2128,7 +2271,9 @@ class Worker(QRunnable):
                 self.update_local_database(db_manager, result.get("applied"))
                 
                 # Aplicar tag en xyplorer después de actualizar exitosamente
-                self.apply_xyplorer_tag()
+                # Guardar solo la submission note no cambia estados: sin tag.
+                if not self.submission_only:
+                    self.apply_xyplorer_tag()
             else:
                 error_message = result.get("error", "Unknown error")
                 self.last_error_message = self._format_error_with_context(error_message)
@@ -2926,7 +3071,17 @@ def Push_Task_Status(
     original_file_name=None,
     file_path=None,
     target_version_number=None,
+    submission_prefill=None,
+    submission_only=False,
 ):
+    """
+    submission_prefill: dict con los campos de submission que ya tiene la
+    Version en Flow (puede venir vacio). Si no es None, el dialogo pide la
+    Submission Note del slate de entrega (Ctrl+Alt+Click en Rev Dir) y el
+    push la escribe en la Version en vez de crear una Note.
+    submission_only: con submission_prefill, guarda solo la nota y no toca el
+    estado de la Task ni de la Version (shot ya en la cola de entrega).
+    """
     global msg_manager
     debug_print(
         f"Push solicitado: estado='{button_name}', shot='{base_name}'"
@@ -3050,12 +3205,18 @@ def Push_Task_Status(
     review_images = []
     extra_images = []
     should_delete_images = False
+    submission = None
     if is_note_capable(sg_status):
         app = QApplication.instance()
         if app is None:
             app = QApplication([])
 
-        input_dialog = InputDialog(base_name, original_file_name, file_path=file_path)
+        input_dialog = InputDialog(
+            base_name,
+            original_file_name,
+            file_path=file_path,
+            submission=submission_prefill,
+        )
         message = input_dialog.get_text()
         if message is None:
             # Operación cancelada por el usuario al cerrar el diálogo de comentarios
@@ -3089,6 +3250,12 @@ def Push_Task_Status(
         review_images = input_dialog.get_review_images()
         extra_images = input_dialog.get_dropped_images()
         should_delete_images = bool(input_dialog.should_delete_images())
+        submission = input_dialog.get_submission()
+        if submission is not None:
+            debug_print(
+                f"Submission: for='{submission.get(FIELD_SUBMITTING_FOR)}' "
+                f"color='{submission.get(FIELD_MEDIA_COLOR)}'"
+            )
         print_debug_messages()  # Imprimir logs después de obtener la información del diálogo
 
     # No hacer verificación de versiones aquí - se hace en el Worker
@@ -3106,6 +3273,8 @@ def Push_Task_Status(
             file_path=file_path,
             target_version_number=target_version_number,
             extra_images=extra_images,
+            submission=submission,
+            submission_only=submission_only,
         )
         # Conectar señales
         worker.signals.result_ready.connect(handle_results)
@@ -3195,7 +3364,10 @@ def _describe_clip_for_log(clip):
 
 
 def push_from_selected_clips(
-    button_name, per_clip_callback=None, flow_target_version_mode=False
+    button_name,
+    per_clip_callback=None,
+    flow_target_version_mode=False,
+    submission_mode=False,
 ):
     """
     Función principal que usa el método centralizado para obtener clips.
@@ -3210,6 +3382,9 @@ def push_from_selected_clips(
                           Se ejecuta SOLO cuando el push es exitoso (no se cancela).
         flow_target_version_mode: Si True, activa el flujo Shift+Click para elegir
                           versión destino en Flow (solo permitido con 1 clip).
+        submission_mode: Si True, flujo Ctrl+Alt+Click de Rev Dir: pide la
+                          Submission Note del slate y la guarda en la Version
+                          exacta del clip, sin crear Note (solo 1 clip).
 
     Returns:
         bool: True si se inició la operación exitosamente, False si se canceló o hubo error
@@ -3386,6 +3561,80 @@ def push_from_selected_clips(
                         f"El Push termino, pero fallo la actualizacion local:\n\n{e}",
                     )
         return callback_wrapper
+
+    # Ctrl+Alt+Click en Rev Dir: Submission Note del slate de entrega (1 clip).
+    # Primero se leen en background los valores que ya tenga la Version, para
+    # que el dialogo los muestre y el supervisor corrija en vez de reescribir.
+    if submission_mode:
+        if not needs_message or len(valid_clips) != 1:
+            show_warning(
+                None,
+                "Submission Note - Invalid selection",
+                "The submission note is written one clip at a time. Select a single "
+                "clip (or leave only one under the playhead) and Ctrl+Alt+Click again.",
+            )
+            return False
+
+        clip, file_path, exr_name = valid_clips[0]
+        base_name = clean_base_name(exr_name.replace(".%", "_%"))
+        clip_callback = create_clip_callback(clip, base_name, exr_name)
+
+        submission_loader = LoadSubmissionWorker(base_name, exr_name, file_path=file_path)
+        _ACTIVE_FLOW_VERSION_LOAD_WORKERS.append(submission_loader)
+
+        def _cleanup_submission_loader():
+            if submission_loader in _ACTIVE_FLOW_VERSION_LOAD_WORKERS:
+                _ACTIVE_FLOW_VERSION_LOAD_WORKERS.remove(submission_loader)
+
+        def _on_submission_loaded(result):
+            _cleanup_submission_loader()
+            debug_print(
+                f"Submission: Version {result.get('version_code')} "
+                f"(ID {result.get('version_id')}) leida de Flow"
+            )
+            task_status = result.get("task_status")
+            submission_only = False
+            if task_status in DELIVERY_QUEUE_CODES:
+                status_name = task_status_dict.get(task_status, (task_status,))[0]
+                if not ask_question(
+                    None,
+                    "Submission Note",
+                    f"The task is already in '{status_name}' (delivery queue).\n\n"
+                    "Only the submission note will be saved; the task stays where it is "
+                    "and does not go back to Rev Dir.",
+                    yes_text="Save note only",
+                    no_text="Cancel",
+                ):
+                    debug_print("Submission: cancelada (task en cola de entrega)")
+                    return
+                submission_only = True
+            debug_print(
+                f"Submission: task_status={task_status} submission_only={submission_only}"
+            )
+            Push_Task_Status(
+                button_name,
+                base_name,
+                # Sin cambio de estado no se repinta el clip ni se limpian tags.
+                None if submission_only else clip_callback,
+                exr_name,
+                file_path=file_path,
+                submission_prefill=result.get("fields") or {},
+                submission_only=submission_only,
+            )
+
+        def _on_submission_error(error_text):
+            _cleanup_submission_loader()
+            show_warning(
+                None,
+                "Submission Note - Error",
+                f"Could not read the clip's version in Flow:\n{error_text}",
+            )
+
+        submission_loader.signals.loaded.connect(_on_submission_loaded)
+        submission_loader.signals.error.connect(_on_submission_error)
+        QThreadPool.globalInstance().start(submission_loader)
+        debug_print(f"Submission Note iniciada en background para '{base_name}'")
+        return True
 
     # Shift+Click: elegir versión destino en Flow en background (solo 1 clip).
     if flow_target_version_mode:

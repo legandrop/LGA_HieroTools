@@ -72,6 +72,13 @@ orden real de `sg_status_list`. No se mantiene una segunda lista en el panel.
   review y entrega, en el orden definido por Flow. La lista vigente se obtiene
   desde la configuración compartida; no se duplican nombres personales aquí.
 
+**Rev Dir, Ctrl+Alt+Click** (solo studio, un clip): escribe la Submission Note del
+slate de entrega. Abre el diálogo de notas con los selectores Submitting For y
+Media Color, precargados con lo que ya tiene la Version exacta del clip, y guarda
+los tres campos en esa Version en vez de crear una Note (los artistas no la
+reciben). Si la task ya está en la cola de entrega ofrece guardar solo la nota.
+El botón lleva el tooltip que lo explica. Detalle: [Docu_Slate_MXF.md](Docu_Slate_MXF.md).
+
 El cambio de contexto reconstruye la lista en caliente. Los colores visibles son
 los colores de estado de Flow con un techo de luminancia para conservar el texto
 legible; el color aplicado al clip sigue siendo el valor real sin esa corrección.

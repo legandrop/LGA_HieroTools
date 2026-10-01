@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_S3_Panel v1.33 | Lega
+  LGA_NKS_Flow_S3_Panel v1.34 | Lega
   Panel Flow | S3 para operaciones de produccion con Flow y almacenamiento S3:
   - Revelar clips en Flow
   - Crear shots automáticamente
@@ -9,6 +9,9 @@ ________________________________________________________________________________
   - Cambiar prioridad de shots
   - Integración con FileManagerS3 (Open, Download, Upload)
 
+  v1.34: Boton nuevo "Slate Frame" despues de Thumbnail: guarda el frame del
+         viewer en el campo sg_slate_frame del shot (slate de entrega, solo
+         contexto studio). Reusa la captura y la ventana de UpdateThumb.
   v1.33: El modulo pasa a llamarse LGA_NKS_Flow_S3_Panel. El id del dock
          (com.lega.FlowProdPanel) y la clase no cambian, para no romper
          layouts guardados.
@@ -73,6 +76,11 @@ import time
 from logging.handlers import QueueHandler, QueueListener
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
 from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
+from LGA_NKS_Shared.LGA_NKS_ContextProfile import get_context_mode
+from LGA_NKS_Shared.LGA_NKS_Slate_Config import (
+    SLATE_CONTEXT_MODE,
+    TOOLTIPS as SLATE_TOOLTIPS,
+)
 
 
 # Clase de botón personalizada que maneja el Shift+Click
@@ -251,7 +259,7 @@ class FlowProdPanel(QtWidgets.QWidget):
         self.scroll_widget.setLayout(self.layout)
         self.scroll_area.setWidget(self.scroll_widget)
 
-        # Los seis primeros pertenecen a Flow; los cinco restantes, a S3.
+        # Los siete primeros pertenecen a Flow; los cinco restantes, a S3.
         # .Psync esta fuera de uso y se conserva solamente como codigo legado:
         # LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_CreatePsync.py.
         # Se conserva el objectName del dock (com.lega.FlowProdPanel) para no romper layouts.
@@ -284,6 +292,13 @@ class FlowProdPanel(QtWidgets.QWidget):
                 None,
                 "Click: reemplazar el thumbnail del shot en Flow con un snapshot\n"
                 "Shift+Click: guardar snapshot del viewer en N:/proyecto/Thumbs",
+            ),
+            (
+                "Slate Frame",
+                self.update_slate_frame_for_selected_clip,
+                SHOT_WORKFLOW_COLOR,
+                None,
+                SLATE_TOOLTIPS["slate_frame"],
             ),
             (
                 "Shot Priority",
@@ -656,6 +671,44 @@ class FlowProdPanel(QtWidgets.QWidget):
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             module.main()
+        except Exception as e:
+            show_warning(self, "Error al ejecutar", str(e))
+
+    def update_slate_frame_for_selected_clip(self):
+        """Guarda el frame del viewer como imagen del slate de entrega del shot."""
+        # El campo sg_slate_frame existe solo en el sitio studio de Flow.
+        if get_context_mode() != SLATE_CONTEXT_MODE:
+            show_warning(
+                self,
+                "Slate Frame",
+                "The delivery slate frame only exists in the studio context.",
+            )
+            return
+        script_path = os.path.join(
+            os.path.dirname(__file__),
+            "LGA_NKS_Flow_S3_Panel_py",
+            "LGA_NKS_Flow_UpdateThumb.py",
+        )
+        if not os.path.exists(script_path):
+            show_warning(
+                self,
+                "Script no encontrado",
+                f"No se encontró el script en la ruta: {script_path}",
+            )
+            return
+        try:
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(
+                "LGA_NKS_Flow_UpdateThumb", script_path
+            )
+            if spec is None or spec.loader is None:
+                raise ImportError(
+                    "No se pudo cargar el módulo LGA_NKS_Flow_UpdateThumb.py"
+                )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            module.main_slate_frame()
         except Exception as e:
             show_warning(self, "Error al ejecutar", str(e))
 

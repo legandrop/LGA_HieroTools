@@ -70,6 +70,14 @@ Internal reference: [Flow Review Panel](LGA_HieroTools/docs/LGA_NKS_Flow_Rev_Pan
   Generated from Flow's context policy rather than a duplicated list. Studio
   and Client expose only their valid review/delivery states, in Flow order.
 
+  **Rev Dir** Ctrl+Alt+Click (Studio only, one clip): writes the **Submission
+  Note** for the delivery slate. It opens the usual note dialog with two extra
+  selectors, *Submitting For* (WIP, FINAL, TEMP or any custom value) and *Media
+  Color*, preloaded with what the exact Flow Version already has. The text is
+  stored in that Version's custom fields instead of a Note, so it is not sent to
+  the artists. If the task is already in the delivery queue, it offers to save
+  only the note without moving the task back to Review Dir.
+
 ### Assignee Panel
 
 Tools for assigning artists to Flow tasks and managing related Wasabi access policies.
@@ -87,7 +95,7 @@ Tools for assigning artists to Flow tasks and managing related Wasabi access pol
 
 ### Flow | S3 Panel
 
-Production-facing tools split into two visual blocks. The first six actions
+Production-facing tools split into two visual blocks. The first seven actions
 belong to Flow; the final five belong to FileManagerS3/Wasabi S3. The runtime
 module is `LGA_NKS_Flow_S3_Panel`; the dock id remains
 `com.lega.FlowProdPanel` for layout compatibility.
@@ -120,6 +128,13 @@ Internal reference: [Flow | S3 Panel](LGA_HieroTools/docs/LGA_NKS_Flow_S3_Panel_
 
   Shift+Click: saves the same zoom-to-fill snapshot, cropped to the sequence
   aspect, to `N:/<project>/Thumbs`, with the same temporary burn-in exclusion.
+- **Slate Frame** (Studio only)
+
+  Saves the current viewer frame as the image of the shot's delivery slate, in
+  the shot's *Slate Frame* field in Flow. Same capture and comparison window as
+  Thumbnail, but a separate image that is chosen once and not overwritten by
+  thumbnail updates. Park the viewer on the aPlate frame you want before
+  clicking. A capture narrower than 730 px shows a warning.
 - **Shot Priority**  
   Toggles shot priority between high and normal. Its green/red gradient keeps
   it in the Flow block while signalling priority.

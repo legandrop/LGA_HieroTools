@@ -45,12 +45,19 @@ La carpeta privada del panel es `LGA_NKS_Flow_S3_Panel_py/`, igual que el módul
 - **BurnIn**: Ambos gestos deshabilitan el VideoTrack `BurnIn` completo antes del zoom y de la lectura del viewer. El apagado cubre juntos todos los textos contenidos en ese track; no modifica cada soft effect por separado. Tras el refresco y la captura, restaura el estado previo incluso ante un error.
 - **Presentación**: Es el cuarto botón y comparte color con Create Shot, Modify Shot y Check Shots Exist porque las cuatro acciones pertenecen al mismo flujo de gestión del shot
 
-### 5. Shot Priority
+### 5. Slate Frame
+- **Función**: Guarda el frame actual del viewer como imagen del slate de entrega del shot, en el campo File/Link `sg_slate_frame` del Shot en Flow. Solo contexto studio.
+- **Por qué es otra imagen**: el thumbnail del shot se pisa seguido; el slate frame lo elige el coordinador una vez, parado en el frame del aPlate que quiere.
+- **Script utilizado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_UpdateThumb.py` con el destino `slate_frame` (`main_slate_frame()`): misma captura sin BurnIn y misma ventana de comparación que Thumbnail; sube con `sg.upload(..., field_name=...)` y baja el actual con `download_attachment`.
+- **Resolución**: JPG calidad 95; si la captura mide menos de 730 px de ancho, la ventana lo avisa.
+- **Detalle del flujo completo**: [Docu_Slate_MXF.md](Docu_Slate_MXF.md)
+
+### 6. Shot Priority
 - **Función**: Cambia la prioridad del shot (alta ↔ normal)
 - **Script utilizado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShotPriority.py`
 - **Presentación**: Gradiente verde/rojo. El anclaje verde lo mantiene dentro del bloque Flow; el rojo comunica prioridad.
 
-### 6. Reveal in Flow
+### 7. Reveal in Flow
 - **Shortcut**: `Ctrl+Shift+F` (abre el Shot completo)
 - **Función Click normal**: Abre la task preferida del contexto en el navegador predeterminado: Comp, o CG en Client si no existe Comp
 - **Función Shift+Click/Shortcut**: Abre el Shot completo en el navegador predeterminado (sin la task específica)
@@ -64,24 +71,24 @@ La carpeta privada del panel es `LGA_NKS_Flow_S3_Panel_py/`, igual que el módul
 - **Motivo de conservarla**: El script queda como referencia histórica por si fuera necesario inspeccionar el formato de intercambio anterior; no debe interpretarse como un flujo activo.
 - **Script conservado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_CreatePsync.py`
 
-### 7. FileManagerS3
+### 8. FileManagerS3
 - **Función**: Abre la carpeta del shot en FileManagerS3
 - **Script utilizado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_OpenPath.py`
 
-### 8. Download Shot
+### 9. Download Shot
 - **Función**: Descarga el shot desde Wasabi S3
 - **Script utilizado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_Download.py`
 
-### 9. Upload Shot
+### 10. Upload Shot
 - **Función**: Sube el shot a Wasabi S3
 - **Script utilizado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_Upload.py`
 
-### 10. Download Clip
+### 11. Download Clip
 - **Click normal**: Descarga la última versión disponible del clip
 - **Shift+Click**: Descarga exactamente la versión seleccionada
 - **Script utilizado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_DownloadClip.py`
 
-### 11. Download AMF
+### 12. Download AMF
 - **Función**: Descarga la carpeta `_input/Look_Files` del shot del clip seleccionado desde Wasabi S3 (los `.amf`/`.cdl`/`.clf` necesarios para ver bien los renders de comp)
 - **Script utilizado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_DownloadAmf.py`
 - **Comportamiento**: No chequea si la carpeta existe localmente; siempre dispara la descarga vía FileManagerS3 CLI sobre `<shot>/_input/Look_Files`
@@ -108,7 +115,7 @@ El sistema detecta automáticamente el formato utilizado sin necesidad de config
 
 La lectura visual es intencional:
 
-- **Flow:** cuatro botones verdes, Shot Priority verde/rojo y Reveal in Flow verde/gris.
+- **Flow:** cinco botones verdes, Shot Priority verde/rojo y Reveal in Flow verde/gris.
 - **S3:** los cinco botones siguientes comparten el gradiente violeta.
 - El color refuerza el grupo, pero cada acción conserva un label explícito; no se depende solo del color.
 
@@ -117,13 +124,14 @@ La lectura visual es intencional:
 2. **Modify Shot** - Modifica un shot existente en Flow
 3. **Check Shots Exist** - Chequea los tracks de task del contexto (Comp; también CG en Client)
 4. **Thumbnail** - Reemplaza el thumbnail en Flow; con Shift guarda el snapshot local
-5. **Shot Priority** - Cambia la prioridad del shot (alta ↔ normal)
-6. **Reveal in Flow** - `Ctrl+Shift+F` - Abre la task preferida o el Shot en Flow
-7. **FileManagerS3** - Abre carpeta del shot en FileManagerS3
-8. **Download Shot** - Descarga el shot desde Wasabi S3
-9. **Upload Shot** - Sube el shot a Wasabi S3
-10. **Download Clip** - Descarga la última versión; con Shift descarga el clip seleccionado
-11. **Download AMF** - Descarga la carpeta `_input/Look_Files` del shot del clip seleccionado
+5. **Slate Frame** - Guarda el frame del viewer como imagen del slate de entrega (solo studio)
+6. **Shot Priority** - Cambia la prioridad del shot (alta ↔ normal)
+7. **Reveal in Flow** - `Ctrl+Shift+F` - Abre la task preferida o el Shot en Flow
+8. **FileManagerS3** - Abre carpeta del shot en FileManagerS3
+9. **Download Shot** - Descarga el shot desde Wasabi S3
+10. **Upload Shot** - Sube el shot a Wasabi S3
+11. **Download Clip** - Descarga la última versión; con Shift descarga el clip seleccionado
+12. **Download AMF** - Descarga la carpeta `_input/Look_Files` del shot del clip seleccionado
 
 ## Requisitos
 
@@ -153,7 +161,7 @@ La lectura visual es intencional:
 
 ## Scripts Relacionados
 
-- `LGA_HieroTools/LGA_NKS_Flow_S3_Panel.py` - `FlowProdPanel.__init__()` define identidad visible, orden y categoría visual; `FlowProdPanel.create_buttons()` construye el layout; `create_thumbnail_for_selected_clip()` y `update_thumbnail_in_flow_for_selected_clip()` resuelven los dos gestos de Thumbnail. El nombre de módulo y `com.lega.FlowProdPanel` se conservan por compatibilidad.
+- `LGA_HieroTools/LGA_NKS_Flow_S3_Panel.py` - `FlowProdPanel.__init__()` define identidad visible, orden y categoría visual; `FlowProdPanel.create_buttons()` construye el layout; `create_thumbnail_for_selected_clip()` y `update_thumbnail_in_flow_for_selected_clip()` resuelven los dos gestos de Thumbnail; `update_slate_frame_for_selected_clip()` resuelve Slate Frame. El id del dock `com.lega.FlowProdPanel` se conserva por compatibilidad con los layouts guardados.
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_StyleUtils.py` - `GRADIENT_COLORS` contiene los gradientes semánticos; `create_gradient_style()` compone estados normal, hover y pressed.
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py` - Funcionalidad de Reveal in Flow
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_Thumbs.py` - `main()` guarda el snapshot local; `zoom_to_fill_simple()` y `crop_to_aspect_ratio()` preparan la imagen

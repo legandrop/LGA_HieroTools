@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Panel v2.61 | Lega
+  LGA_NKS_Flow_Panel v2.62 | Lega
 
   Panel Flow Review con herramientas de review que interactuan con las tasks de
   Flow Production Tracking descargadas previamente con LGA_NKS_Flow_Downloader.
@@ -9,6 +9,9 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v2.62: Ctrl+Alt+Click en Rev Dir escribe la Submission Note del slate de
+         entrega (Flow_Push submission_mode). Solo en contexto studio; el
+         boton lleva el tooltip que lo explica.
   v2.61: La etiqueta visible pasa de Flow Rev a Flow Review para describir un
          unico flujo de review conectado con Flow.
   v2.60: La etiqueta visible pasa de Flow a Flow Rev y la carpeta privada pasa
@@ -72,6 +75,11 @@ from LGA_NKS_Shared.LGA_NKS_ContextProfile import get_context_mode
 from LGA_NKS_Shared.LGA_NKS_ContextSwitch import subscribe as subscribe_context_change
 from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import get_push_buttons
 from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning, show_error
+from LGA_NKS_Shared.LGA_NKS_Slate_Config import (
+    SLATE_CONTEXT_MODE,
+    SUBMISSION_BUTTON_LABEL,
+    TOOLTIPS as SLATE_TOOLTIPS,
+)
 
 # Importar utilidades de naming
 sys.path.append(str(Path(__file__).parent / "LGA_NKS_Shared"))
@@ -205,12 +213,13 @@ def debug_print(*message, level="info"):
         print(timestamped_msg)
 
 
-# Clase de botón personalizada que maneja el Shift+Click
+# Clase de botón personalizada que maneja el Shift+Click y el Ctrl+Alt+Click
 class CustomButton(QtWidgets.QPushButton):
     def __init__(self, text):
         super(CustomButton, self).__init__(text)
         self._custom_click_handler = None
         self._shift_click_handler = None
+        self._ctrl_alt_click_handler = None
 
     def setCustomClickHandler(self, handler):
         self._custom_click_handler = handler
@@ -218,10 +227,18 @@ class CustomButton(QtWidgets.QPushButton):
     def setShiftClickHandler(self, handler):
         self._shift_click_handler = handler
 
+    def setCtrlAltClickHandler(self, handler):
+        self._ctrl_alt_click_handler = handler
+
     def mousePressEvent(self, event):
         if self._custom_click_handler and self._shift_click_handler:
             modifiers = event.modifiers()
-            if modifiers & QtCore.Qt.ShiftModifier:
+            ctrl_alt = QtCore.Qt.ControlModifier | QtCore.Qt.AltModifier
+            # Ctrl+Alt va antes que Shift y exige las DOS teclas. En teclados
+            # con AltGr, Qt lo reporta como Ctrl+Alt: es el mismo gesto.
+            if self._ctrl_alt_click_handler and (modifiers & ctrl_alt) == ctrl_alt:
+                self._ctrl_alt_click_handler()
+            elif modifiers & QtCore.Qt.ShiftModifier:
                 self._shift_click_handler()
             else:
                 self._custom_click_handler()
@@ -387,10 +404,14 @@ class ColorChangeWidget(QtWidgets.QWidget):
             """
 
             # Agregar estilos de tooltip din?micos si hay tooltip
+            is_submission_button = (
+                action == "color" and name == SUBMISSION_BUTTON_LABEL
+            )
             has_tooltip = (
                 action == "fpt_pull" or
                 action == "review_pic" or
-                action == "shot_info"
+                action == "shot_info" or
+                is_submission_button
             )
 
             if has_tooltip:
@@ -412,6 +433,11 @@ class ColorChangeWidget(QtWidgets.QWidget):
                 button.setShiftClickHandler(
                     self.handle_color_button_shift_click(color, name)
                 )
+                if is_submission_button:
+                    button.setCtrlAltClickHandler(
+                        self.handle_submission_note_click(color, name)
+                    )
+                    button.setToolTip(SLATE_TOOLTIPS["rev_dir"])
             elif action == "fpt_pull":
                 button.setCustomClickHandler(self.run_FPT_pull_with_deselect)
                 button.setShiftClickHandler(self.run_FPT_pull)
@@ -688,6 +714,42 @@ class ColorChangeWidget(QtWidgets.QWidget):
 
         return button_shift_click_handler
 
+    def handle_submission_note_click(self, color, button_name):
+        """Ctrl+Alt+Click en Rev Dir: Submission Note del slate de entrega."""
+
+        def submission_click_handler():
+            # Los campos del slate existen solo en el sitio studio de Flow.
+            if self.context_mode != SLATE_CONTEXT_MODE:
+                show_warning(
+                    self,
+                    "Submission Note",
+                    "The delivery slate submission note only exists in the studio context.",
+                )
+                return
+            # Los tags se limpian en el callback de exito del clip, no aca: la
+            # Version se lee en background y el dialogo abre despues, asi que
+            # limpiar ahora borraria tags aunque el supervisor cancele.
+            self.change_clip_color_and_push_status(
+                color, button_name, submission_mode=True
+            )
+
+        return submission_click_handler
+
+    def delete_tags_from_clip(self, clip):
+        """Borra los tags de un clip con el mismo script que Clear Tag."""
+        script_path = os.path.join(
+            os.path.dirname(__file__), "LGA_NKS_Shared", "LGA_NKS_Delete_ClipTags.py"
+        )
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("LGA_H_DeleteClipTags", script_path)
+        if spec is None or spec.loader is None:
+            debug_print(f"No se pudo cargar {script_path}")
+            return
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.delete_tags_from_clip(clip)
+
     def parse_exr_name(self, exr_name):
         """
         Extrae el nombre base del archivo EXR.
@@ -768,7 +830,11 @@ class ColorChangeWidget(QtWidgets.QWidget):
             return False
 
     def change_clip_color_and_push_status(
-        self, color, button_name, flow_target_version_mode=False
+        self,
+        color,
+        button_name,
+        flow_target_version_mode=False,
+        submission_mode=False,
     ):
         """
         Ejecuta el push usando el método centralizado. La resolución de task y la
@@ -860,6 +926,11 @@ class ColorChangeWidget(QtWidgets.QWidget):
                                     debug_print(
                                         f"Color cambiado para clip (después de push exitoso): {exr_name}"
                                     )
+                            if (
+                                submission_mode
+                                and button_name in self.CLEAR_TAG_BUTTONS
+                            ):
+                                self.delete_tags_from_clip(clip)
                         finally:
                             project.endUndo()
                 except Exception as e:
@@ -878,6 +949,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
                 button_name,
                 change_color_callback,
                 flow_target_version_mode=flow_target_version_mode,
+                submission_mode=submission_mode,
             )
             if not result:
                 debug_print("Push cancelado o fallido")
