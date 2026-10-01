@@ -10,7 +10,7 @@ ____________________________________________________________________
   Usado por runtime activo:
   - LGA_NKS_Assignee_Panel.py
   - LGA_NKS_ClipColor_Panel.py
-  - LGA_NKS_Coordination_Panel.py
+  - LGA_NKS_Flow_S3_Panel.py
   - LGA_NKS_Edit_Panel.py
   - LGA_NKS_Flow_Panel.py
   - LGA_NKS_Projects_Panel.py

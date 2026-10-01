@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_FlowProd_Panel v1.32 | Lega
+  LGA_NKS_Flow_S3_Panel v1.33 | Lega
   Panel Flow | S3 para operaciones de produccion con Flow y almacenamiento S3:
   - Revelar clips en Flow
   - Crear shots automáticamente
@@ -9,6 +9,9 @@ ________________________________________________________________________________
   - Cambiar prioridad de shots
   - Integración con FileManagerS3 (Open, Download, Upload)
 
+  v1.33: El modulo pasa a llamarse LGA_NKS_Flow_S3_Panel. El id del dock
+         (com.lega.FlowProdPanel) y la clase no cambian, para no romper
+         layouts guardados.
   v1.32: Corrige la documentacion interna del gesto actual de Thumbnail:
          click normal reemplaza en Flow y Shift+Click guarda una copia local.
   v1.31: La etiqueta visible pasa de Flow S3 a Flow | S3 para separar las dos
@@ -251,7 +254,7 @@ class FlowProdPanel(QtWidgets.QWidget):
         # Los seis primeros pertenecen a Flow; los cinco restantes, a S3.
         # .Psync esta fuera de uso y se conserva solamente como codigo legado:
         # LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_CreatePsync.py.
-        # Se conserva el objectName historico del dock para no romper layouts.
+        # Se conserva el objectName del dock (com.lega.FlowProdPanel) para no romper layouts.
         self.fixed_buttons = [
             (
                 "Create Shot",

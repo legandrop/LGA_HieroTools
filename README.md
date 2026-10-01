@@ -89,7 +89,7 @@ Tools for assigning artists to Flow tasks and managing related Wasabi access pol
 
 Production-facing tools split into two visual blocks. The first six actions
 belong to Flow; the final five belong to FileManagerS3/Wasabi S3. The runtime
-module and dock id remain `LGA_NKS_Coordination_Panel` /
+module is `LGA_NKS_Flow_S3_Panel`; the dock id remains
 `com.lega.FlowProdPanel` for layout compatibility.
 
 Internal reference: [Flow | S3 Panel](LGA_HieroTools/docs/LGA_NKS_Flow_S3_Panel_README.md).

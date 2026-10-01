@@ -29,7 +29,7 @@ Esta guía documenta cómo implementar un sistema de logging robusto que escribe
 - **Scripts que lo usan**:
   - `LGA_NKS_Flow/LGA_NKS_Flow_Pull.py` (log: `debugPy_FlowPull.log`)
   - `LGA_NKS_Flow_Panel.py`
-  - `LGA_NKS_Coordination_Panel.py`
+  - `LGA_NKS_Flow_S3_Panel.py`
   - `LGA_NKS_ViewerTL_Panel.py`
   - `LGA_NKS_Edit_Panel.py`
   - `LGA_NKS_Review_Panel.py`

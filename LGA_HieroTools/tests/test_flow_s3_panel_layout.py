@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 
-PANEL_PATH = Path(__file__).resolve().parents[1] / "LGA_NKS_Coordination_Panel.py"
+PANEL_PATH = Path(__file__).resolve().parents[1] / "LGA_NKS_Flow_S3_Panel.py"
 FLOW_PANEL_PATH = Path(__file__).resolve().parents[1] / "LGA_NKS_Flow_Panel.py"
 VIEWER_PANEL_PATH = Path(__file__).resolve().parents[1] / "LGA_NKS_ViewerTL_Panel.py"
 STYLE_UTILS_PATH = (
@@ -14,7 +14,7 @@ STYLE_UTILS_PATH = (
 )
 
 
-class CoordinationPanelLayoutTests(unittest.TestCase):
+class FlowS3PanelLayoutTests(unittest.TestCase):
     def test_flow_actions_precede_s3_actions_and_use_semantic_styles(self):
         tree = ast.parse(PANEL_PATH.read_text(encoding="utf-8"))
         fixed_buttons = None
@@ -103,6 +103,8 @@ class CoordinationPanelLayoutTests(unittest.TestCase):
         self.assertTrue((root / "LGA_NKS_Flow_Rev_Panel_py").is_dir())
         self.assertTrue((root / "LGA_NKS_Flow_S3_Panel_py").is_dir())
         self.assertFalse((root / "LGA_NKS_Flow_Panel_py").exists())
+        # Guarda: el nombre viejo del modulo y de su carpeta no puede reaparecer.
+        self.assertFalse((root / "LGA_NKS_Coordination_Panel.py").exists())
         self.assertFalse((root / "LGA_NKS_Coordination_Panel_py").exists())
 
     def test_semantic_gradients_render_all_states(self):

@@ -35,7 +35,7 @@ MODULES = [
     "LGA_NKS_Assignee_Panel",
     "LGA_NKS_BurnIn",
     "LGA_NKS_ClipColor_Panel",
-    "LGA_NKS_Coordination_Panel",
+    "LGA_NKS_Flow_S3_Panel",
     "LGA_NKS_Edit_Panel",
     "LGA_NKS_Flow_Panel",
     "LGA_NKS_Projects_Panel",

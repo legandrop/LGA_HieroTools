@@ -23,7 +23,7 @@ El criterio usado es:
 
 - `LGA_NKS_Flow_Panel.py`
 - `LGA_NKS_Assignee_Panel.py`
-- `LGA_NKS_Coordination_Panel.py`
+- `LGA_NKS_Flow_S3_Panel.py`
 - `LGA_NKS_ViewerTL_Panel.py`
 - `LGA_NKS_Edit_Panel.py`
 - `LGA_NKS_Review_Panel.py`
@@ -36,7 +36,7 @@ El criterio usado es:
 | --- | --- | --- | --- |
 | Flow Review | `LGA_NKS_Flow_Panel.py` | `LGA_NKS_Flow_Panel.py` | El nombre visible describe un único recorrido de review conectado con Flow. El módulo queda estable. |
 | Assignees | `LGA_NKS_Assignee_Panel.py` | `LGA_NKS_Flow_Assignee_Panel.py` | El panel opera sobre Flow y Wasabi, no solo sobre Flow. |
-| Flow \| S3 | `LGA_NKS_Coordination_Panel.py` | `LGA_NKS_Flow_FlowProd_Panel.py` | La barra del nombre visible separa el bloque Flow del bloque S3; el módulo histórico queda estable por compatibilidad. |
+| Flow \| S3 | `LGA_NKS_Flow_S3_Panel.py` | `LGA_NKS_Flow_FlowProd_Panel.py` | La barra del nombre visible separa el bloque Flow del bloque S3; el módulo lleva el mismo nombre que el panel y el id del dock (`com.lega.FlowProdPanel`) no cambia, por compatibilidad con layouts guardados. |
 | Viewer \| TL | `LGA_NKS_ViewerTL_Panel.py` | `LGA_NKS_ViewerPanel.py` | La barra del nombre visible separa las herramientas del Viewer de las del Timeline. |
 | Edit | `LGA_NKS_Edit_Panel.py` | `LGA_NKS_EditTools_Panel.py` | `EditTools` era mas largo de lo necesario frente al nombre visible `Edit`. |
 | Review | `LGA_NKS_Review_Panel.py` | `LGA_NKS_Review_Panel.py` | Ya representaba bien al panel. |
@@ -128,7 +128,7 @@ Tambien usa shareds:
 
 Panel:
 
-- `LGA_NKS_Coordination_Panel.py`
+- `LGA_NKS_Flow_S3_Panel.py`
 
 Hoy carga scripts desde:
 
@@ -460,7 +460,7 @@ petroleo propio para no confundirse con el bloque verde de Difference/Compare.
 
 - `LGA_NKS_Projects_Panel.py` usa carpeta `LGA_NKS_Projects_Panel_py/`
 - `LGA_NKS_ViewerTL_Panel.py` usa carpeta `LGA_NKS_ViewerTL_Panel_py/`
-- `LGA_NKS_Coordination_Panel.py` usa carpeta `LGA_NKS_Flow_S3_Panel_py/`
+- `LGA_NKS_Flow_S3_Panel.py` usa carpeta `LGA_NKS_Flow_S3_Panel_py/`
 - `LGA_NKS_Review_Panel.py` usa carpeta `LGA_NKS_Review_Panel_py/`
 
 ### Carpetas que parecen privadas pero no lo son
@@ -508,7 +508,7 @@ petroleo propio para no confundirse con el bloque verde de Difference/Compare.
 Startup/
   LGA_NKS_Flow_Panel.py
   LGA_NKS_Assignee_Panel.py
-  LGA_NKS_Coordination_Panel.py
+  LGA_NKS_Flow_S3_Panel.py
   LGA_NKS_ViewerTL_Panel.py
   LGA_NKS_Edit_Panel.py
   LGA_NKS_Review_Panel.py
@@ -693,7 +693,7 @@ Esta seccion agrega el nivel fino: para cada `.py` relevante se indica si lo lla
   - Lo usan:
     - `LGA_NKS_Flow_Panel.py` del `Flow Review Panel`
     - `LGA_NKS_Assignee_Panel.py` del `Assignees Panel`
-    - `LGA_NKS_Coordination_Panel.py` del `Flow | S3 Panel`
+    - `LGA_NKS_Flow_S3_Panel.py` del `Flow | S3 Panel`
     - `LGA_NKS_Edit_Panel.py` del `Edit Panel`
     - varios scripts de `LGA_NKS_Edit/`
 
@@ -717,7 +717,7 @@ Esta seccion agrega el nivel fino: para cada `.py` relevante se indica si lo lla
     - `LGA_NKS_ViewerTL_Panel.py` del `Viewer | TL Panel`
     - `LGA_NKS_Flow_Panel.py` del `Flow Review Panel`
     - `LGA_NKS_Assignee_Panel.py` del `Assignees Panel`
-    - `LGA_NKS_Coordination_Panel.py` del `Flow | S3 Panel`
+    - `LGA_NKS_Flow_S3_Panel.py` del `Flow | S3 Panel`
     - `LGA_NKS_Edit_Panel.py` del `Edit Panel`
 
 - `LGA_NKS_Shared/LGA_NKS_GetClip.py`
@@ -782,17 +782,17 @@ Esta seccion agrega el nivel fino: para cada `.py` relevante se indica si lo lla
 ### Flow | S3 Panel
 
 - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py`
-  - Lo usa `LGA_NKS_Coordination_Panel.py`.
+  - Lo usa `LGA_NKS_Flow_S3_Panel.py`.
 
 - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_Thumbs.py`
-  - Lo usa `LGA_NKS_Coordination_Panel.py`.
+  - Lo usa `LGA_NKS_Flow_S3_Panel.py`.
 
 - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py`
-  - Lo usa `LGA_NKS_Coordination_Panel.py`.
+  - Lo usa `LGA_NKS_Flow_S3_Panel.py`.
   - A su vez usa `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py`.
 
 - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ModifyShot.py`
-  - Lo usa `LGA_NKS_Coordination_Panel.py`.
+  - Lo usa `LGA_NKS_Flow_S3_Panel.py`.
   - A su vez usa `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py`.
 
 - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py`
@@ -801,19 +801,19 @@ Esta seccion agrega el nivel fino: para cada `.py` relevante se indica si lo lla
     - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ModifyShot.py` del `Flow | S3 Panel`
 
 - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShotPriority.py`
-  - Lo usa `LGA_NKS_Coordination_Panel.py`.
+  - Lo usa `LGA_NKS_Flow_S3_Panel.py`.
 
 - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_OpenPath.py`
-  - Lo usa `LGA_NKS_Coordination_Panel.py`.
+  - Lo usa `LGA_NKS_Flow_S3_Panel.py`.
 
 - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_Download.py`
-  - Lo usa `LGA_NKS_Coordination_Panel.py`.
+  - Lo usa `LGA_NKS_Flow_S3_Panel.py`.
 
 - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_Upload.py`
-  - Lo usa `LGA_NKS_Coordination_Panel.py`.
+  - Lo usa `LGA_NKS_Flow_S3_Panel.py`.
 
 - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py`
-  - Lo usa `LGA_NKS_Coordination_Panel.py`.
+  - Lo usa `LGA_NKS_Flow_S3_Panel.py`.
 
 - `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_OpenPath.py`
   - Conservado como legado; no tiene boton visible.
@@ -1029,7 +1029,7 @@ Esta seccion agrega el nivel fino: para cada `.py` relevante se indica si lo lla
 
 ### Etapa 5. Flow | S3 Panel
 
-- Migrar `LGA_NKS_Coordination_Panel.py`
+- Migrar `LGA_NKS_Flow_S3_Panel.py`
 - Mover sus privados a `LGA_NKS_Flow_S3_Panel_py/`
 - Validar helpers internos como `LGA_NKS_Flow_CreateShot_Folders.py`
 

@@ -281,7 +281,7 @@ Cuando se usa **Download Clip**, al terminar la descarga el clip se reconecta so
 ### Hallazgos de investigacion (estado actual)
 
 - **Panel con doble accion ya resuelta en otros botones**:
-  `LGA_NKS_Coordination_Panel.py` ya implementa `CustomButton` + `setShiftClickHandler()` para `Reveal in Flow` y `.Psync`, con tooltip explicito `Click` / `Shift+Click`.
+  `LGA_NKS_Flow_S3_Panel.py` ya implementa `CustomButton` + `setShiftClickHandler()` para `Reveal in Flow` y `.Psync`, con tooltip explicito `Click` / `Shift+Click`.
 - **Download Clip actual en Startup**:
   `LGA_NKS_FileManagerS3_DownloadClip.py` soporta modo normal y modo latest:
   - normal: `--download` / `--download-file`
@@ -342,7 +342,7 @@ Cuando se usa **Download Clip**, al terminar la descarga el clip se reconecta so
 
 ## 📚 Referencias Técnicas
 
-- **`LGA_NKS_Coordination_Panel.py`** (raíz de Startup)
+- **`LGA_NKS_Flow_S3_Panel.py`** (raíz de Startup)
   - Clase `FlowProdPanel`: define los botones del panel en `self.fixed_buttons`.
   - `download_shot_from_filemanagers3()`: lanza `LGA_NKS_FileManagerS3_Download.py`.
   - `upload_shot_to_filemanagers3()`: lanza `LGA_NKS_FileManagerS3_Upload.py`.
@@ -375,7 +375,7 @@ Cuando se usa **Download Clip**, al terminar la descarga el clip se reconecta so
   - `_reconnect_clip()`: ejecuta `reconnectMedia()` con fallback `refresh()` y un toggle de `setEnabled()` para refrescar el viewer.
   - `get_marker_dir()`: carpeta vigilada (debe coincidir con `get_notify_dir()` del script anterior).
 
-- **`LGA_NKS_Coordination_Panel.py`**
+- **`LGA_NKS_Flow_S3_Panel.py`**
   - Al final del módulo carga e inicia `LGA_NKS_DownloadClip_Watcher.py` (mantiene la referencia en `download_clip_watcher_module`).
 
 - **`LGA_NKS_Shared/LGA_NKS_GetClip.py`**

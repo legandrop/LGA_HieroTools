@@ -1,17 +1,18 @@
 > **Regla de documentacion**: este archivo describe el estado actual del codigo. No es un historial de cambios, changelog ni bitacora temporal.
 > **Regla de documentacion**: este archivo debe incluir una seccion de referencias tecnicas con rutas completas a los archivos mas importantes relacionados, y para cada archivo nombrar las funciones, clases o metodos clave vinculados a este tema.
 
-# Flow | S3 Panel (`LGA_NKS_Coordination_Panel`)
+# Flow | S3 Panel (`LGA_NKS_Flow_S3_Panel`)
 
 ## Descripción
 Flow | S3 separa en un solo dock dos etapas contiguas del trabajo de producción:
 las primeras seis acciones operan sobre Flow Production Tracking y las cinco
 restantes preparan o transfieren datos mediante FileManagerS3/Wasabi S3. El
-nombre visible describe esa frontera; el módulo, la clase y el `objectName`
-históricos no cambian para conservar compatibilidad con layouts guardados.
+nombre visible describe esa frontera; el módulo se llama `LGA_NKS_Flow_S3_Panel`,
+pero la clase `FlowProdPanel` y el `objectName` del dock
+(`com.lega.FlowProdPanel`) no cambian, para conservar compatibilidad con
+layouts guardados.
 
-La carpeta privada del panel es `LGA_NKS_Flow_S3_Panel_py/`. El nombre viejo
-`LGA_NKS_Coordination_Panel_py/` ya no existe y no debe usarse en rutas nuevas.
+La carpeta privada del panel es `LGA_NKS_Flow_S3_Panel_py/`, igual que el módulo.
 
 ## Funcionalidades Principales
 
@@ -152,7 +153,7 @@ La lectura visual es intencional:
 
 ## Scripts Relacionados
 
-- `LGA_HieroTools/LGA_NKS_Coordination_Panel.py` - `FlowProdPanel.__init__()` define identidad visible, orden y categoría visual; `FlowProdPanel.create_buttons()` construye el layout; `create_thumbnail_for_selected_clip()` y `update_thumbnail_in_flow_for_selected_clip()` resuelven los dos gestos de Thumbnail. El nombre de módulo y `com.lega.FlowProdPanel` se conservan por compatibilidad.
+- `LGA_HieroTools/LGA_NKS_Flow_S3_Panel.py` - `FlowProdPanel.__init__()` define identidad visible, orden y categoría visual; `FlowProdPanel.create_buttons()` construye el layout; `create_thumbnail_for_selected_clip()` y `update_thumbnail_in_flow_for_selected_clip()` resuelven los dos gestos de Thumbnail. El nombre de módulo y `com.lega.FlowProdPanel` se conservan por compatibilidad.
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_StyleUtils.py` - `GRADIENT_COLORS` contiene los gradientes semánticos; `create_gradient_style()` compone estados normal, hover y pressed.
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py` - Funcionalidad de Reveal in Flow
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_Thumbs.py` - `main()` guarda el snapshot local; `zoom_to_fill_simple()` y `crop_to_aspect_ratio()` preparan la imagen

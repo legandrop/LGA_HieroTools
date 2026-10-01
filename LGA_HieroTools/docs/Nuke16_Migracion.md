@@ -16,7 +16,7 @@
 - [x] `LGA_NKS_ClipColor_Panel.py` — Panel de colores de clips (PySide2.QtWidgets, PySide2.QtGui)
 - [x] `LGA_NKS_Edit_Panel.py` — Panel de herramientas de edición (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
 - [x] `LGA_NKS_Assignee_Panel.py` — Panel de asignación de usuarios Flow (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
-- [x] `LGA_NKS_Coordination_Panel.py` — Panel visible Flow | S3 (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
+- [x] `LGA_NKS_Flow_S3_Panel.py` — Panel visible Flow | S3 (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
 - [x] `LGA_NKS_Flow_Panel.py` — Panel visible Flow Review (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
 - [x] `LGA_NKS_Review_Panel.py` — Panel de revisión (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)
 - [x] `LGA_NKS_ViewerTL_Panel.py` — Panel visible Viewer | TL (PySide2.QtWidgets, PySide2.QtGui, PySide2.QtCore)

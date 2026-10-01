@@ -35,7 +35,7 @@ Este método utiliza los clips que están actualmente seleccionados en el timeli
 
 #### Paneles:
 - [x] **`LGA_NKS_Assignee_Panel.py`** - Usa `get_clips_to_process()` del módulo `LGA_NKS_GetClip` con `prioritize_multiple_selection=True` (método híbrido: selección múltiple prioritaria, playhead para selección simple)
-- **`LGA_NKS_Coordination_Panel.py`** - Llama a scripts que usan selección
+- **`LGA_NKS_Flow_S3_Panel.py`** - Llama a scripts que usan selección
 
 #### Scripts de NKS:
 - **`LGA_NKS/LGA_NKS_Trim_In.py`** (línea 396) - `selected_clips = te.selection()`

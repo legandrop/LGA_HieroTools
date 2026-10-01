@@ -206,9 +206,9 @@ def _check_stamp_incluye_wal():
         )
 
 
-def _check_imports_coordination_panel():
+def _check_imports_flow_s3_panel():
     """
-    Los 5 scripts del panel de coordinacion tienen que dejar TODOS sus imports
+    Los 5 scripts del panel Flow | S3 tienen que dejar TODOS sus imports
     fuera del `except ImportError` del helper de naming.
 
     Existe porque ya pasó: al insertar ese try/except, el import del launcher de
@@ -251,7 +251,7 @@ def run():
     original_path_fn = vendors_config.get_pipesync_db_path
 
     _check_stamp_incluye_wal()
-    _check_imports_coordination_panel()
+    _check_imports_flow_s3_panel()
 
     try:
         _run_con_db_sintetica()
