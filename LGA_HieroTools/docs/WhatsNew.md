@@ -13,7 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v3.97
-- [improved] Review Pic and Viewer | Snapshot capture the whole viewer and remove only the black area around the image, so a zoomed or panned image is no longer cut or left with black bars.
+- [improved] Review Pic and Viewer | Snapshot trim only the black around the image, so zoomed or panned shots are no longer cut.
 - [improved] Review Pic and the Shift+Click of Viewer | Snapshot open the picture in FrameRev to annotate it, replacing the ShareX image editor that came inside HieroTools, which is no longer included. FrameRev 0.265 or later has to be installed and opened once; otherwise a message says so.
 - [new][mac] Review Pic and the Shift+Click of Viewer | Snapshot now work on macOS too, opening the picture in FrameRev to annotate it.
 - [new][studio] Ctrl+Alt+Click on Rev Dir in the Flow Review panel opens the delivery slate's Submission Note with Submitting For and Media Color; it never overwrites a newer note and asks before saving an empty one.
