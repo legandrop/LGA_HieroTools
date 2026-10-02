@@ -69,7 +69,8 @@ Internal reference: [Flow Review Panel](LGA_HieroTools/docs/LGA_NKS_Flow_Rev_Pan
   Shows shot information and version comments for the task resolved from the
   active context (Comp, Roto, Cleanup, or another enabled task scope).
 - **Review Pic**  
-  Creates a viewer snapshot, saves it with its frame number, and opens it in
+  Creates a snapshot of the whole viewer without the black area around the
+  image, saves it with its frame number, and opens it in
   FrameRev to annotate it. Saving in FrameRev writes the annotation into that
   same picture, which is then sent together with the review notes.
 - **Review / delivery state buttons**
@@ -183,8 +184,8 @@ or `TL |`, so similarly colored controls do not imply an unrelated function.
   area of the viewer, creating the frame-only burn-in when needed.
   Shortcut: `Shift+F`.
 - **Viewer | Snapshot**
-  Click: creates a snapshot from the current viewer image, crops it to the
-  sequence aspect ratio, and copies it to the clipboard. Shift+Click opens the
+  Click: creates a snapshot of the whole viewer, removes the black area around
+  the image on any side, and copies it to the clipboard. Shift+Click opens the
   same capture in FrameRev to annotate it, without saving it anywhere first, and
   also copies it to the clipboard.
 - **TL | Refresh**

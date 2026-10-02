@@ -1,10 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_ViewerPanel v1.79 | Lega
+  LGA_ViewerPanel v1.80 | Lega
 
   Panel con herramientas para el viewer y el timeline de Hiero
 
+  v1.80: El tooltip de Snapshot describe el recorte nuevo: viewer entero menos
+         el negro que rodea la imagen.
   v1.79: El tooltip de Snapshot nombra a FrameRev, que reemplaza a ShareX
          ImageEditor LGA en el Shift+Click.
   v1.78: La apertura del Shot Info pasa al helper compartido
@@ -306,7 +308,7 @@ class ViewerPanel(QtWidgets.QWidget):
                 self.snapshot,
                 "#2d5a3d",
                 None,
-                "Click: copia un snapshot de la imagen actual del viewer al portapapeles.\nShift+Click: abre el snapshot en FrameRev para anotarlo, sin guardarlo (FrameRev tiene que estar instalado).\nLa captura se recorta al aspect ratio de la secuencia.",
+                "Click: copia un snapshot de la imagen actual del viewer al portapapeles.\nShift+Click: abre el snapshot en FrameRev para anotarlo, sin guardarlo (FrameRev tiene que estar instalado).\nSe captura el viewer entero y se recorta solo el negro que rodea la imagen.",
                 self.snapshot_in_image_editor,
             ),
         ]

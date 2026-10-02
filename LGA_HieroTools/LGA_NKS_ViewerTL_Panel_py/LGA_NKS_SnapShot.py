@@ -1,10 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_SnapShot v0.63 | Lega
+  LGA_NKS_SnapShot v0.64 | Lega
 
   Crea un snapshot de la imagen actual del viewer y lo copia al portapapeles
 
+  v0.64: Se captura el viewer entero y solo se recorta el negro que lo rodea,
+         de cualquier lado (LGA_NKS_ViewerCrop), en vez de recortar centrado
+         al aspect ratio de la secuencia.
   v0.63: Shift+Click abre el snapshot en FrameRev (ver LGA_NKS_FrameRev) en vez
          del ShareX ImageEditor LGA que viajaba en el pack. La captura le llega
          por un PNG temporal que FrameRev borra al leerlo, y queda ademas en el
@@ -20,7 +23,7 @@ ____________________________________________________________________
 import hiero.core
 import hiero.ui
 import os
-from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
+from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets
 
 DEBUG = False
 SaveToFile = False
@@ -29,26 +32,6 @@ SaveToFile = False
 def debug_print(*message):
     if DEBUG:
         print(*message)
-
-
-def crop_to_aspect_ratio(qimage, target_aspect):
-    width = qimage.width()
-    height = qimage.height()
-
-    current_aspect = width / height
-
-    if current_aspect > target_aspect:
-        new_width = int(height * target_aspect)
-        offset_x = int((width - new_width) / 2)
-        rect = QtCore.QRect(offset_x, 0, new_width, height)
-        cropped = qimage.copy(rect)
-        return cropped
-    else:
-        new_height = int(width / target_aspect)
-        offset_y = int((height - new_height) / 2)
-        rect = QtCore.QRect(0, offset_y, width, new_height)
-        cropped = qimage.copy(rect)
-        return cropped
 
 
 def open_in_image_editor(qimage):
@@ -84,29 +67,11 @@ def main(open_in_editor=False):
     if qimage is None or qimage.isNull():
         raise Exception("viewer.image() devolvió None o imagen nula")
 
-    # Obtener la secuencia activa y su relacion de aspecto
-    sequence = hiero.ui.activeSequence()
-    if sequence is None:
-        debug_print("No hay ninguna secuencia activa, usando 16:9 por defecto.")
-        target_aspect = 16 / 9
-    else:
-        format = sequence.format()
-        width = format.width()
-        height = format.height()
-        pixel_aspect = format.pixelAspect()
-        # El viewer.image() ya entrega la imagen con el PAR aplicado (proporciones de
-        # display), por lo que el crop debe hacerse contra el DISPLAY aspect ratio
-        # (storage * PAR). Si se croppeara contra el storage aspect, se recortarian
-        # los lados de la imagen (canvas muy chico en X) en timelines con PAR != 1.
-        target_aspect = (width / height) * pixel_aspect
-        debug_print(
-            f"Relación de aspecto de la secuencia: {width} x {height} "
-            f"(storage {width / height:.2f}, PAR {pixel_aspect:.2f}, "
-            f"display {target_aspect:.2f})"
-        )
+    # Se captura el viewer entero y solo se le saca el negro que lo rodea, de
+    # cualquier lado (ver LGA_NKS_ViewerCrop).
+    from LGA_NKS_Shared.LGA_NKS_ViewerCrop import crop_black_borders
 
-    # Aplicar crop
-    qimage_cropped = crop_to_aspect_ratio(qimage, target_aspect)
+    qimage_cropped = crop_black_borders(qimage)
 
     debug_print(
         "Snapshot size (cropped):", qimage_cropped.width(), "×", qimage_cropped.height()

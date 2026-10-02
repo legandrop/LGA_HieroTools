@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ReviewPic v1.24 | Lega
+  LGA_NKS_ReviewPic v1.25 | Lega
 
   Crea un snapshot de la imagen actual del viewer y lo guarda en ReviewPic_Cache
   organizando por clips del track EXR de la task activa con numeracion de frames,
@@ -10,6 +10,10 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v1.25: Se captura el viewer entero y solo se recorta el negro que lo rodea,
+         de cualquier lado (LGA_NKS_ViewerCrop). Antes se recortaba centrado al
+         aspect ratio de la secuencia, que con zoom o paneo cortaba imagen o
+         dejaba negro.
   v1.24: El JPG se abre en FrameRev (--edit-image, ver LGA_NKS_FrameRev) en vez
          del ShareX ImageEditor LGA que viajaba en el pack. Funciona tambien en
          macOS, y si FrameRev falta o es viejo se avisa con un cartel.
@@ -38,11 +42,10 @@ import re
 import glob
 from pathlib import Path
 # Importar compatibilidad Qt para Hiero Panels (PySide2/PySide6)
-from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
+from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets
 
 # Reasignar clases para compatibilidad con código existente
 QApplication = QtWidgets.QApplication
-QRect = QtCore.QRect
 import sys
 
 DEBUG = False
@@ -136,29 +139,6 @@ def get_next_available_filename(base_path, base_name, frame_number):
             raise Exception("Demasiados archivos duplicados")
 
 
-def crop_to_aspect_ratio(qimage, target_aspect):
-    """
-    Recorta la imagen a la relacion de aspecto especificada.
-    """
-    width = qimage.width()
-    height = qimage.height()
-
-    current_aspect = width / height
-
-    if current_aspect > target_aspect:
-        new_width = int(height * target_aspect)
-        offset_x = int((width - new_width) / 2)
-        rect = QRect(offset_x, 0, new_width, height)
-        cropped = qimage.copy(rect)
-        return cropped
-    else:
-        new_height = int(width / target_aspect)
-        offset_y = int((height - new_height) / 2)
-        rect = QRect(0, offset_y, width, new_height)
-        cropped = qimage.copy(rect)
-        return cropped
-
-
 def main():
     # Imports lazy para evitar "QWidget: Must construct a QApplication before a QWidget"
     # en Nuke 15 (PySide2). Se importan aquí y no al cargar el módulo para garantizar
@@ -224,29 +204,12 @@ def main():
         print("❌ viewer.image() devolvió None o imagen nula")
         return
 
-    # Obtener la secuencia activa y su relacion de aspecto
-    sequence = hiero.ui.activeSequence()
-    if sequence is None:
-        debug_print("No hay ninguna secuencia activa, usando 16:9 por defecto.")
-        target_aspect = 16 / 9
-    else:
-        format = sequence.format()
-        width = format.width()
-        height = format.height()
-        pixel_aspect = format.pixelAspect()
-        # El viewer.image() ya entrega la imagen con el PAR aplicado (proporciones de
-        # display), por lo que el crop debe hacerse contra el DISPLAY aspect ratio
-        # (storage * PAR). Si se croppeara contra el storage aspect, se recortarian
-        # los lados de la imagen (canvas muy chico en X).
-        target_aspect = (width / height) * pixel_aspect
-        debug_print(
-            f"Relación de aspecto de la secuencia: {width} x {height} "
-            f"(storage {width / height:.2f}, PAR {pixel_aspect:.2f}, "
-            f"display {target_aspect:.2f})"
-        )
+    # Se captura el viewer entero y solo se le saca el negro que lo rodea, de
+    # cualquier lado (ver LGA_NKS_ViewerCrop): con zoom o paneo, recortar al
+    # aspect ratio de la secuencia cortaba imagen o dejaba negro.
+    from LGA_NKS_Shared.LGA_NKS_ViewerCrop import crop_black_borders
 
-    # Aplicar crop (sobre la imagen ya corregida por PAR que entrega el viewer)
-    qimage_cropped = crop_to_aspect_ratio(qimage, target_aspect)
+    qimage_cropped = crop_black_borders(qimage)
     debug_print(
         f"Snapshot size (cropped): {qimage_cropped.width()} × {qimage_cropped.height()}"
     )
