@@ -77,7 +77,9 @@ comprobar con una cuenta de ese rol que no lo vea antes de escribir la primera n
    Color. Los dos son `ArrowComboBox` (`LGA_NKS_Shared/LGA_NKS_ArrowComboBox.py`): `Style.COMBO`
    oculta la flecha nativa, y un combo con la hoja sola parecía un campo de texto. En este modo **Enter no
    confirma** (se confirma con OK o Ctrl+Enter): el primer widget es el combo editable y un Enter
-   al escribir "Submitting For" mandaba la nota vacía.
+   al escribir "Submitting For" mandaba la nota vacía. Si se confirma con el texto vacío, pregunta
+   antes de guardar ("Save empty" / "Write it", ninguna empujada por Enter): una nota vacía deja
+   el slate sin nota o borra la que ya estaba.
 4. El push escribe los tres campos **antes** de tocar la Task. Si Flow no los acepta, se corta sin
    cambiar nada. Después hace lo de siempre en Rev Dir: Task en `rev_di`, Version en `vwd`, color
    del clip y limpieza de tags (esta última recién cuando el push salió bien).

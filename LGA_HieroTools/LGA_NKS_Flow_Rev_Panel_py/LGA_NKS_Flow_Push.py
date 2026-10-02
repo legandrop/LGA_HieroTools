@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push v4.20 | Lega
+  LGA_NKS_Flow_Push v4.21 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -12,6 +12,9 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v4.21: Una Submission Note vacia se confirma antes de guardar ("Save
+         empty" / "Write it"): un OK sin texto dejaba el slate sin nota, o
+         borraba la que habia, sin avisar.
   v4.20: Ctrl+Alt+Click en Rev Dir lee la Submission Note y el estado de la
          task de pipesync.db (el sync de Reviewer y Coordinator ya baja los
          tres campos): la ventana abre al instante, sin pasar por Flow. Si la
@@ -1917,6 +1920,27 @@ class InputDialog(QDialog):
         row.addWidget(QLabel("Media Color:"))
         row.addWidget(self.media_color_combo, 1)
         self.layout.addLayout(row)
+
+    def accept(self):
+        """En modo submission, una nota vacia se confirma antes de guardarla.
+
+        El slate de entrega sale con la nota que haya: un OK sin texto (o un
+        Ctrl+Enter de mas) la dejaba vacia, o borraba la que ya estaba, sin
+        avisar. recommended=False: ninguna opcion queda empujada por Enter.
+        """
+        if self.submission_mode and not self.text_edit.toPlainText().strip():
+            if not ask_question(
+                self,
+                "Empty Submission Note",
+                "The submission note is empty. The delivery slate will go out without one.\n\n"
+                "Save it empty anyway?",
+                yes_text="Save empty",
+                no_text="Write it",
+                recommended=False,
+            ):
+                self.text_edit.setFocus()
+                return
+        super(InputDialog, self).accept()
 
     def get_submission(self):
         """Dict de campos de Version con lo que eligio el supervisor."""
