@@ -77,7 +77,24 @@ slate de entrega. Abre el diálogo de notas con los selectores Submitting For y
 Media Color, precargados con lo que ya tiene la Version exacta del clip, y guarda
 los tres campos en esa Version en vez de crear una Note (los artistas no la
 reciben). Si la task ya está en la cola de entrega ofrece guardar solo la nota.
-El botón lleva el tooltip que lo explica. Detalle: [Docu_Slate_MXF.md](Docu_Slate_MXF.md).
+Detalle: [Docu_Slate_MXF.md](Docu_Slate_MXF.md).
+
+**Gestos de los botones de estado** (cada botón los lista en su tooltip):
+
+- **Click:** pasa la task a ese estado en Flow y pinta el clip (selección o clip
+  del playhead). Si el estado pide nota (`is_note_capable()`), la nota va a la
+  Version de Flow del clip. Rev Dir y Corrections además borran los tags del clip.
+- **Shift+Click** (solo estados con nota, un clip): igual, pero abre un selector
+  para elegir a qué Version de Flow va la nota. En los estados sin nota hace lo
+  mismo que el Click y el tooltip no lo anuncia.
+- **Ctrl+Alt+Click** (solo Rev Dir, solo studio): la Submission Note de arriba.
+  El tooltip lo muestra solo en studio, que es donde funciona.
+
+Los textos salen de `PUSH_TOOLTIPS` y `status_button_tooltip()` en
+`LGA_NKS_Flow_Panel.py` (la línea de Ctrl+Alt+Click, de `TOOLTIPS` en
+`LGA_NKS_Slate_Config.py`), aparte de los widgets para la futura versión bilingüe.
+`tests/test_flow_panel_tooltips.py` verifica que cada botón de los dos contextos
+anuncie sus gestos.
 
 El cambio de contexto reconstruye la lista en caliente. Los colores visibles son
 los colores de estado de Flow con un techo de luminancia para conservar el texto
@@ -88,8 +105,8 @@ legible; el color aplicado al clip sigue siendo el valor real sin esa correcció
 - **Flow Pull** lee Flow/PipeSync y actualiza el timeline.
 - **Shot Info** es observación: consulta y presenta historial, notas y versiones.
 - **Review Pic** crea material auxiliar para comunicar feedback.
-- **Botones de estado** realizan Flow Push; el click normal y Shift+click pueden
-  seleccionar distintos alcances/versiones según el botón y el flujo de Push.
+- **Botones de estado** realizan Flow Push; el Shift+Click elige la Version de
+  Flow de la nota (ver "Gestos de los botones de estado").
 
 El panel no crea shots, no administra vendor groups y no lanza operaciones S3.
 Esas responsabilidades pertenecen a Flow | S3 y Assignee.

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Panel v2.62 | Lega
+  LGA_NKS_Flow_Panel v2.63 | Lega
 
   Panel Flow Review con herramientas de review que interactuan con las tasks de
   Flow Production Tracking descargadas previamente con LGA_NKS_Flow_Downloader.
@@ -9,6 +9,12 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v2.63: Todos los botones de estado tienen tooltip con lo que hace cada
+         gesto: Click (pasa la task al estado, pinta el clip y, si el estado
+         pide nota, a que version va), Shift+Click (elegir la version de Flow
+         de la nota) y, en Rev Dir y contexto studio, Ctrl+Alt+Click (Submission
+         Note). Los textos salen de PUSH_TOOLTIPS. Se corrige el mojibake de los
+         tooltips de Review Pic y Shot Info.
   v2.62: Ctrl+Alt+Click en Rev Dir escribe la Submission Note del slate de
          entrega (Flow_Push submission_mode). Solo en contexto studio; el
          boton lleva el tooltip que lo explica.
@@ -73,7 +79,7 @@ from LGA_NKS_Shared.LGA_NKS_PipeSyncPreflight import (
 )
 from LGA_NKS_Shared.LGA_NKS_ContextProfile import get_context_mode
 from LGA_NKS_Shared.LGA_NKS_ContextSwitch import subscribe as subscribe_context_change
-from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import get_push_buttons
+from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import get_push_buttons, is_note_capable
 from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning, show_error
 from LGA_NKS_Shared.LGA_NKS_Slate_Config import (
     SLATE_CONTEXT_MODE,
@@ -109,6 +115,51 @@ from LGA_NKS_Shared.LGA_NKS_StyleUtils import (
 #
 # Mismo valor y misma funcion que el Assignee Panel, que tiene el mismo caso.
 MAX_STATUS_BG_LUMINANCE = 135
+
+
+# Textos de los tooltips, aparte de los widgets para la futura version bilingue.
+# Formato de los demas paneles: una linea por gesto ("Click: ...").
+PUSH_TOOLTIPS = {
+    "fpt_pull": (
+        "Click: Pull de todos los shots del timeline\n"
+        "Shift+Click: Pull solo del shot seleccionado"
+    ),
+    "review_pic": (
+        "Crea un snapshot del viewer y lo guarda con su número de frame para "
+        "mandarlo junto con los comentarios"
+    ),
+    "shot_info": (
+        "Muestra la información del shot y los comentarios de las versiones de "
+        "la task comp (Shift+T)"
+    ),
+    "status_click": (
+        "Click: pasa la task a {label} en Flow y pinta el clip "
+        "(selección o clip del playhead)."
+    ),
+    "status_note": "Pide una nota, que va a la versión de Flow del clip.",
+    "status_clear_tags": "Además borra los tags del clip.",
+    "status_shift": (
+        "Shift+Click: igual, pero eligiendo a qué versión de Flow va la nota "
+        "(1 clip)."
+    ),
+}
+
+
+def status_button_tooltip(label, code, clears_tags, show_submission):
+    """Tooltip de un boton de estado: que hace cada gesto que acepta."""
+    # Una idea por linea: un tooltip de texto plano no corta solo.
+    lines = [PUSH_TOOLTIPS["status_click"].format(label=label)]
+    if is_note_capable(code):
+        lines.append(PUSH_TOOLTIPS["status_note"])
+    if clears_tags:
+        lines.append(PUSH_TOOLTIPS["status_clear_tags"])
+    # Shift+Click solo cambia algo en los estados que piden nota; en el resto
+    # hace lo mismo que el Click y no se anuncia.
+    if is_note_capable(code):
+        lines.append(PUSH_TOOLTIPS["status_shift"])
+    if show_submission:
+        lines.append(SLATE_TOOLTIPS["rev_dir"])
+    return "\n".join(lines)
 
 
 # Variable global para activar o desactivar los prints
@@ -334,6 +385,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
             buttons.append(
                 {
                     "name": status_button["label"],
+                    "code": status_button["code"],
                     "color": QtGui.QColor(color_hex),
                     "style": color_hex,
                     "action": "color",
@@ -373,7 +425,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
             style = button_info["style"]
             action = button_info["action"]
 
-            # Crear un bot?n personalizado que maneje el Shift+Click
+            # Crear un botón personalizado que maneje el Shift+Click
             button = CustomButton(name)
 
             # Techo de brillo al fondo: el texto es claro y contra un fondo muy
@@ -381,7 +433,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
             # siendo el color real del estado que va al clip del timeline.
             style = ensure_max_luminance(style, MAX_STATUS_BG_LUMINANCE)
 
-            # Aplicar estilos din?micos con bordes, hover y tooltips
+            # Aplicar estilos dinámicos con bordes, hover y tooltips
             # (derivados del color ya corregido)
             border_color = calculate_dynamic_border(style)
             hover_color = calculate_dynamic_hover(style)
@@ -403,28 +455,23 @@ class ColorChangeWidget(QtWidgets.QWidget):
                 }}
             """
 
-            # Agregar estilos de tooltip din?micos si hay tooltip
+            # Estilos de tooltip: todos los botones del panel llevan tooltip.
             is_submission_button = (
                 action == "color" and name == SUBMISSION_BUTTON_LABEL
             )
-            has_tooltip = (
-                action == "fpt_pull" or
-                action == "review_pic" or
-                action == "shot_info" or
-                is_submission_button
-            )
+            has_tooltip = True
 
             if has_tooltip:
-                # Crear un selector ?nico para este bot?n usando su objectName
+                # Crear un selector único para este botón usando su objectName
                 button_object_name = f"button_{index}"
                 button.setObjectName(button_object_name)
 
-                # Crear stylesheet de tooltip din?mico
+                # Crear stylesheet de tooltip dinámico
                 tooltip_stylesheet = create_tooltip_stylesheet(style)
-                # Modificar el tooltip stylesheet para usar el selector del bot?n
+                # Modificar el tooltip stylesheet para usar el selector del botón
                 tooltip_stylesheet = tooltip_stylesheet.replace("QToolTip", f"#{button_object_name} QToolTip")
 
-                # Combinar estilos del bot?n con estilos de tooltip
+                # Combinar estilos del botón con estilos de tooltip
                 button_stylesheet += tooltip_stylesheet
 
             button.setStyleSheet(button_stylesheet)
@@ -437,28 +484,29 @@ class ColorChangeWidget(QtWidgets.QWidget):
                     button.setCtrlAltClickHandler(
                         self.handle_submission_note_click(color, name)
                     )
-                    button.setToolTip(SLATE_TOOLTIPS["rev_dir"])
+                # El Ctrl+Alt+Click solo se anuncia donde funciona (studio): en
+                # client el gesto avisa que no existe.
+                button.setToolTip(
+                    status_button_tooltip(
+                        name,
+                        button_info.get("code", ""),
+                        name in self.CLEAR_TAG_BUTTONS,
+                        is_submission_button
+                        and self.context_mode == SLATE_CONTEXT_MODE,
+                    )
+                )
             elif action == "fpt_pull":
                 button.setCustomClickHandler(self.run_FPT_pull_with_deselect)
                 button.setShiftClickHandler(self.run_FPT_pull)
-                # Tooltip que explica las dos funcionalidades del bot?n Flow Pull
-                tooltip_text = (
-                    "Click: Pull de todos los shots del timeline\n"
-                    "Shift+Click: Pull solo del shot seleccionado"
-                )
-                button.setToolTip(tooltip_text)
+                button.setToolTip(PUSH_TOOLTIPS["fpt_pull"])
             elif action == "review_pic":
                 button.clicked.connect(self.run_review_pic_script)
-                button.setToolTip(
-                    "Crea snapshot del viewer y lo guarda con su n?mero de frame para ser enviado junto con los comentarios"
-                )
+                button.setToolTip(PUSH_TOOLTIPS["review_pic"])
             elif action == "shot_info":
                 button.clicked.connect(self.run_shot_info_script)
                 if "shortcut" in button_info:
                     button.setShortcut(QtGui.QKeySequence(button_info["shortcut"]))
-                button.setToolTip(
-                    "Muestra informaci?n del shot y comentarios de las versiones de la task comp"
-                )
+                button.setToolTip(PUSH_TOOLTIPS["shot_info"])
 
             max_button_width = max(max_button_width, button.sizeHint().width())
             row = index // self.num_columns

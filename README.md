@@ -69,6 +69,13 @@ Internal reference: [Flow Review Panel](LGA_HieroTools/docs/LGA_NKS_Flow_Rev_Pan
 
   Generated from Flow's context policy rather than a duplicated list. Studio
   and Client expose only their valid review/delivery states, in Flow order.
+  Each button's tooltip lists the gestures it accepts.
+
+  Click: sets the task to that state in Flow and colors the clip (selected
+  clips, or the one under the playhead). States that ask for a note send it to
+  the clip's Flow Version; Rev Dir and Corrections also clear the clip tags.
+  Shift+Click (states with a note, one clip): same, but lets you pick which
+  Flow Version gets the note.
 
   **Rev Dir** Ctrl+Alt+Click (Studio only, one clip): writes the **Submission
   Note** for the delivery slate. It opens the usual note dialog with two extra
