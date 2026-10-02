@@ -1,10 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_ViewerPanel v1.78 | Lega
+  LGA_ViewerPanel v1.79 | Lega
 
   Panel con herramientas para el viewer y el timeline de Hiero
 
+  v1.79: El tooltip de Snapshot nombra a FrameRev, que reemplaza a ShareX
+         ImageEditor LGA en el Shift+Click.
   v1.78: La apertura del Shot Info pasa al helper compartido
          LGA_NKS_ShotInfoOnReview (que tambien usa el Flow Pull) y se decide
          por reviewer con REVIEWERS_WITH_AUTO_SHOT_INFO en vez de estar clavada
@@ -304,7 +306,7 @@ class ViewerPanel(QtWidgets.QWidget):
                 self.snapshot,
                 "#2d5a3d",
                 None,
-                "Click: copia un snapshot de la imagen actual del viewer al portapapeles.\nShift+Click: abre el snapshot en ShareX ImageEditor LGA sin guardarlo.\nLa captura se recorta al aspect ratio de la secuencia.",
+                "Click: copia un snapshot de la imagen actual del viewer al portapapeles.\nShift+Click: abre el snapshot en FrameRev para anotarlo, sin guardarlo (FrameRev tiene que estar instalado).\nLa captura se recorta al aspect ratio de la secuencia.",
                 self.snapshot_in_image_editor,
             ),
         ]

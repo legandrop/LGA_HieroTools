@@ -13,6 +13,8 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v3.97
+- [improved] Review Pic and the Shift+Click of Viewer | Snapshot open the picture in FrameRev to annotate it. FrameRev 0.265 or later has to be installed and opened once; otherwise a message says so.
+- [new][mac] Review Pic and the Shift+Click of Viewer | Snapshot now work on macOS too, opening the picture in FrameRev to annotate it.
 - [new][studio] Ctrl+Alt+Click on Rev Dir in the Flow Review panel opens the delivery slate's Submission Note with Submitting For and Media Color; it never overwrites a newer note and asks before saving an empty one.
 - [new][studio] The Slate Frame button in the Flow | S3 panel saves the viewer image as the shot's slate frame for the delivery slate.
 - [improved] Every status button in the Flow Review panel now has a tooltip listing its click gestures.

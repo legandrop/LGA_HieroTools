@@ -61,7 +61,7 @@ nueva.
    sin mínimo propio usa el `minimumSizeHint` del scroll area, más alto que una
    fila (por eso lleva `setMinimumHeight(1)`).
 2. **Shot Info** — muestra datos del shot y comentarios/versiones de la task; shortcut `Shift+T`.
-3. **Review Pic** — captura el viewer con número de frame para acompañar notas de review.
+3. **Review Pic** — captura el viewer con número de frame y la abre en FrameRev para anotarla; Save en FrameRev deja la anotación en ese mismo JPG, que Flow Push sube con la nota (ver `Docu_FrameRev.md`).
 
 ## Botones de estado
 
@@ -129,4 +129,6 @@ Esas responsabilidades pertenecen a Flow | S3 y Assignee.
 - `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py`
   - `main()` resuelve el clip y abre `GUIWindow`; `ShotGridManager` consulta la información.
 - `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_ReviewPic.py`
-  - `main()` captura el viewer y abre el flujo de edición/guardado de la imagen.
+  - `main()` captura el viewer, guarda el JPG en `ReviewPic_Cache` y lo abre en FrameRev.
+- `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_FrameRev.py`
+  - `find_framerev()` ubica FrameRev por el registro de apps LGA; `edit_image()` lo lanza con `--edit-image`.

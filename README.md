@@ -14,6 +14,7 @@ I am sharing this repository both for the reusable tools and as a reference impl
 
 - Copy the contents of this folder into your `.nuke/Python/Startup` directory.
 - Restart Hiero / Nuke Studio.
+- Review Pic and the Shift+Click of Viewer | Snapshot open the image in [FrameRev](https://github.com/legandrop/LGA_FrameRev_Release/releases), LGA's annotation app, which is installed separately (version 0.265 or later). Open FrameRev once after installing it, so Hiero Tools can find it. Without FrameRev, those two actions show a message instead.
 - Optional: Nuke Studio prints `Can't restore panel 'com.lega.…' because it hasn't been registered.` at startup, because it restores the saved workspace before the Hiero Tools panels load. The panels end up in place anyway; to hide the messages, add this line to the `init.py` of your `.nuke` folder:
   `nuke.pluginAddPath("./Python/Startup/LGA_HieroTools/LGA_NKS_NukeInit")`
 - If you are adapting the tools to your own environment, review any pipeline-specific integrations first, especially:
@@ -68,7 +69,9 @@ Internal reference: [Flow Review Panel](LGA_HieroTools/docs/LGA_NKS_Flow_Rev_Pan
   Shows shot information and version comments for the task resolved from the
   active context (Comp, Roto, Cleanup, or another enabled task scope).
 - **Review Pic**  
-  Creates a viewer snapshot and saves it with its frame number so it can be sent together with review notes.
+  Creates a viewer snapshot, saves it with its frame number, and opens it in
+  FrameRev to annotate it. Saving in FrameRev writes the annotation into that
+  same picture, which is then sent together with the review notes.
 - **Review / delivery state buttons**
 
   Generated from Flow's context policy rather than a duplicated list. Studio
@@ -182,7 +185,8 @@ or `TL |`, so similarly colored controls do not imply an unrelated function.
 - **Viewer | Snapshot**
   Click: creates a snapshot from the current viewer image, crops it to the
   sequence aspect ratio, and copies it to the clipboard. Shift+Click opens the
-  same temporary capture in ShareX ImageEditor LGA without saving it.
+  same capture in FrameRev to annotate it, without saving it anywhere first, and
+  also copies it to the clipboard.
 - **TL | Refresh**
   Rebuilds the active timeline view when it becomes unstable: it preserves the
   view state, cleans temporary `NukeVFX` tracks, refreshes the sequence and

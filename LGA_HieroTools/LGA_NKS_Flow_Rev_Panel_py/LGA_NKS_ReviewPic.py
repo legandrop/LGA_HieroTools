@@ -1,14 +1,18 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ReviewPic v1.23 | Lega
+  LGA_NKS_ReviewPic v1.24 | Lega
 
   Crea un snapshot de la imagen actual del viewer y lo guarda en ReviewPic_Cache
-  organizando por clips del track EXR de la task activa con numeracion de frames.
+  organizando por clips del track EXR de la task activa con numeracion de frames,
+  y lo abre en FrameRev para anotarlo en el mismo archivo.
   Actualizado para ser compatible con ambos sistemas de nomenclatura:
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v1.24: El JPG se abre en FrameRev (--edit-image, ver LGA_NKS_FrameRev) en vez
+         del ShareX ImageEditor LGA que viajaba en el pack. Funciona tambien en
+         macOS, y si FrameRev falta o es viejo se avisa con un cartel.
   v1.23: El debug por consola queda apagado por default.
   v1.22: Se tiene en cuenta el pixel aspect ratio (PAR) del formato. El viewer.image()
          ya entrega la imagen con el PAR aplicado (proporciones de display), por lo que
@@ -39,7 +43,6 @@ from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
 # Reasignar clases para compatibilidad con código existente
 QApplication = QtWidgets.QApplication
 QRect = QtCore.QRect
-import subprocess
 import sys
 
 DEBUG = False
@@ -262,22 +265,17 @@ def main():
             print(f"✅ ReviewPic guardado: {clip_folder_name}/{filename}")
             debug_print(f"Ruta completa: {full_path}")
 
-            # Ruta al ejecutable de ShareX_ImageEditor_LGA privado del Flow Rev Panel.
-            editor_dir = os.path.abspath(
-                os.path.join(script_dir, "ShareX_ImageEditor_LGA")
-            )
-            editor_path = os.path.join(editor_dir, "ShareX_ImageEditor_LGA.exe")
+            # Abrir el JPG en FrameRev para anotarlo: Save lo pisa en su lugar, que es
+            # donde Flow Push lo busca (ver LGA_NKS_FrameRev).
+            from LGA_NKS_Shared import LGA_NKS_FrameRev
 
-            # Abrir el JPG con el editor de imagenes solo si estamos en Windows
-            if sys.platform == "win32":
-                try:
-                    subprocess.Popen([editor_path, full_path])
-                    debug_print(f"Abriendo {full_path} con {editor_path}")
-                except Exception as e:
-                    print(f"❌ Error al intentar abrir el editor de imágenes: {e}")
-                    debug_print(f"Error completo al abrir editor: {e}")
-            else:
-                debug_print("No se abrio el editor de imagenes (no es Windows).")
+            error = LGA_NKS_FrameRev.edit_image(full_path)
+            if error:
+                print(f"❌ No se pudo abrir FrameRev: {error}")
+                LGA_NKS_FrameRev.warn_user(
+                    "The review picture was saved, but it could not be opened for annotation.\n\n"
+                    + error
+                )
 
         else:
             print("❌ No se pudo crear el archivo.")

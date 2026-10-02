@@ -1,10 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_SnapShot v0.62 | Lega
+  LGA_NKS_SnapShot v0.63 | Lega
 
   Crea un snapshot de la imagen actual del viewer y lo copia al portapapeles
 
+  v0.63: Shift+Click abre el snapshot en FrameRev (ver LGA_NKS_FrameRev) en vez
+         del ShareX ImageEditor LGA que viajaba en el pack. La captura le llega
+         por un PNG temporal que FrameRev borra al leerlo, y queda ademas en el
+         portapapeles como con el click normal.
   v0.62: Shift+Click abre el snapshot en ShareX ImageEditor LGA sin crear archivos.
   v0.61: Se tiene en cuenta el pixel aspect ratio (PAR) del formato. El crop ahora se
          hace contra el DISPLAY aspect (storage * PAR) en lugar del storage aspect,
@@ -16,8 +20,6 @@ ____________________________________________________________________
 import hiero.core
 import hiero.ui
 import os
-import subprocess
-import sys
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtCore
 
 DEBUG = False
@@ -50,29 +52,25 @@ def crop_to_aspect_ratio(qimage, target_aspect):
 
 
 def open_in_image_editor(qimage):
-    """Abre la captura en ShareX ImageEditor LGA sin generar un archivo temporal."""
+    """Abre la captura en FrameRev como captura sin archivo propio.
+
+    Pasa por un PNG temporal que FrameRev borra apenas lo lee (ver
+    LGA_NKS_FrameRev.open_capture): no queda nada en disco, y Save en FrameRev
+    pregunta donde guardar. Si FrameRev falta o es viejo, avisa con un cartel.
+    """
+    from LGA_NKS_Shared import LGA_NKS_FrameRev
+
+    # La captura queda tambien en el portapapeles, como con el click normal: si
+    # FrameRev falta, el usuario no la pierde.
     app = QtWidgets.QApplication.instance()
-    if not app:
-        app = QtWidgets.QApplication([])
+    if app:
+        app.clipboard().setImage(qimage)
 
-    app.clipboard().setImage(qimage)
-
-    editor_path = os.path.abspath(
-        os.path.join(
-            os.path.dirname(__file__),
-            "..",
-            "LGA_NKS_Flow_Rev_Panel_py",
-            "ShareX_ImageEditor_LGA",
-            "ShareX_ImageEditor_LGA.exe",
-        )
-    )
-    if not os.path.isfile(editor_path):
-        raise FileNotFoundError(f"No se encontro ShareX ImageEditor LGA: {editor_path}")
-
-    if sys.platform != "win32":
-        raise RuntimeError("ShareX ImageEditor LGA solo esta disponible en Windows.")
-
-    subprocess.Popen([editor_path, "--clipboard"])
+    error = LGA_NKS_FrameRev.open_capture(qimage)
+    if error:
+        LGA_NKS_FrameRev.warn_user(error)
+        return False
+    return True
 
 
 def main(open_in_editor=False):
@@ -130,8 +128,8 @@ def main(open_in_editor=False):
             debug_print("❌ No se pudo crear el archivo.")
 
     if open_in_editor:
-        open_in_image_editor(qimage_cropped)
-        debug_print("Imagen abierta en ShareX ImageEditor LGA.")
+        if open_in_image_editor(qimage_cropped):
+            debug_print("Imagen abierta en FrameRev.")
         return
 
     # Copiar al portapapeles
