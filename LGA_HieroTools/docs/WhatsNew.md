@@ -13,7 +13,6 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v3.97
-- [new] The Help menu has a new LGA HieroTools: What's new entry that shows what changed in each version.
 - [new][studio] Ctrl+Alt+Click on Rev Dir in the Flow Review panel opens the delivery slate's Submission Note with Submitting For and Media Color; it never overwrites a newer note and asks before saving an empty one.
 - [new][studio] The Slate Frame button in the Flow | S3 panel saves the viewer image as the shot's slate frame for the delivery slate.
 - [improved] Every status button in the Flow Review panel now has a tooltip listing its click gestures.
