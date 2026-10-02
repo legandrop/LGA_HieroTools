@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_transcode v1.05 | Lega
+  LGA_import_shots_transcode v1.06 | Lega
 
   Helper de transcode EXR para LGA_import_shots.
 
@@ -10,6 +10,13 @@ ____________________________________________________________________
   en serie; el paralelismo por frame lo maneja internamente
   LGA_EXR_Convert.py con concurrent.futures.
 
+  v1.06: El worker se puede saltear desde la cola (request_skip): corta
+         LGA_EXR_Convert junto con sus oiiotool/exrmetrics (Job Object en
+         Windows, grupo de procesos en macOS/Linux), restaura los originales
+         por el camino normal de fallo y devuelve el resultado marcado
+         skipped. Antes, un transcode colgado frenaba la cola entera sin
+         forma de cortarlo. Un fallo deja tambien el motivo en stats["error"]
+         para que la cola lo muestre.
   v1.05: El dialogo de overwrite y sus avisos quedan enteros en ingles (antes
          mezclaba castellano). Cuando falta el registro de convertidos el
          mensaje nombra las dos causas: la mas comun, un transcode hecho con
@@ -56,6 +63,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -676,6 +684,100 @@ def show_overwrite_warning(seq_name: str, conflict_desc: str, parent=None) -> bo
     return result[0]
 
 
+# ── Arbol de procesos del convert (para poder saltear un job) ─────────────────
+
+# Motivo que se muestra en la cola y en el log de la ventana cuando el usuario saltea.
+SKIPPED_BY_USER = "Skipped by user"
+
+
+class TranscodeSkipped(Exception):
+    """El usuario salteo la secuencia antes de que arrancara el convert."""
+
+
+def _win_kernel32():
+    import ctypes
+    from ctypes import wintypes
+
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateJobObjectW.restype = wintypes.HANDLE
+    k32.CreateJobObjectW.argtypes = [wintypes.LPVOID, wintypes.LPCWSTR]
+    k32.OpenProcess.restype = wintypes.HANDLE
+    k32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    k32.AssignProcessToJobObject.restype = wintypes.BOOL
+    k32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+    k32.TerminateJobObject.restype = wintypes.BOOL
+    k32.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
+    k32.CloseHandle.restype = wintypes.BOOL
+    k32.CloseHandle.argtypes = [wintypes.HANDLE]
+    return k32
+
+
+def _attach_kill_group(proc):
+    """Mete el convert recien lanzado en un Job Object de Windows.
+
+    LGA_EXR_Convert lanza hasta `workers` oiiotool/exrmetrics a la vez. Matar solo el
+    python los deja huerfanos, escribiendo EXR en la carpeta del plate mientras el
+    worker restaura los originales: un huerfano que termina despues PISA el original
+    restaurado con el convertido. Todo hijo que el convert lance despues de asignarlo
+    cae en el mismo Job, y TerminateJobObject los corta a todos de una.
+
+    Devuelve el handle del Job, o None si no se pudo (fuera de Windows, o el host
+    no permite anidar Jobs): en ese caso se corta con taskkill /T.
+    """
+    if os.name != "nt":
+        return None
+    try:
+        k32 = _win_kernel32()
+        job = k32.CreateJobObjectW(None, None)
+        if not job:
+            return None
+        # PROCESS_SET_QUOTA | PROCESS_TERMINATE: lo minimo que pide AssignProcessToJobObject.
+        handle = k32.OpenProcess(0x0100 | 0x0001, False, proc.pid)
+        ok = bool(handle) and bool(k32.AssignProcessToJobObject(job, handle))
+        if handle:
+            k32.CloseHandle(handle)
+        if not ok:
+            k32.CloseHandle(job)
+            return None
+        return job
+    except Exception:
+        return None
+
+
+def _release_kill_group(job):
+    if job:
+        try:
+            _win_kernel32().CloseHandle(job)
+        except Exception:
+            pass
+
+
+def _kill_process_tree(proc, job):
+    """Corta el convert y todos sus hijos. Devuelve una descripcion para el log."""
+    if job:
+        try:
+            if _win_kernel32().TerminateJobObject(job, 1):
+                return "job object"
+        except Exception:
+            pass
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        return "taskkill /T"
+    import signal
+
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        return "killpg"
+    except Exception:
+        proc.kill()
+        return "kill"
+
+
 # ── Worker ────────────────────────────────────────────────────────────────────
 
 class TranscodeWorker(QRunnable):
@@ -722,6 +824,48 @@ class TranscodeWorker(QRunnable):
         # Python bundled con OIIO — garantiza stdlib completa + no depende de sys.executable
         self._python_exe = self.shared_dir / "OIIO_Win" / "bin" / "python" / "python.exe"
         self._start_time: float = 0.0
+
+        # Skip pedido desde la cola (hilo de UI). El lock ordena el pedido contra el
+        # arranque del convert: o el worker ve el pedido antes de lanzar, o el pedido
+        # ve el proceso ya lanzado y lo corta.
+        self._skip_lock = threading.Lock()
+        self._skip_requested = False
+        self._proc = None
+        self._kill_job = None
+        self._kill_done = threading.Event()
+        self._kill_done.set()
+
+    # ── Skip (llamado desde el hilo de UI) ───────────────────────────────
+
+    def request_skip(self) -> None:
+        """Saltea la secuencia en curso sin bloquear la UI.
+
+        - Antes del convert: el worker no lo lanza y restaura lo que ya movio.
+        - Durante el convert: se corta el arbol de procesos en un hilo aparte y el
+          worker sigue por el camino normal de fallo (restaura originales).
+        - Despues del convert (postflight, borrados): no se interrumpe; esa parte es
+          corta y cortarla a mitad de un move es lo peligroso.
+        """
+        with self._skip_lock:
+            if self._skip_requested:
+                return
+            self._skip_requested = True
+            proc = self._proc
+            if proc is None or proc.poll() is not None:
+                return
+            job = self._kill_job
+            self._kill_done.clear()
+
+        def _kill():
+            try:
+                how = _kill_process_tree(proc, job)
+                self.signals.log_message.emit("  %s ⏭ Skip: convert cortado (%s)." % (self._t(), how))
+            except Exception as exc:
+                self.signals.log_message.emit("  %s ⚠ Skip: no se pudo cortar el convert: %s" % (self._t(), exc))
+            finally:
+                self._kill_done.set()
+
+        threading.Thread(target=_kill, name="TranscodeSkipKill", daemon=True).start()
 
     # ── Helpers de tiempo ────────────────────────────────────────────────
 
@@ -780,6 +924,9 @@ class TranscodeWorker(QRunnable):
         temp_src_dir:  Path | None = None
 
         try:
+            if self._skip_requested:
+                raise TranscodeSkipped(SKIPPED_BY_USER)
+
             # ── 1. Preparar paths de src / dst ────────────────────────
             if self.test_mode:
                 src_dir = item_path
@@ -930,29 +1077,51 @@ class TranscodeWorker(QRunnable):
             extra = {}
             if platform.system() == "Windows":
                 extra["creationflags"] = subprocess.CREATE_NO_WINDOW
+            else:
+                # Grupo propio: el skip corta convert e hijos con killpg.
+                extra["start_new_session"] = True
 
-            proc = subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                **extra,
-            )
+            with self._skip_lock:
+                if self._skip_requested:
+                    raise TranscodeSkipped(SKIPPED_BY_USER)
+                proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    **extra,
+                )
+                self._proc = proc
+                self._kill_job = _attach_kill_group(proc)
+            try:
+                proc_stdout, proc_stderr = proc.communicate()
+            finally:
+                with self._skip_lock:
+                    self._proc = None
+                    skipped = self._skip_requested
+            if skipped:
+                # El restore de abajo no puede empezar hasta que el ultimo hijo este
+                # muerto: un oiiotool vivo escribiria encima del original restaurado.
+                self._kill_done.wait(30)
+            _release_kill_group(self._kill_job)
+            self._kill_job = None
 
             # ── 5. Parsear resultado ──────────────────────────────────
             report = None
-            if log_json_path.exists():
+            if skipped:
+                report = {"ok": False, "error": SKIPPED_BY_USER, "skipped": True}
+            if report is None and log_json_path.exists():
                 try:
                     report = json.loads(log_json_path.read_text(encoding="utf-8"))
                 except Exception:
                     pass
-            if report is None and proc.stdout.strip():
+            if report is None and (proc_stdout or "").strip():
                 try:
-                    report = json.loads(proc.stdout)
+                    report = json.loads(proc_stdout)
                 except Exception:
                     pass
             if report is None:
-                stderr_snippet = (proc.stderr or "sin salida")[:300]
+                stderr_snippet = (proc_stderr or "sin salida")[:300]
                 report = {"ok": False, "error": stderr_snippet}
 
             elapsed   = time.perf_counter() - seq_start
@@ -965,6 +1134,10 @@ class TranscodeWorker(QRunnable):
                     "  %s ✓ OK — %d/%d frames en %.1fs (%.1f fps)" % (
                         self._t(), ok_count, frame_count, elapsed, fps_rate
                     )
+                )
+            elif skipped:
+                self.signals.log_message.emit(
+                    "  %s ⏭ SKIPPED — salteado desde la cola tras %.1fs" % (self._t(), elapsed)
                 )
             else:
                 failed   = report.get("failed_count", frame_count - ok_count)
@@ -1081,6 +1254,9 @@ class TranscodeWorker(QRunnable):
                 "elapsed_seconds": elapsed,
                 "fps":             fps_rate,
             }
+            if not ok:
+                stats["error"] = report.get("error") or "fallo desconocido"
+                stats["skipped"] = skipped
             self.signals.sequence_done.emit(row_i, ok, stats)
 
             return {"row_i": row_i, "ok": ok, "name": seq_name, **stats}
@@ -1088,9 +1264,14 @@ class TranscodeWorker(QRunnable):
         except Exception as exc:
             elapsed  = time.perf_counter() - seq_start
             err_msg  = str(exc)
-            self.signals.log_message.emit(
-                "  %s ✗ EXCEPCIÓN: %s" % (self._t(), err_msg)
-            )
+            if isinstance(exc, TranscodeSkipped):
+                self.signals.log_message.emit(
+                    "  %s ⏭ SKIPPED — salteado desde la cola antes del convert" % self._t()
+                )
+            else:
+                self.signals.log_message.emit(
+                    "  %s ✗ EXCEPCIÓN: %s" % (self._t(), err_msg)
+                )
             # Intentar restaurar si hay carpeta de buffer
             restore_from = originals_dir or temp_src_dir
             if restore_from and restore_from.exists() and not self.test_mode:
@@ -1107,7 +1288,8 @@ class TranscodeWorker(QRunnable):
                     )
                 )
             stats = {"ok": False, "error": err_msg, "elapsed_seconds": elapsed,
-                     "frame_count": 0, "ok_count": 0, "fps": 0.0}
+                     "frame_count": 0, "ok_count": 0, "fps": 0.0,
+                     "skipped": isinstance(exc, TranscodeSkipped)}
             self.signals.sequence_done.emit(row_i, False, stats)
             return {"row_i": row_i, "ok": False, "name": seq_name, **stats}
 

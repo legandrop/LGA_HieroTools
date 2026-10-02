@@ -1,13 +1,18 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_transcode_queue v0.01 | Lega
+  LGA_import_shots_transcode_queue v0.02 | Lega
 
   Coordina la cola global de Transcode Plates para Import Shot.
   Recibe jobs desde ventanas de Import Shot y garantiza que solo una
   secuencia EXR se convierta a la vez dentro de la misma sesion de
   Hiero/Nuke Studio.
 
+  v0.02: skip_active_job() saltea el plate que se esta convirtiendo y la
+         cola sigue con el siguiente (pedido: un plate colgado frenaba toda
+         la fila). Un error fatal del worker ya no hace desaparecer el job:
+         queda como Error con su motivo, y la ventana de origen recibe su
+         batch_done cuando no le quedan jobs.
   v0.01: Manager global minimo para una ventana.
          Encola jobs individuales por plate, ejecuta un TranscodeWorker
          por vez y escribe log propio para diagnostico.
@@ -222,6 +227,27 @@ class TranscodeQueueManager(QtCore.QObject):
         self._emit_queue_changed()
         self._start_next_if_idle()
 
+    def skip_active_job(self):
+        """Saltea el job en curso: corta su convert, restaura originales y sigue la cola.
+
+        El job no se suelta aca: el worker termina por su camino normal de fallo
+        (sequence_done + all_done con skipped=True) y recien ahi arranca el siguiente.
+        Soltarlo antes dejaria dos workers moviendo originales a la vez.
+        """
+        job = self._active_job
+        worker = self._active_worker
+        if job is None or worker is None or job.get("skip_requested"):
+            return False
+        job["skip_requested"] = True
+        debug_print(
+            "skip requested job=%s window=%s shot=%s name=%s"
+            % (job.get("job_id"), job.get("window_id"), job.get("shot_name"), job.get("name")),
+            level="warning",
+        )
+        worker.request_skip()
+        self._emit_queue_changed()
+        return True
+
     def snapshot(self):
         data = []
         if self._active_job:
@@ -419,23 +445,42 @@ class TranscodeQueueManager(QtCore.QObject):
                 result.setdefault("cpu_preset", (self._active_job.get("global_opts") or {}).get("cpu_preset"))
                 result.setdefault("workers", (self._active_job.get("global_opts") or {}).get("workers"))
                 result.setdefault("exrmetrics_threads", (self._active_job.get("global_opts") or {}).get("exrmetrics_threads"))
+        debug_print("worker done window=%s results=%d" % (window_id, len(results)))
+        self._finish_active_job(window_id, results)
+
+    def _on_worker_error(self, window_id, msg):
+        """Excepcion que se escapo del worker (por ejemplo, un restore que fallo).
+
+        Antes el job desaparecia de la cola sin dejar rastro y la ventana de origen
+        nunca recibia batch_done. Es justo el caso que mas importa ver: se lo marca
+        como Error con su motivo, igual que un fallo comun, y la cola sigue.
+        """
+        debug_print("worker fatal window=%s msg=%s" % (window_id, msg), level="error")
+        job = self._active_job or {}
+        row_i = job.get("row_i")
+        stats = {"ok": False, "error": msg, "fatal": True, "frame_count": 0, "ok_count": 0}
+        if row_i is not None:
+            self._on_sequence_done(window_id, row_i, False, stats)
+        self.fatal_error.emit(window_id, msg)
+        result = dict(stats)
+        result.update({
+            "row_i": row_i,
+            "name": job.get("name"),
+            "job_id": job.get("job_id"),
+            "window_id": window_id,
+            "shot_name": job.get("shot_name"),
+        })
+        self._finish_active_job(window_id, [result])
+
+    def _finish_active_job(self, window_id, results):
         self._results_by_window.setdefault(window_id, []).extend(results)
         all_results = list(self._results_by_window.get(window_id, []))
-        debug_print("worker done window=%s results=%d" % (window_id, len(results)))
 
         self._active_job = None
         self._active_worker = None
         if not self._has_window_jobs(window_id):
             self._emit_window_done(window_id, all_results)
 
-        self._emit_queue_changed()
-        self._start_next_if_idle()
-
-    def _on_worker_error(self, window_id, msg):
-        debug_print("worker fatal window=%s msg=%s" % (window_id, msg), level="error")
-        self.fatal_error.emit(window_id, msg)
-        self._active_job = None
-        self._active_worker = None
         self._emit_queue_changed()
         self._start_next_if_idle()
 
@@ -510,6 +555,7 @@ class TranscodeQueueManager(QtCore.QObject):
             "row_i": job.get("row_i"),
             "name": job.get("name"),
             "status": status,
+            "skip_requested": bool(job.get("skip_requested")),
             "position": position,
             "frame_count": (job.get("item") or {}).get("frame_count"),
             "source_fps": (job.get("item") or {}).get("fps"),

@@ -184,8 +184,9 @@ La columna `Estado` de cada plate deberia poder mostrar:
 | queued | `Queued #N` | Job pendiente en la cola global |
 | running | barra de progreso | Job actualmente convirtiendo |
 | done | `DONE (Xs)` | Conversion terminada OK con segundos reales |
-| error | `Error` | Conversion fallida |
-| cancelled | `Cancelado` | Job pendiente removido por cierre/cancelacion |
+| error | `Error` | Conversion fallida; el tooltip de la ventana de cola muestra el motivo |
+| skipped | `Skipped` | Plate salteado con `Skip Current` desde la ventana de cola |
+| cancelled | `Cancelled` | Job pendiente removido por cierre/cancelacion |
 | unsupported | `No soportado` | MOV u otro formato no convertible |
 
 Cuando termina un job, todos los jobs pendientes deben recalcular su numero de fila.
@@ -343,14 +344,14 @@ Columnas sugeridas:
 |---------|-----------|
 | Shot | Nombre del shot como boton plano; alterna `SHOTNAME_COLOR` / `SHOTNAME_COLOR_ALT` cuando cambia el shot |
 | Plate | Nombre de secuencia, con el mismo criterio visual que la columna Nombre de la tabla Convert |
-| Duracion | `484f - 20.2s`, con el mismo color de frames/segundos usado en Convert |
-| Estado | Barra de progreso para activo, `Queued #N` para pendiente, `DONE (Xs)`, `Error`, `Cancelado` |
+| Duration | `484f - 20.2s`, con el mismo color de frames/segundos usado en Convert |
+| Status | Barra de progreso para activo, `Skipping…` mientras se saltea, `Queued #N` para pendiente, `DONE (Xs)`, `Error` (motivo en tooltip), `Skipped`, `Cancelled` |
 
-Primera version recomendada:
+Alcance actual:
 
-- Solo lectura.
+- La unica accion sobre la cola es `Skip Current` (ver "Saltear el plate en curso").
 - Sin reordenar jobs.
-- Sin cancelar jobs desde esta ventana.
+- Sin quitar jobs pendientes desde esta ventana.
 - Click en shot solo trae al frente ventanas existentes.
 - Boton `Show All Import Windows`.
 - Boton `Clear Completed`, que limpia solo el historial visual de completados.
@@ -385,7 +386,7 @@ de las ventanas de `Import Shot`.
 Al cambiar el flag de always-on-top puede ser necesario preservar geometria, aplicar los
 window flags, y hacer `hide()` / `show()` para que Qt actualice el comportamiento.
 
-Cancelacion y reordenamiento pueden agregarse despues si hacen falta.
+Reordenar y quitar pendientes pueden agregarse despues si hacen falta.
 
 ---
 
@@ -409,11 +410,16 @@ de transcode debe resolver restauracion de originales, outputs parciales y estad
 
 ---
 
-## Errores y continuidad (pendiente de implementacion y test)
+## Errores y continuidad
 
 Si un job falla:
 
-- La fila correspondiente debe quedar en `Error`.
+- La fila correspondiente queda en `Error`, y en la ventana de cola el tooltip de esa
+  celda muestra el motivo (`stats["error"]`).
+- Tambien cuando el fallo es una excepcion que se escapa del worker (por ejemplo, un
+  restore que no pudo completarse): `_on_worker_error` lo registra como resultado `Error`
+  con su motivo. Antes ese job desaparecia de la cola sin rastro y su ventana nunca
+  recibia `batch_done`.
 - El log de la ventana que origino el job debe recibir el mensaje de error si la ventana
   sigue abierta.
 - La cola global debe continuar con el siguiente job.
@@ -421,6 +427,32 @@ Si un job falla:
 
 Si la ventana de origen ya no existe, el manager debe conservar el resultado para la ventana
 `Open Queue` y escribir debug log, pero no intentar actualizar widgets destruidos.
+
+---
+
+## Saltear el plate en curso
+
+Pedido que lo origino (2026-05): con varios plates en fila, uno se colgo en el ultimo
+frame y no habia forma de pasar al siguiente; la cola entera quedaba frenada aunque el
+resto ya estaba listo para procesar. Lo que se pidio: poder saltear el que falla, que
+sigan los demas, y despues ver cual tiro el error.
+
+Como queda:
+
+- Un plate que **falla** no frena nada: queda en `Error` y la cola sigue sola.
+- Un plate que **se cuelga** se saltea con `Skip Current` en la ventana de cola.
+  `skip_active_job()` marca el job (`skip_requested`, la celda pasa a `Skipping…`) y
+  llama a `TranscodeWorker.request_skip()`, que corta el convert con todos sus hijos y
+  restaura los originales. El job NO se suelta antes de que el worker termine: soltarlo
+  dejaria dos workers moviendo originales a la vez. En la prueba de integracion, desde el
+  click hasta que arranca el siguiente plate pasaron entre 1 y 3 segundos.
+- El resultado queda como `Skipped` (no `Error`) en la ventana de cola y en la tabla de
+  `Import Shot`, y el resumen final cuenta salteadas aparte de errores.
+- Saltear no pide confirmacion: es reversible, los originales vuelven a su lugar y el
+  plate se puede volver a encolar.
+
+Detalle de como se corta el arbol de procesos y por que no alcanza con matar el python:
+`LGA_import_shots_transcode.md`, "Saltear el plate en curso".
 
 ---
 
@@ -524,8 +556,8 @@ Eventos minimos:
   el overwrite debe restaurarlos a `item_path` antes de relanzar el worker, no borrarlos.
   Este flujo ya tiene preflight, restore verificado, validacion de rutas y postflight de
   output implementados; queda pendiente validarlo en Hiero con casos reales.
-- Si se permite cancelar jobs activos mas adelante, habra que agregar soporte explicito
-  para terminar subprocess y restaurar originales con seguridad.
+- Cortar el job activo ya esta resuelto con `Skip Current`: corta el arbol de procesos
+  entero antes de restaurar (ver "Saltear el plate en curso").
 - `QThreadPool.globalInstance()` puede ejecutar otros jobs de la aplicacion; el manager
   debe controlar su propio estado para no depender del limite global del thread pool.
 

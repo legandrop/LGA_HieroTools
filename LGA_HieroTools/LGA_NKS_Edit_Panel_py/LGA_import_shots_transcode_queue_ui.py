@@ -1,12 +1,17 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_transcode_queue_ui v0.04 | Lega
+  LGA_import_shots_transcode_queue_ui v0.05 | Lega
 
   Ventana no modal para visualizar la cola global de Transcode Plates.
   Muestra jobs activos, pendientes y completados en una tabla unica
-  ordenada globalmente, sin modificar la cola ni ejecutar transcodes.
+  ordenada globalmente. La unica accion sobre la cola es saltear el
+  plate en curso.
 
+  v0.05: Boton Skip Current: saltea el plate que se esta convirtiendo y la
+         cola sigue con el siguiente. Estados Skipping... y Skipped. Las
+         filas Error/Skipped muestran el motivo en el tooltip. Headers y
+         estados en ingles (Duration, Status, Cancelled).
   v0.04: La ventana lleva la fuente del pack (apply_ui_font), al
          armarla y de nuevo en cada render de la tabla; sin eso
          salia con la fuente del host.
@@ -61,6 +66,17 @@ _CLR_FRAMES = Color.WARNING
 _CLR_PENDING = "#5a9ab5"
 _CLR_DONE = Color.OK       # mismo valor que el hex anterior (#6a9960)
 _CLR_ERROR = Color.ERROR   # mismo valor que el hex anterior (#a06060)
+_CLR_SKIPPED = Color.WARNING  # salteado a pedido: no es un error del transcode
+
+# Tooltips en castellano, fuera de los widgets para que pasar a bilingue sea un
+# cambio de datos.
+_TOOLTIPS = {
+    "skip": (
+        "Saltea el plate que se esta convirtiendo: corta el proceso, devuelve los "
+        "originales a su lugar y la cola sigue con el siguiente."
+    ),
+    "error_fallback": "El transcode fallo sin informar el motivo.",
+}
 
 # Hojas del modulo de estilo del pack; este archivo ya no define QSS propio.
 _BTN_SMALL = Style.BTN_SMALL
@@ -189,7 +205,9 @@ class TranscodeQueueWindow(QtWidgets.QDialog):
         self.setMinimumSize(720, 360)
         # Hoja completa del pack: fondo de ventana, labels y checkbox salen
         # de Style.FORM en lugar del QSS local con hexes.
-        self.setStyleSheet(Style.FORM)
+        # Style.TOOLTIP: el motivo de un Error/Skipped y el del boton Skip Current
+        # salen con la caja de tooltip del pack, no con la del host.
+        self.setStyleSheet(Style.FORM + Style.TOOLTIP)
         self._apply_window_flags(initial=True)
         self._build_ui()
         self._connect_manager()
@@ -202,7 +220,7 @@ class TranscodeQueueWindow(QtWidgets.QDialog):
         layout.setSpacing(10)
 
         self.table = QtWidgets.QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["Shot", "Plate", "Duracion", "Estado"])
+        self.table.setHorizontalHeaderLabels(["Shot", "Plate", "Duration", "Status"])
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
         self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
@@ -229,8 +247,14 @@ class TranscodeQueueWindow(QtWidgets.QDialog):
         self.clear_btn = QtWidgets.QPushButton("Clear Completed")
         self.clear_btn.setStyleSheet(_BTN_SMALL)
         self.clear_btn.clicked.connect(self._clear_completed)
+        self.skip_btn = QtWidgets.QPushButton("Skip Current")
+        self.skip_btn.setStyleSheet(_BTN_SMALL)
+        self.skip_btn.setToolTip(_TOOLTIPS["skip"])
+        self.skip_btn.setEnabled(False)
+        self.skip_btn.clicked.connect(self._skip_current)
         btn_row.addWidget(self.show_windows_btn)
         btn_row.addWidget(self.clear_btn)
+        btn_row.addWidget(self.skip_btn)
 
         cpu_label = QtWidgets.QLabel("CPU")
         cpu_label.setStyleSheet("color:%s; font-size:11px; padding-left:6px;" % _CLR_DIM)
@@ -253,6 +277,10 @@ class TranscodeQueueWindow(QtWidgets.QDialog):
 
         # Fuente del pack al final del armado: recorre los hijos ya creados.
         apply_ui_font(self)
+        # El minimo fijo de 720 dejaba cortado el checkbox de la derecha cuando la
+        # fila de botones pide mas. Se mide despues de la fuente: antes da el ancho
+        # con la del host.
+        self.setMinimumWidth(max(720, layout.minimumSize().width()))
 
     def _connect_manager(self):
         self.manager.queue_changed.connect(self._render)
@@ -372,6 +400,15 @@ class TranscodeQueueWindow(QtWidgets.QDialog):
                 pass
             return
 
+    def _skip_current(self):
+        # Sin confirmacion: saltear es reversible (los originales vuelven a su
+        # lugar y el plate se puede encolar de nuevo).
+        self.skip_btn.setEnabled(False)
+        try:
+            self.manager.skip_active_job()
+        except Exception:
+            self._render(self.manager.snapshot())
+
     def _clear_completed(self):
         self._completed.clear()
         live_keys = set(_job_key(j) for j in self._last_snapshot)
@@ -390,7 +427,10 @@ class TranscodeQueueWindow(QtWidgets.QDialog):
         item = dict(stats or {})
         item["window_id"] = item.get("window_id") or window_id
         item["row_i"] = row_i
-        item["status"] = "done" if ok else "error"
+        if ok:
+            item["status"] = "done"
+        else:
+            item["status"] = "skipped" if item.get("skipped") else "error"
         if not item.get("shot_name"):
             known = self._find_known_job(item)
             if known:
@@ -443,6 +483,10 @@ class TranscodeQueueWindow(QtWidgets.QDialog):
         # pasar la fuente del pack para que no salgan con la del host.
         apply_ui_font(self)
         self.clear_btn.setEnabled(bool(self._completed))
+        self.skip_btn.setEnabled(any(
+            j.get("status") in ("running", "starting") and not j.get("skip_requested")
+            for j in self._last_snapshot
+        ))
 
     def _shot_colors(self, rows):
         colors = {}
@@ -497,6 +541,13 @@ class TranscodeQueueWindow(QtWidgets.QDialog):
 
     def _set_status_widget(self, row_i, job):
         status = job.get("status", "")
+        if status in ("running", "starting") and job.get("skip_requested"):
+            # El convert se esta cortando y los originales vuelven a su lugar.
+            text = "Skipping…"
+            self.table.setCellWidget(
+                row_i, 3, _make_html_label("<span style='color:%s;'>%s</span>" % (_CLR_SKIPPED, text))
+            )
+            return
         if status in ("running", "starting"):
             pbar = QtWidgets.QProgressBar()
             total = int(job.get("total_frames") or job.get("frame_count") or 1)
@@ -518,15 +569,23 @@ class TranscodeQueueWindow(QtWidgets.QDialog):
             text = "DONE (%s)" % elapsed if elapsed else "DONE"
             color = _CLR_DONE
         elif status == "cancelled":
-            text = "Cancelado"
+            text = "Cancelled"
             color = _CLR_ERROR
+        elif status == "skipped":
+            text = "Skipped"
+            color = _CLR_SKIPPED
         elif status == "error":
             text = "Error"
             color = _CLR_ERROR
         else:
             text = ""
             color = _CLR_DIM
-        self.table.setCellWidget(row_i, 3, _make_html_label("<span style='color:%s;'>%s</span>" % (color, text)))
+        label = _make_html_label("<span style='color:%s;'>%s</span>" % (color, text))
+        if status == "error":
+            # "Despues ver el que tiro el error": el motivo queda a un hover de distancia.
+            # <qt> fuerza rich text: sin eso Qt mostraria literal el &lt; escapado.
+            label.setToolTip("<qt>%s</qt>" % _escape(job.get("error") or _TOOLTIPS["error_fallback"]))
+        self.table.setCellWidget(row_i, 3, label)
 
     def _start_progress_timer(self, key, dst_dir, total, pbar):
         timer = QtCore.QTimer(self)

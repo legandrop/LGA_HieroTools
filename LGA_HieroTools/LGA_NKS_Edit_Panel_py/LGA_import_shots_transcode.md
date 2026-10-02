@@ -301,7 +301,7 @@ Una linea de texto sobre el log con totales (sin estimaciones):
 
 - Al arrancar `_run_transcode()`: se deshabilita y su texto cambia a `"Transcoding, wait..."`.
 - Al finalizar toda la cola (`_finalize_transcode()`): se re-habilita y vuelve a `"Go Back"`.
-- El path de error fatal (`_on_transcode_error`) tambien llama a `_finalize_transcode`, asi que el restore cubre ese caso.
+- Un error fatal del worker no cierra la ventana por su cuenta: `_on_manager_transcode_error` solo lo escribe en el log, el manager marca la fila como `✗ Error` y manda `batch_done` cuando a esa ventana no le quedan plates en fila, y ese `batch_done` es el que llama a `_finalize_transcode`. Antes la ventana se re-habilitaba con plates suyos todavia esperando turno.
 - El boton no tiene flecha (`←`); ninguno de los botones "Go Back" del dialogo la tiene.
 
 ### Log panel
@@ -330,6 +330,35 @@ aplica un timeout por frame:
   reportando el fallo (`report["error"]`) en vez de quedar colgada.
 - El timeout adaptativo calculado y los eventos de timeout/reintento se loguean
   en `logs/debugPy_EXRConvert.log`.
+
+### Saltear el plate en curso (`TranscodeWorker.request_skip`)
+
+El timeout por frame no cubre todo: un cuelgue que no es de un frame, o un frame que
+tarda los cuatro intentos completos (hasta `4 x 120s` en el warmup), igual frenaba la
+fila entera, y la unica salida era cerrar Hiero. Por eso la cola tiene `Skip Current`
+(ver `LGA_import_shots_transcode_queue_ui.md`), que llama a `request_skip()`:
+
+- **Antes del convert** (moviendo originales): el worker no lanza `LGA_EXR_Convert` y
+  restaura lo que ya movio (`TranscodeSkipped`, camino del `except`).
+- **Durante el convert**: se corta `LGA_EXR_Convert` **junto con todos sus
+  `oiiotool`/`exrmetrics`**, en un hilo aparte para no trabar la UI, y el worker sigue por
+  el camino normal de fallo: borra los convertidos parciales y devuelve los originales.
+- **Despues del convert** (postflight, manifiesto, borrados): no se interrumpe. Es corto,
+  y cortar a mitad de un move es justamente lo que pierde originales.
+
+**Por que hay que matar el arbol y no solo el python.** Probado con un convert falso
+(2026-10-02): matando solo el padre, el hijo que seguia vivo escribio su frame **despues**
+del restore y piso el original restaurado. En Windows el convert se mete al lanzarlo en
+un **Job Object** (`_attach_kill_group`) y el skip hace `TerminateJobObject`: todo hijo
+que el convert lance cae en el mismo Job y muere con el, en ~20 ms. Si el host no deja
+anidar Jobs se cae a `taskkill /T /F`; en macOS/Linux el convert corre en un grupo de
+procesos propio y se corta con `killpg`. El worker espera a que el corte termine
+(`_kill_done`) antes de empezar el restore.
+
+El resultado vuelve como fallo con `skipped: True` y `error: "Skipped by user"`: la
+tabla de la ventana muestra `Skipped`, el resumen final cuenta salteadas aparte de
+errores, y la cola sigue con el siguiente plate. Todo fallo deja ademas su motivo en
+`stats["error"]`, que es lo que la cola muestra en el tooltip de `Error`.
 
 > Nota: la tool original de Hiero solo hace `EXR -> EXR`. El pipeline `MOV` y la
 > flag de debug `transcode_timeout` existen unicamente en la app `MediaTools`.

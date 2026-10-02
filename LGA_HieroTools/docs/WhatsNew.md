@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v3.97
+- [new] The Import Shots transcode queue has a Skip Current button: a plate that hangs can be skipped, its originals go back in place and the queue moves on to the next one; failed plates show the reason when you hover over Error.
 - [improved] Review Pic and Viewer | Snapshot trim only the black around the image, so zoomed or panned shots are no longer cut.
 - [improved] Review Pic and the Shift+Click of Viewer | Snapshot open the picture in FrameRev to annotate it, replacing the ShareX image editor that came inside HieroTools, which is no longer included. FrameRev 0.265 or later has to be installed and opened once; otherwise a message says so.
 - [new][mac] Review Pic and the Shift+Click of Viewer | Snapshot now work on macOS too, opening the picture in FrameRev to annotate it.

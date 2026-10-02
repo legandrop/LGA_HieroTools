@@ -1,13 +1,18 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.46 | Lega
+  LGA_import_shots v1.47 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
 
+  v1.47: La tabla de Transcode Plates muestra Skipped en el plate salteado
+         desde la cola y el resumen final cuenta salteadas aparte de errores.
+         Un error fatal del worker ya no cierra la ventana con plates suyos
+         todavia en fila: solo se loguea y la cola la cierra al terminar.
+         "Cancelado" pasa a "Cancelled".
   v1.46: TASK_FOLDERS lleva el nombre de carpeta en minuscula (`comp`,
          `dmp`), la convencion unica para crear. La lectura no cambia: cada
          carpeta se resuelve contra el disco con resolve_task_folder().
@@ -579,6 +584,7 @@ _CLR_STATUS_PENDING  = "#5a9ab5" # estado Pendiente      — cian suave
 _CLR_STATUS_DONE     = "#6a9960" # estado DONE           — verde suave
 _CLR_STATUS_ERROR    = "#a06060" # estado Error          — rojo suave
 _CLR_STATUS_UPSCALE  = "#a06060" # estado Upscale (bloq) — rojo suave
+_CLR_STATUS_SKIPPED  = Color.WARNING  # salteado desde la cola: no es un error del transcode
 
 # ── colores de botones especiales ──────────────────────────────────
 # Botón "Open Queue" — variables para que el usuario las cambies
@@ -6883,7 +6889,7 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
         if not hasattr(self, "_transcode_results_all"):
             self._transcode_results_all = []
         self._transcode_results_all.append(result)
-        self._set_convert_status(row_i, "Cancelado", _CLR_STATUS_UPSCALE)
+        self._set_convert_status(row_i, "Cancelled", _CLR_STATUS_UPSCALE)
 
     def _on_manager_batch_done(self, window_id, results):
         if window_id != self._window_id:
@@ -6892,9 +6898,12 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
         self._finalize_transcode()
 
     def _on_manager_transcode_error(self, window_id, msg):
+        # Solo el log: el manager ya marco la fila como Error (sequence_done) y manda
+        # batch_done cuando a esta ventana no le quedan jobs. Cerrar aca con
+        # _on_transcode_error re-habilitaba la ventana con plates suyos todavia en fila.
         if window_id != self._window_id:
             return
-        self._on_transcode_error(msg)
+        self._on_transcode_log("ERROR FATAL: " + msg)
 
     def _on_global_transcode_queue_changed(self, snapshot):
         """Actualiza etiquetas de fila y footer global segun la cola global."""
@@ -7041,6 +7050,8 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
                 if elapsed_v > 0.0:
                     elapsed = " (%.1fs)" % elapsed_v
                 html = "<span style='color:%s;'>DONE%s</span>" % (_CLR_STATUS_DONE, elapsed)
+            elif (stats or {}).get("skipped"):
+                html = "<span style='color:%s;'>Skipped</span>" % _CLR_STATUS_SKIPPED
             else:
                 html = "<span style='color:%s;'>✗ Error</span>" % _CLR_STATUS_ERROR
             self._convert_table.setCellWidget(row_i, 7, _cell_html_label(html))
@@ -7056,18 +7067,21 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
         total    = len(results)
         ok_count = sum(1 for r in results if r.get("ok"))
         cancelled_count = sum(1 for r in results if r.get("cancelled"))
+        skipped_count = sum(1 for r in results if r.get("skipped"))
+        error_count = total - ok_count - cancelled_count - skipped_count
         if total == 0:
             summary = "⚠ Todas las secuencias fueron canceladas"
         elif ok_count == total:
             summary = "✓ Transcode completo: %d/%d OK" % (ok_count, total)
-        elif cancelled_count and ok_count + cancelled_count == total:
-            summary = "⚠ Transcode: %d/%d OK, %d canceladas" % (
-                ok_count, total, cancelled_count
-            )
         else:
-            summary = "⚠ Transcode: %d/%d OK, %d con errores" % (
-                ok_count, total, total - ok_count - cancelled_count
-            )
+            parts = []
+            if cancelled_count:
+                parts.append("%d canceladas" % cancelled_count)
+            if skipped_count:
+                parts.append("%d salteadas" % skipped_count)
+            if error_count:
+                parts.append("%d con errores" % error_count)
+            summary = "⚠ Transcode: %d/%d OK, %s" % (ok_count, total, ", ".join(parts))
         self._on_transcode_log(summary)
         self._transcode_active = False
         self._start_transcode_btn.setEnabled(True)
