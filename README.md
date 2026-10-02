@@ -216,6 +216,13 @@ or `TL |`, so similarly colored controls do not imply an unrelated function.
 - **TL | ON/OFF _roto_ / _cg_**
   Enables or disables the second task track: `_roto_` in Studio and `_cg_` in
   Client. Shortcut: `Ctrl+Shift+D`.
+- **TL | Solo EditRef**
+  Turns off every video track except `EditRef` / `EditRefClean` and `BurnIn`,
+  to watch the edit reference on its own. When EditRef is already the only
+  visible track at the playhead, it turns all video tracks back on. Audio tracks
+  and `BurnIn` are never changed. See
+  [Docu_Solo_EditRef.md](LGA_HieroTools/docs/Docu_Solo_EditRef.md).
+  Shortcut: `Alt+Shift+D`.
 
 ### Edit Panel
 

@@ -1,10 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_ViewerPanel v1.80 | Lega
+  LGA_ViewerPanel v1.81 | Lega
 
   Panel con herramientas para el viewer y el timeline de Hiero
 
+  v1.81: Nuevo boton TL | Solo EditRef (Alt+Shift+D) al final del bloque de
+         toggles: apaga todo menos EditRef y BurnIn, y vuelve a prender.
   v1.80: El tooltip de Snapshot describe el recorte nuevo: viewer entero menos
          el negro que rodea la imagen.
   v1.79: El tooltip de Snapshot nombra a FrameRev, que reemplaza a ShareX
@@ -445,6 +447,13 @@ class ViewerPanel(QtWidgets.QWidget):
                 "Shift+D\nHabilita/deshabilita el clip del track _comp_",
             ),
             self._second_task_button(),
+            (
+                "TL | Solo EditRef",
+                self.solo_editref,
+                "#0e1f3a",
+                "Alt+Shift+D",
+                "Alt+Shift+D\nApaga todos los tracks de video menos EditRef y BurnIn.\nSi EditRef ya es lo único prendido bajo el playhead, prende todos los tracks de nuevo",
+            ),
         ]
 
         # Combinar todos los botones
@@ -655,6 +664,9 @@ class ViewerPanel(QtWidgets.QWidget):
             task, "LGA_NKS_Clip_DisableRoto.py"
         )
         self.execute_viewertl_script(script_name)
+
+    def solo_editref(self):
+        self.execute_viewertl_script("LGA_NKS_Solo_EditRef.py")
 
     def rec709_viewer(self):
 
