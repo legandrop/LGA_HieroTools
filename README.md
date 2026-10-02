@@ -12,6 +12,7 @@ I am sharing this repository both for the reusable tools and as a reference impl
 
 - Copy the contents of this folder into your `.nuke/Python/Startup` directory.
 - Restart Hiero / Nuke Studio.
+- **Help > LGA HieroTools: What's new** shows what changed in each version.
 - Optional: Nuke Studio prints `Can't restore panel 'com.lega.…' because it hasn't been registered.` at startup, because it restores the saved workspace before the Hiero Tools panels load. The panels end up in place anyway; to hide the messages, add this line to the `init.py` of your `.nuke` folder:
   `nuke.pluginAddPath("./Python/Startup/LGA_HieroTools/LGA_NKS_NukeInit")`
 - If you are adapting the tools to your own environment, review any pipeline-specific integrations first, especially:
