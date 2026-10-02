@@ -79,7 +79,7 @@ Internal reference: [Flow Review Panel](LGA_HieroTools/docs/LGA_NKS_Flow_Rev_Pan
 
   **Rev Dir** Ctrl+Alt+Click (Studio only, one clip): writes the **Submission
   Note** for the delivery slate. It opens the usual note dialog with two extra
-  selectors, *Submitting For* (WIP, FINAL, TEMP or any custom value) and *Media
+  selectors, *Submitting For* (WIP, FINAL or any custom value) and *Media
   Color*, preloaded with what the exact Flow Version already has. The text is
   stored in that Version's custom fields instead of a Note, so it is not sent to
   the artists. If the task is already in the delivery queue, it offers to save

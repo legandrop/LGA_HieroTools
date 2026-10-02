@@ -24,7 +24,7 @@ hacen nada.
 | Entidad | Código | Tipo | Lo escribe |
 |---|---|---|---|
 | Version | `sg_submission_note` | text | Ctrl+Alt+Click en Rev Dir |
-| Version | `sg_submitting_for` | text | ídem (WIP, FINAL, TEMP o texto libre) |
+| Version | `sg_submitting_for` | text | ídem (WIP, FINAL o texto libre) |
 | Version | `sg_media_color` | text | ídem ("Rec709 with show LUT" / "Rec709 without show LUT") |
 | Shot | `sg_slate_frame` | url (File/Link) | botón Slate Frame |
 
@@ -58,7 +58,10 @@ comprobar con una cuenta de ese rol que no lo vea antes de escribir la primera n
 1. Solo en contexto studio y de a **un clip** (selección o playhead, igual que el push).
 2. En segundo plano lee de Flow la **Version exacta** del clip y sus tres campos, para que el
    diálogo los muestre y el supervisor corrija en vez de reescribir.
-3. El diálogo es el de notas del push con dos selectores arriba del texto. En este modo **Enter no
+3. El diálogo es el de notas del push con dos selectores en una fila arriba del texto: Submitting
+   For (editable, ofrece WIP y FINAL, las dos opciones estándar del template del cliente) y Media
+   Color. Los dos son `ArrowComboBox` (`LGA_NKS_Shared/LGA_NKS_ArrowComboBox.py`): `Style.COMBO`
+   oculta la flecha nativa, y un combo con la hoja sola parecía un campo de texto. En este modo **Enter no
    confirma** (se confirma con OK o Ctrl+Enter): el primer widget es el combo editable y un Enter
    al escribir "Submitting For" mandaba la nota vacía.
 4. El push escribe los tres campos **antes** de tocar la Task. Si Flow no los acepta, se corta sin

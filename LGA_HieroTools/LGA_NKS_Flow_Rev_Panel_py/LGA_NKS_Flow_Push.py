@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push v4.18 | Lega
+  LGA_NKS_Flow_Push v4.19 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -12,6 +12,9 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v4.19: Submitting For y Media Color van en UNA fila y con ArrowComboBox
+         (la flecha del pack a la vista): con la hoja sola no se veia que
+         desplegaban opciones. Submitting For ofrece WIP y FINAL.
   v4.18: Submission Note del slate de entrega (submission_mode, llamado por
          Ctrl+Alt+Click en Rev Dir). Lee en background los valores que ya
          tiene la Version exacta del clip, abre el dialogo de notas con los
@@ -196,6 +199,7 @@ from LGA_NKS_Shared.LGA_NKS_MessageBox import (
     styled_message_box,
 )
 from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, Metric, apply_ui_font
+from LGA_NKS_Shared.LGA_NKS_ArrowComboBox import ArrowComboBox
 from LGA_NKS_Shared.LGA_NKS_Slate_Config import (
     DELIVERY_QUEUE_CODES,
     FIELD_MEDIA_COLOR,
@@ -1766,22 +1770,21 @@ class InputDialog(QDialog):
             )
 
     def _add_submission_selectors(self, submission):
-        """Fila con Submitting For (editable) y Media Color, arriba del texto."""
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(Metric.SPACING)
-        grid.setVerticalSpacing(6)
+        """Una fila con Submitting For (editable) y Media Color, arriba del texto."""
+        row = QHBoxLayout()
+        row.setSpacing(Metric.SPACING)
 
-        self.submitting_for_combo = QComboBox(self)
+        self.submitting_for_combo = ArrowComboBox(self)
         self.submitting_for_combo.setEditable(True)
         self.submitting_for_combo.addItems(list(SUBMITTING_FOR_OPTIONS))
-        self.submitting_for_combo.setStyleSheet(Style.COMBO)
         current_for = (submission.get(FIELD_SUBMITTING_FOR) or "").strip()
         # Un valor custom guardado antes se muestra tal cual en el campo editable.
         self.submitting_for_combo.setCurrentText(current_for or SUBMITTING_FOR_OPTIONS[0])
+        # Un valor largo se lee desde el principio (si no, queda corrido y corta la primera letra).
+        self.submitting_for_combo.lineEdit().setCursorPosition(0)
 
-        self.media_color_combo = QComboBox(self)
+        self.media_color_combo = ArrowComboBox(self)
         self.media_color_combo.addItems(list(MEDIA_COLOR_OPTIONS))
-        self.media_color_combo.setStyleSheet(Style.COMBO)
         current_color = (submission.get(FIELD_MEDIA_COLOR) or "").strip()
         if current_color and current_color not in MEDIA_COLOR_OPTIONS:
             # Valor escrito a mano en Flow: se conserva como opcion extra para
@@ -1790,12 +1793,12 @@ class InputDialog(QDialog):
         if current_color:
             self.media_color_combo.setCurrentText(current_color)
 
-        grid.addWidget(QLabel("Submitting For:"), 0, 0)
-        grid.addWidget(self.submitting_for_combo, 0, 1)
-        grid.addWidget(QLabel("Media Color:"), 1, 0)
-        grid.addWidget(self.media_color_combo, 1, 1)
-        grid.setColumnStretch(1, 1)
-        self.layout.addLayout(grid)
+        row.addWidget(QLabel("Submitting For:"))
+        row.addWidget(self.submitting_for_combo, 1)
+        row.addSpacing(Metric.SPACING)
+        row.addWidget(QLabel("Media Color:"))
+        row.addWidget(self.media_color_combo, 1)
+        self.layout.addLayout(row)
 
     def get_submission(self):
         """Dict de campos de Version con lo que eligio el supervisor."""

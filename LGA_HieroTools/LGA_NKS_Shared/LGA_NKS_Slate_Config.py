@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Slate_Config v1.01 | Lega
+  LGA_NKS_Slate_Config v1.02 | Lega
 
   Fuente unica de los datos del slate que viajan por Flow: los codigos de
   los campos custom, las opciones de los selectores y el boton que dispara
@@ -12,6 +12,8 @@ ____________________________________________________________________
   Los cuatro campos existen SOLO en el sitio studio de Flow. Los crea
   bootstrap_slate_fields.py de PipeSync; detalle en docs/Docu_Slate_MXF.md.
 
+  v1.02: Submitting For ofrece solo WIP y FINAL, las dos opciones estandar
+         del template del cliente (el campo sigue aceptando texto libre).
   v1.01: Tooltip de Rev Dir en una linea corta, como el resto del panel.
   v1.00: Version inicial.
 ____________________________________________________________________
@@ -43,9 +45,9 @@ SUBMISSION_BUTTON_LABEL = "Rev Dir"
 # volver a Rev Dir sacaria al shot de la cola de entrega.
 DELIVERY_QUEUE_CODES = ("pubsh", "check", "apr")
 
-# Opciones del selector "Submitting For". El combo es editable: el supervisor
-# puede escribir cualquier otro valor.
-SUBMITTING_FOR_OPTIONS = ("WIP", "FINAL", "TEMP")
+# Opciones del selector "Submitting For": las dos estandar del template del
+# cliente. El combo es editable: el supervisor puede escribir cualquier otro valor.
+SUBMITTING_FOR_OPTIONS = ("WIP", "FINAL")
 
 # Opciones cerradas del selector "Media Color".
 MEDIA_COLOR_OPTIONS = (
