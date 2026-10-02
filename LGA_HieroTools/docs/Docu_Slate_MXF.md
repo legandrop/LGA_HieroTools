@@ -56,8 +56,22 @@ comprobar con una cuenta de ese rol que no lo vea antes de escribir la primera n
 ## Ctrl+Alt+Click en Rev Dir
 
 1. Solo en contexto studio y de a **un clip** (selección o playhead, igual que el push).
-2. En segundo plano lee de Flow la **Version exacta** del clip y sus tres campos, para que el
-   diálogo los muestre y el supervisor corrija en vez de reescribir.
+2. Lee los tres campos de la **Version exacta** del clip y el estado de la task, para que el
+   diálogo los muestre y el supervisor corrija en vez de reescribir. Primero de `pipesync.db`
+   (`DBManager.read_submission()`): el sync de Reviewer y Coordinator los baja, así que la
+   ventana abre al instante. Si la base no alcanza (PipeSync sin las columnas nuevas, Version
+   nunca sincronizada —campos en `NULL`—, o dos Versions con el mismo code) los lee de Flow en
+   background (~2 s).
+   **La base puede estar vieja** (el sync automático suele estar apagado, y el incremental no
+   relee una Version a la que solo le cambió la nota). Por eso, al guardar —que ya corre en
+   segundo plano— el conector compara contra Flow lo que mostró el diálogo
+   (`submission_expected`, `submission_stale_reason()` en `LGA_NKS_Flow_Push_connector.py`): si
+   la task entró a la cola de entrega o los tres campos cambiaron en Flow, **no guarda nada**,
+   avisa, y la fila de la base vuelve a `NULL` (`forget_version_submission()`) para que el
+   próximo Ctrl+Alt+Click lea de Flow. Si guarda bien, los tres campos se escriben en la base
+   local, en la fila de esa Version (`version_sg_id`) y solo si el sync ya la mantiene (no
+   `NULL`): en la base de un rol que no sincroniza estos campos, escribirlos los dejaría
+   congelados.
 3. El diálogo es el de notas del push con dos selectores en una fila arriba del texto: Submitting
    For (editable, ofrece WIP y FINAL, las dos opciones estándar del template del cliente) y Media
    Color. Los dos son `ArrowComboBox` (`LGA_NKS_Shared/LGA_NKS_ArrowComboBox.py`): `Style.COMBO`

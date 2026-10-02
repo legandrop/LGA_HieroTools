@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push v4.19 | Lega
+  LGA_NKS_Flow_Push v4.20 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -12,6 +12,17 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v4.20: Ctrl+Alt+Click en Rev Dir lee la Submission Note y el estado de la
+         task de pipesync.db (el sync de Reviewer y Coordinator ya baja los
+         tres campos): la ventana abre al instante, sin pasar por Flow. Si la
+         base no los tiene (columnas viejas, version sin sincronizar, NULL o
+         nombre ambiguo), cae a la lectura de Flow de siempre. Como la base
+         puede estar vieja, al guardar el conector compara contra Flow lo que
+         mostro el dialogo (submission_expected) y, si cambio, no guarda y la
+         fila de la base vuelve a NULL para que la proxima vez lea de Flow.
+         Al guardar bien, los tres campos se escriben en la base local, en la
+         fila de esa Version (por version_sg_id) y solo si el sync ya la
+         mantiene.
   v4.19: Submitting For y Media Color van en UNA fila y con ArrowComboBox
          (la flecha del pack a la vista): con la hoja sola no se veia que
          desplegaban opciones. Submitting For ofrece WIP y FINAL.
@@ -801,6 +812,113 @@ class DBManager:
             debug_print(
                 f"Error al actualizar el estado de la versión en la DB local: {e}"
             )
+            return False
+
+    SUBMISSION_COLUMNS = (
+        ("sg_submission_note", "submission_note"),
+        ("sg_submitting_for", "submitting_for"),
+        ("sg_media_color", "media_color"),
+    )
+
+    def _has_submission_columns(self):
+        """True si la tabla versions ya tiene las columnas del slate (PipeSync al dia)."""
+        cur = self.conn.cursor()
+        cur.execute("PRAGMA table_info(versions)")
+        names = {row["name"] for row in cur.fetchall()}
+        return all(column in names for _field, column in self.SUBMISSION_COLUMNS)
+
+    def read_submission(self, version_code):
+        """Campos del slate y estado de la task de la Version `version_code`, de la base.
+
+        Devuelve el mismo dict que la lectura de Flow (`read_submission` del
+        conector) o None si la base no alcanza: sin conexion, columnas viejas,
+        ninguna o varias filas con ese code, o campos en NULL (nunca
+        sincronizados por un Reviewer/Coordinator). None = leer de Flow.
+        """
+        if not self.conn or not version_code:
+            return None
+        try:
+            if not self._has_submission_columns():
+                debug_print("Submission DB: la tabla versions no tiene las columnas del slate")
+                return None
+            cur = self.conn.cursor()
+            cur.execute(
+                """
+                SELECT v.version_sg_id, v.version_code, v.submission_note,
+                       v.submitting_for, v.media_color, t.task_status
+                FROM versions v JOIN tasks t ON v.task_id = t.id
+                WHERE v.version_code = ? COLLATE NOCASE
+                """,
+                (version_code,),
+            )
+            rows = cur.fetchall()
+            if len(rows) != 1:
+                debug_print(f"Submission DB: {len(rows)} filas para '{version_code}'")
+                return None
+            row = rows[0]
+            if any(row[column] is None for _field, column in self.SUBMISSION_COLUMNS):
+                debug_print(f"Submission DB: '{version_code}' nunca sincronizada (NULL)")
+                return None
+            return {
+                "success": True,
+                "source": "db",
+                "version_id": row["version_sg_id"],
+                "version_code": row["version_code"],
+                "task_status": row["task_status"],
+                "fields": {field: row[column] for field, column in self.SUBMISSION_COLUMNS},
+            }
+        except Exception as e:
+            debug_print(f"Submission DB: error leyendo '{version_code}': {e}")
+            return None
+
+    def update_version_submission(self, version_sg_id, fields):
+        """Escribe en la base local los campos del slate que Flow confirmo.
+
+        Solo en la fila de esa Version (version_sg_id) y solo si el sync ya la
+        mantiene (campos no NULL): en la base de un rol que no sincroniza estos
+        campos, escribirlos los dejaria congelados para siempre.
+        """
+        if not self.conn or not version_sg_id or not fields:
+            return False
+        try:
+            if not self._has_submission_columns():
+                return False
+            cur = self.conn.cursor()
+            cur.execute(
+                """
+                UPDATE versions SET submission_note = ?, submitting_for = ?, media_color = ?
+                WHERE version_sg_id = ? AND submission_note IS NOT NULL
+                """,
+                tuple(fields.get(field) or "" for field, _column in self.SUBMISSION_COLUMNS)
+                + (int(version_sg_id),),
+            )
+            self.conn.commit()
+            debug_print(f"Submission DB: {cur.rowcount} fila(s) actualizada(s) para Version {version_sg_id}")
+            return cur.rowcount == 1
+        except Exception as e:
+            debug_print(f"Submission DB: error escribiendo Version {version_sg_id}: {e}")
+            return False
+
+    def forget_version_submission(self, version_sg_id):
+        """Vuelve a NULL los campos del slate de esa Version: la proxima vez se leen de Flow."""
+        if not self.conn or not version_sg_id:
+            return False
+        try:
+            if not self._has_submission_columns():
+                return False
+            cur = self.conn.cursor()
+            cur.execute(
+                """
+                UPDATE versions SET submission_note = NULL, submitting_for = NULL, media_color = NULL
+                WHERE version_sg_id = ?
+                """,
+                (int(version_sg_id),),
+            )
+            self.conn.commit()
+            debug_print(f"Submission DB: Version {version_sg_id} vuelta a NULL ({cur.rowcount} fila(s))")
+            return True
+        except Exception as e:
+            debug_print(f"Submission DB: error olvidando Version {version_sg_id}: {e}")
             return False
 
     def get_user_name(self):
@@ -2046,6 +2164,21 @@ class SubmissionLoadSignals(QObject):
     error = Signal(str)
 
 
+def submission_version_code(base_name, original_file_name=None):
+    """Code exacto de la Version del clip: el base_name con su _vNNN.
+
+    Misma regla que read_submission_operation() del conector: si el base_name
+    no trae numero, se toma el del nombre del archivo.
+    """
+    if original_file_name:
+        version_match = re.search(r"_v(\d+)", original_file_name)
+        if version_match and not any(
+            part.startswith("v") and part[1:].isdigit() for part in base_name.split("_")
+        ):
+            return base_name + version_match.group(0)
+    return base_name
+
+
 class LoadSubmissionWorker(QRunnable):
     """Lee en background los campos de submission de la Version exacta del clip."""
 
@@ -2116,6 +2249,7 @@ class Worker(QRunnable):
         extra_images=None,
         submission=None,
         submission_only=False,
+        submission_expected=None,
     ):
         super(Worker, self).__init__()
         self.button_name = button_name
@@ -2129,6 +2263,9 @@ class Worker(QRunnable):
         # el conector los escribe en la Version y no crea Note.
         self.submission = submission
         self.submission_only = submission_only
+        # Lo que mostro el dialogo al abrirse (campos, estado de la task y
+        # version_id): el conector lo compara contra Flow antes de escribir.
+        self.submission_expected = submission_expected
         self.should_delete_images = should_delete_images
         self.original_file_name = original_file_name
         self.file_path = file_path
@@ -2246,6 +2383,7 @@ class Worker(QRunnable):
                 allow_task_only=getattr(self, "allow_task_only", False),
                 submission=getattr(self, "submission", None),
                 submission_only=getattr(self, "submission_only", False),
+                submission_expected=getattr(self, "submission_expected", None),
             )
 
             # Capturar información para el resumen
@@ -2279,6 +2417,11 @@ class Worker(QRunnable):
                     self.apply_xyplorer_tag()
             else:
                 error_message = result.get("error", "Unknown error")
+                # Submission que no se guardo (desactualizada o fallo a mitad):
+                # la fila de la base deja de valer y la proxima vez se lee de Flow.
+                expected = getattr(self, "submission_expected", None) or {}
+                if self.submission and expected.get("version_id"):
+                    db_manager.forget_version_submission(expected["version_id"])
                 self.last_error_message = self._format_error_with_context(error_message)
                 debug_print(f"Worker: Error en operación de red: {error_message}")
                 debug_print(self.last_error_message)
@@ -2403,6 +2546,11 @@ class Worker(QRunnable):
                     "Worker: Flow no informó qué se aplicó; no se escribe la DB local"
                 )
                 return
+            # Campos del slate: a la Version EXACTA del clip, no a la ultima de la
+            # task (la que usa el resto de este metodo).
+            expected = getattr(self, "submission_expected", None) or {}
+            if applied.get("submission") and self.submission and expected.get("version_id"):
+                db_manager.update_version_submission(expected["version_id"], self.submission)
             # Extraer project_name desde la ruta (VFX-NOMBRE) o fallback al filename
             project_name = extract_project_name_from_path(self.file_path)
             if project_name:
@@ -3076,8 +3224,12 @@ def Push_Task_Status(
     target_version_number=None,
     submission_prefill=None,
     submission_only=False,
+    submission_expected=None,
 ):
     """
+    submission_expected: {"fields", "task_status", "version_id"} con lo que
+    se leyo al abrir (de pipesync.db o de Flow); el conector lo compara contra
+    Flow antes de escribir.
     submission_prefill: dict con los campos de submission que ya tiene la
     Version en Flow (puede venir vacio). Si no es None, el dialogo pide la
     Submission Note del slate de entrega (Ctrl+Alt+Click en Rev Dir) y el
@@ -3278,6 +3430,7 @@ def Push_Task_Status(
             extra_images=extra_images,
             submission=submission,
             submission_only=submission_only,
+            submission_expected=submission_expected,
         )
         # Conectar señales
         worker.signals.result_ready.connect(handle_results)
@@ -3583,7 +3736,6 @@ def push_from_selected_clips(
         clip_callback = create_clip_callback(clip, base_name, exr_name)
 
         submission_loader = LoadSubmissionWorker(base_name, exr_name, file_path=file_path)
-        _ACTIVE_FLOW_VERSION_LOAD_WORKERS.append(submission_loader)
 
         def _cleanup_submission_loader():
             if submission_loader in _ACTIVE_FLOW_VERSION_LOAD_WORKERS:
@@ -3593,7 +3745,8 @@ def push_from_selected_clips(
             _cleanup_submission_loader()
             debug_print(
                 f"Submission: Version {result.get('version_code')} "
-                f"(ID {result.get('version_id')}) leida de Flow"
+                f"(ID {result.get('version_id')}) leida de "
+                f"{'pipesync.db' if result.get('source') == 'db' else 'Flow'}"
             )
             task_status = result.get("task_status")
             submission_only = False
@@ -3623,6 +3776,11 @@ def push_from_selected_clips(
                 file_path=file_path,
                 submission_prefill=result.get("fields") or {},
                 submission_only=submission_only,
+                submission_expected={
+                    "fields": result.get("fields") or {},
+                    "task_status": task_status,
+                    "version_id": result.get("version_id"),
+                },
             )
 
         def _on_submission_error(error_text):
@@ -3633,6 +3791,24 @@ def push_from_selected_clips(
                 f"Could not read the clip's version in Flow:\n{error_text}",
             )
 
+        # Primero la base de PipeSync: el sync de Reviewer/Coordinator ya baja los
+        # tres campos y el estado de la task, asi que la ventana abre al instante.
+        version_code = submission_version_code(base_name, exr_name)
+        db_reader = DBManager()
+        try:
+            db_result = db_reader.read_submission(version_code)
+        finally:
+            if db_reader.conn:
+                db_reader.conn.close()
+        if db_result:
+            debug_print(f"Submission: datos de '{version_code}' leidos de pipesync.db")
+            _on_submission_loaded(db_result)
+            return True
+
+        # La base no alcanza (PipeSync viejo, version sin sincronizar o ambigua):
+        # se lee de Flow en background, como antes.
+        debug_print(f"Submission: '{version_code}' no esta en pipesync.db; se lee de Flow")
+        _ACTIVE_FLOW_VERSION_LOAD_WORKERS.append(submission_loader)
         submission_loader.signals.loaded.connect(_on_submission_loaded)
         submission_loader.signals.error.connect(_on_submission_error)
         QThreadPool.globalInstance().start(submission_loader)

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push_connector v1.14 | Lega
+  LGA_NKS_Flow_Push_connector v1.15 | Lega
 
   Conector simple para operaciones de red con Flow
   Este script se ejecuta con Python personalizado para evitar problemas de dependencias
@@ -11,6 +11,11 @@ ____________________________________________________________________
   - PROYECTO_TEMP_EP_SEQ_SHOT_DESC1_DESC2 (6 bloques con descripción)
   - PROYECTO_TEMP_EP_SEQ_SHOT (4 bloques simplificado)
 
+  v1.15: La submission compara contra Flow antes de escribir
+         (`submission_expected`): HieroTools abre el dialogo con lo que tiene
+         pipesync.db, que puede estar viejo. Si la task entro a la cola de
+         entrega o los tres campos cambiaron en Flow desde entonces, no se
+         escribe nada y vuelve `stale` para que el panel relea de Flow.
   v1.14: Submission note del slate de entrega. execute_full_push acepta
          `submission` (campos de Version de LGA_NKS_Slate_Config): exige la
          Version exacta, la escribe ANTES que la Task y no crea Note. La
@@ -168,7 +173,7 @@ except ImportError as e:
 status_translation = get_status_translation()
 
 try:
-    from LGA_NKS_Slate_Config import VERSION_SUBMISSION_FIELDS
+    from LGA_NKS_Slate_Config import DELIVERY_QUEUE_CODES, VERSION_SUBMISSION_FIELDS
 except ImportError as e:
     debug_print(f"⚠️ ImportError: {e} - LGA_NKS_Slate_Config no disponible")
     raise
@@ -998,6 +1003,7 @@ def execute_full_push_operation(
     extra_images=None,
     submission=None,
     submission_only=False,
+    submission_expected=None,
 ):
     """
     Ejecuta todo el proceso de push en una sola operación para mayor eficiencia.
@@ -1216,6 +1222,18 @@ def execute_full_push_operation(
                     f"y task {task_name}"
                 ),
             }
+
+        # Lo que el dialogo mostro puede venir de pipesync.db, que puede estar
+        # viejo: se compara contra Flow ANTES de escribir. Escribir encima sin
+        # mirar pisaria la nota de otro supervisor (o de otra maquina) y podria
+        # sacar de la cola de entrega una task que el panel creyo en Rev Dir.
+        if submission and submission_expected is not None:
+            stale = submission_stale_reason(
+                sg_manager, sg_specific_version, tasks, task_name,
+                submission_expected, submission_only,
+            )
+            if stale:
+                return {"success": False, "stale": True, "error": stale}
 
         # La submission note va primero: si Flow no la acepta (campo inexistente
         # en este sitio, permisos), el push se corta sin haber tocado la Task.
@@ -1457,6 +1475,51 @@ AMBIGUOUS_SUBMISSION_ERROR = (
 )
 
 
+STALE_SUBMISSION_HINT = (
+    "Nothing was saved. Ctrl+Alt+Click again: the window will read Flow directly."
+)
+
+
+def submission_stale_reason(sg_manager, version, tasks, task_name, expected, submission_only):
+    """Motivo por el que NO se puede guardar la submission, o None.
+
+    `expected` es lo que mostro el dialogo al abrirse: {"fields": {...},
+    "task_status": codigo}. Si la task entro a la cola de entrega desde
+    entonces (y no se eligio "Save note only"), o si los tres campos de la
+    Version ya no son los que se mostraron, guardar pisaria algo que el
+    supervisor no vio.
+    """
+    current_status = next(
+        (
+            t.get("sg_status_list")
+            for t in tasks or []
+            if (t.get("content") or "").lower() == task_name
+        ),
+        None,
+    )
+    if (
+        not submission_only
+        and current_status in DELIVERY_QUEUE_CODES
+        and current_status != (expected.get("task_status") or None)
+    ):
+        return (
+            f"The task is already in the delivery queue in Flow ('{current_status}'), "
+            f"but PipeSync hadn't synced it yet. {STALE_SUBMISSION_HINT}"
+        )
+    fields, error = sg_manager.read_version_fields(version["id"], VERSION_SUBMISSION_FIELDS)
+    if error:
+        return f"Could not check the current submission note in Flow: {error}"
+    shown = expected.get("fields") or {}
+    for name in VERSION_SUBMISSION_FIELDS:
+        if (fields.get(name) or "").strip() != (shown.get(name) or "").strip():
+            debug_print(f"submission desactualizada: {name} cambio en Flow")
+            return (
+                "The submission note changed in Flow after PipeSync last synced it "
+                f"(someone else saved it). {STALE_SUBMISSION_HINT}"
+            )
+    return None
+
+
 def read_submission_operation(sg_manager, base_name, original_file_name=None, file_path=None):
     """Lee los campos de submission de la Version EXACTA del clip.
 
@@ -1607,6 +1670,7 @@ def execute_flow_operation(operation, **kwargs):
             allow_task_only = bool(kwargs.get("allow_task_only"))
             submission = kwargs.get("submission") or None
             submission_only = bool(kwargs.get("submission_only"))
+            submission_expected = kwargs.get("submission_expected") or None
             if submission:
                 # Solo los campos conocidos: el dict llega por stdin desde NKS.
                 submission = {
@@ -1627,6 +1691,7 @@ def execute_flow_operation(operation, **kwargs):
                 extra_images=extra_images,
                 submission=submission,
                 submission_only=submission_only,
+                submission_expected=submission_expected,
             )
 
         elif operation == "read_submission":
