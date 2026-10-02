@@ -20,7 +20,6 @@ from LGA_NKS_Shared.LGA_NKS_Slate_Config import (  # noqa: E402
 )
 
 FLOW_PANEL_PATH = ROOT / "LGA_NKS_Flow_Panel.py"
-CLEAR_TAG_BUTTONS = ("Rev Dir", "Corrections")
 
 
 def load_tooltip_helpers():
@@ -41,12 +40,9 @@ class FlowPanelTooltipTests(unittest.TestCase):
         self.texts, self.tooltip = load_tooltip_helpers()
 
     def tooltip_for(self, button, mode):
-        label = button["label"]
         return self.tooltip(
-            label,
             button["code"],
-            label in CLEAR_TAG_BUTTONS,
-            label == SUBMISSION_BUTTON_LABEL and mode == SLATE_CONTEXT_MODE,
+            button["label"] == SUBMISSION_BUTTON_LABEL and mode == SLATE_CONTEXT_MODE,
         )
 
     def test_every_status_button_explains_its_gestures(self):
@@ -55,7 +51,6 @@ class FlowPanelTooltipTests(unittest.TestCase):
                 text = self.tooltip_for(button, mode)
                 with self.subTest(mode=mode, button=button["label"]):
                     self.assertTrue(text.startswith("Click: "))
-                    self.assertIn(button["label"], text)
                     # Shift+Click solo se anuncia donde cambia algo: los estados con nota.
                     self.assertEqual("Shift+Click:" in text, is_note_capable(button["code"]))
 

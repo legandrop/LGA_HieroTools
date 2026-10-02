@@ -9,12 +9,10 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
-  v2.63: Todos los botones de estado tienen tooltip con lo que hace cada
-         gesto: Click (pasa la task al estado, pinta el clip y, si el estado
-         pide nota, a que version va), Shift+Click (elegir la version de Flow
-         de la nota) y, en Rev Dir y contexto studio, Ctrl+Alt+Click (Submission
-         Note). Los textos salen de PUSH_TOOLTIPS. Se corrige el mojibake de los
-         tooltips de Review Pic y Shot Info.
+  v2.63: Todos los botones de estado tienen tooltip, una linea corta por
+         gesto: Click, Shift+Click (solo estados con nota) y, en Rev Dir y
+         contexto studio, Ctrl+Alt+Click. Los textos salen de PUSH_TOOLTIPS.
+         Se corrige el mojibake de los tooltips de Review Pic y Shot Info.
   v2.62: Ctrl+Alt+Click en Rev Dir escribe la Submission Note del slate de
          entrega (Flow_Push submission_mode). Solo en contexto studio; el
          boton lleva el tooltip que lo explica.
@@ -132,27 +130,14 @@ PUSH_TOOLTIPS = {
         "Muestra la información del shot y los comentarios de las versiones de "
         "la task comp (Shift+T)"
     ),
-    "status_click": (
-        "Click: pasa la task a {label} en Flow y pinta el clip "
-        "(selección o clip del playhead)."
-    ),
-    "status_note": "Pide una nota, que va a la versión de Flow del clip.",
-    "status_clear_tags": "Además borra los tags del clip.",
-    "status_shift": (
-        "Shift+Click: igual, pero eligiendo a qué versión de Flow va la nota "
-        "(1 clip)."
-    ),
+    "status_click": "Click: cambia el estado de la task",
+    "status_shift": "Shift+Click: elegir la versión de Flow de la nota",
 }
 
 
-def status_button_tooltip(label, code, clears_tags, show_submission):
-    """Tooltip de un boton de estado: que hace cada gesto que acepta."""
-    # Una idea por linea: un tooltip de texto plano no corta solo.
-    lines = [PUSH_TOOLTIPS["status_click"].format(label=label)]
-    if is_note_capable(code):
-        lines.append(PUSH_TOOLTIPS["status_note"])
-    if clears_tags:
-        lines.append(PUSH_TOOLTIPS["status_clear_tags"])
+def status_button_tooltip(code, show_submission):
+    """Tooltip de un boton de estado: una linea corta por gesto que acepta."""
+    lines = [PUSH_TOOLTIPS["status_click"]]
     # Shift+Click solo cambia algo en los estados que piden nota; en el resto
     # hace lo mismo que el Click y no se anuncia.
     if is_note_capable(code):
@@ -488,9 +473,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
                 # client el gesto avisa que no existe.
                 button.setToolTip(
                     status_button_tooltip(
-                        name,
                         button_info.get("code", ""),
-                        name in self.CLEAR_TAG_BUTTONS,
                         is_submission_button
                         and self.context_mode == SLATE_CONTEXT_MODE,
                     )

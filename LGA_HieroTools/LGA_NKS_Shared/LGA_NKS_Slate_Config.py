@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Slate_Config v1.00 | Lega
+  LGA_NKS_Slate_Config v1.01 | Lega
 
   Fuente unica de los datos del slate que viajan por Flow: los codigos de
   los campos custom, las opciones de los selectores y el boton que dispara
@@ -12,6 +12,7 @@ ____________________________________________________________________
   Los cuatro campos existen SOLO en el sitio studio de Flow. Los crea
   bootstrap_slate_fields.py de PipeSync; detalle en docs/Docu_Slate_MXF.md.
 
+  v1.01: Tooltip de Rev Dir en una linea corta, como el resto del panel.
   v1.00: Version inicial.
 ____________________________________________________________________
 """
@@ -57,10 +58,7 @@ SLATE_CONTEXT_MODE = "studio"
 
 # Textos de tooltip, aparte del widget para la futura version bilingue.
 TOOLTIPS = {
-    "rev_dir": (
-        "Ctrl+Alt+Click: escribir la Submission Note del slate de entrega "
-        "(1 clip). Solo en contexto studio."
-    ),
+    "rev_dir": "Ctrl+Alt+Click: Submission Note del slate de entrega",
     "slate_frame": (
         "Click: guardar el frame actual del viewer como imagen del slate de "
         "entrega del shot en Flow (campo Slate Frame). Solo en contexto studio."

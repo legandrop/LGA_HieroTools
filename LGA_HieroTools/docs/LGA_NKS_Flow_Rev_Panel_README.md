@@ -79,7 +79,8 @@ los tres campos en esa Version en vez de crear una Note (los artistas no la
 reciben). Si la task ya está en la cola de entrega ofrece guardar solo la nota.
 Detalle: [Docu_Slate_MXF.md](Docu_Slate_MXF.md).
 
-**Gestos de los botones de estado** (cada botón los lista en su tooltip):
+**Gestos de los botones de estado** (el tooltip de cada botón los nombra en una línea
+corta cada uno; el detalle es este):
 
 - **Click:** pasa la task a ese estado en Flow y pinta el clip (selección o clip
   del playhead). Si el estado pide nota (`is_note_capable()`), la nota va a la
