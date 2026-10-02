@@ -53,13 +53,3 @@ for module_name in MODULES:
     except Exception:
         print("[LGA_HieroTools_Startup] Error loading {}".format(module_name))
         traceback.print_exc()
-
-# HieroTools no tiene menu propio: la entrada What's new va al menu Help del
-# host. Registrarla no lee las notas; eso pasa recien al abrir la ventana.
-try:
-    from LGA_NKS_Shared import LGA_NKS_WhatsNew
-
-    LGA_NKS_WhatsNew.register_menu()
-except Exception:
-    print("[LGA_HieroTools_Startup] Error registering What's new")
-    traceback.print_exc()
