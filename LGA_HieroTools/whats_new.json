@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "product": "legandrop/LGA_HieroTools",
+  "name": "LGA HieroTools",
+  "versions": [
+    {
+      "version": "3.97",
+      "items": [
+        {
+          "kind": "new",
+          "text": "TL | Solo EditRef in the Viewer | TL panel (Alt+Shift+D) turns off every video track except EditRef and BurnIn to watch the edit on its own; press it again to turn them all back on."
+        },
+        {
+          "kind": "new",
+          "text": "The Import Shots transcode queue has a Skip Current button: a plate that hangs can be skipped, its originals go back in place and the queue moves on to the next one; failed plates show the reason when you hover over Error."
+        },
+        {
+          "kind": "improved",
+          "text": "Review Pic and Viewer | Snapshot trim only the black around the image, so zoomed or panned shots are no longer cut."
+        },
+        {
+          "kind": "improved",
+          "text": "Review Pic and the Shift+Click of Viewer | Snapshot open the picture in FrameRev to annotate it, replacing the ShareX image editor that came inside HieroTools, which is no longer included. FrameRev 0.265 or later has to be installed and opened once; otherwise a message says so."
+        },
+        {
+          "kind": "new",
+          "text": "Review Pic and the Shift+Click of Viewer | Snapshot now work on macOS too, opening the picture in FrameRev to annotate it.",
+          "platform": [
+            "mac"
+          ]
+        },
+        {
+          "kind": "new",
+          "text": "Ctrl+Alt+Click on Rev Dir in the Flow Review panel opens the delivery slate's Submission Note with Submitting For and Media Color; it never overwrites a newer note and asks before saving an empty one.",
+          "edition": [
+            "studio"
+          ]
+        },
+        {
+          "kind": "new",
+          "text": "The Slate Frame button in the Flow | S3 panel saves the viewer image as the shot's slate frame for the delivery slate.",
+          "edition": [
+            "studio"
+          ]
+        },
+        {
+          "kind": "improved",
+          "text": "Every status button in the Flow Review panel now has a tooltip listing its click gestures."
+        },
+        {
+          "kind": "new",
+          "text": "The Flow Review panel has Rev Netflix and SL Approved status buttons.",
+          "edition": [
+            "client"
+          ]
+        },
+        {
+          "kind": "new",
+          "text": "The Flow Pull results window can show only the shots in review (Only in review)."
+        },
+        {
+          "kind": "new",
+          "text": "Reviewers: the Flow Pull results window can also show only your own reviews (Only for me).",
+          "for": [
+            "Reviewers"
+          ],
+          "edition": [
+            "studio"
+          ]
+        },
+        {
+          "kind": "new",
+          "text": "HieroTools now answers PipeSync's Show shot in NukeStudio: it opens the project if needed, switches to the sequence, marks the shot and brings NukeStudio to the front."
+        },
+        {
+          "kind": "improved",
+          "text": "Create Shot now creates the task folders in lowercase, the same as PipeSync, so a task no longer ends up with two folders that differ only in capitalization."
+        },
+        {
+          "kind": "fixed",
+          "text": "Shot Info, Push, Assign and Clear Assignees now find the shot when the clip's path has the project name in lowercase."
+        }
+      ],
+      "date": "2026-10-04"
+    }
+  ]
+}
