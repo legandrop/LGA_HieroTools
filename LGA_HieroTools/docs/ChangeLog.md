@@ -1,3 +1,7 @@
+v3.98:
+
+        - NukeInit queda documentado, con test y explicado en la guía de instalación (`LGA_NKS_NukeInit v1.00`, sin cambios de código): el módulo salió sin doc propia y quien instala desde el `.zip` no se enteraba de que existe, porque el README no viaja ahí y el PDF no lo nombraba. Se agrega `Docu_NukeInit.md` con el porqué, el orden de carga medido y la interacción con los instaladores de los ToolPacks (el comentario sobre la línea de `init.py` debe ocupar una sola línea o lo parten), un test que falla si un panel `com.lega.*` queda fuera de la raíz del pack, y el paso opcional en la guía de instalación. [ NukeInit - Documentación, test y guía de instalación ]
+
 v3.97:
 
         - Botón `TL | Solo EditRef` (`Alt+Shift+D`) en el panel Viewer | TL (`LGA_NKS_Solo_EditRef v1.00`, script nuevo; `LGA_ViewerPanel v1.81`): para mirar el corte había que apagar a mano todos los tracks menos EditRef y después prenderlos de a uno. Es un toggle a nivel track y sin estado guardado: si ningún otro track prendido tiene contenido bajo el playhead (y hay alguno apagado), prende todos los tracks de video; si no, apaga todos menos EditRef/EditRefClean (todos los que haya con ese nombre). BurnIn y audio no se tocan. Entra al Undo como un solo paso. Ver `docs/Docu_Solo_EditRef.md`. Test nuevo `tests/test_solo_editref.py`. [ ViewerTL - Toggle Solo EditRef ]

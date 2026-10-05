@@ -12,6 +12,9 @@ platforms: [win, mac]
 
 ## Unreleased
 
+## v3.98
+- [new] The install guide now explains an optional one-line setup that stops Nuke Studio from printing a "Can't restore panel" message for every HieroTools panel at startup.
+
 ## v3.97
 - [new] TL | Solo EditRef in the Viewer | TL panel (Alt+Shift+D) turns off every video track except EditRef and BurnIn to watch the edit on its own; press it again to turn them all back on.
 - [new] The Import Shots transcode queue has a Skip Current button: a plate that hangs can be skipped, its originals go back in place and the queue moves on to the next one; failed plates show the reason when you hover over Error.
