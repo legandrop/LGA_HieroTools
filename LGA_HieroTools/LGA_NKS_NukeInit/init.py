@@ -20,8 +20,10 @@ ____________________________________________________________________
   entra solo.
 
   Como se instala: una linea en el init.py de la carpeta .nuke, igual que
-  los ToolPacks (ver README.md, seccion Installation):
+  los ToolPacks. El instalador de HieroTools la agrega solo; a mano es:
       nuke.pluginAddPath("./Python/Startup/LGA_HieroTools/LGA_NKS_NukeInit")
+  Tiene que ir ahi y no en Python/Startup, que carga despues del rearmado.
+  Detalle en docs/Docu_NukeInit.md.
 
   v1.00: Primera version.
 ____________________________________________________________________

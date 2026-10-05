@@ -1,5 +1,7 @@
 v3.98:
 
+        - El instalador agrega solo la línea de NukeInit a `init.py` (`LGA_NKS_NukeInit v1.00`, sin cambios de código): el módulo que saca los avisos "Can't restore panel" solo funciona cargado desde `init.py`, y pedir ese paso a mano significaba que casi nadie lo iba a tener. Ahora el instalador agrega la línea al final si falta, con backup, sin reordenar el archivo y respetando una línea que el usuario haya comentado. README, `Docu_NukeInit.md` y la guía de instalación dejan de presentarlo como paso opcional. [ NukeInit - El instalador agrega la línea a init.py ]
+
         - NukeInit queda documentado, con test y explicado en la guía de instalación (`LGA_NKS_NukeInit v1.00`, sin cambios de código): el módulo salió sin doc propia y quien instala desde el `.zip` no se enteraba de que existe, porque el README no viaja ahí y el PDF no lo nombraba. Se agrega `Docu_NukeInit.md` con el porqué, el orden de carga medido y la interacción con los instaladores de los ToolPacks (el comentario sobre la línea de `init.py` debe ocupar una sola línea o lo parten), un test que falla si un panel `com.lega.*` queda fuera de la raíz del pack, y el paso opcional en la guía de instalación. [ NukeInit - Documentación, test y guía de instalación ]
 
 v3.97:

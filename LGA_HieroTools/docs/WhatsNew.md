@@ -13,7 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v3.98
-- [new] The install guide now explains an optional one-line setup that stops Nuke Studio from printing a "Can't restore panel" message for every HieroTools panel at startup.
+- [fixed] Nuke Studio no longer prints a "Can't restore panel" message for every HieroTools panel at startup: the installer now sets this up on its own.
 
 ## v3.97
 - [new] TL | Solo EditRef in the Viewer | TL panel (Alt+Shift+D) turns off every video track except EditRef and BurnIn to watch the edit on its own; press it again to turn them all back on.

@@ -54,26 +54,39 @@ panel nuevo queda cubierto sin tocar nada.
 
 ## Instalación
 
-Es opcional y se activa con una línea en el `init.py` de la carpeta `.nuke`:
+Se activa con una línea en el `init.py` de la carpeta `.nuke`:
 
     nuke.pluginAddPath("./Python/Startup/LGA_HieroTools/LGA_NKS_NukeInit")
 
 Tiene que ir ahí y no en `Python/Startup`: los `init.py` del plugin path de Nuke
 corren antes del rearmado del workspace, y `Python/Startup` corre después.
 
-- **El instalador de HieroTools no agrega la línea.** HieroTools no es un plugin
-  de Nuke y su instalador no toca `init.py`. Quien instala desde el `.zip` no ve
-  el `README.md` (no viaja en el `.zip`): la línea está explicada en la guía de
-  instalación en PDF que sí viaja.
-- **Los instaladores de los ToolPacks reescriben `init.py`**: juntan los
-  `pluginAddPath` de las carpetas `LGA_*` y los reordenan. Esta línea no la
-  mueven, porque su ruta empieza con `Python/`, pero pueden usarla de ancla para
-  insertar el grupo justo arriba. Al hacerlo solo consideran **una** línea de
-  comentario pegada encima. Si se le pone un comentario de dos líneas, el
-  instalador lo parte y deja la primera suelta más arriba. Comentario de una
-  sola línea, o ninguno.
-- En cada máquina hay que agregar la línea por separado: `init.py` es de la
-  carpeta `.nuke` de cada una, no del pack.
+**El instalador de HieroTools agrega la línea solo** y avisa que lo hizo. No se
+le pide ningún paso manual a quien instala. Es lo único que ese instalador hace
+sobre `init.py`:
+
+- Si la línea ya está, no toca nada. También cuenta una línea comentada: es la
+  forma de apagar el módulo, y el instalador no la vuelve a agregar.
+- Si falta, la agrega **al final** del archivo, con un comentario de una línea
+  arriba. No reordena ni reescribe el resto, así que no puede romper un
+  `init.py` válido. Antes guarda una copia en `LGA_init_backups/`.
+- Si no hay `init.py`, o está vacío, lo crea con `import nuke` y la línea.
+- La ruta se escribe con las mayúsculas reales de la carpeta en disco
+  (`python/startup` o `Python/Startup`).
+- Si algo falla, avisa y la instalación termina bien igual: HieroTools funciona
+  sin la línea.
+
+Quien instala a mano copiando la carpeta tiene que agregar la línea por su
+cuenta.
+
+**Convivencia con los instaladores de los ToolPacks.** Esos instaladores sí
+reescriben `init.py`: juntan los `pluginAddPath` de las carpetas `LGA_*` y los
+reordenan. Esta línea no la mueven, porque su ruta empieza con `python/`, pero
+pueden usarla de ancla para insertar el grupo justo arriba. Al hacerlo solo
+consideran **una** línea de comentario pegada encima. Con un comentario de dos
+líneas lo parten y dejan la primera suelta más arriba. Por eso el comentario que
+escribe el instalador ocupa una sola línea, y si se edita a mano hay que dejarlo
+así.
 
 ## Lo que hay que saber antes de tocarlo
 

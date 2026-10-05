@@ -15,7 +15,7 @@ I am sharing this repository both for the reusable tools and as a reference impl
 - Copy the contents of this folder into your `.nuke/Python/Startup` directory.
 - Restart Hiero / Nuke Studio.
 - Review Pic and the Shift+Click of Viewer | Snapshot open the image in [FrameRev](https://github.com/legandrop/LGA_FrameRev_Release/releases), LGA's annotation app, which is installed separately (version 0.265 or later). Open FrameRev once after installing it, so Hiero Tools can find it. Without FrameRev, those two actions show a message instead.
-- Optional: Nuke Studio prints `Can't restore panel 'com.lega.…' because it hasn't been registered.` at startup, because it restores the saved workspace before the Hiero Tools panels load. The panels end up in place anyway; to hide the messages, add this line to the `init.py` of your `.nuke` folder:
+- The installer also adds one line at the end of the `init.py` of your `.nuke` folder, unless it is already there. Without it, Nuke Studio prints `Can't restore panel 'com.lega.…' because it hasn't been registered.` for every Hiero Tools panel at startup, because it restores the saved workspace before the panels load. If you install by hand, add it yourself; Hiero Tools works the same without it:
   `nuke.pluginAddPath("./Python/Startup/LGA_HieroTools/LGA_NKS_NukeInit")`
 - If you are adapting the tools to your own environment, review any pipeline-specific integrations first, especially:
   - Flow Production Tracking / ShotGrid
