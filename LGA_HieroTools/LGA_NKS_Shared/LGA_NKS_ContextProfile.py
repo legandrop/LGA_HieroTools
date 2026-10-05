@@ -1,13 +1,28 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ContextProfile v1.00 | Lega
+  LGA_NKS_ContextProfile v1.01 | Lega
 
-  Resolver de contexto Studio/Client para LGA_HieroTools.
+  Resolver de contexto Studio/Client para LGA_HieroTools: decide qué perfil
+  de PipeSync se usa al resolver config.secure y bases locales.
 
-  Lee un INI junto a LGA_HieroTools_Startup.py para decidir qué perfil de
-  PipeSync debe usarse al resolver config.secure y bases locales.
+  El modo es STUDIO salvo que algo diga lo contrario. Una instalación de
+  estudio no lleva ningún archivo de contexto: que no haya nada ES studio.
+  Se mira, en este orden:
 
+    1. LGA_HIEROTOOLS_CONTEXT_INI, si la variable apunta a un archivo.
+    2. El INI suelto junto a LGA_HieroTools_Startup.py. No lo instala nadie:
+       lo escribe el switch Studio/Client del Projects Panel, que existe
+       para un solo usuario. Es el cambio local, y por eso gana.
+    3. El INI de ADENTRO de la carpeta del pack. Es la marca del build: solo
+       viaja en el paquete client, donde lo pone el generador de release.
+    4. Nada de lo anterior: studio.
+
+  v1.01: La marca del build pasa a vivir adentro de la carpeta del pack.
+         Antes el INI se instalaba suelto en Python/Startup en las dos
+         variantes, y era un tercer item visible que el usuario no necesita
+         conocer. get_override_ini_path() da la ruta donde escribe el switch,
+         para que nunca caiga sobre la marca del build.
   v1.00: La cache client de Windows se resuelve en la instalación hermana
          `PipeSync_Client/cacheClient`.
 ____________________________________________________________________
@@ -22,7 +37,9 @@ MODE_STUDIO = "studio"
 MODE_CLIENT = "client"
 
 ENV_CONTEXT_INI = "LGA_HIEROTOOLS_CONTEXT_INI"
-DEFAULT_CONTEXT_FILES = ("LGA_HieroTools_context.ini", "context.ini")
+CONTEXT_FILE_NAME = "LGA_HieroTools_context.ini"
+# "context.ini" es un nombre historico del INI suelto; se sigue leyendo.
+DEFAULT_CONTEXT_FILES = (CONTEXT_FILE_NAME, "context.ini")
 
 
 def _normalize_mode(raw_mode):
@@ -36,14 +53,38 @@ def _startup_root():
     return Path(__file__).resolve().parents[2]
 
 
+def _pack_root():
+    # .../Startup/LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_ContextProfile.py
+    # -> .../Startup/LGA_HieroTools
+    return Path(__file__).resolve().parents[1]
+
+
+def get_override_ini_path():
+    """
+    Ruta del INI donde se guarda un cambio LOCAL de contexto.
+
+    Es la que usa el switch del Projects Panel. Nunca es la marca del build:
+    escribir ahi modificaria un archivo del pack, que se pierde en la proxima
+    instalacion y dejaria al build mintiendo sobre su propia variante.
+    """
+    env_path = (os.getenv(ENV_CONTEXT_INI) or "").strip()
+    if env_path:
+        return Path(env_path)
+    return _startup_root() / CONTEXT_FILE_NAME
+
+
 def _candidate_context_paths():
     env_path = (os.getenv(ENV_CONTEXT_INI) or "").strip()
     if env_path:
         yield Path(env_path)
 
+    # Cambio local: el INI suelto que escribe el switch.
     startup_root = _startup_root()
     for file_name in DEFAULT_CONTEXT_FILES:
         yield startup_root / file_name
+
+    # Marca del build: solo existe en el paquete client.
+    yield _pack_root() / CONTEXT_FILE_NAME
 
 
 def find_context_ini():

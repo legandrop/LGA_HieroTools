@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.48 | Lega
+  LGA_NKS_Projects_Panel v2.49 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,9 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.49: El switch Studio/Client escribe siempre en el INI de cambio local
+         (get_override_ini_path), no en el primero que exista: en un paquete
+         client ese es la marca del build, adentro del pack.
   v2.48: after_project_open() acepta on_done, que se llama al terminar la
          post-apertura (con o sin switch). Lo usa LGA_NKS_RemoteNav para
          navegar al shot recien cuando el proyecto quedo listo.
@@ -126,7 +129,11 @@ import time
 from pathlib import Path
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt, is_widget_alive
 from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color, Style
-from LGA_NKS_Shared.LGA_NKS_ContextProfile import get_context_mode, find_context_ini
+from LGA_NKS_Shared.LGA_NKS_ContextProfile import (
+    get_context_mode,
+    find_context_ini,
+    get_override_ini_path,
+)
 from LGA_NKS_Shared.LGA_NKS_ContextSwitch import (
     SWITCH_USER_LOGIN,
     get_normal_login,
@@ -1193,10 +1200,10 @@ class ProjectsPanel(QtWidgets.QWidget):
         return result
 
     def _get_context_ini_path(self):
-        ini_path = find_context_ini()
-        if ini_path:
-            return Path(ini_path)
-        return Path(__file__).resolve().parent.parent / "LGA_HieroTools_context.ini"
+        # Siempre el INI de cambio local, nunca el primero que exista: en un
+        # paquete client el unico que hay es la marca del build, adentro del
+        # pack, y el switch no tiene que escribir ahi.
+        return Path(get_override_ini_path())
 
     def _refresh_context_toggle(self):
         """Actualiza el estilo del toggle pill segun el contexto activo."""

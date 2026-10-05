@@ -11,7 +11,9 @@ HieroTools, qué scripts quedaron adaptados y cuáles requieren revisión adicio
 
 ## Estado actual
 
-- Control de contexto por INI: `LGA_HieroTools_context.ini` (`mode=studio|client`).
+- Contexto `studio` por defecto, sin ningún archivo. El paquete client lleva una
+  marca adentro del pack; el switch escribe un INI suelto local. Ver
+  `Docu_Context_Profile.md`.
 - Resolución de `config.secure/.key` por contexto activo.
 - Resolución de cache/DB por contexto activo (con fallback portable histórico).
 - Preflight bloqueante en Pull/Push con mensajes UI cuando faltan prerequisitos.
@@ -219,7 +221,7 @@ Por eso nada arma el nombre de la carpeta con un literal:
 
 ### Núcleo de contexto
 
-- `LGA_HieroTools_context.ini`
+- `LGA_HieroTools_context.ini` (suelto: switch local; adentro del pack: marca del paquete client)
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_ContextProfile.py`
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_ContextSwitch.py`
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_Flow_Status_Config.py`
@@ -280,22 +282,23 @@ Por eso nada arma el nombre de la carpeta con un literal:
 
 ## Packaging (release generator)
 
-- El `_LGA_ReleaseGen-HieroTools.bat` genera dos zips y cada uno viaja con un
-  `LGA_HieroTools_context.ini` fijado por el packaging, independiente del
-  INI activo de Lega al momento de releasar:
-  - Zip público `*_gh.zip`: `mode = client` (fuente:
-    `Python/Startup/LGA_HieroTools_context_gh.ini`).
-  - Zip interno `*.zip`: `mode = studio` (fuente:
-    `Python/Startup/LGA_HieroTools_context_studio.ini`).
-- Los INI fuente son fijos, versionados y verificados por preflight
-  (existencia + valor de `mode`) antes de empaquetar.
-- El INI se agrega al zip con 7z desde un directorio temporal renombrado a
-  `Startup/LGA_HieroTools_context.ini`, así el installer lo deposita en el
-  path esperado.
-- El `i_win_engine.ps1` copia el `LGA_HieroTools_context.ini` a
-  `%USERPROFILE%/.nuke/python/startup/` siempre pisando el previo. No se
-  respeta el INI del usuario final: la política es que el modo lo define el
-  zip que se instala (client para gh, studio para interno).
+- El `_LGA_ReleaseGen-HieroTools.bat` genera dos zips del mismo build,
+  `*_studio.zip` y `*_client.zip`, independientes del contexto que Lega tenga
+  activo al momento de releasar.
+- **El zip studio no lleva ningún archivo de contexto.** Sin archivo, el runtime
+  resuelve `studio`.
+- **El zip client lleva la marca adentro de la carpeta del pack**:
+  `Startup/LGA_HieroTools/LGA_HieroTools_context.ini` con `mode = client`. La
+  plantilla vive en el repo privado de release, no en este.
+- El generador verifica el contenido real de los dos zips antes de publicar:
+  ningún archivo de contexto en el studio, exactamente uno y en esa ruta en el
+  client. Si no se cumple, aborta.
+- Los instaladores son idénticos en las dos variantes: copian el script de
+  arranque y la carpeta del pack. No copian ni exigen ningún INI. Si quedó el
+  INI suelto de una instalación anterior a v3.98 lo borran en silencio, porque
+  le ganaría a la marca del paquete recién instalado.
+- Nada de esto se le nombra al usuario: ni la guía de instalación, ni los
+  mensajes del instalador, ni las notas del release mencionan el contexto.
 - Consecuencia: la editora del cliente siempre arranca en modo client sin
   intervención manual, y los demás reviewers de estudio siempre arrancan en
   studio (sin ver el switch, porque su `Flow.Login` de PipeSync normal no
@@ -304,7 +307,8 @@ Por eso nada arma el nombre de la carpeta con un literal:
 ## Decisiones de diseño implementadas
 
 - Switch en Projects Panel:
-  - persistencia en `LGA_HieroTools_context.ini`;
+  - persistencia en el INI suelto `Python/Startup/LGA_HieroTools_context.ini`,
+    nunca en la marca del build;
   - override de sesión vía `LGA_HIEROTOOLS_CONTEXT_INI` y `PIPESYNC_CONTEXT`;
   - recarga de panel/proyectos sin reinicio obligatorio.
 - Visibilidad del switch:

@@ -2,26 +2,42 @@
 
 ## Objetivo
 
-Permitir que las tools de Hiero trabajen en modo `studio` o `client` sin cambiar código,
-solo editando un INI.
+Permitir que las tools de Hiero trabajen en modo `studio` o `client` sin cambiar
+código.
 
-## Archivo de control
+## Cómo se decide el modo
 
-Ubicación:
+El modo es **studio salvo que algo diga lo contrario**. Una instalación de
+estudio no lleva ningún archivo de contexto: que no haya nada es studio.
+`LGA_NKS_ContextProfile` mira, en este orden:
 
-- `~/.nuke/Python/Startup/LGA_HieroTools_context.ini`
+1. `LGA_HIEROTOOLS_CONTEXT_INI`, si la variable apunta a un archivo.
+2. El INI suelto `~/.nuke/Python/Startup/LGA_HieroTools_context.ini`. **No lo
+   instala nadie**: lo escribe el switch Studio/Client del Projects Panel, que
+   existe para un solo usuario. Es el cambio local, y por eso gana.
+3. El INI de adentro de la carpeta del pack,
+   `~/.nuke/Python/Startup/LGA_HieroTools/LGA_HieroTools_context.ini`. Es la
+   marca del build: solo viaja en el paquete client.
+4. Nada de lo anterior: `studio`.
 
-Formato:
+Formato, en los dos archivos:
 
 ```ini
 [Context]
-mode=studio
+mode=client
 ```
 
-Valores válidos:
+**Por qué la marca va adentro del pack y no suelta.** Hasta v3.97 las dos
+variantes instalaban el INI suelto en `Python/Startup`, como un tercer item
+visible, y el instalador y la guía lo nombraban. Al usuario no le sirve de nada
+saber que existe un contexto: el único que cambia de uno a otro es quien tiene
+el switch. Adentro del pack es un archivo más entre cientos, nadie lo instala a
+mano y nada lo menciona.
 
-- `mode=studio`
-- `mode=client`
+**El switch nunca escribe sobre la marca del build.** Usa
+`get_override_ini_path()`, que da siempre la ruta del INI suelto. Antes escribía
+en "el primer INI que exista", y en un paquete client ese es el de adentro del
+pack.
 
 ## Qué cambia por contexto
 
