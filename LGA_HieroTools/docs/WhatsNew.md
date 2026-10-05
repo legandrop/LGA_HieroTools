@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v3.98
+- [improved] The Flow Pull results window remembers its Only in review and Only for me checkboxes, the same way it already remembers Keep this window on top.
 - [fixed] Nuke Studio no longer prints a "Can't restore panel" message for every HieroTools panel at startup: the installer now sets this up on its own.
 
 ## v3.97

@@ -1,12 +1,17 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.70 | Lega
+  LGA_NKS_Flow_Pull v3.71 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.71: "Only in review" y "Only for me" persisten igual que "Keep this
+         window on top": los tres se guardan en FlowPull.ini al tocarlos y la
+         ventana abre como quedo. Antes los dos filtros volvian a su default
+         en cada Pull. Si el usuario no es reviewer, "Only for me" se muestra
+         apagado sin pisar lo guardado.
   v3.70: Checkbox "Only for me" entre "Only in review" y "Keep this window
          on top", apagado al abrir: deja solo las filas cuyo New Status es el
          review del usuario, comparando el codigo de Flow de la fila.
@@ -1043,14 +1048,21 @@ class ShotGridManager:
             self.conn.close()
 
 
-# ── Persistencia del "Keep this window on top" ────────────────────────────────
-# Mismo enfoque que la Transcode Queue del Import Shot: se guarda el estado del
-# checkbox en un INI bajo %APPDATA%/LGA/HieroTools, para que persista entre
+# ── Persistencia de los checkboxes de la ventana ──────────────────────────────
+# Mismo enfoque que la Transcode Queue del Import Shot: se guarda el estado de
+# cada checkbox en un INI bajo %APPDATA%/LGA/HieroTools, para que persista entre
 # ejecuciones. Seccion propia para no pisar settings de otros tools.
 _FLOWPULL_CONFIG_DIR_NAME = "LGA"
 _FLOWPULL_CONFIG_SUBDIR_NAME = "HieroTools"
 _FLOWPULL_CONFIG_FILE_NAME = "FlowPull.ini"
 _FLOWPULL_SECTION = "FlowPullWindow"
+# Los tres checkboxes del header persisten igual: clave del INI -> valor con el
+# que arranca quien todavia no lo toco nunca.
+_FLOWPULL_DEFAULTS = {
+    "keep_on_top": True,
+    "only_in_review": True,
+    "only_for_me": False,
+}
 
 # Colores del titulo, ahora tokens del modulo de estilo: el proyecto va en el
 # celeste informativo (INFO), la barra en el gris de separador de paths
@@ -1141,20 +1153,22 @@ def _flowpull_settings_path():
         / _FLOWPULL_CONFIG_SUBDIR_NAME / _FLOWPULL_CONFIG_FILE_NAME
 
 
-def _load_keep_on_top():
+def _load_window_setting(key):
+    """Lee un checkbox persistido de la ventana; si falta o falla, su default."""
+    default = _FLOWPULL_DEFAULTS[key]
     try:
         cfg = configparser.ConfigParser()
         p = _flowpull_settings_path()
         if p.exists():
             cfg.read(str(p), encoding="utf-8")
-        # Por defecto prendido si todavia no existe el setting.
-        return cfg.getboolean(_FLOWPULL_SECTION, "keep_on_top", fallback=True)
+        return cfg.getboolean(_FLOWPULL_SECTION, key, fallback=default)
     except Exception as e:
-        debug_print(f"[WindowSize] No se pudo leer keep_on_top: {e}")
-        return True
+        debug_print(f"[Settings] No se pudo leer {key}: {e}")
+        return default
 
 
-def _save_keep_on_top(value):
+def _save_window_setting(key, value):
+    """Guarda un checkbox de la ventana sin pisar las otras claves del INI."""
     try:
         p = _flowpull_settings_path()
         cfg = configparser.ConfigParser()
@@ -1162,12 +1176,21 @@ def _save_keep_on_top(value):
             cfg.read(str(p), encoding="utf-8")
         if not cfg.has_section(_FLOWPULL_SECTION):
             cfg.add_section(_FLOWPULL_SECTION)
-        cfg.set(_FLOWPULL_SECTION, "keep_on_top", "true" if value else "false")
+        cfg.set(_FLOWPULL_SECTION, key, "true" if value else "false")
         p.parent.mkdir(parents=True, exist_ok=True)
         with open(str(p), "w", encoding="utf-8") as fh:
             cfg.write(fh)
+        debug_print(f"[Settings] {key}={bool(value)} guardado en {p}")
     except Exception as e:
-        debug_print(f"[WindowSize] No se pudo guardar keep_on_top: {e}")
+        debug_print(f"[Settings] No se pudo guardar {key}: {e}")
+
+
+def _load_keep_on_top():
+    return _load_window_setting("keep_on_top")
+
+
+def _save_keep_on_top(value):
+    _save_window_setting("keep_on_top", value)
 
 
 def fix_colorspaces_si_proyecto_managed():
@@ -1498,24 +1521,33 @@ class GUI_Table(QtWidgets.QDialog):
         self.title_label.setStyleSheet("QLabel { padding: 0 4px 4px 4px; }")
         header_row.addWidget(self.title_label, 0, Qt.AlignLeft | Qt.AlignVCenter)
         header_row.addStretch(1)
-        # Filtro de vista: prendido cada vez que se abre la ventana (no persiste).
+        # Filtro de vista: abre como lo dejo el usuario la ultima vez (INI).
+        # El valor se pone ANTES de conectar la senal, para que cargar no guarde.
         self.only_review_chk = QtWidgets.QCheckBox("Only in review")
         self.only_review_chk.setProperty("lgaLabeled", True)
         self.only_review_chk.setToolTip(_tooltip("only_in_review"))
-        self.only_review_chk.setChecked(True)
-        self.only_review_chk.toggled.connect(self._on_filter_toggled)
+        self.only_review_chk.setChecked(_load_window_setting("only_in_review"))
+        self.only_review_chk.toggled.connect(
+            lambda checked: self._on_filter_toggled("only_in_review", checked)
+        )
         header_row.addWidget(self.only_review_chk, 0, Qt.AlignRight | Qt.AlignVCenter)
         header_row.addSpacing(Metric.SPACING)
-        # Segundo filtro: solo el review del usuario. Apagado al abrir.
+        # Segundo filtro: solo el review del usuario. Tambien persiste.
         self.only_me_chk = QtWidgets.QCheckBox("Only for me")
         self.only_me_chk.setProperty("lgaLabeled", True)
-        self.only_me_chk.setChecked(False)
         if self._my_review_codes:
+            self.only_me_chk.setChecked(_load_window_setting("only_for_me"))
             self.only_me_chk.setToolTip(_tooltip("only_for_me"))
         else:
+            # Sin reviewer reconocido queda apagado y deshabilitado, pero NO se
+            # guarda: lo que el usuario eligio sigue en el INI para cuando su
+            # usuario vuelva a resolverse.
+            self.only_me_chk.setChecked(False)
             self.only_me_chk.setEnabled(False)
             self.only_me_chk.setToolTip(_tooltip("only_for_me_off"))
-        self.only_me_chk.toggled.connect(self._on_filter_toggled)
+        self.only_me_chk.toggled.connect(
+            lambda checked: self._on_filter_toggled("only_for_me", checked)
+        )
         header_row.addWidget(self.only_me_chk, 0, Qt.AlignRight | Qt.AlignVCenter)
         # Mas aire antes de Keep on top: separa los filtros de la opcion de ventana.
         header_row.addSpacing(Metric.SPACING * 2)
@@ -1716,7 +1748,9 @@ class GUI_Table(QtWidgets.QDialog):
                 widget.setSizePolicy(Policy.Ignored, Policy.Ignored)
         self.results_stack.setCurrentWidget(page)
 
-    def _on_filter_toggled(self, _checked):
+    def _on_filter_toggled(self, setting_key, checked):
+        """El usuario toco un filtro: se guarda ESA clave y se refiltra."""
+        _save_window_setting(setting_key, checked)
         self.apply_review_filter()
         if self.isVisible():
             # Se ajusta el tamano sin recentrar, para no mover la ventana.

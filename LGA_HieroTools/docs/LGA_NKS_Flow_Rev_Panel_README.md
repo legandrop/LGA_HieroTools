@@ -29,7 +29,7 @@ nueva.
    [LGA_NKS_Flow_Shot_Info.md](LGA_NKS_Flow_Shot_Info.md#apertura-automatica-al-llegar-a-un-shot-en-review).
 
    El header de la ventana de resultados trae **Only in review**, a la izquierda de
-   **Keep this window on top**. Arranca prendido cada vez (no persiste) y oculta las
+   **Keep this window on top**. Arranca prendido la primera vez y oculta las
    filas cuyo New Status no contiene "review" en el nombre visible (Review Lega,
    Review Hold, Pending Review...). Por qué: después de un Pull lo que se va a
    mirar son los shots en review; el resto de los cambios ya quedó aplicado en el
@@ -39,11 +39,26 @@ nueva.
    la navegación y la actualización tras un Push van por índice de fila. Una fila
    que un Push saca de review sigue visible hasta volver a tocar el checkbox.
 
-   A su derecha, **Only for me** (apagado al abrir, no persiste) deja solo las
+   A su derecha, **Only for me** (apagado la primera vez) deja solo las
    filas cuyo New Status es el review del usuario. Acá sí se compara el código de
    Flow de la fila (`revleg`, `rev_su`...) contra los del usuario, porque el dato
    es de quién es el review y no si la palabra aparece. Si el usuario no es un
    reviewer conocido, el checkbox queda deshabilitado.
+
+   **Los tres checkboxes del header persisten igual.** Only in review, Only for
+   me y Keep this window on top se guardan al tocarlos en
+   `%APPDATA%/LGA/HieroTools/FlowPull.ini`, sección `[FlowPullWindow]`, claves
+   `only_in_review`, `only_for_me` y `keep_on_top`; la ventana abre como quedó.
+   Los defaults (`_FLOWPULL_DEFAULTS`) valen solo hasta el primer toque. Por qué:
+   cada reviewer mira el Pull siempre igual, y volver a tildar lo mismo en cada
+   Pull era el paso que sobraba. Dos cosas que no se deducen del código:
+   - Se guarda **solo la clave que el usuario tocó**, y el valor se carga antes
+     de conectar la señal, así abrir la ventana no escribe el INI.
+   - Si el usuario no se resuelve como reviewer, Only for me se muestra apagado
+     y deshabilitado **sin guardar ese apagado**: lo elegido sigue en el INI para
+     cuando el perfil de PipeSync vuelva a resolverse.
+
+   Test: `tests/test_flow_pull_window_settings.py`.
 
    **De dónde sale el usuario:** de `get_normal_login()` (perfil PipeSync normal),
    igual que los botones Prev/Next Rev del ViewerTL. No del contexto activo: en
