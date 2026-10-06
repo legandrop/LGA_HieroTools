@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateNKScript v1.14 | Lega
+  LGA_NKS_CreateNKScript v1.15 | Lega
 
   Crea el script de comp de Nuke de un shot a partir del template .nk
   del proyecto (<raiz>/ASSETS/*.nk), editandolo como texto plano:
@@ -12,6 +12,12 @@ ____________________________________________________________________
   el frame range del proyecto. El resultado se escribe en
   <shot>/Comp/1_projects/<shot>_comp_v000.nk (si existe, pregunta antes de pisar).
 
+  v1.15: El vendor al final del nombre del shot pasa a ser opcional: se
+         exigia siempre y un shot PROJ_SEQ_SHOT se rechazaba como "no
+         reconocible". El shot de origen del template se busca como carpeta
+         en las rutas, no como token suelto: con un nombre de tres bloques
+         el patron viejo se comia el arranque del sufijo que seguia
+         (PROJ_010_020_aPla) y lo tomaba por el shot.
   v1.14: Sin carpeta de comp en disco, la ruta se arma con `comp` en
          minuscula (antes "Comp"): es la convencion unica para crear. Un shot
          con `Comp/` existente se sigue resolviendo por resolve_task_folder().
@@ -166,9 +172,24 @@ EDITREF_CLIP_FIRST = 1
 HANDLE_SPIN_WIDTH = 78
 HANDLE_SPIN_HEIGHT = 28
 
-# Nombre de shot tipo PROJ_1234_5678_VND (vendor al final)
-SHOT_NAME_RE = re.compile(r"^[A-Za-z0-9]+_\d{3,4}_\d{3,4}_[A-Za-z0-9]{2,4}$")
-SHOT_TOKEN_RE = re.compile(r"[A-Za-z0-9]+_\d{3,4}_\d{3,4}_[A-Za-z0-9]{2,4}")
+# Nombre de shot: PROJ_SEQ_SHOT, con un vendor OPCIONAL al final
+# (PROJ_SEQ_SHOT_VND). El vendor no se exige: hay proyectos sin vendor.
+#
+# El cuarto bloque solo se puede decidir por estructura cuando el nombre esta
+# COMPLETO y delimitado -la carpeta del shot, o un segmento entre barras-. En
+# texto suelto no: "PROJ_010_020_comp" y "PROJ_010_020_VND" tienen la misma
+# forma. Por eso aca no hay un patron "token de shot en cualquier lado": el
+# shot de origen del template se busca como carpeta (ver detect_source_shot).
+# Y es a proposito que no se consulte la lista de vendors de PipeSync: esta
+# tool trabaja con el nombre de la carpeta, que no depende de que el vendor
+# este cargado.
+_SHOT_BODY = r"[A-Za-z0-9]+_\d{3,4}_\d{3,4}"
+_SHOT_VENDOR = r"_[A-Za-z0-9]{2,4}"
+SHOT_NAME_RE = re.compile(r"^%s(?:%s)?$" % (_SHOT_BODY, _SHOT_VENDOR))
+# El shot como carpeta dentro de una ruta: .../<shot>/...
+SHOT_FOLDER_IN_PATH_RE = re.compile(
+    r"[/\\](%s(?:%s)?)(?=[/\\])" % (_SHOT_BODY, _SHOT_VENDOR)
+)
 
 PLATE_FOLDER_RE = re.compile(r"_([A-Za-z][A-Za-z0-9]*?Plate[0-9]*)_v\d+", re.IGNORECASE)
 
@@ -781,21 +802,50 @@ def check_anchor_orphans(all_chunks, deleted_indices):
 # ============================
 
 
-def detect_source_shot(template_text, template_name):
+def _is_template_own_shot(token, template_name):
+    """True si el token es el shot del NOMBRE del template (el placeholder
+    tipo PROJ_0000_0000 de PROJ_0000_0000_comp_v001.nk), que no es el shot
+    de origen aunque aparezca en el texto."""
+    stem = os.path.splitext(template_name)[0].lower()
+    token = token.lower()
+    return stem == token or stem.startswith(token + "_")
+
+
+def _loose_shot_token_re(shot_name):
+    """Patron de shot en texto suelto, con la MISMA cantidad de bloques que
+    el shot destino. Es la unica referencia que hay para saber si el bloque
+    que sigue al numero de shot es un vendor o el sufijo de un archivo."""
+    has_vendor = bool(shot_name) and len(shot_name.split("_")) > 3
+    return re.compile(
+        r"(?<![A-Za-z0-9])%s%s(?![A-Za-z0-9])"
+        % (_SHOT_BODY, _SHOT_VENDOR if has_vendor else "")
+    )
+
+
+def detect_source_shot(template_text, template_name, shot_name=None):
     """(shot_origen, carpeta_secuencia_origen) leidos del propio template.
 
-    El shot de origen es el token tipo PROJ_1234_5678_VND mas frecuente en
-    el texto que no sea el del nombre del template (que suele ser _0000_).
+    El shot de origen es la carpeta de shot mas frecuente en las rutas del
+    template (.../<seq>/<shot>/...), con o sin vendor. Se busca como carpeta
+    porque ahi el nombre esta delimitado por las barras; suelto en el texto,
+    el bloque que sigue al shot puede ser un vendor o el sufijo de un
+    archivo y no hay forma de distinguirlos.
+
+    Si el template no tiene ninguna ruta con la carpeta del shot, se buscan
+    nombres sueltos con la forma del shot destino (shot_name).
+
+    Nunca cuenta el shot del nombre del template (que suele ser _0000_).
     La secuencia es el segmento de ruta que precede a ese shot."""
-    template_token = None
-    m = SHOT_TOKEN_RE.search(template_name)
-    if m:
-        template_token = m.group(0)
     counts = {}
-    for token in SHOT_TOKEN_RE.findall(template_text):
-        if token == template_token:
+    for token in SHOT_FOLDER_IN_PATH_RE.findall(template_text):
+        if _is_template_own_shot(token, template_name):
             continue
         counts[token] = counts.get(token, 0) + 1
+    if not counts:
+        for token in _loose_shot_token_re(shot_name).findall(template_text):
+            if _is_template_own_shot(token, template_name):
+                continue
+            counts[token] = counts.get(token, 0) + 1
     if not counts:
         raise CreateNKError(
             "No pude detectar el shot de origen del template (%s)" % template_name
@@ -838,7 +888,7 @@ def build_script(
     if not SHOT_NAME_RE.match(shot_name):
         raise CreateNKError("El nombre del shot no es reconocible: %s" % shot_name)
     seq_folder = os.path.basename(os.path.dirname(shot_root))
-    source_shot, source_seq = detect_source_shot(template_text, template_name)
+    source_shot, source_seq = detect_source_shot(template_text, template_name, shot_name)
     log.append("Shot: %s (seq %s) | origen del template: %s" % (shot_name, seq_folder, source_shot))
     log.append("  ffprobe: %s" % (ffprobe_path() or "NO ENCONTRADO"))
 

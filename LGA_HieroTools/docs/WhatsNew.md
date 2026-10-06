@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v3.98
+- [fixed] Create NK v000 no longer rejects shots whose name has no vendor code at the end.
 - [improved] The Flow Pull results window remembers its Only in review and Only for me checkboxes, the same way it already remembers Keep this window on top.
 - [fixed] Nuke Studio no longer prints a "Can't restore panel" message for every HieroTools panel at startup: the installer now sets this up on its own.
 
