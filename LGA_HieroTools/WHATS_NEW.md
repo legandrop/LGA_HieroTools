@@ -1,5 +1,12 @@
 # What's new in LGA HieroTools
 
+## v3.98 (2026-10-06)
+
+- **Improved:** Create NK v000 works with a template that only has the plates the project uses: aPlate is the only one it needs, and the plate Reads can be empty with just their label.
+- **Improved:** The Flow Pull results window remembers its Only in review and Only for me checkboxes, the same way it already remembers Keep this window on top.
+- **Fixed:** Create NK v000 no longer rejects shots whose name has no vendor code at the end.
+- **Fixed:** Nuke Studio no longer prints a "Can't restore panel" message for every HieroTools panel at startup: the installer now sets this up on its own.
+
 ## v3.97 (2026-10-04)
 
 - **New:** TL | Solo EditRef in the Viewer | TL panel (Alt+Shift+D) turns off every video track except EditRef and BurnIn to watch the edit on its own; press it again to turn them all back on.

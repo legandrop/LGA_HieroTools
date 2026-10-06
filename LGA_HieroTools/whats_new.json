@@ -4,6 +4,28 @@
   "name": "LGA HieroTools",
   "versions": [
     {
+      "version": "3.98",
+      "items": [
+        {
+          "kind": "fixed",
+          "text": "Create NK v000 no longer rejects shots whose name has no vendor code at the end."
+        },
+        {
+          "kind": "improved",
+          "text": "Create NK v000 works with a template that only has the plates the project uses: aPlate is the only one it needs, and the plate Reads can be empty with just their label."
+        },
+        {
+          "kind": "improved",
+          "text": "The Flow Pull results window remembers its Only in review and Only for me checkboxes, the same way it already remembers Keep this window on top."
+        },
+        {
+          "kind": "fixed",
+          "text": "Nuke Studio no longer prints a \"Can't restore panel\" message for every HieroTools panel at startup: the installer now sets this up on its own."
+        }
+      ],
+      "date": "2026-10-06"
+    },
+    {
       "version": "3.97",
       "items": [
         {
