@@ -145,7 +145,7 @@ class PanelReviewReorganizationTests(unittest.TestCase):
         )
         self.assertEqual(
             [_tuple_text(item, 0) for item in toggle_buttons],
-            ["TL | ON Clips / OFF v00", "TL | ON/OFF _comp_"],
+            ["TL | ON Clips / OFF v00", "TL | ON/OFF _comp_", "TL | Solo EditRef"],
         )
 
         viewer_colors = {
