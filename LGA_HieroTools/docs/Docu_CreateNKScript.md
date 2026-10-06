@@ -43,11 +43,32 @@ sueltos con la misma cantidad de bloques que el shot destino.
 
 ## Qué tiene que traer el template
 
-No sirve cualquier `.nk` guardado desde un shot. La tool exige que el template
-tenga un Read por cada slot, identificado por su **label**: `aPlate` …
-`fPlate`, `aDenoised` … `fDenoised`, `cbPlate`, `rfPlate`, `ccPlate` y
-`lgPlate`. Cada uno es un trío Read → Anchor → Stamp, y los slots que no son
-del shot de origen llevan `file PLACEHOLDER`. Si falta alguno, la corrida
-termina con `El template no tiene estos Reads esperados` y la lista: un
-template con los Reads sin label cae ahí aunque tenga el aPlate y el denoised
-bien conectados.
+Un **slot** es un trío Read → Anchor → Stamp cuyo Read lleva el nombre del slot
+en su **label**: `aPlate` … `fPlate`, `aDenoised` … `fDenoised`, `cbPlate`,
+`rfPlate`, `ccPlate`, `lgPlate`. La tool reconoce el slot por el label, no por
+el nombre del archivo: un Read sin label no existe para ella.
+
+El único slot obligatorio es `aPlate`. El template trae los demás si quiere:
+un proyecto de un solo plate puede tener solo `aPlate` y `aDenoised`. Hasta la
+v1.15 se exigían los 16 y la corrida abortaba con la lista de los que faltaban.
+
+- **El Read de un slot puede estar vacío.** Alcanza con el label. Nuke no
+  escribe los knobs que quedaron en su default, así que un Read recién creado
+  se guarda sin `file` ni rango; la tool los agrega. Hasta la v1.15 solo
+  reemplazaba knobs existentes: el Read quedaba vacío y el log decía `SET`
+  igual. El log ahora marca `[el Read venia sin file]`.
+- **Un plate del shot sin slot en el template se clona** del último slot de
+  letra que sirva de molde (`f`, `e`, … `b`), plate desde plate y denoised
+  desde denoised. Con un solo slot `b` de cada tipo alcanza para clonar todos
+  los demás.
+- **El slot `a` nunca sirve de molde.** Su trío lleva líneas `set`/`push` y su
+  Stamp está cableado al resto del comp, fuera de la columna de input: una
+  copia quedaría colgando en el medio del graph. Si el shot trae un plate que
+  el template no contempla y no hay otro slot del que copiar, ese plate no se
+  agrega y el cartel final lo avisa por nombre.
+- **Las columnas se ubican según el propio template.** La primera va en la x
+  del Read `aPlate`, el paso es la distancia `aPlate` → `aDenoised`
+  (`COLUMN_STEP` si no hay `aDenoised`) y el backdrop `input` conserva el
+  margen que tenía a la derecha de su último slot. Hasta la v1.15 eran
+  coordenadas fijas medidas sobre un template: en otro armado en otra zona
+  del node graph, los plates caían fuera de su backdrop.

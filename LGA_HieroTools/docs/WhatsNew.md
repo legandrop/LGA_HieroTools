@@ -14,6 +14,7 @@ platforms: [win, mac]
 
 ## v3.98
 - [fixed] Create NK v000 no longer rejects shots whose name has no vendor code at the end.
+- [improved] Create NK v000 works with a template that only has the plates the project uses: aPlate is the only one it needs, and the plate Reads can be empty with just their label.
 - [improved] The Flow Pull results window remembers its Only in review and Only for me checkboxes, the same way it already remembers Keep this window on top.
 - [fixed] Nuke Studio no longer prints a "Can't restore panel" message for every HieroTools panel at startup: the installer now sets this up on its own.
 

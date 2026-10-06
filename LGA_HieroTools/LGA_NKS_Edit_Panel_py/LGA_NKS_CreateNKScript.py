@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateNKScript v1.15 | Lega
+  LGA_NKS_CreateNKScript v1.16 | Lega
 
   Crea el script de comp de Nuke de un shot a partir del template .nk
   del proyecto (<raiz>/ASSETS/*.nk), editandolo como texto plano:
@@ -12,6 +12,14 @@ ____________________________________________________________________
   el frame range del proyecto. El resultado se escribe en
   <shot>/Comp/1_projects/<shot>_comp_v000.nk (si existe, pregunta antes de pisar).
 
+  v1.16: El template trae los slots que quiere: el unico obligatorio es
+         aPlate (antes exigia los 16 y abortaba si faltaba uno). Una columna
+         del shot sin slot se clona del ultimo slot de letra que sirva de
+         molde; si no hay ninguno, no se agrega y se avisa. Las columnas y
+         el backdrop input se ubican relativos al layout del propio template
+         en vez de en coordenadas fijas medidas sobre uno. Y un Read vacio
+         (solo con label) recibe file y rango: antes no se le escribia nada
+         y el log decia SET igual.
   v1.15: El vendor al final del nombre del shot pasa a ser opcional: se
          exigia siempre y un shot PROJ_SEQ_SHOT se rechazaba como "no
          reconocible". El shot de origen del template se busca como carpeta
@@ -149,11 +157,10 @@ KNOWN_SPECIALS = ["cb", "rf", "cc", "lg"]
 # aPlate es obligatorio. aDenoised conserva su trio si se acepta continuar.
 NEVER_DELETE = {"aPlate"}
 
-# Layout del backdrop input (medido sobre el template)
-COLUMN_START_X = -2087
+# Paso entre columnas del backdrop input cuando el template no deja medirlo
+# (no trae aDenoised). El origen de las columnas, el paso y el margen derecho
+# del backdrop se leen del PROPIO template: ver measure_layout().
 COLUMN_STEP = 161
-GROUP_GAP = 161
-BACKDROP_RIGHT_PAD = 2532
 
 INPUT_DIR_NAME = "_input"
 LOOK_DIR_NAME = "Look_Files"
@@ -344,11 +351,27 @@ def token_sort_key(token):
     return (base, int(suffix) if suffix else 0)
 
 
-def missing_denoised_keys(columns):
-    """Slots denoised del template que corresponden a plates reales sin render."""
+def slot_keys():
+    """Todos los slots que la tool sabe llenar, en orden de columnas."""
+    keys = []
+    for letter in KNOWN_LETTERS:
+        keys.append(letter + "Plate")
+        keys.append(letter + "Denoised")
+    for special in KNOWN_SPECIALS:
+        keys.append(special + "Plate")
+    return keys
+
+
+def missing_denoised_keys(columns, template_keys=None):
+    """Slots denoised del template que corresponden a plates reales sin render.
+
+    template_keys: los slots que trae el template elegido. Un denoised que el
+    template no contempla no es un faltante: no hay Read que conservar. Sin
+    ese dato se asume el template completo."""
     present = {col["key"] for col in columns}
     return [letter + "Denoised" for letter in KNOWN_LETTERS
-            if letter + "Plate" in present and letter + "Denoised" not in present]
+            if letter + "Plate" in present and letter + "Denoised" not in present
+            and (template_keys is None or letter + "Denoised" in template_keys)]
 
 
 def confirm_missing_denoised(parent, missing):
@@ -684,6 +707,73 @@ def find_read_chunks(chunks):
     return found
 
 
+def template_slot_keys(template_text):
+    """Slots que trae un template: los Reads cuyo label es un slot conocido.
+    Un template trae los que quiere; el unico obligatorio es aPlate."""
+    reads = find_read_chunks(split_chunks(template_text.split("\n")))
+    return [key for key in slot_keys() if key in reads]
+
+
+def clone_model_key(chunks, reads, kind):
+    """Slot del template que sirve de molde para una columna sin slot propio,
+    o None si no hay ninguno.
+
+    Sirve el ultimo slot de letra del mismo tipo (f, e, ... b) cuyo trio sea
+    autonomo. El de 'a' no sirve nunca: lleva lineas set/push y su Stamp esta
+    cableado al resto del comp, asi que una copia quedaria colgando del
+    graph en vez de en la columna de input."""
+    word = "Denoised" if kind == "denoised" else "Plate"
+    for letter in reversed(KNOWN_LETTERS):
+        key = letter + word
+        if key in NEVER_DELETE or key not in reads:
+            continue
+        try:
+            trio_indices(chunks, reads[key], for_delete=True)
+        except CreateNKError:
+            continue
+        return key
+    return None
+
+
+def _int_knob(chunk, knob):
+    try:
+        return int(float(chunk_knob(chunk, knob)))
+    except (TypeError, ValueError):
+        return None
+
+
+def measure_layout(chunks, reads):
+    """(x de la primera columna, paso entre columnas, margen derecho del
+    backdrop input) medidos sobre el propio template.
+
+    Cada template arma su node graph donde quiere, asi que las columnas se
+    ubican relativas al aPlate del template y no en coordenadas fijas.
+    El paso es la distancia aPlate -> aDenoised; sin aDenoised, COLUMN_STEP.
+    El margen es lo que el backdrop input deja a la derecha del ultimo slot
+    (None si no hay backdrop input o no se puede medir)."""
+    start_x = _int_knob(chunks[reads["aPlate"]], "xpos")
+    if start_x is None:
+        raise CreateNKError("El Read aPlate del template no tiene xpos")
+    step = COLUMN_STEP
+    if "aDenoised" in reads:
+        den_x = _int_knob(chunks[reads["aDenoised"]], "xpos")
+        if den_x is not None and den_x > start_x:
+            step = den_x - start_x
+    slot_xs = [
+        x for x in (_int_knob(chunks[reads[key]], "xpos") for key in slot_keys() if key in reads)
+        if x is not None
+    ]
+    right_margin = None
+    for chunk in chunks:
+        if chunk_class(chunk) == "BackdropNode" and normalized_label(chunk) == "input":
+            bd_x = _int_knob(chunk, "xpos")
+            bd_width = _int_knob(chunk, "bdwidth")
+            if bd_x is not None and bd_width is not None:
+                right_margin = bd_x + bd_width - max(slot_xs)
+            break
+    return start_x, step, right_margin
+
+
 def _is_stack_line(chunk):
     return len(chunk) == 1 and (
         chunk[0].startswith("set ") or chunk[0].startswith("push ")
@@ -726,14 +816,22 @@ def trio_indices(chunks, read_idx, for_delete=False):
 
 
 def fill_read(chunk, info):
-    set_chunk_knob(chunk, "file", quote_if_needed(info["path"]))
+    """Apunta el Read a la secuencia. True si el Read ya traia knob file.
+
+    Los knobs se AGREGAN si faltan: Nuke no escribe los que quedaron en su
+    default, asi que el Read vacio de un template (solo con su label) viene
+    sin file ni rango, y reemplazar sin agregar lo dejaba vacio en silencio.
+    """
+    had_file = chunk_knob(chunk, "file") is not None
+    set_or_add_chunk_knob(chunk, "file", quote_if_needed(info["path"]))
     for knob, value in (
         ("first", info["first"]),
         ("last", info["last"]),
         ("origfirst", info["first"]),
         ("origlast", info["last"]),
     ):
-        set_chunk_knob(chunk, knob, str(value))
+        set_or_add_chunk_knob(chunk, knob, str(value))
+    return had_file
 
 
 def set_trio_xpos(chunks_of_trio, x):
@@ -895,7 +993,22 @@ def build_script(
     if columns is None:
         columns, unknown = scan_shot(shot_root)
     unknown = unknown or []
-    missing_denoised = missing_denoised_keys(columns)
+
+    lines = template_text.split("\n")
+    chunks = split_chunks(lines)
+    reads = find_read_chunks(chunks)
+
+    # El template trae los slots que quiere: el unico obligatorio es aPlate.
+    known_keys = slot_keys()
+    template_keys = [k for k in known_keys if k in reads]
+    for key in NEVER_DELETE:
+        if key not in reads:
+            raise CreateNKError(
+                "El template no tiene un Read con label %s" % key
+            )
+    log.append("  Slots del template: %s" % ", ".join(template_keys))
+
+    missing_denoised = missing_denoised_keys(columns, template_keys)
     if missing_denoised and not keep_missing_denoised:
         raise CreateNKError(
             "Missing denoised renders require confirmation: %s"
@@ -914,36 +1027,23 @@ def build_script(
         if key not in present_keys:
             raise CreateNKError("El shot no tiene %s: no se puede armar el script" % key)
 
-    lines = template_text.split("\n")
-    chunks = split_chunks(lines)
-    reads = find_read_chunks(chunks)
+    # El layout se mide ANTES de tocar nada: sale del template tal como vino.
+    column_start_x, column_step, backdrop_right_margin = measure_layout(chunks, reads)
 
-    known_keys = []
-    for letter in KNOWN_LETTERS:
-        known_keys.append(letter + "Plate")
-        known_keys.append(letter + "Denoised")
-    for sp in KNOWN_SPECIALS:
-        known_keys.append(sp + "Plate")
-    missing_labels = [k for k in known_keys if k not in reads]
-    if missing_labels:
-        raise CreateNKError(
-            "El template no tiene estos Reads esperados: %s" % ", ".join(missing_labels)
-        )
-
-    # 1. llenar slots conocidos existentes / borrar los que no existen
+    # 1. llenar los slots del template que el shot tiene / borrar los demas
     to_delete = []
     col_by_key = {c["key"]: c for c in columns}
     trios = {}
     preserved_files = {}
-    for key in known_keys:
+    for key in template_keys:
         keep_template = key in missing_denoised
         trio = trio_indices(
             chunks, reads[key], for_delete=key not in col_by_key and not keep_template
         )
         if key in col_by_key:
-            fill_read(chunks[reads[key]], col_by_key[key]["info"])
+            had_file = fill_read(chunks[reads[key]], col_by_key[key]["info"])
             trios[key] = [chunks[i] for i in trio]
-            log.append("  SET %s" % key)
+            log.append("  SET %s%s" % (key, "" if had_file else " [el Read venia sin file]"))
         elif keep_template:
             trios[key] = [chunks[i] for i in trio]
             log.append("  CONSERVAR %s: ruta original del template" % key)
@@ -965,15 +1065,29 @@ def build_script(
             to_delete.append(index)
             log.append("  BORRAR StickyNote de version del template")
 
-    # 2. clonar trios para columnas extra (gPlate, cbPlate2, gDenoised, ...)
+    # 2. clonar trios para las columnas sin slot propio: las extra (gPlate,
+    # cbPlate2, gDenoised, ...) y las que el template no trae. Sin un slot
+    # que sirva de molde, la columna no se agrega y se avisa.
     next_read = max_numbered_name(chunks, "Read") + 1
     next_stamp = max_numbered_name(chunks, "Stamp") + 1
     clones = {}
     used_names = {chunk_knob(c, "name") for c in chunks}
+    models = {
+        "plate": clone_model_key(chunks, reads, "plate"),
+        "denoised": clone_model_key(chunks, reads, "denoised"),
+    }
     for col in columns:
-        if col["key"] in known_keys:
+        if col["key"] in template_keys:
             continue
-        source_key = "fDenoised" if col["kind"] == "denoised" else "fPlate"
+        source_key = models["denoised" if col["kind"] == "denoised" else "plate"]
+        if source_key is None:
+            _warn(
+                log, warnings,
+                "%s: the template has no slot for it and no spare slot to "
+                "copy one from, so it was not added. Add it by hand"
+                % col["key"],
+            )
+            continue
         source_trio = trio_indices(chunks, reads[source_key])
         anchor_name = "Anchor_" + re.sub(r"[^A-Za-z0-9]", "", col["key"])
         if anchor_name in used_names:
@@ -993,11 +1107,12 @@ def build_script(
         trios[col["key"]] = cloned
         log.append("  CLONAR %s (desde %s)" % (col["key"], source_key))
 
-    # 3. recomputar posiciones de columnas y backdrop input
-    x = COLUMN_START_X
+    # 3. recomputar posiciones de columnas y backdrop input, relativas al
+    # layout del template. Solo entran las columnas que tienen trio.
+    x = column_start_x
     last_x = x
     started_specials = False
-    layout_columns = list(columns)
+    layout_columns = [col for col in columns if col["key"] in trios]
     for key in missing_denoised:
         plate_index = next(i for i, col in enumerate(layout_columns)
                            if col["key"] == key.replace("Denoised", "Plate"))
@@ -1005,15 +1120,20 @@ def build_script(
     for col in layout_columns:
         base = col["token"].partition("#")[0]
         if not started_specials and base in KNOWN_SPECIALS:
-            x += GROUP_GAP
+            # los especiales van separados de las letras por una columna vacia
+            x += column_step
             started_specials = True
         set_trio_xpos(trios[col["key"]], x)
         last_x = x
-        x += COLUMN_STEP
-    for chunk in chunks:
-        if chunk_class(chunk) == "BackdropNode" and normalized_label(chunk) == "input":
-            set_chunk_knob(chunk, "bdwidth", str(last_x + BACKDROP_RIGHT_PAD))
-            break
+        x += column_step
+    if backdrop_right_margin is not None:
+        for chunk in chunks:
+            if chunk_class(chunk) == "BackdropNode" and normalized_label(chunk) == "input":
+                bd_x = _int_knob(chunk, "xpos")
+                set_chunk_knob(
+                    chunk, "bdwidth", str(last_x - bd_x + backdrop_right_margin)
+                )
+                break
 
     # 4. OCIO CDL / LUT con rutas reales. Se toca todo nodo de color cuyo
     # file apunte a Look_Files O sea una expresion TCL que resuelve el look
@@ -1218,7 +1338,7 @@ def build_script(
                 "Could not read the EditRef duration: the review range is the template's, check it by hand",
             )
 
-    # Proteger rutas despues de clonar: fDenoised sigue sirviendo de modelo.
+    # Proteger rutas despues de clonar: el slot molde ya se uso.
     for key in missing_denoised:
         for line_index, line in enumerate(chunks[reads[key]]):
             if re.match(r"^\s+file\s", line):
@@ -1228,10 +1348,14 @@ def build_script(
                 preserved_files[marker] = line
                 chunks[reads[key]][line_index] = marker
 
-    # 6. reconstruir texto: sin borrados, con clones insertados tras el trio
-    # de fDenoised (las posiciones visuales ya estan recalculadas)
+    # 6. reconstruir texto: sin borrados, con clones insertados tras el
+    # ultimo trio molde (las posiciones visuales ya estan recalculadas)
     delete_set = set(to_delete)
-    insert_after = trio_indices(chunks, reads["fDenoised"])[-1]
+    model_keys = [key for key in models.values() if key]
+    insert_after = (
+        max(trio_indices(chunks, reads[key])[-1] for key in model_keys)
+        if model_keys else None
+    )
     out_lines = []
     for i, chunk in enumerate(chunks):
         if i not in delete_set:
@@ -1943,13 +2067,17 @@ def _make_controller():
         done = QtCore.Signal(object)
         failed = QtCore.Signal(str)
 
-        def __init__(self, shot_root, shot_name):
+        def __init__(self, shot_root, shot_name, template_path):
             QtCore.QThread.__init__(self)
             self.shot_root = shot_root
             self.shot_name = shot_name
+            self.template_path = template_path
 
         def run(self):
             try:
+                # los slots del template se leen aca, fuera del hilo principal
+                template_text, _uses_crlf = load_template(self.template_path)
+                template_keys = template_slot_keys(template_text)
                 columns, unknown = scan_shot(self.shot_root)
                 editref_mov = find_editref(self.shot_root)
                 frames = probe_mov_frames(editref_mov) if editref_mov else None
@@ -1960,6 +2088,7 @@ def _make_controller():
                         "unknown": unknown,
                         "editref_frames": frames,
                         "publish_v000": publish,
+                        "template_keys": template_keys,
                     }
                 )
             except Exception as error:
@@ -2056,7 +2185,9 @@ def _make_controller():
 
         def _on_template_chosen(self, template_path):
             self.template_path = template_path
-            self.scan_worker = ScanWorker(self.shot_root, self.shot_name)
+            self.scan_worker = ScanWorker(
+                self.shot_root, self.shot_name, template_path
+            )
             self.scan_worker.done.connect(self._on_scan_done)
             self.scan_worker.failed.connect(self._on_failed)
             self.scan_worker.start()
@@ -2074,7 +2205,7 @@ def _make_controller():
                 )
                 return
 
-            missing = missing_denoised_keys(columns)
+            missing = missing_denoised_keys(columns, data.get("template_keys"))
             self.keep_missing_denoised = False
             if missing:
                 if not confirm_missing_denoised(_get_hiero_main_window(), missing):
