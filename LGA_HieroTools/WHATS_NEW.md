@@ -1,5 +1,17 @@
 # What's new in LGA HieroTools
 
+## v3.99 (2026-10-08)
+
+- **Improved:** Apply AMF now applies the shot's .cube LUT, together with the .cdl grade when there is one.
+- **Improved:** Fix Colorspaces, and the automatic fix after a Flow Pull, now also fix the other loaded versions of each clip, so switching versions keeps the right color space.
+- **Improved:** Create NK v000 points LUT look nodes that use a .cube file to the shot's .cube in Look_Files.
+- **Fixed:** Apply AMF no longer deletes effects you had added to the clip: the look goes on top of them.
+- **Fixed:** Apply AMF works with the OCIO v2 configs that ship with Nuke 17, and warns when a look file is missing or corrupt instead of leaving the clip black.
+- **Fixed:** Compare Versions now loads the previous version in the same color space as the comp in color-managed projects, so the difference compares like with like.
+- **Fixed:** Fix Colorspaces no longer skips plates and comps it used to report as having no color transform available.
+- **Fixed:** Contact Sheet connects the clips in timeline order: the first clip on the left is input 0, even when the selection includes effects.
+- **Fixed:** Create NK v000 now trims the review range (without handles) on every movie output of the template, whatever the Write node is named.
+
 ## v3.98 (2026-10-06)
 
 - **Improved:** Create NK v000 works with a template that only has the plates the project uses: aPlate is the only one it needs, and the plate Reads can be empty with just their label.
