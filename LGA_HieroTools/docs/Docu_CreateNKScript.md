@@ -72,3 +72,73 @@ v1.15 se exigían los 16 y la corrida abortaba con la lista de los que faltaban.
   margen que tenía a la derecha de su último slot. Hasta la v1.15 eran
   coordenadas fijas medidas sobre un template: en otro armado en otra zona
   del node graph, los plates caían fuera de su backdrop.
+
+## Nodos de look: CDL, CLF y .cube
+
+Los nodos OCIO del template (`OCIOCDLTransform`, `OCIOFileTransform`) se
+apuntan a los archivos del shot en `<shot>/_input/Look_Files`. Cada nodo recibe
+el tipo de archivo que le corresponde:
+
+| Nodo del template | Recibe |
+|---|---|
+| `OCIOCDLTransform` | el `.cdl` del aPlate (`*aplate*.cdl` o `*_cdl`), de version mas alta |
+| `OCIOFileTransform` cuyo `file` nombra un `.cube` | el `.cube` del shot |
+| cualquier otro `OCIOFileTransform` | el `.clf` del shot |
+
+**El tipo lo decide lo que el template ya trae en el `file` del nodo**: una ruta
+o una expresion TCL que contenga `.cube` (por ejemplo la que busca `*.cube` en
+`Look_Files`). Un `OCIOFileTransform` sin `file` no dice que formato espera y se
+trata como `.clf`, que era lo unico que existia antes. **Si el LMT de un show es
+un `.cube`, el template tiene que dejar el nodo con su `file` puesto** (alcanza
+con la ruta de cualquier shot, que la tool reemplaza). Hasta la v1.16 un nodo
+con `.cube` se pisaba con el `.clf` del shot, o quedaba intacto sin aviso si el
+shot no tenia `.clf`.
+
+**Que `.cube` se elige.** Es el LMT del proyecto, no de un plate (igual que el
+`.clf`), asi que no se filtra por plate: entre varios gana el de version mas
+alta (`_vNN` del nombre) y, si empatan o ninguno trae version, el ultimo por
+orden alfabetico. Las mayusculas de la extension no importan.
+
+**Reglas que no cambian:**
+
+- Un `file` que apunta a un archivo concreto FUERA de `Look_Files` no se toca:
+  lo puso alguien a mano y no es el look del shot. Pasa tambien con un `.cube`
+  de ruta fija: queda como vino y el cartel final lo avisa como cualquier nodo
+  de color no reconocido. Si algun show necesita lo contrario, es una decision
+  de la regla, no un caso del `.cube`.
+- Si el shot no trae el archivo, el nodo conserva la ruta del template y el
+  cartel avisa. El aviso `No .cube LUT found` solo sale si el template tiene
+  nodos de `.cube` (en el resto de los proyectos no tener `.cube` es lo normal),
+  y el de `.clf` se omite cuando el template tiene solo nodos de `.cube`.
+
+## Writes de video: el limit range sin handles
+
+El EditRef del shot define la ventana del review, sin handles. Esa ventana se
+aplica como limit range (`use_limit true`, `first`, `last`) a **todo Write cuya
+salida es video**, sea cual sea su nombre. Hasta la v1.16 solo se tocaba el
+Write llamado `WRITE_DNXHD`: en un show cuyo Write se llamaba `WRITE_REV` el
+rango quedaba el del template, sin ningun aviso.
+
+- **Que es "de video":** `file_type` en `mov`, `mov64` o `mxf`. Si el nodo no
+  trae `file_type` -Nuke no guarda los knobs en su default, y ahi el formato
+  sale de la extension- decide la extension del `file`: `.mov` o `.mxf`. Manda
+  `file_type`: un Write con `file_type exr` y `file` terminado en `.mov` escribe
+  EXR y no se toca. El `file` suele ser una expresion TCL; la extension es el
+  texto literal del final. Si el final es otra expresion (`...]`) no se puede
+  saber sin evaluarla, el Write no cuenta como video y el log lo dice
+  (`extension indeterminada`).
+- **Un show puede tener dos salidas de video** (reviews en DNxHD y entregas en
+  otro `.mov`/`.mxf`): las dos van sin handles y las dos reciben el rango.
+- **Los Write de imagen** (`.exr`, `.tif`, `.dpx`) no se tocan.
+- **Write deshabilitado:** se ajusta igual. Sigue siendo parte del template y,
+  si alguien lo prende despues, tiene que salir con el rango correcto y no con
+  handles. El log lo marca `[deshabilitado]`.
+- **Write dentro de un Group:** se ajusta igual. En un `.nk` los nodos internos
+  de un Group van como chunks indentados a continuacion de la llave de cierre del
+  Group, asi que el recorrido del texto los ve igual que a los de afuera; el log
+  dice en que grupo estaba.
+- **Sin ningun Write de video:** no es un error. El log lo registra
+  (`WRITE de video: ninguno ...`) y el script se arma igual.
+- **Sin duracion del EditRef** (no hay mov o no se pudo medir) no hay ventana
+  que aplicar: los Write quedan como vinieron y el log lo dice. El cartel final
+  ya avisa del EditRef.

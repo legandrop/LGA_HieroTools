@@ -1,3 +1,7 @@
+v3.99:
+
+        - Create NK v000 no aplicaba el rango sin handles al review si el Write no se llamaba `WRITE_DNXHD` (`LGA_NKS_CreateNKScript v1.17`): en un show con `WRITE_REV` el mov salía con handles y sin aviso. Ahora lo reciben todos los Write de video (`file_type` mov/mxf, o archivo `.mov`/`.mxf` si no hay `file_type`), también deshabilitados o dentro de Groups, y se prende `use_limit`: Nuke guarda `first`/`last` aunque esté apagado, así que setear solo esos no acotaba. Los de imagen no se tocan. Además, un nodo de look cuyo `file` es un `.cube` (LMT en `OCIOFileTransform`) recibía el `.clf` del shot; ahora se apunta al `.cube` de `_input/Look_Files` de versión más alta, con aviso si falta. Test nuevo `tests/test_create_nk_review_and_look.py`. [ Create NK - Writes de video y look .cube ]
+
 v3.98:
 
         - El test de labels del panel Viewer | TL quedó desactualizado cuando se sumó `TL | Solo EditRef` (`tests/test_panel_review_reorganization.py`): esperaba dos botones en el bloque azul de estado de clips y el panel tiene tres desde la v3.97, así que la suite fallaba aunque el panel estuviera bien. Se actualiza la lista esperada; no cambia código de runtime. [ Tests - Labels del panel Viewer TL ]

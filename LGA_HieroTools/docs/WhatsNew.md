@@ -12,6 +12,10 @@ platforms: [win, mac]
 
 ## Unreleased
 
+## v3.99
+- [fixed] Create NK v000 now trims the review range (without handles) on every movie output of the template, whatever the Write node is named.
+- [improved] Create NK v000 points LUT look nodes that use a .cube file to the shot's .cube in Look_Files.
+
 ## v3.98
 - [fixed] Create NK v000 no longer rejects shots whose name has no vendor code at the end.
 - [improved] Create NK v000 works with a template that only has the plates the project uses: aPlate is the only one it needs, and the plate Reads can be empty with just their label.

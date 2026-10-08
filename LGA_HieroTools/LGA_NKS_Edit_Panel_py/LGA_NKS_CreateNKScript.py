@@ -1,17 +1,24 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateNKScript v1.16 | Lega
+  LGA_NKS_CreateNKScript v1.17 | Lega
 
   Crea el script de comp de Nuke de un shot a partir del template .nk
   del proyecto (<raiz>/ASSETS/*.nk), editandolo como texto plano:
   reemplaza los Reads de plates/denoised por las rutas reales del shot
   (version mas alta con EXR), borra los trios Read+Anchor+Stamp de los
   plates que no existen, clona trios para plates extra, apunta los
-  OCIO (CDL/CLF) a los Look_Files del shot, centra el EditRef y ajusta
+  OCIO (CDL/CLF/.cube) a los Look_Files del shot, centra el EditRef y ajusta
   el frame range del proyecto. El resultado se escribe en
   <shot>/Comp/1_projects/<shot>_comp_v000.nk (si existe, pregunta antes de pisar).
 
+  v1.17: Dos cambios del template. (1) El limit range sin handles ya no
+         depende del nombre WRITE_DNXHD: lo reciben TODOS los Write cuya
+         salida es video (.mov o .mxf), sea cual sea su nombre. (2) Un nodo
+         de look que usa un .cube (LMT en un OCIOFileTransform) se apunta al
+         .cube del shot en Look_Files, igual que los .cdl/.clf; antes un
+         nodo asi se pisaba con el .clf del shot o quedaba intacto sin
+         aviso.
   v1.16: El template trae los slots que quiere: el unico obligatorio es
          aPlate (antes exigia los 16 y abortaba si faltaba uno). Una columna
          del shot sin slot se clona del ultimo slot de letra que sirva de
@@ -504,6 +511,108 @@ def resolve_look_files(shot_root):
             clfs.sort(key=get_version)
             clf = os.path.join(look_dir, clfs[-1]).replace("\\", "/")
     return cdl, clf
+
+
+def resolve_cube_file(shot_root):
+    """Ruta del .cube del shot en Look_Files, o None.
+
+    Es el LMT del shot cuando el look del proyecto no viene como .clf sino
+    como LUT .cube. Mismo criterio que el .clf, que tampoco es de un plate:
+    entre varios se toma el de version mas alta (_vNN del nombre); si
+    empatan en version -o ninguno la lleva- queda el ultimo por orden
+    alfabetico. Las mayusculas de la extension no importan."""
+    look_dir = os.path.join(shot_root, INPUT_DIR_NAME, LOOK_DIR_NAME)
+    if not os.path.isdir(look_dir):
+        return None
+    cubes = [f for f in sorted(os.listdir(look_dir)) if f.lower().endswith(".cube")]
+    if not cubes:
+        return None
+    cubes.sort(key=get_version)
+    return os.path.join(look_dir, cubes[-1]).replace("\\", "/")
+
+
+def look_node_kind(cls, current_file):
+    """Que archivo del shot le corresponde a un nodo de look del template:
+    'cdl', 'clf' o 'cube'.
+
+    Un OCIOCDLTransform es siempre 'cdl'. Un OCIOFileTransform es 'cube' si
+    el file que trae el template NOMBRA un .cube -una ruta o la expresion TCL
+    que busca *.cube en Look_Files-, y 'clf' en cualquier otro caso. Un
+    OCIOFileTransform sin file no dice que formato espera: se asume clf, que
+    es lo que hacia la tool antes de existir el soporte de .cube. Si el
+    template de un show con LMT .cube trae el nodo vacio, hay que dejarle el
+    file puesto (aunque sea con la ruta de otro shot)."""
+    if cls == "OCIOCDLTransform":
+        return "cdl"
+    return "cube" if ".cube" in (current_file or "").lower() else "clf"
+
+
+# Salidas de video: Writes cuyo archivo es .mov o .mxf. Son los reviews y
+# las entregas, y los dos van sin handles. Los Writes de imagen (.exr, .tif,
+# .dpx) no se tocan nunca.
+VIDEO_FILE_TYPES = ("mov", "mov64", "mxf")
+VIDEO_EXTENSIONS = (".mov", ".mxf")
+
+
+def write_video_info(chunk):
+    """(es_video, motivo) de un chunk Write.
+
+    Manda el knob file_type: si el nodo lo trae, Nuke escribe con ESE
+    formato aunque la extension diga otra cosa. Cuando no lo trae -Nuke no
+    guarda los knobs en su default, y el file_type por defecto sale de la
+    extension- decide la extension del knob file. El file suele ser una
+    expresion TCL (\\[file dir ...]/.../\\[file tail ...].mov): la extension
+    es el texto literal del final. Si el final es una expresion ("...]"), la
+    extension no se puede saber sin evaluarla y el Write no cuenta como
+    video."""
+    file_type = (chunk_knob(chunk, "file_type") or "").strip().strip('"').lower()
+    if file_type:
+        return file_type in VIDEO_FILE_TYPES, "file_type %s" % file_type
+    raw = (chunk_knob(chunk, "file") or "").strip().strip('"').strip().lower()
+    if raw.endswith(VIDEO_EXTENSIONS):
+        return True, "extension %s" % raw[-4:]
+    if raw.endswith("]"):
+        return False, "extension indeterminada (termina en una expresion)"
+    return False, "no es .mov/.mxf"
+
+
+def apply_review_limit(chunks, grupos, first, last, log):
+    """Limit range sin handles en TODO Write de video. Devuelve cuantos.
+
+    Setea use_limit, first y last (los agrega si el template no los trae:
+    un Write sin limit guardado no escribe esos knobs). Un Write
+    deshabilitado tambien se ajusta: sigue siendo parte del template y, si
+    alguien lo prende despues, tiene que salir con el rango correcto y no con
+    handles. Adentro de un Group tambien: sus nodos internos son chunks del
+    mismo texto."""
+    total = 0
+    tocados = 0
+    for index, chunk in enumerate(chunks):
+        if chunk_class(chunk) != "Write":
+            continue
+        total += 1
+        nombre = chunk_knob(chunk, "name") or "?"
+        grupo = grupos[index] if index < len(grupos) else None
+        donde = "en el grupo %s" % grupo if grupo else "suelto"
+        es_video, motivo = write_video_info(chunk)
+        if not es_video:
+            log.append("  WRITE %s (%s): sin tocar, %s" % (nombre, donde, motivo))
+            continue
+        set_or_add_chunk_knob(chunk, "use_limit", "true")
+        set_or_add_chunk_knob(chunk, "first", str(first))
+        set_or_add_chunk_knob(chunk, "last", str(last))
+        tocados += 1
+        apagado = (chunk_knob(chunk, "disable") or "").strip().lower() == "true"
+        log.append(
+            "  WRITE %s (%s): limit range %d-%d [%s]%s"
+            % (nombre, donde, first, last, motivo, " [deshabilitado]" if apagado else "")
+        )
+    if not tocados:
+        log.append(
+            "  WRITE de video: ninguno en el template (%d Write(s) en total): "
+            "no hay review al que acotar el rango" % total
+        )
+    return tocados
 
 
 def ffprobe_path():
@@ -1140,8 +1249,12 @@ def build_script(
     # desde root.name: las dos formas son 'el look del shot'. Un OCIO que
     # apunte a un archivo fijo puesto a mano NO se pisa.
     cdl, clf = resolve_look_files(shot_root)
+    cube = resolve_cube_file(shot_root)
     log.append("  CDL del shot: %s" % (cdl or "NINGUNO"))
     log.append("  CLF del shot: %s" % (clf or "NINGUNO"))
+    log.append("  CUBE del shot: %s" % (cube or "NINGUNO"))
+    shot_looks = {"cdl": cdl, "clf": clf, "cube": cube}
+    nodos_por_tipo = {"cdl": 0, "clf": 0, "cube": 0}
     grupos = grupo_de_cada_chunk(chunks)
     ocio_total = 0
     ocio_tocados = 0
@@ -1155,7 +1268,11 @@ def build_script(
         grupo = grupos[index] if index < len(grupos) else None
         donde = "en el grupo %s" % grupo if grupo else "suelto"
         current = chunk_knob(chunk, "file") or ""
-        target = cdl if cls == "OCIOCDLTransform" else clf
+        # Que archivo del shot le toca: el CDL, el CLF o el CUBE. El tipo sale
+        # de lo que el template ya trae en el file del nodo.
+        tipo = look_node_kind(cls, current)
+        nodos_por_tipo[tipo] += 1
+        target = shot_looks[tipo]
         # Tres formas de que un nodo sea "del look del shot":
         #   - su path nombra Look_Files
         #   - es la expresion TCL que resuelve desde root.name
@@ -1181,8 +1298,8 @@ def build_script(
             # No se suma a ocio_intactos: la falta de CDL/CLF ya tiene su
             # propio aviso y repetirla por nodo seria ruido.
             log.append(
-                "  OCIO %s (%s): INTACTO, no hay archivo de look en el shot"
-                % (nombre, donde)
+                "  OCIO %s (%s): INTACTO, no hay .%s en el shot"
+                % (nombre, donde, tipo)
             )
             continue
         if current.strip():
@@ -1193,7 +1310,7 @@ def build_script(
             set_or_add_chunk_knob(chunk, "file", quote_if_needed(target))
             motivo = " [venia sin file]"
         ocio_tocados += 1
-        log.append("  OCIO %s (%s)%s -> %s" % (nombre, donde, motivo, target))
+        log.append("  OCIO %s (%s) [%s]%s -> %s" % (nombre, donde, tipo, motivo, target))
     log.append("  OCIO: %d nodos, %d reemplazados" % (ocio_total, ocio_tocados))
     if ocio_intactos:
         # Solo llega aca el caso raro: HAY archivo de look pero el nodo no se
@@ -1210,11 +1327,22 @@ def build_script(
             "No aPlate .cdl found in %s/%s: the CDL nodes keep the template path"
             % (INPUT_DIR_NAME, LOOK_DIR_NAME),
         )
-    if not clf:
+    # El aviso del .clf se mantiene como siempre, salvo en un template cuyos
+    # nodos de LUT son todos .cube: ahi un shot sin .clf es lo normal y el
+    # aviso saldria en todos los shots.
+    if not clf and (nodos_por_tipo["clf"] or not nodos_por_tipo["cube"]):
         _warn(
             log, warnings,
             "No .clf LUT found in %s/%s: the LUT nodes keep the template path"
             % (INPUT_DIR_NAME, LOOK_DIR_NAME),
+        )
+    # El del .cube solo si el template tiene nodos de .cube: en el resto de
+    # los proyectos no tener .cube es lo normal.
+    if not cube and nodos_por_tipo["cube"]:
+        _warn(
+            log, warnings,
+            "No .cube LUT found in %s/%s: the .cube look nodes keep the "
+            "template path" % (INPUT_DIR_NAME, LOOK_DIR_NAME),
         )
     amf_con_extension, amf_con_sufijo = find_amf(shot_root)
     if not amf_con_extension:
@@ -1310,11 +1438,9 @@ def build_script(
                 set_or_add_chunk_knob(chunk, "origlast", str(editref_clip_last))
                 set_or_add_chunk_knob(chunk, "frame_mode", '"start at"')
                 set_or_add_chunk_knob(chunk, "frame", str(editref_start))
-            elif cls == "Write" and (chunk_knob(chunk, "name") or "").startswith(
-                "WRITE_DNXHD"
-            ):
-                set_chunk_knob(chunk, "first", str(editref_start))
-                set_chunk_knob(chunk, "last", str(editref_end))
+        # Limit range sin handles de TODA salida de video (.mov / .mxf), con
+        # el nombre que tenga el Write: ver apply_review_limit().
+        apply_review_limit(chunks, grupos, editref_start, editref_end, log)
         log.append(
             "  EditRef: %d frames, clip %d-%d, start at %d (timeline %d-%d)"
             % (editref_frames, EDITREF_CLIP_FIRST, editref_clip_last,
@@ -1337,6 +1463,12 @@ def build_script(
                 log, warnings,
                 "Could not read the EditRef duration: the review range is the template's, check it by hand",
             )
+
+    if not editref_frames:
+        log.append(
+            "  WRITE de video: sin tocar, no hay duracion del EditRef "
+            "para acotar el limit range"
+        )
 
     # Proteger rutas despues de clonar: el slot molde ya se uso.
     for key in missing_denoised:

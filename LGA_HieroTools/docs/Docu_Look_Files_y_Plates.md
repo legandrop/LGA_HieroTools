@@ -39,6 +39,10 @@ Lo que hay que saber, medido sobre shots reales:
   uno. En el shot de diez `.amf` hay exactamente diez `.cdl`.
 - **El `.clf` es UNO y lo comparten todos.** El LMT es del proyecto, no del
   plate, y su nombre no sigue la convencion del shot.
+- **El LMT puede venir como `.cube`** en vez de `.clf` en algunos shows. Create
+  NK v000 lo trata igual que al `.clf` (uno por shot, de version mas alta); ver
+  `Docu_CreateNKScript.md`. Apply AMF lo aplica solo si el `.amf` lo nombra: sin
+  `.amf`, el plan de respaldo busca únicamente `.cdl` y `.clf`.
 - **Un plate puede tener varias versiones** (`bPlate_v001`, `bPlate_v002`). En
   todos los casos medidos las versiones de un mismo plate traen el MISMO grade,
   asi que ofrecer todas seria ruido: se toma la mas alta.
