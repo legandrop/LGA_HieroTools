@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v3.99
+- [fixed] Contact Sheet connects the clips in timeline order again: the first clip on the left is input 0, even when the selection includes effects.
 - [fixed] Create NK v000 now trims the review range (without handles) on every movie output of the template, whatever the Write node is named.
 - [improved] Create NK v000 points LUT look nodes that use a .cube file to the shot's .cube in Look_Files.
 
