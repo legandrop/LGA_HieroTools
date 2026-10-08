@@ -13,6 +13,9 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v3.99
+- [improved] Apply AMF now applies the shot's .cube LUT, together with the .cdl grade when there is one.
+- [fixed] Apply AMF no longer deletes effects you had added to the clip: the look goes on top of them.
+- [fixed] Apply AMF works with the OCIO v2 configs that ship with Nuke 17, and warns when a look file is missing or corrupt instead of leaving the clip black.
 - [fixed] Compare Versions now loads the previous version in the same color space as the comp in color-managed projects, so the difference compares like with like.
 - [improved] Fix Colorspaces, and the automatic fix after a Flow Pull, now also fix the other loaded versions of each clip, so switching versions keeps the right color space.
 - [fixed] Fix Colorspaces no longer skips plates and comps it used to report as having no color transform available.

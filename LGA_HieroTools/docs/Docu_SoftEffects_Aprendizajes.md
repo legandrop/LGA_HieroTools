@@ -236,6 +236,21 @@ efectos, que en pantalla se ve como una franja muerta VERTICAL entre el clip y
 su propia cadena, y crece con cada clip. No es un problema de frames: los
 rangos coinciden al frame.
 
+### Crear sobre un subtrack ocupado BORRA el efecto que estaba (medido)
+
+`createEffect(..., subTrackIndex=N)` sobre un subtrack que ya ocupa otro efecto
+en el mismo rango **elimina ese efecto sin avisar** (queda con `isValid()` en
+False y `subTrackIndex()` en -1). Blur en sub 0 + crear un CDL en sub 0 = Blur
+perdido. Por eso Apply AMF no usa posiciones fijas: pone la cadena en un bloque
+contiguo por ENCIMA del subtrack mas alto ocupado (`subtracks_para_la_cadena`).
+
+**Orden de aplicacion** (medido con `TrackItem.addToNukeScript(script,
+includeEffects=True)`): el subtrack mas BAJO se aplica primero, el mas alto
+despues, y los huecos no importan. Un efecto en un subtrack mayor que uno ajeno
+queda aplicado ENCIMA del ajeno. Y al borrar, Hiero compacta los subtracks
+vacios: los indices de lo ajeno pueden cambiar tras un toggle. Detalle en
+`Docu_ApplyAMF_NKS.md`.
+
 ### Borrar: la opcion que evita borrar el CLIP
 
 Un soft effect vive en `track.subTrackItems()` y se elimina con
@@ -334,11 +349,21 @@ lista con formato `scene_linear (ACES - ACEScg)`. Pidiendo `ACES2065-1` en un
 config ACES matchean DOS opciones, `ACES - ACES2065-1` y
 `default (ACES - ACES2065-1)`, y cual gana depende del orden del enum. Hoy dan
 lo mismo, pero elegir el rol es volver a atarse a la indireccion que causo el
-bug. `LGA_NKS_ApplyAMF.match_colorspace_option` busca en DOS pasadas: primero
-contra las opciones sin parentesis, y despues contra la lista entera. La
-segunda pasada hace falta porque hay colorspaces directos con parentesis en
-su nombre (34 en `aces_1.2`, del tipo `Input - ARRI - V3 LogC (EI160) - Wide
-Gamut`): descartarlos de una dejaria sin resolver a quien pida uno de esos.
+bug. `LGA_NKS_ApplyAMF.match_colorspace_option` busca en TRES pasadas: primero
+contra las opciones sin parentesis y sin alias, despues contra todas las que no
+son alias, y al final contra la lista entera. La segunda pasada hace falta
+porque hay colorspaces directos con parentesis en su nombre (34 en
+`aces_1.2`, del tipo `Input - ARRI - V3 LogC (EI160) - Wide Gamut`): descartarlos
+de una dejaria sin resolver a quien pida uno de esos. Los alias (la familia
+`Utility/Aliases` de `aces_1.2`: `acescct`, `acescg`...) quedan para la ultima
+porque en minuscula ganarian por igualdad exacta.
+
+**Las opciones del enum traen campos separados por TAB; solo el primero es el
+nombre.** `'ACES - ACEScct<TAB>Colorspaces/ACES/ACES - ACEScct'` en `aces_1.2`
+y `'ACEScct<TAB>Colorspaces/ACES/ACEScct<TAB><TAB>ACES - ACEScct,acescct_ap1'`
+en los configs v2 de Foundry. Devolver la cadena entera deja el nodo en error
+con los v2 y sin ningun aviso; la funcion matchea y devuelve el nombre corto.
+Ver `Docu_ApplyAMF_NKS.md`.
 
 **Si el espacio pedido no esta en el config, eso es un ERROR, no un WARN.**
 El nodo se queda en el default y el look sale mal igual, asi que informar el

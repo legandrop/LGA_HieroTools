@@ -41,8 +41,11 @@ Lo que hay que saber, medido sobre shots reales:
   plate, y su nombre no sigue la convencion del shot.
 - **El LMT puede venir como `.cube`** en vez de `.clf` en algunos shows. Create
   NK v000 lo trata igual que al `.clf` (uno por shot, de version mas alta); ver
-  `Docu_CreateNKScript.md`. Apply AMF lo aplica solo si el `.amf` lo nombra: sin
-  `.amf`, el plan de respaldo busca únicamente `.cdl` y `.clf`.
+  `Docu_CreateNKScript.md`. Apply AMF lo aplica en los dos caminos: si el `.amf`
+  lo nombra en su `<file>`, y sin `.amf`, donde el plan de respaldo es el `.cdl`
+  suelto (si hay) mas UN LMT -el `.clf` y, si no hay, el `.cube`-. Con `.cdl` y
+  `.cube` se aplican los dos; nunca `.clf` y `.cube` juntos. Ver
+  `Docu_ApplyAMF_NKS.md`.
 - **Un plate puede tener varias versiones** (`bPlate_v001`, `bPlate_v002`). En
   todos los casos medidos las versiones de un mismo plate traen el MISMO grade,
   asi que ofrecer todas seria ruido: se toma la mas alta.
@@ -65,6 +68,10 @@ El orden es:
 3. Si el clip **no es un plate** -un `_comp`, un precomp, un render de review-,
    tambien el del aPlate: el look que le corresponde es el del plate principal.
 4. Si tampoco hay aPlate, el primero de la carpeta.
+
+Esta eleccion es del **.amf**. Sin ningun `.amf` en la carpeta no hay plate que
+resolver y manda el plan de respaldo (`.cdl` + LMT), que se explica en
+`Docu_ApplyAMF_NKS.md`.
 
 Los pasos 2 y 3 son el mismo codigo: se busca el plate pedido y, si no esta, se
 busca `PLATE_POR_DEFECTO`. Un clip sin plate entra con `None` y cae directo al
@@ -128,6 +135,8 @@ cargador deja de salvarnos.
   media.
 - `pick_amf_for_plate(look_dir, plate)` — la regla de eleccion completa.
 - `sibling_look_file(amf_path, extension)` — el `.cdl` hermano.
+- `pick_cube(look_dir)` — el `.cube` del shot (sin plate; version mas alta y,
+  entre LUT distintos, el ultimo alfabetico).
 - `_archivos_de(look_dir)` / `_PLAN_CACHE` / `reset_caches()` — el cache.
 - `build_effect_plan(look_dir, plate)` — arma el plan; cachea por
   (carpeta, plate).

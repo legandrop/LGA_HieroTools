@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ApplyAMF v0.92 | Lega
+  LGA_NKS_ApplyAMF v0.93 | Lega
 
   Pone y saca los soft effects de color de un shot, siguiendo lo que
   declara el .amf que viene con el shot.
@@ -45,10 +45,12 @@ ____________________________________________________________________
 
   Efectos que sabe crear:
     OCIOCDLTransform  <- el .cdl del shot (grade)
-    OCIOFileTransform <- el .clf que nombra el .amf (LMT)
+    OCIOFileTransform <- el LMT: el .clf o el .cube que nombra el .amf
 
-  Si no hay .amf en la carpeta se cae a un plan fijo: un archivo por
-  extension, sin tocar el working space. Queda avisado por consola.
+  Si no hay .amf en la carpeta se cae a un plan fijo: el .cdl suelto (si
+  hay) y UN LMT, que es el .clf y, si no hay, el .cube. Con .cdl y .cube
+  se aplican los dos; nunca .clf y .cube juntos (son el mismo LMT y se
+  doblaria el look). Queda avisado por consola.
 
   Flujo por clip:
     1. Ruta de la media del clip.
@@ -77,6 +79,28 @@ ____________________________________________________________________
   (ver pick_amf_for_plate). El aviso de 'hay mas de uno de esa extension'
   quedo solo para el plan de respaldo, donde no hay .amf que consultar.
 
+  v0.93: El .cube pasa a ser un look. Sin .amf, el plan de respaldo es el
+         .cdl (si hay) mas UN LMT: el .clf y, si no hay, el .cube. El .cube
+         va como OCIOFileTransform y su working space sale del nombre del
+         archivo (sin pista, ACEScct). Con varios .cube se queda la version
+         mas alta de cada LUT y, entre LUT distintos, el ultimo alfabetico,
+         avisado en el log. Fix: con los configs OCIO v2 de Foundry las
+         opciones del enum traen campos separados por TAB y la funcion
+         devolvia la cadena entera, que deja el efecto roto sin aviso:
+         ahora matchea y devuelve el nombre corto. Los archivos del plan
+         se validan antes de crear el efecto (inexistente, vacio, .cube o
+         XML corrupto) porque nodeHasError() NO detecta un archivo faltante;
+         y un nodo que igual queda en error (Node.hasError()) se saca del
+         timeline y sube al cartel, porque un nodo en error entrega negro.
+         Fix (preexistente): crear un efecto en un subtrack ocupado BORRA el
+         que estaba, y la cadena iba siempre al 0 y al 1, asi que se llevaba
+         puestos los efectos del artista. Ahora la cadena va en un bloque
+         contiguo de subtracks por ENCIMA del mas alto ocupado
+         (subtracks_para_la_cadena), con el CDL antes que el LMT y sin que un
+         efecto del artista la parta; sin ajenos es el 0 y el 1 de siempre.
+         Un OCIOFileTransform/OCIOCDLTransform ajeno ya no hace saltear
+         nuestro eslabon. El cartel dice 'could not apply everything' porque
+         puede aplicar parte.
   v0.92: El .amf se resuelve por el PLATE del clip y no como 'el unico de
          esa extension'. Un shot trae un .amf por plate y cada plate tiene
          su propio grade, asi que quedarse con el primero le ponia a un
@@ -204,12 +228,42 @@ PLATE_POR_DEFECTO = "aplate"
 # la tool NO tiene que consultar el espacio del proyecto ni el del clip.
 AMF_WORKING_SPACE = "ACES2065-1"
 
-# Plan de respaldo, para cuando el shot no trae .amf. Mismo orden que el .amf
-# de referencia: primero el grade, despues el LMT.
-FALLBACK_EFFECTS = (
-    {"type": "OCIOCDLTransform", "extension": ".cdl"},
-    {"type": "OCIOFileTransform", "extension": ".clf"},
+# Extensiones de los archivos de look que entiende el plan de respaldo.
+CDL_EXTENSION = ".cdl"
+CLF_EXTENSION = ".clf"
+CUBE_EXTENSION = ".cube"
+
+# Un .cube es un LUT 1D/3D pelado: no trae metadata, ni siquiera dice en que
+# espacio espera su entrada. Se deduce del nombre del archivo y, sin pista, se
+# asume ACEScct, que es la convencion de los LMT de ACES (un LMT en un
+# OCIOFileTransform con working space ACEScct es la forma en que el estudio
+# arma el look del shot). El nombre que se pide es el LOGICO ('ACEScct'): el
+# nombre real del colorspace lo resuelve match_colorspace_option contra el
+# config OCIO activo, porque cambia de config en config ('ACEScct' a secas o
+# 'ACES - ACEScct').
+CUBE_DEFAULT_SPACE = "ACEScct"
+
+# Pista del nombre -> espacio logico. 'linear' se lee como lineal ACES (AP0),
+# no como cualquier lineal: el .cube de un LMT de ACES que dice 'Linear' habla
+# de ACES2065-1. Los lookaround evitan que 'acescc' matchee adentro de
+# 'acescct' y que 'linear' matchee adentro de 'nonlinear'.
+_CUBE_SPACE_HINTS = {
+    "acescct": "ACEScct",
+    "acescc": "ACEScc",
+    "acescg": "ACEScg",
+    "ap1": "ACEScg",
+    "aces2065": "ACES2065-1",
+    "ap0": "ACES2065-1",
+    "linear": "ACES2065-1",
+}
+_CUBE_SPACE_RE = re.compile(
+    r"(?<![a-z0-9])(%s)(?![a-z])"
+    % "|".join(sorted(_CUBE_SPACE_HINTS, key=len, reverse=True))
 )
+
+# '<nombre>_v003' al final del nombre (sin extension). Sin distinguir mayusculas:
+# hay carpetas con '_V003'.
+_LUT_VERSION_RE = re.compile(r"^(?P<base>.+)_v(?P<version>\d+)$", re.IGNORECASE)
 
 # Si el clip ya tiene un efecto de ese tipo, se lo deja como esta y se crea solo
 # el que falta. Asi el boton es idempotente y no apila efectos al reintentar, ni
@@ -440,12 +494,28 @@ def resolve_look_dir(shot_dir):
 # modulo de la forma normal, el cargador deja de salvarnos.
 _ARCHIVOS_CACHE = {}
 _PLAN_CACHE = {}
+_CUBE_CACHE = {}
+_VALIDACION_CACHE = {}
+
+# Avisos de la corrida que NO son un fallo (por ejemplo, "habia varios .cube y se
+# eligio uno"). Van al log y al RESUMEN; no abren un cartel: son decisiones
+# deterministas de la tool, no algo que el usuario tenga que resolver ahora.
+_AVISOS_CORRIDA = []
+
+
+def _anotar_aviso_corrida(aviso):
+    """Suma un aviso a la corrida, sin repetirlo (el plan se arma por plate)."""
+    if aviso not in _AVISOS_CORRIDA:
+        _AVISOS_CORRIDA.append(aviso)
 
 
 def reset_caches():
     """Vacia los caches. Se llama al arrancar cada corrida."""
     _ARCHIVOS_CACHE.clear()
     _PLAN_CACHE.clear()
+    _CUBE_CACHE.clear()
+    _VALIDACION_CACHE.clear()
+    del _AVISOS_CORRIDA[:]
 
 
 def _archivos_de(look_dir):
@@ -594,6 +664,237 @@ def read_cccid(cdl_path):
     if len(ids) > 1:
         debug_print(f"  [INFO] El .cdl tiene {len(ids)} ids, se usa el primero: {ids}")
     return ids[0]
+
+
+# ============================
+# .cube como look del shot
+# ============================
+
+
+def parse_lut_name(basename):
+    """(nombre sin version, version) de un .cube, o (None, None) si no trae.
+
+    A diferencia de un .amf, el token que precede a '_vNNN' NO identifica un
+    plate: en 'PROJA_Preview_LMT_v001.cube' y 'PROJA_Final_LMT_v001.cube' los
+    dos terminan en 'LMT' y son LUT distintos. Por eso la clave de agrupado es el
+    nombre ENTERO sin el '_vNNN' final: las versiones de un mismo LUT colapsan
+    en una entrada y dos LUT distintos quedan separados.
+    """
+    stem = os.path.splitext(basename)[0]
+    match = _LUT_VERSION_RE.match(stem)
+    if not match:
+        return None, None
+    return match.group("base"), int(match.group("version"))
+
+
+def pick_cube(look_dir):
+    """El .cube del shot, o None si no hay. SIN cartel de eleccion.
+
+    Se agrupa por nombre sin el '_vNNN' final y de cada LUT se queda la version
+    mas alta. Si quedan varios LUT distintos no se pregunta -la tool procesa
+    muchos clips de una vez, un cartel por clip es inviable-: se elige de forma
+    determinista el ULTIMO por orden alfabetico y queda avisado en el log y en
+    el RESUMEN. Los .cube sin '_vNNN' son cada uno su propio LUT.
+
+    Es el LMT del shot, no de un plate: no se filtra por plate (igual que el
+    .clf). Cacheado por carpeta, asi el aviso sale una sola vez por corrida.
+    """
+    if not look_dir:
+        return None
+    if look_dir in _CUBE_CACHE:
+        return _CUBE_CACHE[look_dir]
+
+    cubes = [
+        p for p in _archivos_de(look_dir) if p.lower().endswith(CUBE_EXTENSION)
+    ]
+    elegido = None
+    if cubes:
+        por_lut = {}
+        for path in cubes:
+            nombre = os.path.basename(path)
+            base, version = parse_lut_name(nombre)
+            if base is None:
+                clave, version = os.path.splitext(nombre)[0].lower(), -1
+            else:
+                clave = base.lower()
+            anterior = por_lut.get(clave)
+            if anterior is None or version > anterior[0]:
+                por_lut[clave] = (version, path)
+
+        ordenados = sorted(por_lut)
+        elegido = por_lut[ordenados[-1]][1]
+        debug_print(
+            "  .cube encontrados    : %d (%d LUT distinto%s)"
+            % (len(cubes), len(ordenados), "" if len(ordenados) == 1 else "s")
+        )
+        if len(ordenados) > 1:
+            aviso = (
+                "%d distintos .cube en %s: se usa '%s' (el ultimo por orden "
+                "alfabetico, en su version mas alta); no se uso: %s"
+                % (
+                    len(ordenados),
+                    LOOK_DIR_NAME,
+                    os.path.basename(elegido),
+                    ", ".join(os.path.basename(por_lut[c][1]) for c in ordenados[:-1]),
+                )
+            )
+            debug_print("  [AVISO] " + aviso)
+            _anotar_aviso_corrida(aviso)
+
+    _CUBE_CACHE[look_dir] = elegido
+    return elegido
+
+
+def cube_working_space(cube_path):
+    """Espacio de color en el que corre el .cube. Devuelve (espacio, origen).
+
+    Un .cube no declara su espacio de entrada, asi que se lee del nombre
+    (ACEScct, ACEScc, ACEScg, AP1, ACES2065, AP0, Linear; sin distinguir
+    mayusculas ni exigir un separador concreto) y, sin pista, se asume
+    CUBE_DEFAULT_SPACE. Si el nombre trae mas de un espacio ('ACEScg_to_ACEScct')
+    gana el PRIMERO, que por convencion es el de entrada, y queda avisado en el
+    log. El espacio devuelto es el nombre logico: configure_effect_node lo
+    resuelve contra el config OCIO real.
+
+    `origen` es 'nombre' o 'default', para el log.
+    """
+    stem = os.path.splitext(os.path.basename(cube_path))[0].lower()
+    hallados = [m.group(1) for m in _CUBE_SPACE_RE.finditer(stem)]
+    if not hallados:
+        return CUBE_DEFAULT_SPACE, "default"
+
+    espacios = []
+    for pista in hallados:
+        espacio = _CUBE_SPACE_HINTS[pista]
+        if espacio not in espacios:
+            espacios.append(espacio)
+    if len(espacios) > 1:
+        debug_print(
+            "  [AVISO] El nombre del .cube menciona varios espacios (%s): "
+            "se usa el primero." % ", ".join(espacios)
+        )
+    return espacios[0], "nombre"
+
+
+def cube_spec(cube_path):
+    """El .cube como eslabon LMT: un OCIOFileTransform con su working space."""
+    espacio, origen = cube_working_space(cube_path)
+    debug_print(
+        "    [APLICAR] LUT -> %s (working space: %s, segun %s)"
+        % (os.path.basename(cube_path), espacio, origen)
+    )
+    return {
+        "type": "OCIOFileTransform",
+        "file": re.sub(r"[\\/]+", "/", cube_path),
+        "cccid": None,
+        "working_space": espacio,
+    }
+
+
+# ============================
+# Validacion del archivo de look
+# ============================
+#
+# POR QUE existe: en NKS, EffectTrackItem.nodeHasError() devuelve False aunque el
+# knob `file` apunte a un archivo que no existe (medido), asi que el
+# "[WARN] El nodo quedo en error" no avisa nunca de lo mas comun. Y el knob
+# ACEPTA cualquier ruta en setValue. Entonces el unico control confiable es mirar
+# el archivo ANTES de crear el efecto: un efecto que no puede cargar su archivo
+# no se crea, y el motivo sube al cartel final.
+
+
+def _motivo_cube_invalido(path):
+    """None si el .cube parece valido; si no, el motivo corto (en ingles).
+
+    Chequeo estructural, no una validacion completa del formato: el header tiene
+    que declarar LUT_1D_SIZE y/o LUT_3D_SIZE y tienen que estar todas las filas
+    de datos (N para 1D, N^3 para 3D). OCIO rechaza un .cube sin tamano, con
+    filas de menos Y con filas de mas (medido en NKS: 4^3 + 10 filas sobrantes
+    dejan el nodo en error), y un nodo en error entrega negro. Las palabras
+    clave desconocidas se ignoran: rechazarlas dejaria sin look a un archivo
+    valido con una extension rara.
+    """
+    tam_1d = tam_3d = 0
+    filas = 0
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            for linea in handle:
+                texto = linea.strip()
+                if not texto or texto.startswith("#"):
+                    continue
+                partes = texto.split()
+                clave = partes[0].upper()
+                if clave == "LUT_1D_SIZE" and len(partes) > 1:
+                    tam_1d = int(partes[1])
+                elif clave == "LUT_3D_SIZE" and len(partes) > 1:
+                    tam_3d = int(partes[1])
+                elif clave in (
+                    "TITLE", "DOMAIN_MIN", "DOMAIN_MAX",
+                    "LUT_1D_INPUT_RANGE", "LUT_3D_INPUT_RANGE",
+                ):
+                    continue
+                elif len(partes) == 3:
+                    # Una fila de datos son tres numeros. Cualquier otra linea
+                    # (una palabra clave que no conocemos) se ignora: rechazarla
+                    # dejaria sin look a un .cube valido con una extension rara.
+                    try:
+                        float(partes[0]), float(partes[1]), float(partes[2])
+                    except ValueError:
+                        continue
+                    filas += 1
+    except (ValueError, OSError):
+        return "is not a valid .cube LUT"
+    if tam_1d <= 0 and tam_3d <= 0:
+        return "is not a valid .cube LUT (no LUT_1D_SIZE / LUT_3D_SIZE)"
+    esperadas = (tam_1d if tam_1d > 0 else 0) + (tam_3d ** 3 if tam_3d > 0 else 0)
+    if filas < esperadas:
+        return "is truncated (%d of %d LUT rows)" % (filas, esperadas)
+    if filas > esperadas:
+        return "has extra data (%d LUT rows, expected %d)" % (filas, esperadas)
+    return None
+
+
+def motivo_archivo_inutil(path):
+    """None si el archivo de look se puede cargar; si no, el motivo (en ingles).
+
+    Mira, en orden: que exista, que se pueda leer, que no este vacio, y que su
+    contenido tenga forma (.cube estructurado; .cdl y .clf como XML bien
+    formado). Cacheado por ruta: veinte clips del mismo shot leen el archivo una
+    sola vez, y los .cube grandes (65^3 son ~270k filas) no se releen.
+    """
+    if path in _VALIDACION_CACHE:
+        return _VALIDACION_CACHE[path]
+
+    nombre = os.path.basename(path)
+    motivo = None
+    if not os.path.isfile(path):
+        motivo = "'%s' does not exist" % nombre
+    else:
+        vacio = False
+        try:
+            with open(path, "rb") as handle:
+                handle.read(1)
+            vacio = os.path.getsize(path) == 0
+        except OSError:
+            motivo = "'%s' cannot be read" % nombre
+        if motivo is None and vacio:
+            motivo = "'%s' is empty" % nombre
+        if motivo is None:
+            extension = os.path.splitext(path)[1].lower()
+            if extension == CUBE_EXTENSION:
+                detalle = _motivo_cube_invalido(path)
+                if detalle:
+                    motivo = "'%s' %s" % (nombre, detalle)
+            elif extension in (CDL_EXTENSION, CLF_EXTENSION):
+                try:
+                    ET.parse(path)
+                except Exception:
+                    motivo = "'%s' is not valid XML" % nombre
+
+    if motivo:
+        debug_print("  [ERROR] Archivo de look inutilizable: %s" % motivo)
+    _VALIDACION_CACHE[path] = motivo
+    return motivo
 
 
 # ============================
@@ -776,7 +1077,13 @@ def _build_effect_plan_sin_cache(look_dir, plate):
                 debug_print(
                     f"    {index}. [AVISO] El .amf nombra '{info['file']}' y no esta en la carpeta"
                 )
-                lmt_path = find_look_file(look_dir, os.path.splitext(info["file"])[1])
+                extension_lmt = os.path.splitext(info["file"])[1].lower()
+                if extension_lmt == CUBE_EXTENSION:
+                    # Para un .cube la eleccion es la determinista de pick_cube
+                    # (version mas alta, ultimo alfabetico) y no "el primero".
+                    lmt_path = pick_cube(look_dir)
+                else:
+                    lmt_path = find_look_file(look_dir, extension_lmt)
                 if not lmt_path:
                     debug_print(f"    {index}. [ERROR] Tampoco hay otro archivo de esa extension")
                     continue
@@ -806,25 +1113,55 @@ def _build_effect_plan_sin_cache(look_dir, plate):
 def _fallback_plan(look_dir):
     """Plan fijo por extension, para shots sin .amf.
 
+    El plan es el .cdl suelto (si hay) y despues UN LMT: el .clf si existe y,
+    si no, el .cube. Con .cdl y .cube se aplican los dos (decision de Lega).
+    Nunca .clf y .cube juntos: son ambos el LMT del shot, y aplicar los dos
+    dobla el look. Si estan los dos gana el .clf y el .cube queda avisado.
+
     Sin .amf el unico working space que se puede afirmar es el del .clf: un LMT
     de ACES entra y sale en ACES2065-1 por convencion, y el archivo mismo lo
-    declara. El del .cdl queda sin tocar a proposito: un .cdl suelto puede estar
-    hecho para ACEScct, ACEScc o lineal, y no hay de donde saberlo. Adivinarlo
-    seria peor que dejar el default y que el log lo diga.
+    declara. El del .cube sale del nombre (ver cube_working_space). El del .cdl
+    queda sin tocar a proposito: un .cdl suelto puede estar hecho para ACEScct,
+    ACEScc o lineal, y no hay de donde saberlo. Adivinarlo seria peor que dejar
+    el default y que el log lo diga.
     """
     plan = []
-    for spec in FALLBACK_EFFECTS:
-        file_path = find_look_file(look_dir, spec["extension"])
-        if not file_path:
-            continue
-        es_cdl = spec["type"] == "OCIOCDLTransform"
+
+    cdl_path = find_look_file(look_dir, CDL_EXTENSION, quiet=True)
+    if cdl_path:
         plan.append(
             {
-                "type": spec["type"],
-                "file": file_path,
-                "cccid": read_cccid(file_path) if es_cdl else None,
-                "working_space": None if es_cdl else AMF_WORKING_SPACE,
+                "type": "OCIOCDLTransform",
+                "file": cdl_path,
+                "cccid": read_cccid(cdl_path),
+                "working_space": None,
             }
+        )
+
+    clf_path = find_look_file(look_dir, CLF_EXTENSION, quiet=True)
+    cube_path = pick_cube(look_dir)
+    if clf_path:
+        plan.append(
+            {
+                "type": "OCIOFileTransform",
+                "file": clf_path,
+                "cccid": None,
+                "working_space": AMF_WORKING_SPACE,
+            }
+        )
+        if cube_path:
+            aviso = (
+                "Look_Files trae .clf y .cube, los dos son el LMT: se usa el "
+                ".clf y el .cube queda sin aplicar (%s)" % os.path.basename(cube_path)
+            )
+            debug_print("  [AVISO] " + aviso)
+            _anotar_aviso_corrida(aviso)
+    elif cube_path:
+        plan.append(cube_spec(cube_path))
+
+    if not plan:
+        debug_print(
+            "  [ERROR] No hay ningun '*.cdl', '*.clf' ni '*.cube' en %s" % look_dir
         )
     return plan
 
@@ -860,6 +1197,15 @@ def _node_file(effect):
         return node["file"].value()
     except Exception:
         return None
+
+
+def _sub_track_index(effect):
+    """subTrackIndex() del efecto, o None si no se puede leer."""
+    try:
+        indice = effect.subTrackIndex()
+    except Exception:
+        return None
+    return indice if isinstance(indice, int) and indice >= 0 else None
 
 
 def scan_clip_effects(track_item):
@@ -913,6 +1259,7 @@ def scan_clip_effects(track_item):
                 "in": efecto_in,
                 "out": efecto_out,
                 "file": _node_file(effect),
+                "sub": _sub_track_index(effect),
             }
         )
 
@@ -971,13 +1318,58 @@ def find_existing_effect(efectos, effect_type):
     Cuenta como propio del clip el que esta linkeado y el que cubre exactamente
     su rango. Uno que solapa parcial se reporta pero no bloquea: puede ser un
     grade que abarca varios clips del track y no tiene por que ser este.
+
+    Y ademas tiene que ser NUESTRO, o sea cargar un archivo de Look_Files (ver
+    _apunta_al_look). Un OCIOFileTransform o un OCIOCDLTransform que el artista
+    puso a mano, con un archivo de otra carpeta, ya NO hace saltear la creacion:
+    antes el LMT del shot no entraba si el clip tenia cualquier otro
+    OCIOFileTransform. Lo ajeno no se toca (ni se borra, ni se pisa, ver
+    subtracks_para_la_cadena) pero tampoco bloquea el look del shot.
     """
     for info in efectos:
         if info["class"] != effect_type:
             continue
-        if info["linked"] or info["same_range"]:
+        if not (info["linked"] or info["same_range"]):
+            continue
+        if _apunta_al_look(info):
             return info
     return None
+
+
+def subtracks_para_la_cadena(efectos, cantidad):
+    """Los `cantidad` subtracks CONTIGUOS donde va la cadena de look del clip.
+
+    POR QUE: createEffect(subTrackIndex=N) sobre un subtrack ocupado en el mismo
+    rango BORRA el efecto que estaba (medido: Blur en sub 0 + crear el CDL en
+    sub 0 deja el Blur invalido, y no avisa). Con la cadena en posiciones
+    fijas (0, 1) la tool se llevaba puesto el trabajo del artista.
+
+    CRITERIO: la cadena (CDL + LMT) es un BLOQUE, y un efecto del artista no
+    puede quedar partiendola por el medio. Va en subtracks consecutivos que
+    empiezan en el primero POR ENCIMA del mas alto ocupado por cualquier efecto
+    que solape el clip (nuestro o ajeno), o en 0 si no hay ninguno. Medido en
+    NKS: el subtrack mas BAJO se aplica primero y los huecos no cambian nada,
+    asi que la cadena queda aplicada DESPUES de todo lo que ya habia, el CDL
+    antes que el LMT:
+
+        sin ajenos        -> 0, 1      (igual que siempre)
+        ajeno en 0        -> 1, 2
+        Blur 0 + Text 1   -> 2, 3
+        ajeno solo en 1   -> 2, 3      (no 0 y 2: partiria la cadena)
+
+    Los huecos que dejen los ajenos por debajo no se usan: llenarlos es lo que
+    intercalaba el efecto del artista entre el CDL y el LMT.
+
+    Devuelve None si algun efecto no dice en que subtrack esta: no se puede
+    saber que esta libre y es mejor no crear que pisar.
+    """
+    ocupados = []
+    for info in efectos:
+        if info.get("sub") is None:
+            return None
+        ocupados.append(info["sub"])
+    inicio = max(ocupados) + 1 if ocupados else 0
+    return list(range(inicio, inicio + cantidad))
 
 
 def create_effect_on_track_item(track_item, effect_type, sub_track_index):
@@ -994,8 +1386,9 @@ def create_effect_on_track_item(track_item, effect_type, sub_track_index):
     s2, dejando s0 vacio debajo de sus efectos. Se veia como una franja muerta
     entre el clip y sus propios efectos, y crecia con cada clip.
 
-    Pasando el indice, todos los clips del track usan los MISMOS dos subtracks
-    y la cadena queda pegada al clip en todos.
+    Pasando el indice, la cadena queda pegada al clip. El indice no es fijo: es
+    un subtrack LIBRE del clip (subtracks_para_la_cadena), porque crear sobre uno
+    ocupado borra el efecto que estaba. Sin efectos ajenos son el 0 y el 1.
     """
     track = track_item.parent()
     if not track:
@@ -1062,12 +1455,14 @@ def match_colorspace_option(node, knob_name, wanted):
     mismo ACEScct puede figurar como 'ACEScct' o 'ACES - ACEScct'. Por eso no
     se hardcodea el string, se busca contra las opciones reales del knob.
 
-    Los ROLES del config quedan afuera. El enum los lista con formato
-    'scene_linear (ACES - ACEScg)', y un rol es una INDIRECCION: apunta a
-    donde el config diga. Pidiendo ACES2065-1 en un config ACES matchean dos
-    opciones, 'ACES - ACES2065-1' y 'default (ACES - ACES2065-1)', y cual gana
-    depende del orden del enum. Hoy las dos dan lo mismo, pero elegir el rol
-    es volver a atarse a lo mismo que hace impredecible el default del nodo.
+    Cada opcion del enum de Nuke 17 trae el nombre del colorspace seguido de
+    campos separados por TAB: en aces_1.2 'ACES - ACEScct<TAB>Colorspaces/ACES/
+    ACES - ACEScct', y en los configs v2 de Foundry (fn-nuke_cg-config-v2.2.0_
+    aces-v1.3, studio v2.2.0, los v3.0.0 de ACES 2.0) 'ACEScct<TAB>Colorspaces/
+    ACES/ACEScct<TAB><TAB>ACES - ACEScct,acescct_ap1'. El knob ACEPTA la cadena
+    entera, pero con los configs v2 el nodo queda con error y el look no se
+    aplica, sin ningun aviso. Lo valido es SOLO el primer campo, asi que se
+    matchea contra el y se devuelve ese.
     """
     if not wanted:
         return None
@@ -1080,27 +1475,44 @@ def match_colorspace_option(node, knob_name, wanted):
 
     target = _normalize(wanted)
 
-    # Dos pasadas: primero contra los espacios nombrados DIRECTO, y recien
-    # despues contra la lista entera. La segunda pasada no es un adorno: hay
-    # colorspaces directos que tienen parentesis en su propio nombre -en el
-    # config aces_1.2 hay 34, del tipo 'Input - ARRI - V3 LogC (EI160) - Wide
-    # Gamut'-, y descartarlos de una dejaria sin resolver a quien pida uno de
-    # esos. Con las dos pasadas, un rol solo puede ganar si NADA directo sirve.
-    directas = [o for o in options if "(" not in str(o)]
+    # Cada opcion es (cadena entera, nombre corto). El nombre corto es lo que va
+    # antes del primer TAB; sin TAB (otras versiones de Nuke) es la cadena entera
+    # y todo sigue como antes. Se matchea contra el nombre corto y no contra la
+    # cadena larga: esa trae la ruta y los alias del colorspace, y 'acescc'
+    # aparece adentro de los de 'ACEScct'. Se DEVUELVE el corto.
+    pares = [(str(o), str(o).split("\t")[0]) for o in options]
 
-    for candidatas in (directas, options):
+    # Los alias van al final. aces_1.2 trae una familia 'Utility/Aliases' con
+    # nombres en minuscula ('acescct', 'acescg'...) que son colorspaces validos
+    # pero no son el nombre del espacio: con el matcheo por nombre corto ganarian
+    # por igualdad exacta y el nodo quedaria con 'acescct' en vez de
+    # 'ACES - ACEScct'. Solo se usan si nada mas sirve.
+    sin_alias = [par for par in pares if "/aliases/" not in par[0].lower()]
+
+    # Tres pasadas: primero los espacios nombrados DIRECTO (sin alias), despues
+    # los demas sin alias, y recien al final todo. Los ROLES del config aparecen
+    # como 'scene_linear (ACES - ACEScg)' y son una INDIRECCION: pidiendo
+    # ACES2065-1 matchean 'ACES - ACES2065-1' y 'default (ACES - ACES2065-1)', y
+    # cual gana depende del orden del enum. La segunda pasada no es un adorno:
+    # hay colorspaces directos con parentesis en su propio nombre -en aces_1.2
+    # hay 34, del tipo 'Input - ARRI - V3 LogC (EI160) - Wide Gamut'-, y
+    # descartarlos de una dejaria sin resolver a quien pida uno de esos. Un rol
+    # o un alias solo gana si NADA directo sirve.
+    directas = [par for par in sin_alias if "(" not in par[1]]
+
+    for candidatas in (directas, sin_alias, pares):
         # De mas estricto a mas laxo. El orden importa: buscando 'ACEScc'
         # primero por igualdad y sufijo se evita que matchee 'ACEScct' por
         # contencion.
-        for opcion in candidatas:
-            if _normalize(opcion) == target:
-                return opcion
-        for opcion in candidatas:
-            if _normalize(opcion).endswith(target):
-                return opcion
-        for opcion in candidatas:
-            if target in _normalize(opcion):
-                return opcion
+        for _entera, corto in candidatas:
+            if _normalize(corto) == target:
+                return corto
+        for _entera, corto in candidatas:
+            if _normalize(corto).endswith(target):
+                return corto
+        for _entera, corto in candidatas:
+            if target in _normalize(corto):
+                return corto
 
     debug_print(f"    [WARN] '{wanted}' no figura entre las opciones de {knob_name}")
     return None
@@ -1196,12 +1608,45 @@ def verify_node(node, effect_type):
             debug_print(f"      {knob_name:<16} = <no legible: {e}>")
 
 
+def _node_has_error(node, effect):
+    """True si el nodo del efecto esta en error.
+
+    Se prefiere Node.hasError(), que en NKS SI ve un archivo inexistente, vacio o
+    corrupto. EffectTrackItem.nodeHasError() queda de respaldo solo si el nodo
+    no se puede consultar: en NKS devuelve False en esos mismos casos, asi que
+    por si solo no sirve para avisar.
+    """
+    if node is not None:
+        try:
+            return bool(node.hasError())
+        except Exception as e:
+            debug_print("    [WARN] No se pudo leer Node.hasError(): %s" % e)
+    return _safe_call(effect, "nodeHasError", False) is True
+
+
+def _quitar_efecto_recien_creado(track_item, effect):
+    """Saca del timeline el efecto que acabamos de crear y quedo roto.
+
+    Usa la misma opcion que el toggle (eDontRemoveLinkedItems): sin ella,
+    removeSubTrackItem sobre un efecto linkeado borra tambien el CLIP. Si la
+    opcion no se puede resolver NO se borra nada (ver _remove_options).
+    """
+    opciones = _remove_options()
+    track = track_item.parent()
+    if opciones is None or not track:
+        return
+    try:
+        track.removeSubTrackItem(effect, opciones)
+        debug_print("    [OK] Se saco el efecto roto '%s'." % _safe_name(effect))
+    except Exception as e:
+        debug_print("    [WARN] No se pudo sacar el efecto roto: %s" % e)
+
+
 def apply_effect(track_item, spec, efectos_existentes, sub_track_index, fallos=None, shot=None):
     """Crea el soft effect si falta. Devuelve 'creado', 'salteado' o 'error'.
 
-    `sub_track_index` es la posicion del efecto en la cadena del .amf, y se
-    usa tal cual como subtrack: asi el mismo eslabon cae siempre en el mismo
-    subtrack en todos los clips del track.
+    `sub_track_index` es un subtrack LIBRE del clip (ver subtracks_para_la_cadena) y se
+    usa tal cual. Es None cuando el efecto ya existe y se va a saltear.
     """
     effect_type = spec["type"]
     debug_print(f"\n  --- {effect_type} ---")
@@ -1241,8 +1686,28 @@ def apply_effect(track_item, spec, efectos_existentes, sub_track_index, fallos=N
     else:
         verify_node(node, effect_type)
 
-    if _safe_call(effect, "nodeHasError", False):
-        debug_print("    [WARN] El nodo quedo en error. Revisar la ruta del archivo.")
+    # Red de seguridad DESPUES de configurar: lo que el chequeo previo del
+    # archivo no ve (un .clf con XML valido pero sin transformaciones, un LUT que
+    # OCIO rechaza). Se mira Node.hasError() y NO EffectTrackItem.nodeHasError():
+    # en NKS el segundo devuelve False con un archivo inexistente, vacio o
+    # corrupto, y el primero devuelve True (medido con los cuatro casos).
+    if _node_has_error(node, effect):
+        debug_print(
+            "    [ERROR] El nodo quedo con error: no pudo cargar '%s'."
+            % os.path.basename(str(spec["file"]))
+        )
+        # Un nodo en error entrega NEGRO, asi que dejarlo puesto apaga el clip en
+        # el viewer. Se saca el efecto que se acaba de crear: es nuestro y esta
+        # recien creado, no hay trabajo ajeno que cuidar.
+        _quitar_efecto_recien_creado(track_item, effect)
+        if fallos is not None and shot:
+            _anotar_fallo(
+                fallos,
+                shot,
+                "'%s' could not be loaded by the color node"
+                % os.path.basename(str(spec["file"])),
+            )
+        ok = False
 
     return "creado" if ok else "error"
 
@@ -1418,7 +1883,7 @@ def _avisar_fallos(fallos, total_clips):
     # El texto va en ingles, como todo lo visible del pack.
     plural = "s" if len(fallos) > 1 else ""
     lineas = [
-        "Apply AMF could not run on %d shot%s:" % (len(fallos), plural),
+        "Apply AMF could not apply everything on %d shot%s:" % (len(fallos), plural),
         "",
     ]
     MAX = 12
@@ -1428,7 +1893,7 @@ def _avisar_fallos(fallos, total_clips):
         lineas.append("    ... and %d more" % (len(fallos) - MAX))
     lineas.append("")
     lineas.append(
-        "The look files live in <shot>/%s/%s (.amf, .cdl and .clf)."
+        "The look files live in <shot>/%s/%s (.amf, .cdl, .clf and .cube)."
         % (INPUT_DIR_NAME, LOOK_DIR_NAME)
     )
 
@@ -1495,17 +1960,67 @@ def process_track_item(track_item, fallos):
     plan = build_effect_plan(look_dir, plate_from_path(media_path))
     if not plan:
         debug_print("  [ERROR] No quedo ningun efecto por aplicar en este clip.")
-        _anotar_fallo(fallos, shot, f"no .cdl in {LOOK_DIR_NAME}")
+        # Un plan vacio tiene dos causas -el .amf no deja nada pendiente, o no hay
+        # ningun .cdl/.clf/.cube-, y ninguna es "falta un .cdl": el texto viejo
+        # mandaba a buscar un archivo que a veces ni hacia falta.
+        _anotar_fallo(
+            fallos,
+            shot,
+            f"nothing to apply (no pending .amf look and no .cdl, .clf or .cube in {LOOK_DIR_NAME})",
+        )
         resumen["error"] += 1
         return resumen
 
+    # Los archivos del plan se miran ANTES de crear nada: nodeHasError() no
+    # detecta un archivo faltante en NKS (ver motivo_archivo_inutil). Un efecto
+    # que no puede cargar su archivo no se crea, y el motivo sube al cartel.
+    plan_valido = []
+    for spec in plan:
+        motivo_archivo = motivo_archivo_inutil(spec["file"])
+        if motivo_archivo:
+            _anotar_fallo(fallos, shot, motivo_archivo)
+            resumen["error"] += 1
+            debug_print(
+                f"  [ERROR] No se crea el {spec['type']}: {motivo_archivo}"
+            )
+        else:
+            plan_valido.append(spec)
+
     # Los efectos se crean en el orden del plan: el primero queda en el
-    # subtrack de abajo, o sea que se aplica antes. El indice del plan ES el
-    # subtrack, y va explicito: sin eso cada llamada abre un subtrack nuevo y
-    # los clips terminan con sus efectos a distinta altura, con subtracks
-    # vacios en el medio.
-    for indice, spec in enumerate(plan):
-        resumen[apply_effect(track_item, spec, efectos_existentes, indice, fallos, shot)] += 1
+    # subtrack de abajo, o sea que se aplica antes. El subtrack va explicito
+    # (sin eso cada llamada abre uno nuevo y los clips terminan con sus efectos
+    # a distinta altura) y sale de subtracks_para_la_cadena: NUNCA se crea en un
+    # subtrack que ocupa otro efecto, porque eso lo borra. La cadena es un bloque
+    # contiguo por encima del mas alto ocupado, asi la cadena queda compacta
+    # aunque se haya descartado un eslabon por su archivo, y sin ajenos es el
+    # 0 y el 1 de siempre.
+    pendientes = [
+        spec
+        for spec in plan_valido
+        if not (SKIP_IF_EXISTS and find_existing_effect(efectos_existentes, spec["type"]))
+    ]
+    libres = subtracks_para_la_cadena(efectos_existentes, len(pendientes))
+    if libres is None:
+        debug_print(
+            "  [ERROR] Un efecto del clip no dice su subtrack: no se puede elegir "
+            "uno libre y no se crea nada para no pisar trabajo ajeno."
+        )
+        _anotar_fallo(
+            fallos,
+            shot,
+            "no free sub-track found for the color effects (nothing was created on this clip)",
+        )
+        resumen["error"] += len(pendientes)
+        pendientes = []
+        plan_valido = [s for s in plan_valido if find_existing_effect(efectos_existentes, s["type"])]
+    debug_print(
+        "  subtracks de la cadena : %s (ocupados: %s)"
+        % (libres, sorted(i["sub"] for i in efectos_existentes if i.get("sub") is not None))
+    )
+    ids_pendientes = set(id(sp) for sp in pendientes)
+    for spec in plan_valido:
+        sub = libres.pop(0) if id(spec) in ids_pendientes else None
+        resumen[apply_effect(track_item, spec, efectos_existentes, sub, fallos, shot)] += 1
 
     debug_print("")
     debug_print(
@@ -1756,6 +2271,8 @@ def _main_interno():
     debug_print(f"    efectos creados : {total['creado']}")
     debug_print(f"    ya estaban      : {total['salteado']}")
     debug_print(f"    con error       : {total['error']}")
+    for aviso in _AVISOS_CORRIDA:
+        debug_print(f"    [AVISO] {aviso}")
     debug_print("=" * 70 + "\n")
 
     # El cartel va DESPUES del endUndo y del resumen: primero se termina el

@@ -243,8 +243,9 @@ indicators.
   loaded version of each clip; otherwise detects and fixes clips using `rec709`
   or `gamma2.2`.
 - **Apply AMF**
-  Adds or removes the shot's CDL/CLF effects on selected EXRs, or on EXRs under
-  the playhead when fewer than two clips are selected. Shortcut: `Shift+L`.
+  Adds or removes the shot's CDL/CLF/.cube effects on selected EXRs, or on EXRs
+  under the playhead when fewer than two clips are selected. Effects you added
+  to the clip are kept; the look goes on top of them. Shortcut: `Shift+L`.
 - **Import shot**  
   Imports shots into the project: plates and references into the shot bin and onto their tracks.
   The shot name preserves `SUP` and external vendor codes.
