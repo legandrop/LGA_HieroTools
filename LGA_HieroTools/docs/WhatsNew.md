@@ -19,7 +19,7 @@ platforms: [win, mac]
 - [fixed] Compare Versions now loads the previous version in the same color space as the comp in color-managed projects, so the difference compares like with like.
 - [improved] Fix Colorspaces, and the automatic fix after a Flow Pull, now also fix the other loaded versions of each clip, so switching versions keeps the right color space.
 - [fixed] Fix Colorspaces no longer skips plates and comps it used to report as having no color transform available.
-- [fixed] Contact Sheet connects the clips in timeline order again: the first clip on the left is input 0, even when the selection includes effects.
+- [fixed] Contact Sheet connects the clips in timeline order: the first clip on the left is input 0, even when the selection includes effects.
 - [fixed] Create NK v000 now trims the review range (without handles) on every movie output of the template, whatever the Write node is named.
 - [improved] Create NK v000 points LUT look nodes that use a .cube file to the shot's .cube in Look_Files.
 
