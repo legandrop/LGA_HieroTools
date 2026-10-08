@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_FixColorspaces v1.23 | Lega
+  LGA_NKS_FixColorspaces v1.24 | Lega
 
   Corrige el color transform de los clips del timeline activo.
 
@@ -34,11 +34,15 @@ ____________________________________________________________________
        detecta antes de tocar nada.
     4. El token se resuelve a un nombre real de colorspace con
        resolve_ocio_name(token, clip.getAvailableOcioColourTransforms()). Si
-       no resuelve, el clip se reporta como 'sin transform disponible' y no
-       se toca.
+       esa lista falla, se usa la de otro clip del proyecto (mismo config
+       OCIO). Si no resuelve, o ningun clip da lista, el clip se reporta como
+       'sin transform disponible' y no se toca.
     5. Si clip.sourceMediaColourTransform() ya es ese nombre, se saltea (no
        se reescribe). Si no, se aplica con setSourceMediaColourTransform().
-    6. Al final se escribe al .log un resumen: corregidos, ya-estaban-bien,
+    6. Lo mismo para las DEMAS versiones ya cargadas del BinItem de cada clip
+       (cada Version es otro Clip con su propio colorspace), sin escanear disco
+       y sin cambiar la version activa.
+    7. Al final se escribe al .log un resumen: corregidos, ya-estaban-bien,
        en-conflicto, sin-transform-disponible, con el nombre del clip y el
        track en cada caso.
 
@@ -51,6 +55,17 @@ ____________________________________________________________________
   adentro de las funciones que los usan: este archivo se puede importar en
   un proceso sin Nuke/Hiero sin que explote y sin que haga nada.
 
+  v1.24: El camino managed corrige tambien las demas versiones ya cargadas del
+         BinItem de cada clip, no solo la visible: al pasar a otra version el
+         clip volvia al colorspace que traia. Sin escanear disco y sin tocar la
+         version activa (medido: ~5 ms por version, 250 versiones ~1.3 s). Suma
+         `aplicar_a_track_item_si_managed()`, que usa Compare Versions para el
+         clip de COMPARE con la misma deteccion y la misma resolucion. Y si
+         `getAvailableOcioColourTransforms()` de un clip falla ('Could not get
+         colour transform.', pasa en clips en compositing_linear), el token se
+         resuelve contra la lista de otro clip del proyecto (una vez por corrida)
+         y se setea directo; esos seteos se releen 300 ms despues (salvo que el
+         proyecto ya se haya cerrado) y el resultado se agrega al .log.
   v1.23: Los resumenes (corregidos, ya bien, en conflicto, sin transform) dejan
          de imprimirse en la consola y van solo al .log. El Flow Pull corre esto
          al terminar cada pull y llenaba la consola con decenas de lineas por
@@ -360,6 +375,16 @@ def _nombre_clip_seguro(clip):
         return "<clip>"
 
 
+def _pendiente(clip, nombre_real):
+    """Item para `programar_verificacion`: con el guid del proyecto, para no leer
+    clips de un proyecto que se cerro mientras se esperaba."""
+    try:
+        guid = clip.project().guid()
+    except Exception:
+        guid = None
+    return (clip, nombre_real, _nombre_clip_seguro(clip), guid)
+
+
 def _clips_por_regla(seq, exr_tracks):
     """
     Agrupa, por token, los clips que le corresponden a cada regla.
@@ -411,10 +436,267 @@ def _clips_por_regla(seq, exr_tracks):
     return asignaciones, conflictos
 
 
-def corregir_clips_con_color_management(project_name, cm_config, seq):
+class ListaTransformsDeRespaldo(object):
+    """
+    Lista de transforms OCIO del PROYECTO, sacada del primer clip que la devuelva.
+    Se busca una sola vez por corrida, y solo si algun clip la necesita.
+
+    POR QUE: `clip.getAvailableOcioColourTransforms()` tira 'Could not get colour
+    transform.' en algunos clips. En un show real fallo en TODOS los que estaban en
+    `compositing_linear` (43 plates y comps visibles) y en EditRefs en
+    `Output - Rec.709`, y esos clips quedaban como 'sin transform' sin arreglarse,
+    justo los que habia que arreglar. El set directo sobre esos mismos clips SI
+    funciona. Como el config OCIO es del proyecto, la lista de cualquier otro clip
+    del proyecto es la misma: se resuelve contra esa y se setea directo.
+    """
+
+    def __init__(self, seq):
+        self._seq = seq
+        self._lista = None
+        self._buscada = False
+        self.origen = None
+        self.intentos = 0
+
+    @property
+    def buscada(self):
+        return self._buscada
+
+    def _candidatos(self):
+        import hiero.core
+
+        # Primero los clips del timeline (lo mas probable es que alguno responda),
+        # despues todos los del bin del proyecto.
+        for track in self._seq.videoTracks():
+            for item in track:
+                if isinstance(item, hiero.core.EffectTrackItem):
+                    continue
+                try:
+                    yield item.source()
+                except Exception:
+                    continue
+        try:
+            for clip in self._seq.project().clips():
+                yield clip
+        except Exception:
+            return
+
+    def obtener(self):
+        if not self._buscada:
+            self._buscada = True
+            for clip in self._candidatos():
+                self.intentos += 1
+                try:
+                    lista = clip.getAvailableOcioColourTransforms()
+                except Exception:
+                    continue
+                if lista:
+                    self._lista = list(lista)
+                    self.origen = _nombre_clip_seguro(clip)
+                    debug_print(
+                        "[managed] Lista de transforms de respaldo: de {0} ({1} intentos, "
+                        "{2} nombres)".format(self.origen, self.intentos, len(self._lista))
+                    )
+                    break
+            if self._lista is None:
+                debug_print(
+                    "[managed][ERROR] Ningun clip del proyecto devolvio la lista de "
+                    "transforms OCIO ({0} intentos)".format(self.intentos)
+                )
+        return self._lista
+
+
+def resolver_nombre_para_clip(clip, wanted_token, respaldo=None):
+    """
+    Resuelve un token neutro contra el config OCIO activo del clip.
+
+    Devuelve (nombre_real, error, via_respaldo):
+      - nombre_real: None si no resolvio o si no hubo lista contra la cual resolver.
+      - error: la excepcion de `getAvailableOcioColourTransforms()` del clip, si
+        fallo Y no hubo respaldo que la reemplace.
+      - via_respaldo: True si se resolvio contra la lista de OTRO clip del proyecto
+        (ver ListaTransformsDeRespaldo). En ese caso el set conviene verificarlo
+        despues (`programar_verificacion`).
+    """
+    try:
+        disponibles = clip.getAvailableOcioColourTransforms()
+    except Exception as e:
+        lista = respaldo.obtener() if respaldo is not None else None
+        if not lista:
+            return None, e, False
+        return resolve_ocio_name(wanted_token, lista), None, True
+    return resolve_ocio_name(wanted_token, disponibles), None, False
+
+
+# Cuanto esperar para releer lo seteado. El set es diferido (lo aplica el event
+# loop de NKS); 300 ms sobra y no se nota.
+VERIFICACION_MS = 300
+
+
+def _verificar_seteos(pendientes):
+    """
+    Relee los clips seteados por la lista de respaldo y AGREGA el resultado al
+    .log de la corrida (que ya se volco). Si alguno no quedo, avisa por consola.
+    """
+    lineas = []
+    fallidos = 0
+    # Si el usuario cerro el proyecto en los 300 ms de espera, sus clips ya no
+    # existen: no se leen. Se compara por guid, que es lo unico estable.
+    try:
+        import hiero.core
+
+        abiertos = {p.guid() for p in hiero.core.projects()}
+    except Exception:
+        abiertos = None
+    sin_verificar = 0
+    for clip, esperado, etiqueta, guid_proyecto in pendientes:
+        if abiertos is not None and guid_proyecto not in abiertos:
+            lineas.append(" - SIN VERIFICAR {0}: el proyecto ya no esta abierto".format(etiqueta))
+            sin_verificar += 1
+            continue
+        try:
+            actual = clip.sourceMediaColourTransform()
+        except Exception as e:
+            actual = "<error al leer: {0}>".format(e)
+        if actual == esperado:
+            lineas.append(" - OK {0}: {1}".format(etiqueta, actual))
+        else:
+            fallidos += 1
+            lineas.append(" - NO QUEDO {0}: se pidio {1}, quedo {2}".format(etiqueta, esperado, actual))
+    encabezado = "[verificacion] Seteos por lista de respaldo: {0} OK, {1} no quedaron, {2} sin verificar.".format(
+        len(pendientes) - fallidos - sin_verificar, fallidos, sin_verificar
+    )
+    try:
+        with open(LOG_PATH, "a", encoding="utf-8", newline="\n") as handle:
+            handle.write("\n".join([encabezado] + lineas) + "\n")
+    except Exception:
+        pass
+    if fallidos:
+        print(
+            "Fix Colorspaces: {0} clips no tomaron el colorspace. Detalle en "
+            "logs/DebugPy_LGA_NKS_FixColorspaces.log".format(fallidos)
+        )
+
+
+def programar_verificacion(pendientes):
+    """
+    Agenda `_verificar_seteos` para despues de que NKS aplique los sets.
+
+    No se puede verificar en la misma corrida: `setSourceMediaColourTransform()` es
+    diferido y releer enseguida devuelve el valor viejo (medido).
+    """
+    if not pendientes:
+        return
+    try:
+        from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtCore
+    except Exception as e:
+        debug_print("[managed] Sin QtCore, no se verifican los seteos: {0}".format(e))
+        return
+    copia = list(pendientes)
+    QtCore.QTimer.singleShot(VERIFICACION_MS, lambda: _verificar_seteos(copia))
+
+
+def aplicar_nombre_a_clip(clip, nombre_real):
+    """
+    Pone `nombre_real` como color transform del clip, salvo que ya lo tenga.
+
+    Devuelve (estado, actual) con estado 'ya_bien', 'corregido' o 'error'.
+
+    🔴 El seteo NO se ve en el momento: `sourceMediaColourTransform()` sigue
+    devolviendo el valor viejo hasta que NKS vuelve al event loop (medido con
+    +Building_Blocks/explore_fixcolor_versions.py). No releer para verificar
+    dentro de la misma corrida: siempre daria "no se aplico".
+    """
+    try:
+        actual = clip.sourceMediaColourTransform()
+    except Exception:
+        actual = None
+    if actual == nombre_real:
+        return "ya_bien", actual
+    try:
+        clip.setSourceMediaColourTransform(nombre_real)
+    except Exception as e:
+        debug_print(
+            "[managed][ERROR] No se pudo setear {0}: {1}".format(_nombre_clip_seguro(clip), e)
+        )
+        return "error", actual
+    return "corregido", actual
+
+
+def _bin_item_seguro(clip):
+    try:
+        return clip.binItem()
+    except Exception:
+        return None
+
+
+def _bin_key(bin_item):
+    try:
+        return bin_item.guid()
+    except Exception:
+        return id(bin_item)
+
+
+def corregir_versiones_del_bin_item(
+    bin_item, nombre_real, ya_procesados, track_name, versiones_corregidas, pendientes=None
+):
+    """
+    Aplica `nombre_real` a TODAS las versiones ya cargadas en el BinItem, no solo
+    a la que muestra el timeline.
+
+    POR QUE: cada `Version` de un BinItem es OTRO Clip, con su propio color
+    transform. Corrigiendo solo la visible, al pasar a otra version (Alt+flecha o
+    el selector de versiones) el clip vuelve al espacio que traia.
+
+    - Solo las versiones que YA estan en el BinItem (`binItem.items()`): no se
+      escanea disco. Escanear (VersionScanner) es lo caro y no es trabajo de este
+      boton.
+    - NO se cambia la version activa: el colorspace seteado en una version no
+      activa persiste y se ve al activarla (medido).
+    - El nombre real se resolvio una vez contra el clip visible: todas las
+      versiones del BinItem viven en el mismo proyecto, o sea en el mismo config
+      OCIO. Resolverlo por version costaria ~1 ms cada una sin cambiar nada.
+    - `ya_procesados`: claves de clips ya tratados (los visibles de otros
+      TrackItems), para no tocarlos dos veces.
+    - `pendientes`: si viene, cada version seteada se agrega para verificarla
+      despues (se usa cuando el nombre salio de la lista de respaldo).
+
+    Costo medido: ~0.1 ms por version en Python mas ~5 ms por version que NKS
+    procesa despues, al volver al event loop. No lee media: cuesta lo mismo con
+    EXR de red de 10 MB que con archivos locales de 7 KB. 250 versiones ~ 1.3 s.
+    """
+    try:
+        versiones = list(bin_item.items())
+    except Exception as e:
+        debug_print(
+            "[managed][ERROR] No se pudieron leer las versiones de un BinItem: {0}".format(e)
+        )
+        return
+    for version in versiones:
+        try:
+            clip_version = version.item()
+        except Exception:
+            clip_version = None
+        if clip_version is None:
+            continue
+        key = _clip_key(clip_version)
+        if key in ya_procesados:
+            continue
+        ya_procesados.add(key)
+        estado, actual = aplicar_nombre_a_clip(clip_version, nombre_real)
+        if estado == "corregido":
+            versiones_corregidas.append(
+                (_nombre_clip_seguro(clip_version), track_name, actual, nombre_real)
+            )
+            if pendientes is not None:
+                pendientes.append(_pendiente(clip_version, nombre_real))
+
+
+def corregir_clips_con_color_management(project_name, cm_config, seq, incluir_versiones=True):
     """
     Camino managed: aplica el token que le corresponde a cada track de
-    plate/publish, resolviendolo contra el config OCIO activo del clip.
+    plate/publish, resolviendolo contra el config OCIO activo del clip. Con
+    `incluir_versiones` corrige ademas las demas versiones ya cargadas del
+    BinItem de cada clip (ver corregir_versiones_del_bin_item).
     """
     exr_tracks = _get_task_exr_tracks()
     asignaciones, conflictos = _clips_por_regla(seq, exr_tracks)
@@ -422,6 +704,31 @@ def corregir_clips_con_color_management(project_name, cm_config, seq):
     corregidos = []
     ya_bien = []
     sin_transform = []
+    versiones_corregidas = []
+    con_respaldo = []
+    pendientes = []
+    respaldo = ListaTransformsDeRespaldo(seq)
+
+    # Clips visibles ya tratados (o en conflicto): la pasada por versiones no los
+    # vuelve a tocar.
+    ya_procesados = set(asignaciones.keys())
+    ya_procesados.update(_clip_key(clip) for clip, _reglas in conflictos)
+
+    # BinItem -> tokens que le tocan por sus clips visibles. Si dos versiones del
+    # mismo BinItem estan en tracks con reglas distintas, sus demas versiones no
+    # tienen una regla clara y no se tocan.
+    tokens_por_bin = {}
+    for token, clip, _track_name in asignaciones.values():
+        bin_item = _bin_item_seguro(clip)
+        if bin_item is not None:
+            tokens_por_bin.setdefault(_bin_key(bin_item), set()).add(token)
+    for clip, reglas in conflictos:
+        bin_item = _bin_item_seguro(clip)
+        if bin_item is not None:
+            tokens_por_bin.setdefault(_bin_key(bin_item), set()).update(
+                t for t, _n in reglas
+            )
+    bins_hechos = set()
 
     for token, clip, track_name in asignaciones.values():
         wanted_token = cm_config.get(token)
@@ -435,18 +742,17 @@ def corregir_clips_con_color_management(project_name, cm_config, seq):
             )
             continue
 
-        try:
-            disponibles = clip.getAvailableOcioColourTransforms()
-        except Exception as e:
+        nombre_real, error, via_respaldo = resolver_nombre_para_clip(
+            clip, wanted_token, respaldo
+        )
+        if error is not None:
             sin_transform.append((_nombre_clip_seguro(clip), track_name, wanted_token))
             debug_print(
                 "[managed][ERROR] {0}: no se pudieron leer los transforms disponibles ({1})".format(
-                    _nombre_clip_seguro(clip), e
+                    _nombre_clip_seguro(clip), error
                 )
             )
             continue
-
-        nombre_real = resolve_ocio_name(wanted_token, disponibles)
         if not nombre_real:
             sin_transform.append((_nombre_clip_seguro(clip), track_name, wanted_token))
             debug_print(
@@ -456,41 +762,109 @@ def corregir_clips_con_color_management(project_name, cm_config, seq):
             )
             continue
 
-        try:
-            actual = clip.sourceMediaColourTransform()
-        except Exception:
-            actual = None
-
-        if actual == nombre_real:
+        estado, actual = aplicar_nombre_a_clip(clip, nombre_real)
+        if via_respaldo:
+            con_respaldo.append((_nombre_clip_seguro(clip), track_name, estado))
+        if estado == "ya_bien":
             ya_bien.append((_nombre_clip_seguro(clip), track_name, nombre_real))
-            continue
-
-        try:
-            clip.setSourceMediaColourTransform(nombre_real)
+        elif estado == "corregido":
             corregidos.append((_nombre_clip_seguro(clip), track_name, actual, nombre_real))
+            if via_respaldo:
+                pendientes.append(_pendiente(clip, nombre_real))
             debug_print(
-                "[managed] {0} ({1}): {2} -> {3}".format(
-                    _nombre_clip_seguro(clip), track_name, actual, nombre_real
+                "[managed] {0} ({1}): {2} -> {3}{4}".format(
+                    _nombre_clip_seguro(clip),
+                    track_name,
+                    actual,
+                    nombre_real,
+                    " (lista de respaldo)" if via_respaldo else "",
                 )
             )
-        except Exception as e:
+        else:
             sin_transform.append((_nombre_clip_seguro(clip), track_name, wanted_token))
+
+        if not incluir_versiones:
+            continue
+        bin_item = _bin_item_seguro(clip)
+        if bin_item is None:
+            continue
+        bin_key = _bin_key(bin_item)
+        if bin_key in bins_hechos:
+            continue
+        bins_hechos.add(bin_key)
+        if len(tokens_por_bin.get(bin_key, ())) > 1:
             debug_print(
-                "[managed][ERROR] No se pudo setear {0}: {1}".format(
-                    _nombre_clip_seguro(clip), e
-                )
+                "[managed] {0}: sus versiones estan en tracks con reglas distintas, "
+                "no se tocan las demas versiones".format(_nombre_clip_seguro(clip))
             )
+            continue
+        corregir_versiones_del_bin_item(
+            bin_item,
+            nombre_real,
+            ya_procesados,
+            track_name,
+            versiones_corregidas,
+            pendientes if via_respaldo else None,
+        )
 
-    _imprimir_resumen_managed(project_name, corregidos, ya_bien, conflictos, sin_transform)
+    _imprimir_resumen_managed(
+        project_name,
+        corregidos,
+        ya_bien,
+        conflictos,
+        sin_transform,
+        versiones_corregidas,
+        con_respaldo,
+        respaldo,
+    )
+    programar_verificacion(pendientes)
 
 
-def _imprimir_resumen_managed(project_name, corregidos, ya_bien, conflictos, sin_transform):
+def _imprimir_resumen_managed(
+    project_name,
+    corregidos,
+    ya_bien,
+    conflictos,
+    sin_transform,
+    versiones_corregidas=(),
+    con_respaldo=(),
+    respaldo=None,
+):
     debug_print(
         "Color management ({0}): {1} corregidos, {2} ya estaban bien, {3} en conflicto, "
-        "{4} sin transform disponible.".format(
-            project_name, len(corregidos), len(ya_bien), len(conflictos), len(sin_transform)
+        "{4} sin transform disponible, {5} versiones no visibles corregidas, "
+        "{6} resueltos con la lista de respaldo.".format(
+            project_name,
+            len(corregidos),
+            len(ya_bien),
+            len(conflictos),
+            len(sin_transform),
+            len(versiones_corregidas),
+            len(con_respaldo),
         )
     )
+
+    if respaldo is not None and respaldo.buscada:
+        if respaldo.origen:
+            debug_print(
+                "Lista de transforms de respaldo: de {0}. La verificacion de esos "
+                "seteos se agrega al final de este log.".format(respaldo.origen)
+            )
+        else:
+            # Caso sin salida: no hay contra que resolver el token. Se avisa tambien
+            # por consola, porque si no el boton parece no hacer nada.
+            mensaje = (
+                "NINGUN clip del proyecto devolvio la lista de transforms OCIO "
+                "({0} intentos): los clips 'sin transform' de abajo no se pudieron "
+                "resolver.".format(respaldo.intentos)
+            )
+            debug_print(mensaje)
+            print("Fix Colorspaces ({0}): {1}".format(project_name, mensaje))
+
+    if versiones_corregidas:
+        debug_print("Versiones no visibles corregidas:")
+        for nombre, track_name, antes, despues in versiones_corregidas:
+            debug_print(" - {0} [{1}]: {2} -> {3}".format(nombre, track_name, antes, despues))
 
     if corregidos:
         debug_print("Corregidos:")
@@ -578,6 +952,106 @@ def run_if_color_managed(seq=None):
             "logs/DebugPy_LGA_NKS_FixColorspaces.log"
         )
         debug_print("[managed][ERROR] {0}".format(traceback.format_exc()))
+    return True
+
+
+def aplicar_a_track_item_si_managed(track_item, track_name_regla, seq=None):
+    """
+    Aplica la regla de color management a UN TrackItem y a todas las versiones
+    ya cargadas de su BinItem. La usa Compare Versions para el clip que pone en
+    el track COMPARE.
+
+    POR QUE EXISTE: el clip de COMPARE es un Clip nuevo (Compare lo reemplaza
+    por el archivo y le baja una version), asi que entra con el colorspace por
+    default del archivo y no con el que dicta el proyecto. El track COMPARE no
+    matchea ninguna regla por nombre, por eso la regla sale de
+    `track_name_regla`: el nombre del track del clip ORIGINAL (`_comp_` ->
+    exr_publish, `*plate` -> plates). Un track sin regla (EditRef, ...) no se
+    toca, igual que en el boton.
+
+    Se corrigen TODAS las versiones del BinItem y no solo la del TrackItem
+    porque Compare cambia la version con `binItem.setActiveVersion()` y el
+    TrackItem recien la refleja al volver al event loop: en esta misma corrida
+    `track_item.source()` todavia puede ser la version anterior.
+
+    Misma deteccion de proyecto managed y misma resolucion de token que el
+    boton y el Pull. NO abre undo (lo abre el llamador) y NO vuelca el log:
+    el llamador llama a `volcar_log()` en su finally, como el Pull.
+
+    Devuelve True si el proyecto estaba managed y la regla aplicaba.
+    """
+    import hiero.ui
+
+    if seq is None:
+        seq = hiero.ui.activeSequence()
+    if seq is None or track_item is None:
+        return False
+
+    project_name = _resolve_active_project_name(seq)
+    if not project_name or not is_color_managed(project_name):
+        debug_print("[compare] proyecto {0!r} no managed: no se toca".format(project_name))
+        return False
+
+    token = _clasificar_track(track_name_regla, _get_task_exr_tracks())
+    cm_config = get_color_management(project_name)
+    wanted_token = cm_config.get(token) if token else None
+    if not wanted_token:
+        debug_print(
+            "[compare] track {0!r}: sin regla de color (token {1!r}), no se toca".format(
+                track_name_regla, token
+            )
+        )
+        return False
+
+    try:
+        clip = track_item.source()
+        respaldo = ListaTransformsDeRespaldo(seq)
+        nombre_real, error, via_respaldo = resolver_nombre_para_clip(
+            clip, wanted_token, respaldo
+        )
+        if not nombre_real:
+            debug_print(
+                "[compare] {0}: '{1}' no resolvio contra el config OCIO activo ({2})".format(
+                    _nombre_clip_seguro(clip), wanted_token, error
+                )
+            )
+            if respaldo.buscada and not respaldo.origen:
+                print(
+                    "Compare Versions: ningun clip del proyecto devolvio la lista de "
+                    "transforms OCIO; el clip de COMPARE queda con su colorspace."
+                )
+            return True
+        pendientes = []
+        estado, actual = aplicar_nombre_a_clip(clip, nombre_real)
+        if via_respaldo and estado == "corregido":
+            pendientes.append(_pendiente(clip, nombre_real))
+        debug_print(
+            "[compare] {0} [{1}]: {2} -> {3} ({4}{5})".format(
+                _nombre_clip_seguro(clip),
+                track_name_regla,
+                actual,
+                nombre_real,
+                estado,
+                ", lista de respaldo de {0}".format(respaldo.origen) if via_respaldo else "",
+            )
+        )
+        versiones_corregidas = []
+        bin_item = _bin_item_seguro(clip)
+        if bin_item is not None:
+            corregir_versiones_del_bin_item(
+                bin_item,
+                nombre_real,
+                {_clip_key(clip)},
+                track_name_regla,
+                versiones_corregidas,
+                pendientes if via_respaldo else None,
+            )
+        for nombre, _track, antes, despues in versiones_corregidas:
+            debug_print("[compare]  version {0}: {1} -> {2}".format(nombre, antes, despues))
+        programar_verificacion(pendientes)
+    except Exception as e:
+        print("Compare Versions: no se pudo aplicar el color management: {0}".format(e))
+        debug_print("[compare][ERROR] {0}".format(traceback.format_exc()))
     return True
 
 

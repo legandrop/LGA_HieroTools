@@ -111,16 +111,136 @@ nombre (del tipo `Input - ARRI - V3 LogC (EI160) - Wide Gamut`), y descartarlos 
 resolver a quien pida uno de esos. Dentro de cada pasada va de igualdad, a sufijo, a contencion.
 
 Si el token no resuelve contra el config activo, el clip **no se toca** y se reporta como *sin
-transform disponible*.
+transform disponible*. Si lo que falla es la lista misma del clip, se usa la de otro clip del
+proyecto (ver «Lo que costo descubrir», mas abajo).
+
+## Todas las versiones del clip, no solo la visible
+
+Desde `LGA_NKS_FixColorspaces v1.24` el camino managed corrige, ademas del clip que muestra el
+timeline, **todas las demas versiones ya cargadas en su BinItem** (`binItem.items()`).
+
+**Por que:** en Hiero cada `Version` de un BinItem es **otro `Clip`, con su propio color
+transform**. Corrigiendo solo la visible, el usuario pasaba de la v009 a la v007 (Alt+flecha o el
+selector de versiones) y la v007 volvia con el colorspace que traia. En el proyecto real de prueba
+(un show ACES), una corrida encontro **32 versiones ocultas mal** (22 en `default` y 10 en
+`compositing_linear`) que la version anterior del boton nunca tocaba.
+
+Reglas de esa pasada (`corregir_versiones_del_bin_item()`):
+
+- **Solo lo que ya esta cargado.** No se escanea disco: el `VersionScanner` es lo caro y no es
+  trabajo de este boton. Las versiones que aparezcan despues de un scan se corrigen la proxima vez.
+- **No se cambia la version activa.** No hace falta: el colorspace seteado en una version NO activa
+  persiste y se ve al activarla (medido abajo).
+- **El nombre real se resuelve una sola vez**, contra el clip visible, y se reusa para sus versiones:
+  todas viven en el mismo proyecto, o sea en el mismo config OCIO. Resolver por version costaria
+  ~1 ms cada una sin cambiar el resultado, y ademas esquiva el fallo de
+  `getAvailableOcioColourTransforms()` que tienen algunos clips (ver abajo). Si el clip visible se
+  resolvio con la lista de respaldo, sus versiones tambien entran en la verificacion diferida.
+- **Mismas protecciones que el clip visible.** Si el clip visible esta en conflicto o no resolvio,
+  sus versiones no se tocan. Si dos versiones del mismo BinItem estan en tracks con reglas distintas
+  (una en un plate y otra en `_comp_`), sus demas versiones no tienen una regla clara y tampoco.
+
+### Lo medido (sonda `+Building_Blocks/explore_fixcolor_versions.py`, NKS 17.0v4, config `aces_1.2`)
+
+| Que | Costo |
+|---|---|
+| `binItem.items()`, `version.item()`, `sourceMediaColourTransform()` | ~0.01–0.03 ms cada una |
+| `getAvailableOcioColourTransforms()` (364 nombres) | ~0.1–0.5 ms |
+| `setSourceMediaColourTransform()` en Python | ~0.1–0.3 ms |
+| **Lo que NKS procesa despues del set, al volver al event loop** | **~4–5.5 ms por version** |
+
+- Ese costo diferido **no lee media**: es el mismo con EXR de red de 10 MB y 1086 frames que con
+  archivos locales de 7 KB (3.8–5.5 ms contra 4.6–5.3 ms por version).
+- Escala: 55 clips con 313 versiones (208 seteadas) = 314 ms de Python + 1125 ms de event loop.
+  O sea ~1.3 s para un timeline de ~50 clips con ~5 versiones cada uno.
+- Proyecto real (109 clips visibles, 32 versiones ocultas a corregir): 43 ms de Python + 196 ms
+  de event loop.
+- **Lo lento es otra cosa:** `VersionScanner().doScan()` cuesta 30–140 ms POR CLIP contra la red
+  (16.7 s para armar 55 clips). Por eso esta pasada no escanea.
+
+### Lo que costo descubrir
+
+- 🔴 **`setSourceMediaColourTransform()` es diferido.** Inmediatamente despues del set,
+  `sourceMediaColourTransform()` devuelve el valor VIEJO; el nuevo aparece recien cuando NKS vuelve
+  al event loop. Una verificacion "releo y comparo" dentro de la misma corrida siempre dice que no
+  se aplico. En la sonda hubo que medir en dos llamadas separadas del dev-link.
+- **Persistencia, medida:** se seteo ACES2065-1 en las versiones no activas de 55 clips, se paso
+  cada TrackItem a su version mas vieja con `trackItem.setCurrentVersion()` (lo que hacen el
+  selector y Alt+flecha) y los 55 mostraron ACES2065-1. Al volver a la version original quedo la
+  original con su propio colorspace.
+- **`binItem.setActiveVersion()` NO mueve al TrackItem** cuando el TrackItem tiene
+  `versionLinkedToBin() == False` (los que arma `track.addTrackItem()` en un proyecto con
+  `trackItemVersionsLinkedToBin() == True`): el bin cambia de version activa y el timeline sigue
+  mostrando la anterior. La version que ve el usuario es `trackItem.currentVersion()` /
+  `trackItem.source()`, no `binItem.activeVersion()`.
+- 🔴 **`getAvailableOcioColourTransforms()` falla con `Could not get colour transform.`** en algunos
+  clips. En el proyecto real fallo en los **43 clips visibles que estaban en `compositing_linear`**
+  (32 plates y 11 comps) y en 12 EditRef en `Output - Rec.709`; otros EditRef si la devuelven. No es
+  el config: es el mismo para todo el proyecto. Hasta la v1.23 esos clips salian como *sin transform
+  disponible* y no se tocaban, o sea que quedaban sin arreglar justo los que habia que arreglar.
+  **El set directo sobre esos mismos clips SI funciona.**
+
+  Por eso, desde la v1.24, si la lista de un clip falla se resuelve el token contra la lista de
+  **otro clip del mismo proyecto** (`ListaTransformsDeRespaldo`): se busca una sola vez por corrida
+  y solo si hace falta, primero en los clips del timeline y despues en `project.clips()`. Vale
+  igual para las versiones ocultas de ese clip y para Compare Versions. Como el set es diferido,
+  esos seteos se **releen 300 ms despues** con un `QTimer.singleShot` y el resultado se agrega al
+  final del `.log` (`[verificacion] ... N OK, M no quedaron`); si alguno no quedo, avisa por
+  consola. Si **ningun** clip del proyecto devuelve la lista, el resumen lo dice en mayusculas y
+  tambien sale por consola, porque si no el boton parece no hacer nada.
+
+  Medido en el proyecto real: la lista salio del primer intento (un EditRef); **los 43 quedaron
+  corregidos** (32 plates a `acescg`, 11 comps a `ACES - ACES2065-1`) y la verificacion dio
+  **43 OK, 0 no quedaron**. Corrida completa: 43 corregidos, 66 ya bien, 0 sin transform, 32
+  versiones ocultas; 37 ms de Python.
+- **El Ctrl+Z del boton puede no devolver exactamente el nombre anterior.** En una prueba sobre el
+  proyecto real, 10 versiones que estaban en `compositing_linear` quedaron en `default` despues del
+  undo; en una segunda prueba el undo dejo todo identico a la foto previa. No se aislo la causa:
+  para restaurar con certeza, hacerlo a mano desde una foto.
+- **La verificacion diferida no lee clips de un proyecto cerrado.** Cada seteo pendiente guarda el
+  `guid()` de su proyecto; si en los 300 ms de espera el proyecto ya no esta en
+  `hiero.core.projects()`, se anota como "sin verificar" en vez de leer un clip que ya no existe.
+
+## Compare Versions usa las mismas reglas
+
+El boton **Compare Versions** del Review Panel (`LGA_NKS_Compare_Versions.py`) copia el clip
+seleccionado a un track `COMPARE`, lo reemplaza por el archivo (`replaceClips`), escanea sus
+versiones y le baja una. Ese clip es **un Clip nuevo**, en un BinItem nuevo (Hiero lo crea en un bin
+con el nombre de la carpeta del media), asi que entraba con el colorspace por default del archivo:
+en el show ACES la version anterior quedaba en `compositing_linear` mientras el comp estaba en
+ACES2065-1, y el difference comparaba dos cosas en espacios distintos.
+
+Desde `LGA_NKS_Compare_Versions v1.21`, al terminar llama a
+`LGA_NKS_FixColorspaces.aplicar_a_track_item_si_managed(track_item, track_del_original, seq)`:
+
+- **Misma deteccion de proyecto managed y misma resolucion de token** que el boton y el Pull.
+- **La regla sale del track del clip ORIGINAL**, no del track `COMPARE`, que no matchea ninguna
+  regla por nombre: original en `_comp_` -> `exr_publish`; en un `*Plate` -> `plates`; en un track
+  sin regla (EditRef, ...) no se toca.
+- **Se corrigen todas las versiones del BinItem nuevo**, no solo la que queda visible, por el mismo
+  motivo que arriba y porque el cambio de version que hace Compare puede no estar reflejado todavia
+  en `trackItem.source()` durante la misma corrida.
+- Corre dentro del grupo de undo "Scan and Downgrade New Clip Version" que ya abre Compare, pero
+  en un `try` propio, separado del scan: si el scan falla (por ejemplo un nombre sin `_vNNN`), el
+  clip de COMPARE ya existe y igual recibe el colorspace. Un fallo del color se informa por consola
+  y no voltea el Compare.
+
+Medido en el proyecto real (en una copia de la secuencia): las tres versiones del clip de COMPARE
+pasaron de `compositing_linear` a `ACES - ACES2065-1`, la version original del comp siguio en la
+suya y ningun BinItem del proyecto cambio de version activa. El `main()` completo de Compare tardo
+361 ms.
 
 ## Quien dispara la correccion
 
-Hay **dos** disparadores, y los dos usan la MISMA funcion, `run_if_color_managed()`:
+Hay **tres** disparadores. Los dos primeros usan la MISMA funcion, `run_if_color_managed()`; el
+tercero usa `aplicar_a_track_item_si_managed()`, que comparte con ella la deteccion, la resolucion
+y la pasada por versiones:
 
 | Disparador | Donde | Quien abre el grupo de undo |
 |---|---|---|
 | Boton `Fix Colorspaces` del Edit Panel | `LGA_NKS_Edit_Panel.py::fix_colorspaces()` -> `main()` | el panel, con `beginUndo("Fix Colorspaces")` |
 | Al terminar un **Flow Pull** | `LGA_NKS_Flow_Pull.py::fix_colorspaces_si_proyecto_managed()` | el Flow Review Panel, con `beginUndo("Run External Script")` |
+| Boton **Compare Versions** del Review Panel | `LGA_NKS_Compare_Versions.py::aplicar_color_management()` | Compare, con `beginUndo("Scan and Downgrade New Clip Version")` |
 
 🔴 **`run_if_color_managed()` NO abre grupo de undo. Lo abre siempre el llamador**, que es la
 convencion del repo ("El undo lo maneja el propio script, para no anidar bloques",
@@ -218,7 +338,9 @@ el mapa lo incluya.
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_Flow_NamingUtils.py` —
   `extract_project_name_from_path()`, `extract_project_name()`, `clean_base_name()`.
 - `LGA_HieroTools/LGA_NKS_Edit_Panel.py` — `fix_colorspaces()`, `execute_external_script()`.
-- `LGA_HieroTools/LGA_NKS_Edit_Panel_py/LGA_NKS_FixColorspaces.py` — `run_if_color_managed()`, el punto de entrada que comparten el boton y el Pull.
+- `LGA_HieroTools/LGA_NKS_Edit_Panel_py/LGA_NKS_FixColorspaces.py` — `run_if_color_managed()`, el punto de entrada que comparten el boton y el Pull; `aplicar_a_track_item_si_managed()`, el de Compare Versions; `corregir_versiones_del_bin_item()`, `resolver_nombre_para_clip()`, `aplicar_nombre_a_clip()`, `ListaTransformsDeRespaldo`, `programar_verificacion()`.
+- `LGA_HieroTools/LGA_NKS_Review_Panel_py/LGA_NKS_Compare_Versions.py` — `aplicar_color_management()`.
+- `LGA_HieroTools/+Building_Blocks/explore_fixcolor_versions.py` — la sonda de tiempos y persistencia por version (no se publica; se respalda en el contenedor).
 - `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py` — `fix_colorspaces_si_proyecto_managed()`, `GUI_Table.update_table()`, `HieroOperations.change_to_highest_version()`.
 - `LGA_HieroTools/LGA_NKS_Shared/tests/test_color_management_config.py` — banco de pruebas sin Nuke.
 - `LGA_HieroTools/docs/Docu_Logica_Nombres_Tracks.md` — la convencion de nombres de track.

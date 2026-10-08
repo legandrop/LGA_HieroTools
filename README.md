@@ -239,8 +239,9 @@ indicators.
 - **Compositing Log | Clip**  
   Sets the selected clips' color transform to `compositing_log`.
 - **Fix Colorspaces**  
-  Uses the project's PipeSync color-management settings when enabled; otherwise
-  detects and fixes clips using `rec709` or `gamma2.2`.
+  Uses the project's PipeSync color-management settings when enabled, on every
+  loaded version of each clip; otherwise detects and fixes clips using `rec709`
+  or `gamma2.2`.
 - **Apply AMF**
   Adds or removes the shot's CDL/CLF effects on selected EXRs, or on EXRs under
   the playhead when fewer than two clips are selected. Shortcut: `Shift+L`.
@@ -293,7 +294,7 @@ opening related Nuke scripts.
 - **Difference Mode**  
   Toggles Difference mode on the `_comp_` track.
 - **Compare Versions**  
-  Creates a new `COMPARE` track with a previous version of the selected clip and puts the track into Difference mode.
+  Creates a new `COMPARE` track with a previous version of the selected clip and puts the track into Difference mode. In color-managed projects the previous version gets the same color space as the original track.
 - **Compare OFF**  
   Removes the `COMPARE` track and disables Difference mode.
 - **Contact Sheet**

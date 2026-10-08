@@ -1,11 +1,21 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Compare_Versions v1.20 | Lega
+  LGA_NKS_Compare_Versions v1.21 | Lega
 
   Crea un nuevo track con una version anterior del clip seleccionado
   y pone al track en modo difference
 
+  Si el proyecto esta color managed, el clip de COMPARE recibe el colorspace
+  que dicta la regla del track del clip original (la misma logica que Fix
+  Colorspaces y el Flow Pull, en LGA_NKS_FixColorspaces), en todas sus
+  versiones cargadas.
+
+  v1.21: El clip de COMPARE entraba con el colorspace por default del archivo:
+         es un Clip nuevo (replaceClips + bajar version) y no pasaba por las
+         reglas de color management, asi que en un proyecto ACES la version
+         anterior no quedaba en ACES2065-1 como el comp. Ahora se aplica la
+         regla del track original con `aplicar_a_track_item_si_managed()`.
   v1.20: Centralización del nombre del track usando TRACK_comp_EXR del módulo LGA_NKS_GetClip
 ____________________________________________________________________
 
@@ -16,6 +26,7 @@ import hiero.ui
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtGui
 from pathlib import Path
 import sys
+import traceback
 
 # Importar utilidades para obtener clips
 utils_path = Path(__file__).parent.parent / "LGA_NKS_Shared"
@@ -176,6 +187,34 @@ def scan_and_downgrade_clip_version(clip):
         print(f"No versions found for clip: {clip.name()}")
 
 
+def aplicar_color_management(copied_clip, track_name_regla, seq):
+    """
+    Pone al clip de COMPARE (y a todas sus versiones) el colorspace que dicta
+    el color management del proyecto, con la MISMA funcion que usan Fix
+    Colorspaces y el Flow Pull. Si el proyecto no esta managed no hace nada.
+
+    Import diferido desde la carpeta hermana del Edit Panel, igual que el Pull.
+    Nada de esto puede voltear el Compare: cualquier fallo se informa y sigue.
+    """
+    fixcs = None
+    try:
+        edit_panel_dir = Path(__file__).parent.parent / "LGA_NKS_Edit_Panel_py"
+        if edit_panel_dir.exists() and str(edit_panel_dir) not in sys.path:
+            sys.path.insert(0, str(edit_panel_dir))
+        import LGA_NKS_FixColorspaces as fixcs
+
+        fixcs.aplicar_a_track_item_si_managed(copied_clip, track_name_regla, seq)
+    except Exception as e:
+        print(f"Compare Versions: no se pudo aplicar el color management: {e}")
+        traceback.print_exc()
+    finally:
+        if fixcs is not None:
+            try:
+                fixcs.volcar_log()
+            except Exception:
+                pass
+
+
 def main(selected_clip=None):
     # Obtener la secuencia activa en el timeline
     seq = hiero.ui.activeSequence()
@@ -185,6 +224,8 @@ def main(selected_clip=None):
 
     # Iniciar una accion de undo para las primeras operaciones
     project = seq.project()
+    copied_clip = None
+    original_track_name = None
     project.beginUndo(
         f"Copy Clip, Reorder Tracks, Paste Clip to COMPARE, and Set {TRACK_comp_EXR} to Difference"
     )
@@ -210,7 +251,13 @@ def main(selected_clip=None):
             return
 
         # Guardar el clip original antes de copiarlo
-        original_clip = hiero.ui.getTimelineEditor(seq).selection()[0]
+        original_clip = selected_clip or hiero.ui.getTimelineEditor(seq).selection()[0]
+        # La regla de color del clip de COMPARE sale del track del ORIGINAL: el
+        # track COMPARE no matchea ninguna regla por nombre.
+        try:
+            original_track_name = original_clip.parentTrack().name()
+        except Exception:
+            original_track_name = None
 
         # Reordenar los tracks y agregar el track COMPARE (solo si no existe)
         compare_track = reorder_tracks_and_add_compare(seq)
@@ -252,6 +299,11 @@ def main(selected_clip=None):
         scan_and_downgrade_clip_version(copied_clip)
     except Exception as e:
         print(f"Error during scan and downgrade clip version: {e}")
+    try:
+        # Despues de escanear, para que las versiones ya esten en el BinItem.
+        # Va aparte: si el scan falla (un nombre sin _vNNN), el clip de COMPARE
+        # ya existe y tiene que quedar igual con el colorspace correcto.
+        aplicar_color_management(copied_clip, original_track_name, seq)
     finally:
         # Finalizar la tercera accion de undo
         project.endUndo()
