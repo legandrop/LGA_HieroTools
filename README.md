@@ -168,7 +168,9 @@ Internal reference: [Flow | S3 Panel](LGA_HieroTools/docs/LGA_NKS_Flow_S3_Panel_
   Uploads the shot to Wasabi S3.
 - **Download Clip** — Click downloads the latest available version;
   Shift+Click: downloads the selected version.
-- **Download AMF** — Downloads the selected shot's `_input/Look_Files` folder.
+- **Download AMF** — Downloads the `_input/Look_Files` folder of the shot under
+  the playhead. With two or more clips selected, downloads it for all those
+  shots at once.
 
 The former **.Psync** button is intentionally hidden because that handoff is no
 longer used. Its script remains in the repository as a documented legacy tool.

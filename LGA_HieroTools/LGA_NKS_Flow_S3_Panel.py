@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_S3_Panel v1.34 | Lega
+  LGA_NKS_Flow_S3_Panel v1.35 | Lega
   Panel Flow | S3 para operaciones de produccion con Flow y almacenamiento S3:
   - Revelar clips en Flow
   - Crear shots automáticamente
@@ -9,6 +9,9 @@ ________________________________________________________________________________
   - Cambiar prioridad de shots
   - Integración con FileManagerS3 (Open, Download, Upload)
 
+  v1.35: El tooltip de "Download AMF" avisa que con dos o mas clips
+         seleccionados baja la Look_Files de todos esos shots a la vez
+         (LGA_NKS_FileManagerS3_DownloadAmf v1.10).
   v1.34: Boton nuevo "Slate Frame" despues de Thumbnail: guarda el frame del
          viewer en el campo sg_slate_frame del shot (slate de entrega, solo
          contexto studio). Reusa la captura y la ventana de UpdateThumb.
@@ -347,7 +350,7 @@ class FlowProdPanel(QtWidgets.QWidget):
                 self.download_amf_from_filemanagers3,
                 "gradient_magenta_violet",
                 None,
-                "Descargar la carpeta Look_Files del shot (los .amf para ver bien los renders)",
+                "Descargar la carpeta Look_Files del shot (los .amf para ver bien los renders)\nCon 2 o mas clips seleccionados: la de todos esos shots a la vez",
             ),
         ]
 

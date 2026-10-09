@@ -89,9 +89,14 @@ La carpeta privada del panel es `LGA_NKS_Flow_S3_Panel_py/`, igual que el módul
 - **Script utilizado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_DownloadClip.py`
 
 ### 12. Download AMF
-- **Función**: Descarga la carpeta `_input/Look_Files` del shot del clip seleccionado desde Wasabi S3 (los `.amf`/`.cdl`/`.clf` necesarios para ver bien los renders de comp)
+- **Función**: Descarga la carpeta `_input/Look_Files` del shot desde Wasabi S3 (los `.amf`/`.cdl`/`.clf`/`.cube` necesarios para ver bien los renders de comp)
 - **Script utilizado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_DownloadAmf.py`
-- **Comportamiento**: No chequea si la carpeta existe localmente; siempre dispara la descarga vía FileManagerS3 CLI sobre `<shot>/_input/Look_Files`
+- **De qué shots** (`get_target_clips`, constante `SELECCION_MINIMA`):
+  - **2 o más clips seleccionados**: el shot de cada uno, todos en una sola llamada al CLI (`--download "<Look_Files 1>" "<Look_Files 2>" ...`). Existe para no ir shot por shot al bajar el look de una tanda, igual que Download Clip con los clips.
+  - **1 o ninguno**: el shot bajo el playhead (método híbrido de `LGA_NKS_GetClip`). Hiero autoselecciona el clip bajo el playhead, así que un solo clip seleccionado no distingue una elección del usuario.
+- **Una carpeta por shot** (`look_files_paths`): varios clips del mismo shot (aPlate, bPlate, `_comp_`) comparten `Look_Files`, y mandarla repetida abriría la misma descarga varias veces.
+- **Comportamiento**: No chequea si la carpeta existe localmente; siempre dispara la descarga vía FileManagerS3 CLI sobre `<shot>/_input/Look_Files`. Un shot que no tiene `Look_Files` en Wasabi lo informa FileManagerS3 con un cartel `Download failed` por shot, y la tanda sigue con los demás (cada ruta se encola por separado).
+- **Sin reconexión**: a diferencia de Download Clip no pasa `--notify-completion`, porque no hay clip que reconectar; después de bajar se aplica el look con **Apply AMF** del Edit Panel.
 
 ## Compatibilidad de Nomenclatura
 
@@ -131,7 +136,7 @@ La lectura visual es intencional:
 9. **Download Shot** - Descarga el shot desde Wasabi S3
 10. **Upload Shot** - Sube el shot a Wasabi S3
 11. **Download Clip** - Descarga la última versión; con Shift descarga el clip seleccionado
-12. **Download AMF** - Descarga la carpeta `_input/Look_Files` del shot del clip seleccionado
+12. **Download AMF** - Descarga la carpeta `_input/Look_Files` del shot bajo el playhead, o de todos los shots con 2 o más clips seleccionados
 
 ## Requisitos
 

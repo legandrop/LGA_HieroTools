@@ -1,13 +1,26 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_FileManagerS3_DownloadAmf v1.00 | Lega
+  LGA_NKS_FileManagerS3_DownloadAmf v1.10 | Lega
 
-  Descarga desde Wasabi S3 la carpeta _input/Look_Files del shot del clip
-  seleccionado (los .amf/.cdl/.clf que hacen falta para ver bien los renders
-  de comp). Reutiliza la deteccion de shot y el launcher de FileManagerS3 de
+  Descarga desde Wasabi S3 la carpeta _input/Look_Files del shot (los
+  .amf/.cdl/.clf/.cube que hacen falta para ver bien los renders de comp).
+  Reutiliza la deteccion de shot y el launcher de FileManagerS3 de
   LGA_NKS_FileManagerS3_Download.py.
 
+  De que shots:
+    - DOS o mas clips seleccionados -> el shot de cada uno, todos en UNA sola
+      llamada al CLI (`--download <Look_Files 1> <Look_Files 2> ...`), con
+      una carpeta por shot aunque haya varios clips del mismo.
+    - UNO o ninguno -> el shot bajo el playhead, como siempre. Hiero
+      autoselecciona el clip bajo el playhead, asi que "uno seleccionado" no
+      distingue una eleccion del usuario (ver SELECCION_MINIMA).
+
+  v1.10: Descarga en tanda. Con dos o mas clips seleccionados baja la
+         Look_Files de todos esos shots de una vez, igual que Download Clip
+         con los clips. Antes tomaba un solo clip y habia que ir shot por
+         shot. El CLI de FileManagerS3 ya aceptaba varias rutas en
+         `--download`; lo que faltaba era pasarselas.
   v1.00: version inicial.
 ____________________________________________________________________
 """
@@ -27,7 +40,7 @@ import re
 utils_path = Path(__file__).parent.parent / "LGA_NKS_Shared"
 if utils_path.exists():
     sys.path.insert(0, str(utils_path))
-    from LGA_NKS_Shared.LGA_NKS_GetClip import get_clip_to_process
+    from LGA_NKS_Shared.LGA_NKS_GetClip import get_clip_to_process, get_selected_clips
     from LGA_NKS_Shared import LGA_NKS_GetClip as clip_utils
     from LGA_NKS_Shared.LGA_NKS_FileManagerS3Launcher import (
         build_filemanagers3_command,
@@ -55,6 +68,18 @@ debug_log_listener = None
 
 # Variable de desarrollo para cambiar la ruta del ejecutable
 Desarrollo = True
+
+# Cuantos clips seleccionados hacen falta para creerle a la seleccion.
+#
+# Hiero AUTOSELECCIONA el clip bajo el playhead: parado sobre un shot y sin
+# haber hecho click en nada, la seleccion ya trae UN item. Con dos o mas la
+# seleccion es deliberada y se bajan todos esos shots; con uno o ninguno manda
+# el playhead, que es como funciono siempre este boton. Misma regla que
+# LGA_NKS_ApplyAMF (ver Docu_Metodos_Seleccion_Clip.md, Metodo 3).
+SELECCION_MINIMA = 2
+
+# Donde vive la carpeta de look, colgando del shot.
+LOOK_FILES_SUBPATH = "_input/Look_Files"
 
 class RelativeTimeFormatter(logging.Formatter):
     """Formatter con hora absoluta y tiempo relativo desde el inicio."""
@@ -213,11 +238,12 @@ def get_shot_path(file_path):
     return os.path.dirname(input_folder)
 
 
-def build_filemanagers3_cmd(action_flag, shot_path):
+def build_filemanagers3_cmd(action_flag, paths):
+    """Arma la llamada al CLI con una o varias rutas detras del mismo flag."""
     try:
         context_mode = resolve_context_mode()
         cmd = build_filemanagers3_command(
-            [action_flag, shot_path],
+            [action_flag] + list(paths),
             desarrollo=Desarrollo,
             script_dir=Path(__file__).parent,
             context_mode=context_mode,
@@ -228,56 +254,102 @@ def build_filemanagers3_cmd(action_flag, shot_path):
         debug_print(f"No se pudo construir comando de FileManagerS3: {exc}", level="error")
         return None
 
+
+def get_target_clips():
+    """Los clips de los que hay que bajar el look, y de donde salieron.
+
+    Devuelve (clips, origen) con origen en {'seleccion', 'playhead'}. La regla
+    es por CANTIDAD (ver SELECCION_MINIMA): con menos de dos seleccionados se
+    usa el metodo hibrido de siempre (playhead primero, seleccion de respaldo).
+    """
+    seleccionados = get_selected_clips()
+    if len(seleccionados) >= SELECCION_MINIMA:
+        return seleccionados, "seleccion"
+
+    clip = get_clip_to_process(track_name=None, prioritize_multiple_selection=False)
+    return ([clip] if clip else []), "playhead"
+
+
+def clip_file_path(clip):
+    """Ruta de la media del clip, o None si no tiene."""
+    try:
+        fileinfos = clip.source().mediaSource().fileinfos()
+        return fileinfos[0].filename() if fileinfos else None
+    except Exception as e:
+        debug_print(f"No se pudo leer la media del clip: {e}", level="warning")
+        return None
+
+
+def look_files_paths(clips):
+    """Las carpetas Look_Files a bajar: una por shot, en el orden de los clips.
+
+    Varios clips del mismo shot (aPlate, bPlate, _comp_) comparten carpeta, asi
+    que se deduplica: mandarla repetida al CLI abriria la misma descarga varias
+    veces. No se chequea si existe localmente: el punto del boton es bajarla
+    justamente cuando no esta en disco.
+    """
+    paths = []
+    vistos = set()
+    for clip in clips:
+        try:
+            nombre = clip.name()
+        except Exception:
+            nombre = "<sin nombre>"
+        file_path = clip_file_path(clip)
+        if not file_path:
+            debug_print(f"Clip '{nombre}' sin ruta de media: se omite", level="warning")
+            continue
+
+        # La estructura es: unidad:/proyecto/grupo/shot/_input/version/archivo
+        shot_path = get_shot_path(file_path)
+        look_path = shot_path.rstrip("/") + "/" + LOOK_FILES_SUBPATH
+        debug_print(f"Clip '{nombre}': {file_path}")
+        debug_print(f"  shot: {shot_path}")
+
+        clave = look_path.lower()
+        if clave in vistos:
+            debug_print("  Look_Files de ese shot ya esta en la tanda")
+            continue
+        vistos.add(clave)
+        debug_print(f"  Look_Files: {look_path}")
+        paths.append(look_path)
+    return paths
+
+
 def main():
-    """Función principal que descarga la carpeta _input/Look_Files del shot seleccionado desde Wasabi S3"""
+    """Descarga desde Wasabi S3 la carpeta _input/Look_Files de uno o varios shots."""
     debug_print("=== FILEMANAGER DOWNLOAD AMF (Look_Files) ===")
 
     try:
-        # Obtener el clip usando el método híbrido inteligente (playhead primero, selección como fallback)
-        clip = get_clip_to_process(track_name=None, prioritize_multiple_selection=False)
-
-        if not clip:
+        clips, origen = get_target_clips()
+        if not clips:
             debug_print("No se encontró clip para procesar")
             return
+        debug_print(f"Clips a mirar: {len(clips)} (por {origen})")
 
-        # Obtener la ruta del archivo del clip
-        file_path = clip.source().mediaSource().fileinfos()[0].filename() if clip.source().mediaSource().fileinfos() else None
+        paths = look_files_paths(clips)
+        if not paths:
+            debug_print("No se pudo resolver ninguna carpeta Look_Files", level="warning")
+            return
 
-        if file_path:
-            # La estructura es: unidad:/proyecto/grupo/shot/_input/version/archivo
-            # Necesitamos llegar a: unidad:/proyecto/grupo/shot
-            # Partimos desde el archivo y subimos hasta encontrar la carpeta del shot
+        # Una sola llamada con todas las carpetas: el CLI acepta varias rutas
+        # detras de --download y encola una descarga por cada una.
+        cmd = build_filemanagers3_cmd("--download", paths)
+        if not cmd:
+            return
 
-            # Normalizar la ruta y dividir por ambos separadores (/ y \)
-            shot_path = get_shot_path(file_path)
+        debug_print(f"Ejecutando: {' '.join(cmd)}")
 
-            debug_print(f"Ruta del archivo: {file_path}")
-            debug_print(f"Ruta del shot: {shot_path}")
-
-            # La carpeta Look_Files vive en <shot>/_input/Look_Files. No se chequea
-            # si existe localmente: el punto de este boton es bajarla justamente
-            # cuando no esta en disco.
-            look_files_path = shot_path.rstrip("/") + "/_input/Look_Files"
-            debug_print(f"Ruta de Look_Files: {look_files_path}")
-
-            # Ejecutar FileManagerS3 con --download sobre la carpeta Look_Files
-            cmd = build_filemanagers3_cmd("--download", look_files_path)
-            if not cmd:
-                return
-
-            debug_print(f"Ejecutando: {' '.join(cmd)}")
-
-            try:
-                # Ejecutar el comando (no esperamos que termine, FileManagerS3 abre la GUI)
-                subprocess.Popen(cmd, shell=False)
-                debug_print("FileManagerS3 iniciado para descarga de Look_Files")
-            except Exception as cmd_error:
-                debug_print(f"Error al ejecutar FileManagerS3: {cmd_error}")
-        else:
-            debug_print("No se pudo obtener la ruta del archivo del clip")
+        try:
+            # No se espera a que termine: FileManagerS3 abre su GUI.
+            subprocess.Popen(cmd, shell=False)
+            debug_print(f"FileManagerS3 iniciado para descargar Look_Files de {len(paths)} shot(s)")
+        except Exception as cmd_error:
+            debug_print(f"Error al ejecutar FileManagerS3: {cmd_error}", level="error")
 
     except Exception as e:
-        debug_print(f"Error al procesar el clip: {e}")
+        debug_print(f"Error al procesar los clips: {e}", level="error")
+
 
 if __name__ == "__main__":
     main()

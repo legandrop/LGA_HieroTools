@@ -163,6 +163,10 @@ contradecir una decisión.
   con las constantes `SELECCION_MINIMA` y `PLAYHEAD_EXTENSIONS`.
 - [x] **`LGA_NKS_Edit_Panel_py/LGA_NKS_ToggleAMF.py`** - `find_amf_effects_at_playhead()`
   barre todos los tracks, pero busca soft effects y no clips, y no mira la selección.
+- [x] **`LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_DownloadAmf.py`** - `get_target_clips()`
+  usa el mismo umbral (`SELECCION_MINIMA`): con 2 o más clips seleccionados baja la
+  `Look_Files` de todos esos shots. Con 1 o ninguno NO barre todos los tracks: cae al
+  Método 2 (`get_clip_to_process`), porque le alcanza un clip para saber el shot.
 
 ---
 
