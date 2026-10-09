@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel_SwitchSequence v2.38 | Lega
+  LGA_NKS_Projects_Panel_SwitchSequence v2.39 | Lega
 
   Hiero / Nuke Studio - Switch V3: HÍBRIDO OPTIMIZADO + LIMPIEZA TOTAL + CROSS-PROJECT
 
@@ -19,6 +19,7 @@ ____________________________________________________________________
   INTEGRACIÓN EN PANEL DE PROYECTOS:
   from switch_sequence_v3_final import switch_to_sequence_hybrid
 
+  v2.39: Mascara de viewer por proyecto (PROJECT_VIEWER_MASKS): al terminar el switch, si el timeline es de un proyecto de la tabla, el viewer queda con su mascara puesta. La tabla esta fija en el codigo y guarda el SHA-256 del nombre del proyecto, no el nombre: los proyectos estan bajo NDA y el repo es publico.
   v2.38: Con force_cleanup y el destino ya activo se reusa el timeline: no se cierra ni se reabre, solo corre la limpieza (cierre de restos, reduce, top track, LUT, Frame Number). Cerrar y reabrir el mismo timeline costaba ~1s y un parpadeo.
   v2.37: Parametro force_cleanup: corre el switch completo aunque la secuencia ya este activa, para la post-apertura de proyecto. Cada switch exitoso anota la secuencia como el ultimo timeline de su proyecto (persistente entre sesiones).
   v2.36: Con memoria temprana tambien se scrollea al top track despues de aplicar la vista guardada: el scroll vertical ya no forma parte de la memoria.
@@ -48,6 +49,7 @@ ____________________________________________________________________
 
 import hiero.core
 import hiero.ui
+import hashlib
 import time
 import importlib.util
 import os
@@ -102,6 +104,23 @@ SWITCH_DIAGNOSTIC_LOG_WIDGETS = False
 # ROMPE el "cierre equilibrado" que el codigo mantiene a proposito, asi que
 # queda apagado por defecto. Prender solo para medir.
 SWITCH_DIAGNOSTIC_SPLIT_CLOSE = False
+
+# Mascara de viewer que se prende sola al entrar a un timeline de ciertos
+# proyectos: {clave: (aspect ratio, estilo)}. El estilo es uno de los de
+# LGA_NKS_Viewer_Mask.MASK_STYLE_BY_NAME; "half" es la mascara al 50%.
+#
+# Esta fijo en el codigo a proposito: por ahora es un solo proyecto y no hay
+# de donde leerlo. Si se suman mas, el lugar natural es el project settings de
+# PipeSync, como el color del proyecto.
+#
+# La clave NO es el nombre del proyecto sino el SHA-256 de ese nombre en
+# mayusculas (el de la carpeta 'VFX-<proyecto>', sin el prefijo): los proyectos
+# estan bajo NDA y este repo es publico. Como la carpeta se llama igual en el
+# root de studio y en el de client, una sola clave cubre los dos contextos.
+# Para sumar un proyecto, calcular la clave con project_mask_key("NOMBRE").
+PROJECT_VIEWER_MASKS = {
+    "511fb60c7cf5617922a3a48ecb9ea35485d8438bf142fc88a77e50dff0dc947c": ("3:2", "half"),
+}
 
 SWITCH_CLEANUP_WAIT_TIMEOUT = 8.0
 SWITCH_CLEANUP_WAIT_INTERVAL = 0.10
@@ -964,6 +983,72 @@ def disable_frame_number_on_active_sequence():
     return False
 
 
+def project_mask_key(project_name):
+    """Clave de PROJECT_VIEWER_MASKS para un nombre de proyecto ('PROJA')."""
+    nombre = str(project_name or "").strip().upper()
+    if not nombre:
+        return None
+    return hashlib.sha256(nombre.encode("utf-8")).hexdigest()
+
+
+def _project_name_of_sequence(seq):
+    """Proyecto de trabajo de una secuencia: la carpeta 'VFX-<proyecto>' de su .hrox."""
+    try:
+        ruta = seq.project().path()
+    except Exception as e:
+        debug_print(f"   Viewer mask: no se pudo leer la ruta del proyecto: {e}")
+        return None
+
+    for parte in str(ruta or "").replace("\\", "/").split("/"):
+        if parte.upper().startswith("VFX-") and len(parte) > 4:
+            return parte[4:]
+    return None
+
+
+def apply_project_viewer_mask(seq):
+    """
+    Prende la mascara de viewer que el proyecto de `seq` tiene asignada en
+    PROJECT_VIEWER_MASKS. Si el proyecto no figura no toca nada: no apaga una
+    mascara que el usuario haya dejado puesta.
+
+    Devuelve True si la mascara quedo aplicada.
+    """
+    if not seq:
+        return False
+
+    clave = project_mask_key(_project_name_of_sequence(seq))
+    mascara = PROJECT_VIEWER_MASKS.get(clave) if clave else None
+    if not mascara:
+        debug_print("   Viewer mask: el proyecto no tiene mascara asignada")
+        return False
+
+    aspect_ratio, style_name = mascara
+    try:
+        from LGA_NKS_ViewerTL_Panel_py import LGA_NKS_Viewer_Mask as viewer_mask
+    except Exception as e:
+        debug_print(f"   Viewer mask: no se pudo importar LGA_NKS_Viewer_Mask: {e}")
+        return False
+
+    try:
+        aplicada = viewer_mask.set_mask(aspect_ratio, style_name)
+    except Exception as e:
+        debug_print(f"   Viewer mask: error aplicando {aspect_ratio} {style_name}: {e}")
+        return False
+
+    # Lo pedido contra lo que quedo: el viewer es nuevo y Hiero lo sigue
+    # armando, asi que un set que no tira error puede no haber quedado.
+    estilo_final = None
+    try:
+        estilo_final = hiero.ui.currentViewer().maskOverlayStyle()
+    except Exception as e:
+        debug_print(f"   Viewer mask: no se pudo releer el estilo: {e}")
+    debug_print(
+        f"   Viewer mask: pedido {aspect_ratio} {style_name} | "
+        f"aplicada={aplicada} | estilo del viewer={estilo_final}"
+    )
+    return bool(aplicada)
+
+
 def _restore_memory_view(seq, retry=False):
     """Aplica la vista guardada de `seq`. No hace nada si ya no es la secuencia activa."""
     try:
@@ -1337,6 +1422,16 @@ def _switch_to_sequence_impl(target_sequence_name, target_project=None, force_cl
         debug_print(f"   Frame Number off: error inesperado: {e}")
     frame_number_off_time = time.time() - step_start
 
+    # 14b. Mascara de viewer del proyecto, si tiene una asignada. Va despues
+    # del LUT y del Frame Number porque tambien acomoda los burn-ins.
+    viewer_mask_result = False
+    step_start = time.time()
+    try:
+        viewer_mask_result = apply_project_viewer_mask(new_active)
+    except Exception as e:
+        debug_print(f"   Viewer mask: error inesperado: {e}")
+    viewer_mask_time = time.time() - step_start
+
     # 15. Espera diagnostica post-event-loop: confirma cierre real de widgets
     cleanup_wait_time, cleanup_wait_ok, cleanup_pending = 0.0, True, []
     if SWITCH_DIAGNOSTIC_CLEANUP_WAIT:
@@ -1378,6 +1473,9 @@ def _switch_to_sequence_impl(target_sequence_name, target_project=None, force_cl
     )
     debug_print(
         f"   Frame Number off: {frame_number_off_time:.3f}s | result={frame_number_off_result}"
+    )
+    debug_print(
+        f"   Viewer mask: {viewer_mask_time:.3f}s | result={viewer_mask_result}"
     )
     if CLOSE_ALL_TIMELINES:
         debug_print(

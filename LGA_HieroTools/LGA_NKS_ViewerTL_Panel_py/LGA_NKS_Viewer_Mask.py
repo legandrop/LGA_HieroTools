@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Viewer_Mask v1.32 | Lega
+  LGA_NKS_Viewer_Mask v1.33 | Lega
 
   Ajusta el overlay del viewer a un aspect ratio especifico, alterna los
   estilos de mascara entre None, Half y Full, y corre los burn-ins del
@@ -16,6 +16,9 @@ ____________________________________________________________________
       izquierda y el centrado se queda quieto, sin tener que saber cual es
       cual ni cuantos efectos hay.
 
+  v1.33: set_mask() deja la mascara en un estilo puntual en vez de rotarla,
+         para quien necesita un estado fijo (el Projects Panel la prende sola
+         en ciertos proyectos). main() y set_mask() comparten apply_mask().
   v1.32: Modo pillarbox para 3:2, que achica la caja de TODOS los burn-ins
          en vez de subir uno solo. La marca de estado ahora dice en que eje
          quedo corrido el burn-in, no solo si lo esta: con dos ejes en juego
@@ -49,6 +52,14 @@ MASK_STYLE_ORDER = [
     hiero.ui.Player.MaskOverlayStyle.eMaskOverlayHalf,
     hiero.ui.Player.MaskOverlayStyle.eMaskOverlayFull,
 ]
+
+# Los mismos estilos por nombre, para pedir uno puntual con set_mask().
+# Half es la mascara al 50% de opacidad; Full, la opaca.
+MASK_STYLE_BY_NAME = {
+    "none": hiero.ui.Player.MaskOverlayStyle.eMaskOverlayNone,
+    "half": hiero.ui.Player.MaskOverlayStyle.eMaskOverlayHalf,
+    "full": hiero.ui.Player.MaskOverlayStyle.eMaskOverlayFull,
+}
 
 # Nombre del track a inspeccionar
 TRACK_NAME = "BurnIn"
@@ -363,13 +374,66 @@ def main(aspect_ratio="3:2"):
 
     try:
         new_style = rotate_overlay_style(viewer)
+    except AttributeError as e:
+        debug_print(f"Error al manipular el viewer: {e}")
+        return
+
+    apply_mask(viewer, aspect_ratio, new_style)
+
+
+def set_mask(aspect_ratio="3:2", style_name="half"):
+    """
+    Deja la mascara del viewer actual en un estilo puntual, sin rotar.
+
+    Es el mismo camino que el boton -mascara y burn-ins quedan coherentes-,
+    pero con el estado de llegada fijo: llamarla dos veces da lo mismo que
+    llamarla una.
+
+    Args:
+        aspect_ratio (str): El aspect ratio de la mascara (ej: "3:2")
+        style_name (str): "none", "half" (50% de opacidad) o "full"
+
+    Returns:
+        bool: True si el viewer quedo en el estilo pedido.
+    """
+    new_style = MASK_STYLE_BY_NAME.get(str(style_name).lower())
+    if new_style is None:
+        debug_print(f"Estilo de mascara no reconocido: {style_name}")
+        return False
+
+    viewer = hiero.ui.currentViewer()
+    if viewer is None:
+        debug_print("No se pudo obtener el viewer actual.")
+        return False
+
+    return apply_mask(viewer, aspect_ratio, new_style)
+
+
+def apply_mask(viewer, aspect_ratio, new_style):
+    """
+    Pone la mascara del viewer en ese aspect ratio y estilo, y corre o
+    devuelve a su lugar los burn-ins segun corresponda.
+
+    Returns:
+        bool: True si el viewer acepto la mascara.
+    """
+    try:
         viewer.setMaskOverlayStyle(new_style)
         viewer.setMaskOverlayFromRemote(aspect_ratio)
         debug_print(f"Estilo de mascara nuevo: {new_style} | aspecto: {aspect_ratio}")
     except AttributeError as e:
         debug_print(f"Error al manipular el viewer: {e}")
-        return
+        return False
 
+    acomodar_burnins(aspect_ratio, new_style)
+    return True
+
+
+def acomodar_burnins(aspect_ratio, new_style):
+    """
+    Corre los burn-ins del track BurnIn para que la mascara no los tape, o
+    les deshace el desplazamiento si el estilo nuevo ya no los tapa.
+    """
     seq = hiero.ui.activeSequence()
     if not seq:
         debug_print("No hay secuencia activa: no se mueven los burn-ins.")

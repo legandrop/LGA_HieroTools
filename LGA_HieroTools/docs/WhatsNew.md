@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.00
+- [new] In projects framed for 3:2, the Projects panel now turns the 3:2 viewer mask on at half opacity every time you switch to one of their timelines.
 - [improved] Download AMF downloads the look files of every selected shot at once when two or more clips are selected, instead of one shot at a time.
 - [fixed] Apply AMF applies the shot's .cdl and .clf again instead of reporting that valid look files could not be loaded.
 - [improved] Shot Info opens as tall as its content instead of at a fixed size, so a shot with little to show no longer opens a mostly empty window.

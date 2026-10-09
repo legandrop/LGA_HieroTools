@@ -6,7 +6,7 @@
 ## Concepto rapido
 - Panel `com.lega.ProjectsPanel` para Hiero/Nuke Studio que escanea `T:\` (`VFX-*/*_SUP`), detecta la ultima version `.hrox` de cada proyecto, y permite abrir proyectos y sus secuencias.
 - Barra lateral derecha, en orden: `Refresh` reescanea en background; `Reload Panel` ejecuta el smart reload del dock y de sus ventanas privadas, incluido el preview de Drop media; `Settings` abre la configuracion. Debajo de un separador, `Organize Project` y `Clean Project` actuan sobre el proyecto completo con botones de icono y tooltip.
-- Click en proyecto lo abre; click en secuencia la abre en timeline (cross-project) preservando ajustes de viewer y dejando apagado el Frame Number del ViewerTL.
+- Click en proyecto lo abre; click en secuencia la abre en timeline (cross-project) preservando ajustes de viewer, dejando apagado el Frame Number del ViewerTL y, en los proyectos que la tienen asignada, prendiendo su mascara de viewer.
 - Boton `Update`: aparece al lado de proyectos abiertos cuando existe version mas nueva en disco y permite actualizar automaticamente.
 
 ## Archivos clave
@@ -64,6 +64,12 @@
   - Cada dato se lee y aplica por separado y los wrappers muertos de PySide se descartan con `is_widget_alive()`: un `QSlider` destruido no puede volver a cortar el guardado del playhead.
 - En el cambio de secuencia se ejecuta un pre-cleanup sobre el timeline nuevo antes de los ajustes finales de UI: elimina tracks NukeVFX y extiende BurnIn hasta el ultimo clip visible.
 - Al final de cada cambio de secuencia, `disable_frame_number_on_active_sequence()` busca `Frame_Only` en el track `BurnIn` de la secuencia activa y lo deshabilita si estaba activo. No llama al toggle de posicionamiento, por lo que no crea el efecto ni lo enciende por accidente.
+- Mascara de viewer por proyecto: despues del Frame Number, `apply_project_viewer_mask()` mira si el proyecto del timeline figura en `PROJECT_VIEWER_MASKS` y, si figura, deja el viewer con esa mascara (hoy un solo proyecto, `3:2` en estilo `half`, que es el 50% de opacidad). Existe porque ese proyecto se revisa siempre con ese encuadre y habia que prender la mascara a mano en cada cambio de timeline: el switch destruye el viewer y abre uno nuevo, que arranca sin mascara.
+  - La tabla esta fija en el codigo a proposito; si se suman proyectos, el lugar natural es el project settings de PipeSync, como el color.
+  - **La clave no es el nombre del proyecto sino su SHA-256** (nombre en mayusculas, tomado de la carpeta `VFX-<proyecto>` del `.hrox`): los proyectos estan bajo NDA y el repo es publico. Es ofuscacion contra quien lee o busca en el repo, no un secreto: un nombre corto se saca por fuerza bruta. Para sumar un proyecto se calcula la clave con `project_mask_key("NOMBRE")` y se pega el resultado; nunca se escribe el nombre, ni en un comentario. `tests/test_project_viewer_mask.py` falla si una clave no es un hash.
+  - La carpeta `VFX-<proyecto>` se llama igual en el root de studio y en el de client, asi que una sola clave cubre los dos contextos.
+  - Se aplica con `LGA_NKS_Viewer_Mask.set_mask()`, que fija el estilo en vez de rotarlo como el boton del ViewerTL, y que tambien devuelve a su lugar los burn-ins que una mascara `Full` hubiera dejado corridos. Corre en TODO switch exitoso (click en el panel, post-apertura de proyecto, navegacion a un shot), asi que si el usuario apaga la mascara vuelve a prenderse al cambiar de timeline. Un proyecto que no figura no se toca: no se le apaga nada.
+  - El click sobre el timeline que ya esta activo corta en "Ya activa" y no pasa por aca.
 - Contadores: etiqueta inferior muestra totales de proyectos encontrados y abiertos.
 - Reload Panel: ejecuta el smart reload externo para probar cambios sin reiniciar Hiero. Antes de recrear el dock reimporta sus dependencias privadas, incluido el diálogo de preview de Drop media, para que el siguiente popup use el código actual. Su tooltip dice `Recargar panel`; el mecanismo interno no forma parte del nombre visible.
 - Acciones de proyecto: los iconos debajo del separador llaman `ProjectsPanel.organize_project()` y `ProjectsPanel.clean_project()`. El loader comun `_run_project_tool()` valida ruta, loader y `main()` antes de ejecutar, y avisa si falla.
@@ -85,12 +91,14 @@
   - resultados del pre-cleanup de timeline
   - resultados del scroll vertical al top track
   - resultado de `Frame Number off`
+  - resultado de `Viewer mask`: lo pedido contra el estilo con el que quedo el viewer
   - mensajes del smart reload del panel
 
 ## Referencias tecnicas
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel.py`: `ProjectsPanel`, import y wiring de `switch_to_sequence_hybrid()`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel_py\LGA_NKS_ProjectItem.py`: `ProjectItem.show_sequences()`, `ProjectItem.on_sequence_click()`.
-- `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel_py\LGA_Projects_Panel_SwitchSequence.py`: `switch_to_sequence_hybrid()`, `disable_frame_number_on_active_sequence()`, `import_script()`.
+- `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel_py\LGA_Projects_Panel_SwitchSequence.py`: `switch_to_sequence_hybrid()`, `disable_frame_number_on_active_sequence()`, `import_script()`, `PROJECT_VIEWER_MASKS`, `project_mask_key()`, `apply_project_viewer_mask()`.
+- `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_ViewerTL_Panel_py\LGA_NKS_Viewer_Mask.py`: `set_mask()`, `apply_mask()`, `acomodar_burnins()`, `MASK_STYLE_BY_NAME`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel_py\LGA_NKS_TimelineMemory.py`: `capture_active()`, `restore_view()`, `remember_context()`, `recall_context()`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel_py\LGA_NKS_UIManager.py`: `setup_ui()`, `_add_project_action_button()`, `setup_connections()`, `eventFilter()`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel_py\LGA_NKS_OrganizeProject.py`: `OrganizeProject`, `main()`.
