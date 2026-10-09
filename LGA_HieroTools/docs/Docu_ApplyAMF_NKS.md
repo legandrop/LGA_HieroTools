@@ -57,21 +57,31 @@ Medido contra los enums reales (NKS aces_1.2 y Nuke 17 con los cuatro configs v2
 
 Verificacion de pixel en Nuke 17 (`configure_effect_node` sobre `OCIOFileTransform`, gris 0.18 con un `.cube` x0.5 en ACEScct; esperado 0.014609): `aces_1.2` 0.014609, `fn-nuke_cg-config-v2.2.0` 0.014609, `fn-nuke_studio-config-v2.2.0` 0.014609, `fn-nuke_cg-config-v3.0.0` 0.014609, `fn-nuke_studio-config-v3.0.0` 0.014609; con la funcion vieja los cuatro v2 daban `hasError=True` y pixel 0.0. `.cdl` slope 2 solo: 0.36; `.cdl` + `.cube`: 0.020661 en los cinco. Ojo al medir: despues de un nodo con error `nuke.sample` devuelve 0.0 en el mismo envio al host, asi que los casos rotos y los sanos se miden en envios separados.
 
-## Detectar que un efecto no carga: `nodeHasError()` NO sirve en NKS
+## Detectar que un efecto no carga: ni `nodeHasError()` ni `Node.hasError()` deciden
 
-Medido en NKS con un `.cube` inexistente, vacio, solo con cabecera, corrupto y con filas de mas:
+Ninguno de los dos indicadores alcanza para decir que un efecto esta roto, y por eso la tool **no saca ni descarta ningun efecto por lo que digan**. Lo que frena la creacion es mirar el archivo antes.
 
-| | `EffectTrackItem.nodeHasError()` | `Node.hasError()` / `Node.error()` |
+**`EffectTrackItem.nodeHasError()` peca por defecto.** Medido en NKS con un `.cube` inexistente, vacio, solo con cabecera, corrupto y con filas de mas: devuelve `False` en todos. El `setValue` del knob `file` acepta cualquier ruta.
+
+**`Node.hasError()` peca por exceso.** Ve esos archivos rotos (`True`), pero tambien marca efectos sanos. Valida el nodo contra el color management de `nuke.root()`, y en NKS ese no tiene por que ser el del proyecto. Medido en Nuke 16.0v4 y 17.0v4 (modo terminal, mismos resultados en los dos, con y sin input conectado, con y sin lifetime):
+
+| Nodo | `Node.hasError()` | Mensaje de Nuke |
 |---|---|---|
-| `.cube` valido | False | False |
-| inexistente / vacio / corrupto / truncado / filas de mas | **False** | **True** |
+| `OCIOFileTransform` recien creado, sin `file` | **True** | `FileTransform: empty file path` |
+| `OCIOCDLTransform` recien creado | False | |
+| archivo valido, `working_space` que el config de `nuke.root()` SI tiene | False | |
+| archivo valido, `working_space` que el config de `nuke.root()` NO tiene | **True** | `Invalid input LUT selected: <espacio>` |
+| archivo inexistente | **True** | `The specified absolute file reference ... could not be located` |
 
-O sea: el `[WARN] El nodo quedo en error` original no avisaba nunca de lo mas comun, y el `setValue` del knob `file` acepta cualquier ruta. Un nodo en error **entrega negro**, asi que dejarlo puesto apaga el clip en el viewer. Por eso hay dos defensas:
+La cuarta fila es la trampa: el `.cdl` se lee bien (el nodo muestra slope, offset y power del archivo) y `hasError()` da `True` igual. En una sesion real de NKS 16.0v4, con un proyecto en `aces_1.2`, un `.cdl` y un `.clf` validos quedaron los dos con `hasError()=True` despues de configurarlos. La version que sacaba del timeline todo efecto con `hasError()` no aplicaba nada en esa sesion y avisaba que los archivos no se podian cargar. Python no expone el texto del error del nodo, asi que desde la tool no se puede distinguir la cuarta fila de la quinta.
 
-1. **Antes de crear** (`motivo_archivo_inutil`): el archivo tiene que existir, poder leerse, no estar vacio, y tener forma (`.cube`: header con `LUT_1D_SIZE`/`LUT_3D_SIZE` y exactamente las filas esperadas; OCIO tambien rechaza las filas de MAS; `.cdl` y `.clf`: XML bien formado). Si no, el efecto **no se crea** y el motivo sube al cartel unico del final. Cacheado por ruta (un `.cube` 65^3 son ~7 MB y ~210 ms de lectura, una vez por corrida).
-2. **Despues de configurar** (`_node_has_error`): lo que el chequeo previo no ve (un `.clf` XML valido pero sin operaciones, por ejemplo). Mira `Node.hasError()` y, si el nodo esta en error, **saca el efecto recien creado** (`_quitar_efecto_recien_creado`, con `eDontRemoveLinkedItems` como el toggle) y suma el motivo al cartel.
+Que se hace entonces:
 
-Sin estos dos pasos, el cartel solo avisa si el config OCIO no tiene el colorspace pedido (`configure_effect_node`).
+1. **Antes de crear** (`motivo_archivo_inutil`): el archivo tiene que existir, poder leerse, no estar vacio, y tener forma (`.cube`: header con `LUT_1D_SIZE`/`LUT_3D_SIZE` y exactamente las filas esperadas; OCIO tambien rechaza las filas de MAS; `.cdl` y `.clf`: XML bien formado). Si no, el efecto **no se crea** y el motivo sube al cartel unico del final. Cacheado por ruta (un `.cube` 65^3 son ~7 MB y ~210 ms de lectura, una vez por corrida). Es el unico control que frena.
+2. **Despues de configurar**, `Node.hasError()` solo se **loguea**, por etapa: `[ESTADO] recien creado`, `con el archivo cargado` y `con el working space` (`_estado_error`). La etapa en la que pasa a `True` dice que knob lo dispara. Si queda en `True` sale un `[WARN]` y el efecto se deja puesto.
+3. **Una vez por corrida** (`_log_contexto_color`) el log trae el color management de `nuke.root()` (`colorManagement`, `OCIO_config`, `customOCIOConfigPath`, `workingSpaceLUT`) y el del proyecto (`ocioConfigName`, `ocioConfigPath`, working space), mas la variable `OCIO`. Si no coinciden, un `hasError()=True` en la etapa del working space es el falso positivo de la tabla.
+
+Lo que queda sin red: un archivo con forma valida que OCIO igual rechaza (un `.clf` XML bien formado pero sin operaciones). Ese efecto se crea, entrega negro y el unico aviso es el `[WARN]` del log.
 
 ## El config OCIO del proyecto NO cambia el enum de los soft effects
 
@@ -111,7 +121,7 @@ El toggle ya funciona con el `.cube`: `AMF_EFFECT_TYPES` incluye `OCIOFileTransf
   - `pick_cube`, `parse_lut_name`, `cube_working_space`, `cube_spec`: el `.cube` como look (`CUBE_DEFAULT_SPACE`, `_CUBE_SPACE_HINTS`).
   - `motivo_archivo_inutil`, `_motivo_cube_invalido`: validacion previa del archivo.
   - `match_colorspace_option`, `configure_effect_node`: resolucion del nombre corto contra el enum del knob.
-  - `_node_has_error`, `_quitar_efecto_recien_creado`, `apply_effect`: deteccion posterior y limpieza.
+  - `_node_has_error`, `_estado_error`, `_log_contexto_color`, `apply_effect`: el estado de error del nodo y el color management de la sesion, solo para el log.
   - `subtracks_para_la_cadena`, `scan_clip_effects` (campo `sub`), `find_existing_effect`: donde va la cadena y que cuenta como "ya lo tiene".
   - `_anotar_fallo`, `_avisar_fallos`: el cartel unico del final; `_AVISOS_CORRIDA`: avisos que no abren cartel (van al log y al RESUMEN).
   - `collect_amf_effects`, `_apunta_al_look`, `remove_amf_effects`: el lado de borrado del toggle.

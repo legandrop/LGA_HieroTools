@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.00
+- [fixed] Apply AMF applies the shot's .cdl and .clf again instead of reporting that valid look files could not be loaded.
 - [improved] Shot Info opens as tall as its content instead of at a fixed size, so a shot with little to show no longer opens a mostly empty window.
 
 ## v3.99

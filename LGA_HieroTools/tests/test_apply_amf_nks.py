@@ -12,7 +12,9 @@ Lo que tiene que seguir siendo cierto:
   - la cadena va en un bloque contiguo de subtracks por ENCIMA del mas alto
     ocupado, nunca en uno ocupado (crear sobre uno ocupado borra el efecto que
     estaba) ni partida por un efecto del artista;
-  - un efecto AJENO (fuera de Look_Files) no hace saltear el nuestro.
+  - un efecto AJENO (fuera de Look_Files) no hace saltear el nuestro;
+  - Node.hasError() en True no saca el efecto ni lo cuenta como error: marca
+    efectos sanos cuando el working space no esta en el config de nuke.root().
 
 El modulo importa `hiero`: se carga con stubs, sin abrir el host.
 """
@@ -266,6 +268,79 @@ class ApplyAmfNksTest(unittest.TestCase):
         self.assertIsNone(self.m.find_existing_effect([ajeno], "OCIOFileTransform"))
         self.assertIs(self.m.find_existing_effect([ajeno, nuestro], "OCIOFileTransform"), nuestro)
         self.assertIsNone(self.m.find_existing_effect([nuestro], "OCIOCDLTransform"))
+
+    # ------------------------------------------- Node.hasError() no decide
+    def test_has_error_no_saca_el_efecto_ni_lo_cuenta_como_error(self):
+        class Knob:
+            def __init__(self, values=()):
+                self._values, self._value = list(values), None
+
+            def values(self):
+                return self._values
+
+            def setValue(self, value):
+                self._value = value
+
+            def value(self):
+                return self._value
+
+        class Node:
+            def __init__(self):
+                self._knobs = {
+                    "file": Knob(),
+                    "working_space": Knob(ACES12),
+                }
+
+            def __getitem__(self, name):
+                return self._knobs[name]
+
+            def knobs(self):
+                return self._knobs
+
+            def hasError(self):
+                return True
+
+            def error(self):
+                return True
+
+        class Effect:
+            def __init__(self):
+                self._node = Node()
+
+            def node(self):
+                return self._node
+
+            def name(self):
+                return "OCIOFileTransform1"
+
+        class Track:
+            def __init__(self):
+                self.quitados = []
+
+            def createEffect(self, **kwargs):
+                return Effect()
+
+            def removeSubTrackItem(self, *args):
+                self.quitados.append(args)
+
+        class TrackItem:
+            def __init__(self):
+                self.track = Track()
+
+            def parent(self):
+                return self.track
+
+        item = TrackItem()
+        fallos = {}
+        spec = {
+            "type": "OCIOFileTransform",
+            "file": "T:/VFX-PROJA/101/PROJA_101_0010/_input/Look_Files/lmt.clf",
+            "cccid": None,
+            "working_space": "ACES2065-1",
+        }
+        self.assertEqual(self.m.apply_effect(item, spec, [], 0, fallos, "PROJA_101_0010"), "creado")
+        self.assertEqual(item.track.quitados, [])
+        self.assertEqual(fallos, {})
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ApplyAMF v0.93 | Lega
+  LGA_NKS_ApplyAMF v0.94 | Lega
 
   Pone y saca los soft effects de color de un shot, siguiendo lo que
   declara el .amf que viene con el shot.
@@ -79,6 +79,18 @@ ____________________________________________________________________
   (ver pick_amf_for_plate). El aviso de 'hay mas de uno de esa extension'
   quedo solo para el plan de respaldo, donde no hay .amf que consultar.
 
+  v0.94: Fix: Node.hasError() deja de decidir. La v0.93 sacaba del timeline
+         todo efecto cuyo nodo quedaba con hasError() en True, y en una sesion
+         real de NKS eso pasaba con un .cdl y un .clf VALIDOS (el CDL hasta
+         leia sus valores del archivo): la tool no aplicaba nada y avisaba
+         'could not be loaded by the color node'. hasError() valida el nodo
+         contra el color management de nuke.root(), que en NKS no tiene por
+         que ser el del proyecto: un working space que el proyecto si tiene
+         da 'Invalid input LUT selected' aunque el efecto se vea bien. Ahora
+         el estado se LOGUEA por etapa (recien creado, con el archivo, con
+         el working space) junto con el color management de nuke.root() y
+         del proyecto, y el efecto se deja puesto. Lo que frena la creacion
+         sigue siendo la validacion previa del archivo.
   v0.93: El .cube pasa a ser un look. Sin .amf, el plan de respaldo es el
          .cdl (si hay) mas UN LMT: el .clf y, si no hay, el .cube. El .cube
          va como OCIOFileTransform y su working space sale del nombre del
@@ -1543,6 +1555,7 @@ def configure_effect_node(node, spec):
             debug_print("    [WARN] Sin cccid: el nodo toma la primera correccion del archivo.")
     else:
         ok &= _set_knob(node, "file", spec["file"])
+    debug_print("    [ESTADO] con el archivo cargado : %s" % _estado_error(node))
 
     # El working space sale del .amf, o de AMF_WORKING_SPACE si el .amf no lo
     # declara. El default del nodo, `scene_linear`, es un rol que en los configs
@@ -1552,6 +1565,7 @@ def configure_effect_node(node, spec):
         opcion = match_colorspace_option(node, "working_space", wanted)
         if opcion:
             ok &= _set_knob(node, "working_space", opcion)
+            debug_print("    [ESTADO] con el working space   : %s" % _estado_error(node))
         else:
             # NO es cosmetico y no puede pasar en silencio: el nodo se queda en
             # `scene_linear`, que en los configs ACES es ACEScg, y el archivo de
@@ -1609,12 +1623,17 @@ def verify_node(node, effect_type):
 
 
 def _node_has_error(node, effect):
-    """True si el nodo del efecto esta en error.
+    """True si Node.hasError() marca el nodo del efecto. Es un DATO, no un veredicto.
 
-    Se prefiere Node.hasError(), que en NKS SI ve un archivo inexistente, vacio o
-    corrupto. EffectTrackItem.nodeHasError() queda de respaldo solo si el nodo
-    no se puede consultar: en NKS devuelve False en esos mismos casos, asi que
-    por si solo no sirve para avisar.
+    Sirve para el log y nada mas: NO alcanza para decir que el efecto esta roto.
+    hasError() valida el nodo contra el color management de nuke.root(), y en NKS
+    ese no tiene por que ser el del proyecto. Con un working space que el config
+    de nuke.root() no tiene, hasError() da True ('Invalid input LUT selected')
+    con el archivo bien cargado: medido en Nuke 16 y 17, y visto en una sesion
+    real de NKS 16 con un .cdl y un .clf validos. Ver Docu_ApplyAMF_NKS.md.
+
+    EffectTrackItem.nodeHasError() queda de respaldo solo si el nodo no se puede
+    consultar: en NKS devuelve False hasta con un archivo inexistente.
     """
     if node is not None:
         try:
@@ -1624,22 +1643,50 @@ def _node_has_error(node, effect):
     return _safe_call(effect, "nodeHasError", False) is True
 
 
-def _quitar_efecto_recien_creado(track_item, effect):
-    """Saca del timeline el efecto que acabamos de crear y quedo roto.
+def _estado_error(node, effect=None):
+    """Los indicadores de error del nodo en una linea, para el log.
 
-    Usa la misma opcion que el toggle (eDontRemoveLinkedItems): sin ella,
-    removeSubTrackItem sobre un efecto linkeado borra tambien el CLIP. Si la
-    opcion no se puede resolver NO se borra nada (ver _remove_options).
+    Se loguean por ETAPA (recien creado, con el archivo, con el working space):
+    es lo que deja ver QUE knob dispara el error sin tener que armar otra sonda.
     """
-    opciones = _remove_options()
-    track = track_item.parent()
-    if opciones is None or not track:
-        return
+    partes = []
+    for nombre in ("hasError", "error"):
+        try:
+            partes.append("%s=%s" % (nombre, getattr(node, nombre)()))
+        except Exception as e:
+            partes.append("%s=<%s>" % (nombre, e))
+    if effect is not None:
+        partes.append("nodeHasError=%s" % _safe_call(effect, "nodeHasError"))
+    return " ".join(partes)
+
+
+def _log_contexto_color(project):
+    """Vuelca al log el color management de nuke.root() y el del proyecto.
+
+    Son DOS cosas distintas en NKS y Node.hasError() mira la primera: cuando no
+    coinciden, un efecto sano figura con error. Va una vez por corrida.
+    """
+    debug_print("  [COLOR] de nuke.root() y del proyecto:")
     try:
-        track.removeSubTrackItem(effect, opciones)
-        debug_print("    [OK] Se saco el efecto roto '%s'." % _safe_name(effect))
+        import nuke
+
+        debug_print("    nuke                 : %s" % nuke.NUKE_VERSION_STRING)
+        root = nuke.root()
+        for knob_name in (
+            "colorManagement", "OCIO_config", "customOCIOConfigPath", "workingSpaceLUT",
+        ):
+            try:
+                debug_print("    root.%-15s : %r" % (knob_name, root[knob_name].value()))
+            except Exception as e:
+                debug_print("    root.%-15s : <no legible: %s>" % (knob_name, e))
     except Exception as e:
-        debug_print("    [WARN] No se pudo sacar el efecto roto: %s" % e)
+        debug_print("    [WARN] No se pudo leer nuke.root(): %s" % e)
+    for metodo in (
+        "ocioConfigName", "ocioConfigPath", "useOCIOEnvironmentOverride",
+        "lutSettingWorkingSpace",
+    ):
+        debug_print("    proyecto.%-28s : %r" % (metodo + "()", _safe_call(project, metodo)))
+    debug_print("    env OCIO             : %r" % os.environ.get("OCIO"))
 
 
 def apply_effect(track_item, spec, efectos_existentes, sub_track_index, fallos=None, shot=None):
@@ -1675,6 +1722,7 @@ def apply_effect(track_item, spec, efectos_existentes, sub_track_index, fallos=N
     debug_print(f"    timelineIn/Out: {_safe_call(effect, 'timelineIn')} / {_safe_call(effect, 'timelineOut')}")
 
     node = _safe_call(effect, "node", None)
+    debug_print("    [ESTADO] recien creado          : %s" % _estado_error(node, effect))
     ok, motivo = configure_effect_node(node, spec)
     if motivo and fallos is not None and shot:
         _anotar_fallo(fallos, shot, motivo)
@@ -1686,28 +1734,18 @@ def apply_effect(track_item, spec, efectos_existentes, sub_track_index, fallos=N
     else:
         verify_node(node, effect_type)
 
-    # Red de seguridad DESPUES de configurar: lo que el chequeo previo del
-    # archivo no ve (un .clf con XML valido pero sin transformaciones, un LUT que
-    # OCIO rechaza). Se mira Node.hasError() y NO EffectTrackItem.nodeHasError():
-    # en NKS el segundo devuelve False con un archivo inexistente, vacio o
-    # corrupto, y el primero devuelve True (medido con los cuatro casos).
+    # Node.hasError() se LOGUEA y no decide nada: el efecto queda puesto. Sacarlo
+    # por este dato fue el bug de la v0.93 -hasError() da True con un archivo
+    # sano cuando el working space no figura en el config de nuke.root(), ver
+    # _node_has_error-, y dejaba la tool sin aplicar nada. El archivo ya paso
+    # motivo_archivo_inutil antes de crear el efecto, que es el control que vale.
     if _node_has_error(node, effect):
         debug_print(
-            "    [ERROR] El nodo quedo con error: no pudo cargar '%s'."
-            % os.path.basename(str(spec["file"]))
+            "    [WARN] Node.hasError() marca el nodo con '%s' cargado (%s). El efecto "
+            "se deja: mirar los [ESTADO] de arriba y el [COLOR] de la corrida; si "
+            "el clip sale negro en el viewer, el error es real."
+            % (os.path.basename(str(spec["file"])), _estado_error(node, effect))
         )
-        # Un nodo en error entrega NEGRO, asi que dejarlo puesto apaga el clip en
-        # el viewer. Se saca el efecto que se acaba de crear: es nuestro y esta
-        # recien creado, no hay trabajo ajeno que cuidar.
-        _quitar_efecto_recien_creado(track_item, effect)
-        if fallos is not None and shot:
-            _anotar_fallo(
-                fallos,
-                shot,
-                "'%s' could not be loaded by the color node"
-                % os.path.basename(str(spec["file"])),
-            )
-        ok = False
 
     return "creado" if ok else "error"
 
@@ -2249,6 +2287,7 @@ def _main_interno():
     total = {"creado": 0, "salteado": 0, "error": 0}
     # shot -> motivo. Se llena en process_track_item y se avisa UNA vez al final.
     fallos = {}
+    _log_contexto_color(project)
 
     if project:
         project.beginUndo("Apply AMF")
