@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotInfoOnReview v1.00 | Lega
+  LGA_NKS_ShotInfoOnReview v1.01 | Lega
 
   Abre el Shot Info del Flow Review Panel cuando un reviewer llega a un
   shot que esta en SU estado de review, para revisar en cadena sin un
@@ -12,12 +12,22 @@ ____________________________________________________________________
   - Click en una fila del Flow Pull cuyo estado es el review del usuario.
 
   Los dos comparten UNA sola ventana: si sigue abierta la del shot anterior,
-  se cierra y la nueva toma su geometria, asi no se apilan ventanas.
+  se cierra y la nueva toma su lugar y su ancho, asi no se apilan ventanas.
+  El alto no se hereda: cada ventana se abre al alto de su contenido.
+
+  Desde aca la ventana se abre contra el borde IZQUIERDO de la pantalla, no
+  centrada como desde el boton del panel: en una revision en cadena la
+  ventana centrada tapa el viewer en cada salto.
 
   Para habilitarlo a otro reviewer, agregar su clave a
   REVIEWERS_WITH_AUTO_SHOT_INFO. Las claves son las normalizadas que ya usan
   ViewerTL y Pull: lega, sebas, juano, javi, charly.
 
+  v1.01: La ventana se abre alineada a la izquierda. De la anterior se
+         hereda la posicion y el ancho, ya no la geometria entera: el alto
+         ahora lo calcula el Shot Info (v2.03) y se le pasa todo por
+         main(align_left=..., previous_placement=...) para que la ventana
+         se muestre ya en su lugar en vez de moverse despues de abrir.
   v1.00: Primera version. Extrae de LGA_ViewerPanel v1.77 la apertura del
          Shot Info y la generaliza por reviewer.
 ____________________________________________________________________
@@ -104,7 +114,12 @@ def _set_topmost_native(widget, on):
 
 
 def _close_previous_window():
-    """Cierra la ventana anterior de este flujo y devuelve su geometria si estaba visible."""
+    """Cierra la ventana anterior de este flujo y devuelve donde estaba.
+
+    Devuelve (posicion del marco, ancho) si estaba visible y en tamano
+    normal; None si no habia ventana o estaba maximizada/minimizada, que no
+    es un lugar que tenga sentido heredar.
+    """
     global _current_window
     previous = _current_window
     _current_window = None
@@ -112,9 +127,11 @@ def _close_previous_window():
         return None
     try:
         if previous.isVisible():
-            geometry = previous.geometry()
+            placement = None
+            if not (previous.isMaximized() or previous.isMinimized()):
+                placement = (previous.pos(), previous.width())
             previous.close()
-            return geometry
+            return placement
     except RuntimeError:
         # El objeto C++ ya no existe (la ventana se destruyo antes).
         pass
@@ -136,7 +153,7 @@ def open_shot_info(source, task_name=None, keep_on_top=False):
                 source, task_name, keep_on_top
             )
         )
-        previous_geometry = _close_previous_window()
+        previous_placement = _close_previous_window()
 
         if not os.path.exists(_SHOT_INFO_PATH):
             debug_print("Shot Info no encontrado en la ruta: {0}".format(_SHOT_INFO_PATH))
@@ -147,7 +164,14 @@ def open_shot_info(source, task_name=None, keep_on_top=False):
         )
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        module.main(task_name=task_name)
+        # Alineada a la izquierda y, si reemplaza a otra, en su mismo lugar.
+        # Se le pasa a main() en vez de mover la ventana despues: asi se
+        # muestra ya ubicada, sin el salto desde el centro.
+        module.main(
+            task_name=task_name,
+            align_left=True,
+            previous_placement=previous_placement,
+        )
 
         window = getattr(module, "window", None)
         _current_window = window
@@ -155,8 +179,6 @@ def open_shot_info(source, task_name=None, keep_on_top=False):
             debug_print("El Shot Info no dejo ventana (DB ausente o error previo).")
             return None
 
-        if previous_geometry is not None:
-            window.setGeometry(previous_geometry)
         if keep_on_top:
             applied = _set_topmost_native(window, True)
             if not applied:
@@ -169,8 +191,8 @@ def open_shot_info(source, task_name=None, keep_on_top=False):
         window.raise_()
         window.activateWindow()
         debug_print(
-            "Shot Info abierto (reemplaza anterior: {0})".format(
-                previous_geometry is not None
+            "Shot Info abierto a la izquierda (reemplaza anterior: {0})".format(
+                previous_placement is not None
             )
         )
         return window

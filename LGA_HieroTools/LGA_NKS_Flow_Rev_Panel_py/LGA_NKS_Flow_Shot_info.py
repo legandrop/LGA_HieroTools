@@ -1,11 +1,19 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Shot_info v2.02 | Lega
+  LGA_NKS_Flow_Shot_info v2.03 | Lega
 
   Imprime informacion del shot y las versiones de la task seleccionada
   (comp, roto o cleanup) en el playhead.
 
+  v2.03: La ventana se abre al alto de su contenido. El 900x700 de antes
+         deja de ser el tamano fijo y pasa a ser el TOPE: con poco para
+         mostrar abria igual a 700 de alto y quedaba casi toda vacia. Si
+         el contenido cambia (Task history, thumbnails) el alto lo sigue
+         hasta que el usuario la redimensiona a mano. La ubicacion se
+         decide aca: centrada, o contra el borde izquierdo cuando la abre
+         el flujo de review (main(align_left=True), ver
+         LGA_NKS_ShotInfoOnReview).
   v2.02: El proyecto se busca en pipesync.db sin distinguir mayusculas:
          en Client la ruta llega en minuscula (N:/vfx-proja) y la DB
          guarda PROJA, asi que el shot no aparecia.
@@ -92,6 +100,7 @@ from logging.handlers import QueueHandler, QueueListener
 from pathlib import Path
 # Importar compatibilidad Qt para Hiero Panels
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, QShortcut, QApplication
+from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import primary_screen_geometry
 from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color as UIColor
 from LGA_NKS_Shared.LGA_UI_Style_HieroTools import apply_ui_font
 from LGA_NKS_Shared.LGA_NKS_PipeSyncPaths import get_pipesync_db_path
@@ -1488,12 +1497,48 @@ class HieroOperations:
         return results
 
 
+# --------------------------------------------------------------------------- #
+# Tamano y ubicacion de apertura.
+# El alto NO es fijo: la ventana se abre al alto que pide su contenido y
+# WINDOW_MAX_AUTO_HEIGHT es el tope (era el alto fijo de siempre). Pasado el
+# tope aparece el scroll. El usuario la puede agrandar a mano mas alla.
+WINDOW_WIDTH = 900
+WINDOW_MAX_AUTO_HEIGHT = 700
+WINDOW_MIN_HEIGHT = 120
+# Margen que se le deja a la pantalla (barra de titulo y bordes) cuando el
+# monitor es mas bajo que el tope.
+WINDOW_SCREEN_MARGIN = 60
+
+
+def _host_screen_geometry():
+    """Area util (sin la barra de tareas) del monitor donde esta el host."""
+    screen = None
+    try:
+        main_window = hiero.ui.mainWindow()
+        handle = main_window.windowHandle() if main_window is not None else None
+        screen = handle.screen() if handle is not None else None
+    except Exception:
+        screen = None
+    if screen is None:
+        return primary_screen_geometry()
+    return screen.availableGeometry()
+
+
 class GUIWindow(QWidget):
     def __init__(self, hiero_ops, parent=None):
         super(GUIWindow, self).__init__(parent)
         self.hiero_ops = hiero_ops
         self._wrapping_labels = []
         self._assignment_spans = []
+        # Alto automatico: vigente hasta que el usuario redimensiona la
+        # ventana. _auto_size es el ultimo tamano que puso el ajuste, para
+        # distinguir en resizeEvent un resize propio de uno del usuario.
+        self._auto_fit = True
+        self._auto_size = None
+        self._fit_pending = False
+        # Ubicacion de apertura (ver set_opening_placement).
+        self._align_left = False
+        self._previous_placement = None
         # Widgets de thumbnails vivos, indexados por note_db_id, para poder
         # reconstruirlos in-place cuando el Shift+Click sobre un thumbnail
         # trae attachments nuevos desde refresh_note_attachments.py.
@@ -1505,7 +1550,7 @@ class GUIWindow(QWidget):
         self.setObjectName("flowNotesContentWidget")
         self.setStyleSheet(SHOT_INFO_QSS)
         apply_tooltip_stylesheet(self)
-        self.setMinimumSize(900, 700)
+        self.setMinimumSize(WINDOW_WIDTH, WINDOW_MIN_HEIGHT)
 
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -1528,6 +1573,8 @@ class GUIWindow(QWidget):
 
         self.scroll_area.setWidget(self.scroll_content)
         main_layout.addWidget(self.scroll_area, 1)
+        # Para seguir con el alto los cambios de contenido (ver eventFilter).
+        self.scroll_content.installEventFilter(self)
 
         # Cerrar con ESC
         shortcut = QShortcut(QKeySequence(Qt.Key_Escape), self)
@@ -1540,7 +1587,169 @@ class GUIWindow(QWidget):
 
     def resizeEvent(self, event):
         super(GUIWindow, self).resizeEvent(event)
+        if (
+            self._auto_fit
+            and self._auto_size is not None
+            and self.isVisible()
+            and event.size() != self._auto_size
+        ):
+            # Un tamano que no puso el ajuste: la redimensiono el usuario. A
+            # partir de aca el alto es suyo y el scroll vuelve a ser normal.
+            self._auto_fit = False
+            self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            debug_print("Alto automatico liberado: la ventana se redimensiono a mano.")
         self._update_wrapping_widths()
+
+    def eventFilter(self, obj, event):
+        # El contenido cambio de alto (se expandio Task history, llegaron
+        # thumbnails nuevos): la ventana lo sigue mientras el alto sea automatico.
+        if (
+            obj is getattr(self, "scroll_content", None)
+            and event.type() == QtCore.QEvent.LayoutRequest
+        ):
+            self._schedule_fit()
+        return super(GUIWindow, self).eventFilter(obj, event)
+
+    # ----------------------------------------------------------------- #
+    # Alto automatico y ubicacion de apertura
+    # ----------------------------------------------------------------- #
+    def set_opening_placement(self, align_left=False, previous_placement=None):
+        """Donde se abre la ventana. Llamar ANTES de display_results.
+
+        align_left: contra el borde izquierdo de la pantalla en vez de centrada.
+        previous_placement: (QPoint, ancho) de la ventana a la que reemplaza;
+            si viene, se abre en ese lugar y con ese ancho.
+        """
+        self._align_left = bool(align_left)
+        self._previous_placement = previous_placement
+
+    def _auto_height_cap(self):
+        """Tope del alto automatico: el historico, o lo que entre en la pantalla."""
+        available = _host_screen_geometry()
+        return max(
+            WINDOW_MIN_HEIGHT,
+            min(WINDOW_MAX_AUTO_HEIGHT, available.height() - WINDOW_SCREEN_MARGIN),
+        )
+
+    def _content_height(self, window_width):
+        """Alto que pide el contenido, sin scroll, para un ancho de ventana.
+
+        Es la misma cuenta con la que QScrollArea decide si hace falta el
+        scroll (heightForWidth del widget interno), asi que si la ventana
+        tiene este alto el contenido entra justo. No modifica nada.
+        """
+        # scroll_content se fija en (viewport - 1): ver _update_wrapping_widths.
+        content_width = max(0, window_width - 1)
+        needed = self.scroll_content.heightForWidth(content_width)
+        if needed < 0:
+            needed = self.scroll_content.sizeHint().height()
+        return needed
+
+    def _schedule_fit(self):
+        if not self._auto_fit or self._fit_pending or not self.isVisible():
+            return
+        self._fit_pending = True
+        QtCore.QTimer.singleShot(0, self._fit_height)
+
+    def _fit_height(self, width=None):
+        """Lleva el alto de la ventana al de su contenido, con el tope."""
+        self._fit_pending = False
+        if not self._auto_fit:
+            return
+        try:
+            if width is None:
+                width = self.width()
+            cap = self._auto_height_cap()
+            needed = self._content_height(width)
+            fits = needed <= cap
+            target = max(WINDOW_MIN_HEIGHT, min(needed, cap))
+
+            # Si entra entero, el scroll vertical se apaga del todo. Con
+            # AsNeeded el estado es biestable: una barra que aparece un
+            # instante angosta el viewport 8 px, el texto envuelve en mas
+            # lineas, y la barra ya no se va aunque el alto sea el justo.
+            policy = Qt.ScrollBarAlwaysOff if fits else Qt.ScrollBarAsNeeded
+            if self.scroll_area.verticalScrollBarPolicy() != policy:
+                self.scroll_area.setVerticalScrollBarPolicy(policy)
+
+            self._auto_size = QSize(width, target)
+            if self.size() != self._auto_size:
+                debug_print(
+                    f"Alto automatico: contenido={needed} tope={cap} -> {width}x{target}"
+                )
+                self.resize(self._auto_size)
+                if self.isVisible():
+                    self._keep_on_screen()
+        except RuntimeError:
+            # La ventana se destruyo entre el pedido y el ajuste.
+            pass
+
+    def _keep_on_screen(self):
+        """Si al crecer la ventana se paso del borde de abajo, la sube."""
+        frame = self.frameGeometry()
+        available = primary_screen_geometry(frame.center())
+        overflow = frame.bottom() - available.bottom()
+        if overflow > 0:
+            self.move(frame.x(), max(available.top(), frame.y() - overflow))
+
+    def _opening_position(self, width, height):
+        """Esquina superior izquierda (del marco) con la que se abre la ventana."""
+        title_h = self.style().pixelMetric(QtWidgets.QStyle.PM_TitleBarHeight)
+        if self._previous_placement is not None:
+            # Reemplaza a otra ventana: mismo lugar, por si el usuario la movio.
+            pos = self._previous_placement[0]
+            available = primary_screen_geometry(
+                pos + QtCore.QPoint(width // 2, title_h // 2)
+            )
+            x, y = pos.x(), pos.y()
+        elif self._align_left:
+            available = _host_screen_geometry()
+            x = available.left()
+            # El borde de arriba es el que tendria una ventana de alto maximo
+            # centrada: asi no salta de un shot a otro aunque cambie el alto.
+            full_h = self._auto_height_cap() + title_h
+            y = available.top() + max(0, (available.height() - full_h) // 2)
+        else:
+            available = _host_screen_geometry()
+            x = available.left() + max(0, (available.width() - width) // 2)
+            y = available.top() + max(
+                0, (available.height() - (height + title_h)) // 2
+            )
+        # Que no quede colgando por debajo de la pantalla.
+        lowest_y = available.bottom() - (height + title_h)
+        y = max(available.top(), min(y, lowest_y))
+        return QtCore.QPoint(x, y)
+
+    def _open_fitted(self):
+        """Dimensiona y ubica la ventana antes de mostrarla, y la muestra."""
+        width = WINDOW_WIDTH
+        if self._previous_placement is not None:
+            width = max(WINDOW_WIDTH, int(self._previous_placement[1]))
+
+        # El alto se mide con la ventana todavia oculta: cada widget tiene
+        # que tener su hoja aplicada (font-size, padding) para que la medida
+        # sea la que va a tener en pantalla.
+        for child in self.scroll_content.findChildren(QWidget):
+            child.ensurePolished()
+        self._fit_height(width)
+        position = self._opening_position(width, self.height())
+        self.move(position)
+        debug_print(
+            f"Apertura: {self.width()}x{self.height()} en "
+            f"({position.x()}, {position.y()}) align_left={self._align_left} "
+            f"reemplaza_anterior={self._previous_placement is not None}"
+        )
+        self.show()
+        self._update_wrapping_widths()
+        QtCore.QTimer.singleShot(0, self._after_show)
+
+    def _after_show(self):
+        """Con la ventana ya en pantalla: anchos reales y alto verificado."""
+        try:
+            self._update_wrapping_widths()
+        except RuntimeError:
+            return
+        self._fit_height()
 
     def closeEvent(self, event):
         # Cerrar la conexión de sg_manager si existe
@@ -2119,7 +2328,7 @@ class GUIWindow(QWidget):
                 f"color: {UIColor.TEXT_DIM}; font-size: 14px;"
             )
             self.scroll_layout.addWidget(no_results_label)
-            self.show()
+            self._open_fitted()
             return
 
         # Titulo + historial: datos del primer resultado (una task por invocacion).
@@ -2152,13 +2361,18 @@ class GUIWindow(QWidget):
             first.get("shot_code", ""),
             first.get("task_type", ""),
         )
-        self.show()
-        self._update_wrapping_widths()
-        QtCore.QTimer.singleShot(0, self._update_wrapping_widths)
+        self._open_fitted()
         debug_print("Results displayed successfully.")
 
 
-def main(task_name=None):
+def main(task_name=None, align_left=False, previous_placement=None):
+    """Abre el Shot Info del shot del playhead.
+
+    task_name: task a mostrar; None la resuelve en el playhead.
+    align_left: abrir contra el borde izquierdo de la pantalla en vez de
+        centrada. Lo usa el flujo de review (LGA_NKS_ShotInfoOnReview).
+    previous_placement: (QPoint, ancho) de la ventana a la que reemplaza.
+    """
     global app, window
     db_path = get_pipesync_db_path("pipesync.db")
 
@@ -2172,6 +2386,9 @@ def main(task_name=None):
     else:
         app = QApplication.instance()
     window = GUIWindow(hiero_ops)
+    window.set_opening_placement(
+        align_left=align_left, previous_placement=previous_placement
+    )
     results = hiero_ops.process_selected_clips(task_override=task_name)
     debug_print(f"Results: {results}")
     window.display_results(results)

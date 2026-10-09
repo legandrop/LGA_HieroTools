@@ -59,7 +59,7 @@ Internal reference: [Flow Review Panel](LGA_HieroTools/docs/LGA_NKS_Flow_Rev_Pan
   Shift+Click: pull only the selected shot.
   Clicking a result row jumps to that shot. For Lega, if the row is in
   Review Lega, **Shot Info** for that shot and task also opens on top of the
-  results window.
+  results window, against the left edge of the screen.
   **Only in review** (on by default) lists only the shots whose New Status is a
   review; untick it to see every change. **Only for me** narrows it to the
   shots waiting for your own review (Lega sees Review Lega, Sebas sees Review
@@ -70,6 +70,8 @@ Internal reference: [Flow Review Panel](LGA_HieroTools/docs/LGA_NKS_Flow_Rev_Pan
 - **Shot Info**  
   Shows shot information and version comments for the task resolved from the
   active context (Comp, Roto, Cleanup, or another enabled task scope).
+  The window opens centered and as tall as its content, up to a maximum
+  height; past that it scrolls.
 - **Review Pic**  
   Creates a snapshot of the whole viewer without the black area around the
   image, saves it with its frame number, and opens it in
@@ -206,8 +208,9 @@ or `TL |`, so similarly colored controls do not imply an unrelated function.
 - **TL | Next Rev [User]**
   Searches for the next clip with that user's review status and adjusts the view by setting In / Out from EditRef, selecting the clip, and fitting the zoom.
   For Lega, both Prev and Next Rev also open **Shot Info** (Flow Review Panel)
-  for the new shot after the jump, replacing the previous Shot Info window in
-  the same position. Other reviewers can be enabled in
+  for the new shot after the jump, against the left edge of the screen instead
+  of centered, replacing the previous Shot Info window in the same position.
+  Other reviewers can be enabled in
   `LGA_NKS_ShotInfoOnReview.py`.
 - **TL | ON Clips / OFF v00**
   Click: enables all timeline clips and disables `v00`/`v000` task clips.

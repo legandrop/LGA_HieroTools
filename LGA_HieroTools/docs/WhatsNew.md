@@ -12,6 +12,9 @@ platforms: [win, mac]
 
 ## Unreleased
 
+## v4.00
+- [improved] Shot Info opens as tall as its content instead of at a fixed size, so a shot with little to show no longer opens a mostly empty window.
+
 ## v3.99
 - [improved] Apply AMF now applies the shot's .cube LUT, together with the .cdl grade when there is one.
 - [fixed] Apply AMF no longer deletes effects you had added to the clip: the look goes on top of them.

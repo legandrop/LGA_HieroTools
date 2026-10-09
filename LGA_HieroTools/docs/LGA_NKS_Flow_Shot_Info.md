@@ -34,9 +34,36 @@ Para habilitarlo a todos, poner las cinco claves. Para que un reviewer nuevo lo 
 ### Detalles que costo resolver
 
 - Corre con un `QTimer.singleShot(0)` encolado despues del `Zoom to Fit` que deja la navegacion (PrevNext y Pull hacen lo mismo), asi el Shot Info lee el playhead ya movido.
-- Una sola ventana compartida entre las dos entradas: si sigue abierta la anterior se cierra y la nueva toma su geometria. No se apilan ventanas al recorrer revs.
+- Una sola ventana compartida entre las dos entradas: si sigue abierta la anterior se cierra y la nueva toma su lugar y su ancho (no el alto, que se calcula por ventana). No se apilan ventanas al recorrer revs.
+- Desde estas dos entradas la ventana se abre contra el borde izquierdo de la pantalla; desde el boton del panel, centrada. Ver [Tamaño y ubicacion de la ventana](#tamaño-y-ubicacion-de-la-ventana).
 - La ventana del Pull es topmost via `SetWindowPos` (Windows). Una ventana normal nunca queda arriba de una topmost, asi que desde el Pull el Shot Info se abre topmost tambien cuando "Keep this window on top" esta prendido. Fuera de Windows se usa `WindowStaysOnTopHint`, como el Pull.
 - Log de cada apertura: `LGA_HieroTools/logs/DebugPy_ShotInfoOnReview.log`.
+
+## Tamaño y ubicacion de la ventana
+
+### Alto automatico
+
+La ventana se abre a 900 de ancho y **al alto que pide su contenido**. Los 700 px que antes eran el alto fijo ahora son el tope (`WINDOW_MAX_AUTO_HEIGHT`): un shot con una sola version sin notas abria una ventana casi vacia. Pasado el tope aparece el scroll. En un monitor mas bajo que el tope, el tope es el alto util de la pantalla menos `WINDOW_SCREEN_MARGIN`.
+
+- El alto se mide **antes de mostrar la ventana** (`GUIWindow._open_fitted`), asi aparece ya en su tamaño y en su lugar, sin un salto. Se vuelve a verificar una vez en pantalla (`_after_show`).
+- La medida es `scroll_content.heightForWidth(ancho - 1)`: la misma cuenta que usa `QScrollArea` para decidir si hace falta el scroll. Por eso el contenido entra justo.
+- **El alto sigue al contenido** mientras el usuario no toque la ventana: al expandir Task history o al llegar thumbnails nuevos, crece o se achica (`eventFilter` sobre `LayoutRequest` del contenido). Si al crecer se pasa del borde de abajo de la pantalla, sube.
+- **Un resize a mano lo libera.** Cualquier tamaño que no haya puesto el ajuste (`resizeEvent` lo compara contra `_auto_size`) apaga el alto automatico para esa ventana; el usuario la puede agrandar mas alla del tope.
+
+Lo que costo descubrir: **cuando el contenido entra entero, el scroll vertical se pone en `ScrollBarAlwaysOff`**, no en `AsNeeded`. Con `AsNeeded` el estado es biestable: una barra que aparece un instante le saca 8 px al viewport, los textos envuelven en mas lineas, el contenido pasa a medir mas que la ventana y la barra ya no se va, aunque la ventana tenga el alto justo. Vuelve a `AsNeeded` cuando el contenido supera el tope o cuando el usuario redimensiona.
+
+### Ubicacion
+
+| Quien la abre | Donde |
+| --- | --- |
+| Boton Shot Info del panel | Centrada en el monitor donde esta el host |
+| Prev/Next Rev y fila del Flow Pull, primera de la cadena | Borde izquierdo de ese monitor |
+| Prev/Next Rev y fila del Flow Pull, reemplazando a otra | El lugar y el ancho de la anterior |
+
+- Alineada a la izquierda, el borde de **arriba** no depende del alto de esa ventana: es el que tendria una ventana de alto maximo centrada. Asi el titulo queda en el mismo lugar de un shot al siguiente aunque el alto cambie, y la ventana crece hacia abajo.
+- La ubicacion se le pasa a `main(align_left=..., previous_placement=...)` y la aplica `GUIWindow._opening_position` antes del `show()`. Moverla despues de abrir (como hacia `ShotInfoOnReview` con `setGeometry`) la muestra un instante en el centro.
+- De la ventana anterior se hereda `pos()` (esquina del marco) y `width()`, no `geometry()`. Una anterior maximizada o minimizada no se hereda.
+- Cada apertura deja en `logs/DebugPy_FlowShotInfo.log` el tamaño, la posicion y si reemplazo a otra.
 
 ## Origen de los datos
 
