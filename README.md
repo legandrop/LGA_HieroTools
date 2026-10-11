@@ -43,8 +43,6 @@ Current persisted settings:
 - **Reusable with adaptation:** `Projects`, some `Flow Review` utilities, and some comparison / reconnect tools
 - **Strongly pipeline-specific:** most of `Flow Review`, `Flow | S3`, and `Assignee`, plus anything tied to Flow Production Tracking, Wasabi, PipeSync, or studio naming rules
 
-The [Media Spreadsheet columns script](LGA_HieroTools/docs/Docu_Media_Spreadsheet.md) runs from the Script Editor. It places Status and Clip first and can change column widths or show and hide columns in the open Spreadsheet View.
-
 ## Panels Overview
 
 ### Flow Review Panel

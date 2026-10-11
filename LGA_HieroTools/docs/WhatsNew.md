@@ -13,7 +13,6 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.00
-- [new] Media Spreadsheet columns can be reordered, resized, hidden and shown from the Script Editor.
 - [new] In projects framed for 3:2, the Projects panel now turns the 3:2 viewer mask on at half opacity every time you switch to one of their timelines.
 - [improved] Download AMF downloads the look files of every selected shot at once when two or more clips are selected, instead of one shot at a time.
 - [fixed] Apply AMF applies the shot's .cdl and .clf again instead of reporting that valid look files could not be loaded.
