@@ -18,23 +18,32 @@ import LGA_NKS_MediaSpreadsheetColumns as spreadsheet_columns
 spreadsheet_columns.apply()
 ```
 
-Ese ejemplo deja `Status`, `Clip` y `Clip Media` como las primeras tres columnas
-visibles. `Status` mide 51 px y `Clip Media` 150 px: son los anchos medidos
-después del ajuste manual en Nuke Studio. `Clip` se ajusta a su contenido con
-`resizeColumnToContents`, la misma
-operación que el doble click en el borde del header. En la sesión medida,
-con 38 filas, pasó de 240 a 330 px y entran los nombres de las 38 filas.
-La cadena más ancha de esas 38 filas midió 318 px; el header dejó margen.
+Ese ejemplo deja estas cinco columnas visibles al principio:
+
+| Posición | Columna | Ancho |
+| --- | --- | --- |
+| 1 | Status | 51 px, medidos después del ajuste manual |
+| 2 | Clip | Automático por contenido; 330 px en la sesión medida |
+| 3 | Clip Media | 150 px, medidos después del ajuste manual |
+| 4 | Color | 33 px, medidos después del ajuste manual |
+| 5 | Shot Name | Automático por contenido; 299 px en la sesión medida |
+
+`Clip` y `Shot Name` usan `resizeColumnToContents`, como el autoajuste del
+header. Se miden todas las filas mediante la precisión temporal `-1` de Qt,
+para no omitir nombres largos fuera de pantalla o más allá del muestreo
+predeterminado. Después se restaura la precisión original del host.
+Referencia: [QHeaderView.setResizeContentsPrecision](https://doc.qt.io/qt-6/qheaderview.html#setResizeContentsPrecision).
+En la sesión de 38 filas, los textos más anchos midieron 318 px en `Clip` y
+287 px en `Shot Name`; ambos quedaron con margen.
 El script oculta `Event`, `Action`, `Num Versions` y `Link Status` cuando están
 presentes, y lleva el scroll horizontal al inicio. Las demás columnas conservan
-su orden relativo y su visibilidad. Para elegir otros anchos y ocultar además
-`Color` en la versión medida:
+su orden relativo y su visibilidad. Para elegir un ancho manual de `Shot Name`
+conservando el orden y el ocultamiento predeterminados:
 
 ```python
 spreadsheet_columns.apply(
-    order=("Status", "Clip", "Clip Media", "Shot Name"),
-    widths={"Status": 51, "Clip": "auto", "Clip Media": 150, "Shot Name": 180},
-    hide=("Event", "Action", "Num Versions", "Link Status", "Color"),
+    widths={"Status": 51, "Clip": "auto", "Clip Media": 150,
+            "Color": 33, "Shot Name": 180},
 )
 ```
 
@@ -62,6 +71,25 @@ En la sesión medida, el panel contiene un `SpreadsheetTreeView` con un
 `restoreState` revierten la prueba. Una prueba posterior confirmó el ancho
 automático de `Clip` mediante `resizeColumnToContents`. El prototipo busca la
 tabla por clase y cabeceras para no alterar otras tablas de Nuke Studio.
+
+## Rapidez y repintado
+
+Los nombres de columna se resuelven una vez en un diccionario por vista. Se
+omiten movimientos, cambios de visibilidad y anchos fijos que ya estén bien.
+Solo las dos columnas automáticas vuelven a medir contenido, mediante Qt,
+sin recorrer textos desde Python en la herramienta.
+
+Los cambios se agrupan con el repintado suspendido temporalmente. No se
+bloquean señales del header: el host puede necesitarlas para actualizar su
+estado interno. Un `finally` restaura la precisión y el estado de repintado
+previos, también si falla una operación; el estado del header se revierte
+ante un error.
+
+En dos ejecuciones completas de `apply()` sobre la vista de 38 filas se
+midieron 3,457 ms y 2,559 ms, incluidos los logs, sin contar el viaje del
+dev-link. La duración se registra en cada corrida. El costo del autoajuste
+crece con la cantidad de filas; estos tiempos corresponden a la sesión
+medida, no a proyectos de cualquier tamaño.
 
 El ajuste se aplica a los Spreadsheet Views visibles en ese momento. Si el
 host reconstruye el panel, puede volver al orden predeterminado; en ese caso
