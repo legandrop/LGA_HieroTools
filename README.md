@@ -197,7 +197,9 @@ or `TL |`, so similarly colored controls do not imply an unrelated function.
 - **TL | Refresh**
   Rebuilds the active timeline view when it becomes unstable: it preserves the
   view state, cleans temporary `NukeVFX` tracks, refreshes the sequence and
-  restores zoom, scroll and track position.
+  restores zoom, scroll and track position. It also replaces accumulated Media
+  Spreadsheet tabs with one for the active timeline, then applies the preferred
+  column order, widths and visibility and sorts rows by Clip.
 - **TL | Top Track**
   Scrolls to the top track in the timeline.  
   Shortcut: `Ctrl+Shift+T`.
@@ -343,7 +345,9 @@ Project browser and sequence switcher built around the studio's project structur
 
 - **Project list**  
   Scans projects on disk, shows open projects, and lets you switch sequences without losing viewer state. Each timeline remembers its zoom, horizontal scroll and playhead across sessions and project versions, and opening a project goes back to its last timeline. In projects framed for 3:2, switching to a timeline also turns the 3:2 viewer mask on at half opacity.
-- **Collapse / expand**  
+  Switching timelines keeps one Media Spreadsheet tab for the active sequence,
+  with the preferred columns and rows sorted by Clip.
+- **Collapse / expand**
   Clicking the name or the triangle of an open project collapses or expands its sequences without closing it.
 - **Close project (×)**  
   Appears when hovering an open project. Asks before discarding unsaved changes, and jumps to another open project if the closed one was active.

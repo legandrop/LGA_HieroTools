@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel_SwitchSequence v2.39 | Lega
+  LGA_NKS_Projects_Panel_SwitchSequence v2.40 | Lega
 
   Hiero / Nuke Studio - Switch V3: HÍBRIDO OPTIMIZADO + LIMPIEZA TOTAL + CROSS-PROJECT
 
@@ -15,6 +15,10 @@ ____________________________________________________________________
   - ✅ CROSS-PROJECT: Cambia entre proyectos automáticamente
 
   ✅ CONFIRMADO: Funciona perfectamente - velocidad 0.63s con cierre equilibrado + cross-project.
+
+  v2.40: Cierra spreadsheets antes de reconstruir el timeline; al final aplica
+         las reglas compartidas de columnas. Si hay tabs acumulados, reconstruye
+         aunque el destino ya esté activo para dejar una sola vista de media.
 
   INTEGRACIÓN EN PANEL DE PROYECTOS:
   from switch_sequence_v3_final import switch_to_sequence_hybrid
@@ -61,6 +65,7 @@ from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectsPanel_Logging import (
     reset_debug_log,
 )
 from LGA_NKS_Projects_Panel_py import LGA_NKS_TimelineMemory as timeline_memory
+from LGA_NKS_Shared import LGA_NKS_MediaSpreadsheetColumns as spreadsheet_columns
 
 # Segundo intento de restaurar la vista guardada. openInTimeline deja el layout
 # del timeline a medio armar y Hiero lo sigue ajustando en eventos posteriores,
@@ -1167,6 +1172,7 @@ def _switch_to_sequence_impl(target_sequence_name, target_project=None, force_cl
     # Con force_cleanup y el destino ya activo, se reusa ese timeline en vez de
     # cerrarlo y reabrirlo: la post-apertura casi siempre cae en este caso.
     reuse_active = False
+    rebuild_spreadsheet = spreadsheet_columns.tab_count() > 1
     if active_seq and active_seq.name() == target_sequence_name:
         # Si hay un proyecto objetivo, verificar que la secuencia activa pertenece al mismo proyecto.
         # Dos proyectos distintos pueden tener secuencias con el mismo nombre (ej: "101" en PROJALT y en PROJA).
@@ -1179,20 +1185,24 @@ def _switch_to_sequence_impl(target_sequence_name, target_project=None, force_cl
                         f"({active_project.name()} ≠ {target_project.name()}), continuando switch..."
                     )
                     # No retornar: el switch debe seguir adelante hacia el proyecto correcto
-                elif force_cleanup:
-                    debug_print("   ├── Ya activa, se reusa y se corre solo la limpieza")
-                    reuse_active = True
+                elif force_cleanup or rebuild_spreadsheet:
+                    debug_print("   ├── Ya activa: reconstrucción por tabs acumulados"
+                                if rebuild_spreadsheet else "   ├── Ya activa, se reusa y se corre solo la limpieza")
+                    reuse_active = not rebuild_spreadsheet
                 else:
                     debug_print("✅ Ya activa - sin cambios")
+                    spreadsheet_columns.refresh(active_seq)
                     return True
             except Exception as _e:
                 debug_print(f"   ├── No se pudo comparar proyectos ({_e}), continuando switch...")
                 # En caso de error comparando, procedemos con el switch para no quedar bloqueados
-        elif force_cleanup:
-            debug_print("   ├── Ya activa, se reusa y se corre solo la limpieza")
-            reuse_active = True
+        elif force_cleanup or rebuild_spreadsheet:
+            debug_print("   ├── Ya activa: reconstrucción por tabs acumulados"
+                        if rebuild_spreadsheet else "   ├── Ya activa, se reusa y se corre solo la limpieza")
+            reuse_active = not rebuild_spreadsheet
         else:
             debug_print("✅ Ya activa - sin cambios")
+            spreadsheet_columns.refresh(active_seq)
             return True
 
     # 2b. Guardar zoom, scroll y playhead del timeline que se va a destruir,
@@ -1267,6 +1277,10 @@ def _switch_to_sequence_impl(target_sequence_name, target_project=None, force_cl
     new_active = None
     open_time = 0
     close_time = 0
+
+    if not reuse_active:
+        closed_sheets = spreadsheet_columns.close_for_refresh()
+        debug_print(f"   Media Spreadsheet: tabs anteriores cerrados={closed_sheets}")
 
     if reuse_active:
         # El timeline destino ya esta abierto y activo: cerrarlo y reabrirlo
@@ -1454,6 +1468,10 @@ def _switch_to_sequence_impl(target_sequence_name, target_project=None, force_cl
         QtCore.QTimer.singleShot(
             MEMORY_RESTORE_RETRY_MS, lambda seq=new_active: _restore_memory_view(seq, retry=True)
         )
+
+    # El header va después de la apertura, limpieza y restauración del timeline.
+    adjusted_sheets = spreadsheet_columns.refresh(new_active)
+    debug_print(f"   Media Spreadsheet: vistas ajustadas={adjusted_sheets}")
 
     # 17. Resultado final
     total_time = time.time() - total_start

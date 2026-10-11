@@ -1,20 +1,16 @@
 # Columnas del Media Spreadsheet
 
-El prototipo local `+Building_Blocks/LGA_NKS_MediaSpreadsheetColumns.py`
+El módulo compartido `LGA_NKS_Shared/LGA_NKS_MediaSpreadsheetColumns.py`
 permite ordenar, dimensionar y ocultar o mostrar columnas del Media
-Spreadsheet abierto en Hiero/Nuke Studio. Permanece en Building Blocks hasta
-decidir si se integra en un panel; no se distribuye en el pack. Existe
+Spreadsheet abierto en Hiero/Nuke Studio. Lo llaman `TL | Refresh` del ViewerTL
+y el switch de secuencias del Projects Panel. Existe
 porque el orden predeterminado deja los datos de estado y media separados,
 y obliga a reorganizar la vista cada vez que se revisan clips.
 
 ## Uso desde el Script Editor
 
 ```python
-from pathlib import Path
-import sys
-from LGA_NKS_Shared import LGA_QtAdapter_HieroTools as qt_adapter
-sys.path.insert(0, str(Path(qt_adapter.__file__).resolve().parents[1] / "+Building_Blocks"))
-import LGA_NKS_MediaSpreadsheetColumns as spreadsheet_columns
+from LGA_NKS_Shared import LGA_NKS_MediaSpreadsheetColumns as spreadsheet_columns
 spreadsheet_columns.apply()
 ```
 
@@ -78,6 +74,48 @@ En la sesión medida, el panel contiene un `SpreadsheetTreeView` con un
 automático de `Clip` mediante `resizeColumnToContents`. El prototipo busca la
 tabla por clase y cabeceras para no alterar otras tablas de Nuke Studio.
 
+## Un solo tab al refrescar o cambiar de timeline
+
+El problema era que ambos flujos reconstruían el timeline y su viewer pero
+dejaban los spreadsheets anteriores. La sonda encontró cinco tabs al inicio;
+un switch de ida y vuelta añadió uno en cada apertura.
+
+Antes de reconstruir el timeline, ambos flujos llaman a `close_for_refresh()`:
+cierra únicamente los tabs nativos de Spreadsheet y procesa sus
+`DeferredDelete`. Sin procesar esa destrucción, el tab sigue registrado y
+Foundry puede devolverlo de nuevo. No se cierran proyectos ni se borran clips.
+
+Al final, después de las restauraciones y los cierres del timeline, llaman a
+`refresh()`. Si Hiero no creó el spreadsheet nuevo, se abre con
+`openInSpreadsheet(sequence)`; después `apply()` impone las reglas. Esto es
+necesario en TL Refresh: en la prueba, abrir el timeline nuevo antes de
+destruir el viejo no volvió a crear automáticamente el spreadsheet cerrado.
+El resultado es una única pestaña de media para el timeline activo. El widget
+nativo se reconstruye; no se retargetea el objeto anterior, porque la API
+pública `SpreadsheetView` no ofrece `setSequence`.
+
+El switch que encuentra su destino ya activo conserva la optimización de
+reuso y aplica las columnas. Si detecta varios spreadsheets, reconstruye
+también en ese caso para eliminar los tabs acumulados. El ajuste incluye tabs
+ocultos detrás de otros y docks flotantes; no depende de `isVisible()`.
+
+Las referencias al panel padre y a su tabla deben conservarse juntas durante
+todo el ajuste: se midió que soltar el wrapper del padre invalida los wrappers
+PySide de sus hijos, aun cuando el panel sigue existiendo en la UI. Buscar la
+tabla y devolver solo el hijo causaba `Internal C++ object already deleted`
+antes de leer el header. No usar `sourceModel()` ni el slot interno
+`refreshTimeline()` para retargetear: no forman parte de la API pública de
+Spreadsheet y no hacen falta para este flujo.
+
+Se verificaron dos idas y vueltas entre secuencias (9 y 38 filas), el click en
+la secuencia ya activa y dos TL Refresh consecutivos: siempre un tab,
+columnas y anchos correctos, seis columnas ocultas y textos de Clip ordenados.
+También se generaron dos tabs antes de pulsar la secuencia ya activa: el
+switch los redujo a uno. Una prueba con el spreadsheet oculto corrigió Status
+de 100 a 51 px sin hacerlo visible.
+Las sondas quedan en `+Building_Blocks/explore_spreadsheet_tabs.py`; el módulo
+runtime ya no vive en Building Blocks.
+
 ## Rapidez y repintado
 
 Los nombres de columna se resuelven una vez en un diccionario por vista. Se
@@ -91,13 +129,14 @@ estado interno. Un `finally` restaura la precisión y el estado de repintado
 previos, también si falla una operación; el estado del header se revierte
 ante un error.
 
-En dos ejecuciones completas de `apply()` v1.04 sobre la vista de 38 filas se
-midieron 5,341 ms y 9,628 ms, incluidos los logs, sin contar el viaje del
+En dos ejecuciones completas de `apply()` v1.05 sobre la vista de 38 filas se
+midieron 33,629 ms y 25,998 ms, incluidos la búsqueda de tabs ocultos/flotantes
+y los logs, sin contar el viaje del
 dev-link. La duración se registra en cada corrida. El costo del autoajuste
 crece con la cantidad de filas; estos tiempos corresponden a la sesión
 medida, no a proyectos de cualquier tamaño.
 
-El ajuste se aplica a los Spreadsheet Views visibles en ese momento. Si el
-host reconstruye el panel, puede volver al orden predeterminado; en ese caso
-se corre `apply()` otra vez. No se instaló un hook automático de restauración
-porque todavía no se midió cuándo recrea el host esta vista.
+El ajuste manual se aplica a los Spreadsheet Views abiertos en ese momento.
+Los dos flujos integrados lo repiten al final de cada refresh/switch. Si otra
+acción nativa reconstruye el panel, se puede correr `apply()` otra vez: no hay
+un hook global para intervenir en todas las acciones del host.

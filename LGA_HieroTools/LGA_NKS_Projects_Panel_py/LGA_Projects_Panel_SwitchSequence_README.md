@@ -10,10 +10,10 @@ Módulo auxiliar que implementa la **solución ganadora V3 Híbrida** para cambi
 ## Solución Implementada
 
 ### 🎯 **V3 HÍBRIDA - La Mejor Opción**
-- ✅ **Velocidad óptima:** 0.49s (más rápido que v4)
+- ✅ **Apertura y cierre:** cierra viewer+timeline anteriores antes de abrir el destino para evitar competir con el IO de la media nueva.
 - ✅ **Ajustes completos preservados:** Gain/Gamma/Saturation + Playhead automático
 - ✅ **Comportamiento nativo:** Reemplaza viewer como Hiero nativo
-- ✅ **Sin duplicados:** Duplica y luego cierra viewer+timeline originales
+- ✅ **Media Spreadsheet:** cierra los tabs anteriores antes de reconstruir el timeline y configura el nuevo al final con el módulo compartido `LGA_NKS_MediaSpreadsheetColumns`.
 - ✅ **Opcional:** Cierra TODOS los viewers+timelines viejos (flag `CLOSE_ALL_TIMELINES`)
 - ✅ **UI completa:** Reduce panel + scroll automático
 - ✅ **Logging por switch:** reinicia `DebugPy_ProjectsPanel.log` al inicio de cada cambio de timeline
@@ -44,7 +44,7 @@ switch_to_sequence(target_sequence_name)
 - ✅ **Detección de proyecto:** Identifica automáticamente a qué proyecto pertenece la secuencia
 - ✅ **Preservación completa:** Gain/Gamma/Saturation + Playhead automático
 - ✅ **Optimización UI:** Reduce panel + scroll al top track
-- ✅ **Manejo de duplicados:** Duplica y luego cierra viewer+timeline originales (método refresh)
+- ✅ **Manejo de duplicados:** cierra viewer+timeline anteriores y los spreadsheets acumulados; el resultado tiene un solo spreadsheet para el timeline activo.
 - ✅ **Cierre total de viewers+timelines:** Opcional con `CLOSE_ALL_TIMELINES = True`
 - ✅ **Logging detallado:** Tiempos de ejecución y estado de operaciones
 - ✅ **Shared logging integrado:** `LGA_NKS_Timeline_PreCleanup.py` y `LGA_NKS_ScrollTo_TopTrack.py` escriben en el mismo log del Projects Panel

@@ -13,6 +13,8 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.00
+- [fixed] Switching timelines in the Projects panel keeps one Media Spreadsheet tab instead of accumulating duplicates.
+- [improved] TL | Refresh and timeline switches apply the preferred Media Spreadsheet column order, widths and visibility, with rows sorted by Clip.
 - [new] In projects framed for 3:2, the Projects panel now turns the 3:2 viewer mask on at half opacity every time you switch to one of their timelines.
 - [improved] Download AMF downloads the look files of every selected shot at once when two or more clips are selected, instead of one shot at a time.
 - [fixed] Apply AMF applies the shot's .cdl and .clf again instead of reporting that valid look files could not be loaded.

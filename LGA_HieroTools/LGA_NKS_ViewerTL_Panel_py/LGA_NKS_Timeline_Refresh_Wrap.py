@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Timeline_Refresh_Wrap v1.43 | Lega
+  LGA_NKS_Timeline_Refresh_Wrap v1.44 | Lega
 
   Wrapper que ejecuta una secuencia de scripts para refrescar el timeline manteniendo el nivel de zoom original:
 
@@ -14,6 +14,8 @@ ____________________________________________________________________
   7. Scrollea al track superior
   8. Restaura el estado original (dos intentos) usando los valores exactos del slider y scrollbar
 
+  v1.44: Cierra spreadsheets antes de reconstruir el timeline y aplica al final
+         el orden, anchos, ocultamiento y orden por Clip del módulo compartido.
   v1.43: Se deja de barrer QApplication.allWidgets() a pelo. Esa lista trae wrappers
          de widgets que Qt ya destruyo del lado C++, y leerles el metaObject() lee
          el heap. Ahora se itera con iter_live_widgets() y se revalida con
@@ -33,6 +35,7 @@ import importlib.util
 import logging
 import queue
 from logging.handlers import QueueHandler, QueueListener
+from LGA_NKS_Shared import LGA_NKS_MediaSpreadsheetColumns as spreadsheet_columns
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import (
     QtWidgets,
     QtCore,
@@ -560,6 +563,8 @@ def main():
         new_timeline = None
         new_viewer = None
         if refresh_module:
+            closed_sheets = spreadsheet_columns.close_for_refresh()
+            debug_print(f"Media Spreadsheet: tabs anteriores cerrados={closed_sheets}")
             result = refresh_module.main()
             if result and len(result) >= 2:
                 new_timeline, new_viewer = result[:2]  # Solo necesitamos timeline y viewer nuevos
@@ -844,6 +849,9 @@ def main():
             import traceback
             debug_print(traceback.format_exc())
 
+        # El refresh y sus cierres ya terminaron: el header nuevo queda definitivo.
+        adjusted_sheets = spreadsheet_columns.refresh()
+        debug_print(f"Media Spreadsheet: vistas ajustadas={adjusted_sheets}")
         debug_print(f"\nTiempo total de operación: {time.time() - start_total:.3f} segundos")
 
     except Exception as e:

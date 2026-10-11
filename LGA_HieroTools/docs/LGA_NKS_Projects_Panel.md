@@ -4,6 +4,14 @@
 # Panel de Proyectos LGA - Documentacion
 
 ## Concepto rapido
+
+- El switch conserva una sola pestaña de Media Spreadsheet para la secuencia activa.
+  Antes de reconstruir el timeline cierra los spreadsheets anteriores; al final
+  aplica el orden Status, Clip Media, Clip, Color, Shot Name, los anchos medidos,
+  el autoajuste de nombres, el ocultamiento y el orden de filas por Clip.
+  El módulo compartido es `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Shared\LGA_NKS_MediaSpreadsheetColumns.py`:
+  `close_for_refresh()`, `refresh()`, `apply()` y `tab_count()`.
+  Detalle de la API y de las pruebas en `Docu_Media_Spreadsheet.md`.
 - Panel `com.lega.ProjectsPanel` para Hiero/Nuke Studio que escanea `T:\` (`VFX-*/*_SUP`), detecta la ultima version `.hrox` de cada proyecto, y permite abrir proyectos y sus secuencias.
 - Barra lateral derecha, en orden: `Refresh` reescanea en background; `Reload Panel` ejecuta el smart reload del dock y de sus ventanas privadas, incluido el preview de Drop media; `Settings` abre la configuracion. Debajo de un separador, `Organize Project` y `Clean Project` actuan sobre el proyecto completo con botones de icono y tooltip.
 - Click en proyecto lo abre; click en secuencia la abre en timeline (cross-project) preservando ajustes de viewer, dejando apagado el Frame Number del ViewerTL y, en los proyectos que la tienen asignada, prendiendo su mascara de viewer.
