@@ -1,5 +1,7 @@
 v4.00:
 
+        - Prototipo Media Spreadsheet (`LGA_NKS_MediaSpreadsheetColumns v1.02`): se midieron en la vista abierta los anchos elegidos para Status (51 px) y Clip Media (150 px), y se fijan al correr el script. El orden visible queda Status, Clip, Clip Media; Event, Action, Num Versions y Link Status se ocultan si existen. Clip conserva el autoajuste por contenido y la vista vuelve al inicio horizontal para mostrar las primeras columnas. La prueba en NKS verificó orden, anchos y ocultamiento. [ Media Spreadsheet - Orden y anchos de tres columnas ]
+
         - Media Spreadsheet: el script de columnas pasa a `+Building_Blocks` hasta decidir en qué panel integrarlo; no forma parte del pack publicado. La prueba en NKS confirmó que `resizeColumnToContents` da a Clip el mismo ancho que el doble click del header (330 px para 38 filas en la sesión medida), y el prototipo lo usa por defecto (`LGA_NKS_MediaSpreadsheetColumns v1.01`). README y `WhatsNew.md` dejan de anunciarlo como función disponible. [ Media Spreadsheet - Prototipo con Clip autoajustable ]
 
         - Media Spreadsheet (`LGA_NKS_MediaSpreadsheetColumns v1.00`): script para poner Status y Clip al principio, ajustar anchos y ocultar o mostrar columnas por nombre en la vista abierta. Una sonda en NKS confirmó que el header Qt admite estas operaciones y que su estado se puede restaurar; no se modifican clips ni secuencias. `Docu_Media_Spreadsheet.md` registra el widget encontrado y el límite de persistencia al recrear el panel. [ Media Spreadsheet - Columnas configurables ]

@@ -18,24 +18,30 @@ import LGA_NKS_MediaSpreadsheetColumns as spreadsheet_columns
 spreadsheet_columns.apply()
 ```
 
-Ese ejemplo deja `Status` primera y `Clip` segunda. `Status` mide 90 px y
-`Clip` se ajusta a su contenido con `resizeColumnToContents`, la misma
+Ese ejemplo deja `Status`, `Clip` y `Clip Media` como las primeras tres columnas
+visibles. `Status` mide 51 px y `Clip Media` 150 px: son los anchos medidos
+después del ajuste manual en Nuke Studio. `Clip` se ajusta a su contenido con
+`resizeColumnToContents`, la misma
 operación que el doble click en el borde del header. En la sesión medida,
 con 38 filas, pasó de 240 a 330 px y entran los nombres de las 38 filas.
 La cadena más ancha de esas 38 filas midió 318 px; el header dejó margen.
-Las demás columnas conservan su orden relativo y su visibilidad. Para elegir
-otros anchos y ocultar columnas:
+El script oculta `Event`, `Action`, `Num Versions` y `Link Status` cuando están
+presentes, y lleva el scroll horizontal al inicio. Las demás columnas conservan
+su orden relativo y su visibilidad. Para elegir otros anchos y ocultar además
+`Color` en la versión medida:
 
 ```python
 spreadsheet_columns.apply(
-    order=("Status", "Clip", "Shot Name"),
-    widths={"Status": 90, "Clip": "auto", "Shot Name": 180},
-    hide=("Event", "Color"),
+    order=("Status", "Clip", "Clip Media", "Shot Name"),
+    widths={"Status": 51, "Clip": "auto", "Clip Media": 150, "Shot Name": 180},
+    hide=("Event", "Action", "Num Versions", "Link Status", "Color"),
 )
 ```
 
-Para volver a mostrar esas dos columnas sin pedir anchos nuevos, usar
-`spreadsheet_columns.apply(widths={}, show=("Event", "Color", "Status", "Clip"))`.
+Para volver a mostrar las cuatro columnas ocultas, usar
+`spreadsheet_columns.apply(widths={}, hide=(), show=("Event", "Action", "Num Versions", "Link Status"))`.
+`hide=None` usa las cuatro columnas predeterminadas solo si existen; `hide=()`
+no oculta ninguna. Una lista `hide` explícita exige que sus nombres existan.
 `show` y `hide` modifican solo los nombres indicados; los demás quedan como
 estaban. Un nombre desconocido o un ancho inválido cancela la operación antes
 de modificar la vista. Un ancho numérico fija píxeles; `"auto"` mide el
