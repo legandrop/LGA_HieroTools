@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.00
+- [new] Project Downgrade creates a separate copy of a Nuke Studio or Hiero 17 project that opens in 16.0, with an explicit choice to discard newer annotations when present.
 - [fixed] Switching timelines in the Projects panel keeps one Media Spreadsheet tab instead of accumulating duplicates.
 - [improved] TL | Refresh and timeline switches apply the preferred Media Spreadsheet column order, widths and visibility, with rows sorted by Clip.
 - [new] In projects framed for 3:2, the Projects panel now turns the 3:2 viewer mask on at half opacity every time you switch to one of their timelines.

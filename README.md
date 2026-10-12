@@ -396,6 +396,10 @@ Not a panel: a small local service that starts with the tools.
 
 Internal reference: [Remote Nav](LGA_HieroTools/docs/Docu_RemoteNav.md).
 
+## Standalone Tools
+
+- **Project Downgrade** creates a separate copy of a Nuke Studio/Hiero 16.1 or 17 project for 16.0, preserving the timeline, media and shared effects. New annotations require an explicit choice to discard them in the copy. Existing files are never overwritten. See [usage and limitations](LGA_HieroTools/docs/Docu_Project_Downgrade.md).
+
 ## Pipeline-Specific Notes
 
 This repository is not a generic plug-and-play product. Many tools assume:
