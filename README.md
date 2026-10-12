@@ -340,6 +340,9 @@ opening related Nuke scripts.
 
 Project browser and sequence switcher built around the studio's project structure and PipeSync storage.
 
+- **Drop project**
+  Drag one local HROX project saved in Nuke Studio or Hiero 16.1/17 over the panel to save a Nuke 16.0 copy. The compact dialog shows the original, suggests the next version number, lets you edit the name and browse for another folder, and asks explicitly before discarding incompatible annotations. Existing files and the original are never overwritten. Saving refreshes the project list; the active timeline stays as it was.
+
 - **Drop media**
   Drag one local MP4, MOV, MXF, JPG, PNG or EXR over the panel to import it into the active project's root bin. If the selected video track has a long enough gap at the playhead, it is placed immediately. Otherwise an interactive preview shows every video and audio track on one continuous time axis with each timeline clip's actual color and one unbroken playhead line. Click a video track name to set the destination, then use the Studio/Client-style placement pill, in its own darker capsule beside Cancel and Import, to see the red incoming clip and option-specific displacement before importing; unavailable choices state a concise reason on that same row. The ripple uses the same Import Shot helper: it moves complete non-BurnIn video clips and soft effects to open space, places the media at the returned effective frame, and extends BurnIn. Hiero detects JPG, PNG and EXR sequences from any dropped frame.
 
@@ -352,7 +355,7 @@ Project browser and sequence switcher built around the studio's project structur
 - **Close project (×)**  
   Appears when hovering an open project. Asks before discarding unsaved changes, and jumps to another open project if the closed one was active.
 - **Refresh** — Bold circular-arrow icon. Re-scans projects.
-- **Reload Panel** — Solid two-arrow icon. Reloads and re-docks the panel together with its private windows, including the Drop media preview.
+- **Reload Panel** — Solid two-arrow icon. Reloads and re-docks the panel together with its private windows, including the Drop media preview and project conversion dialog.
 - **Settings** — Gear icon. Opens the panel configuration.
 - **Organize Project** — Folder-with-arrow icon in the right rail. Organizes clips into bins based on their file path; its original Spanish tooltip is preserved.
 - **Clean Project** — Trash icon in the right rail. Removes unused clips from the project; its original Spanish tooltip is preserved.

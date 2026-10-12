@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.49 | Lega
+  LGA_NKS_Projects_Panel v2.50 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,8 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.50: El drop de .hrox ofrece guardar una copia compatible con NKS 16,
+         sin importarla como media ni exigir un timeline activo.
   v2.49: El switch Studio/Client escribe siempre en el INI de cambio local
          (get_override_ini_path), no en el primero que exista: en un paquete
          client ese es la marca del build, adentro del pack.
@@ -149,6 +151,7 @@ from LGA_NKS_Edit_Panel_py import LGA_import_shots_timeline as timeline_mod
 from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectMediaPreview import (
     ProjectMediaPreviewDialog,
 )
+from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectDrop_Dialog import ProjectConversionDialog
 from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectsPanel_Logging import (
     DEBUG,
     DEBUG_CONSOLE,
@@ -503,6 +506,7 @@ class ProjectsPanel(QtWidgets.QWidget):
         self.collapsed_projects = set()
         self._drop_has_supported_media = False
         self._drop_overlay = None
+        self._project_conversion_dialog = None
 
         UIManager.setup_ui(self)
         UIManager.setup_connections(self)
@@ -576,7 +580,7 @@ class ProjectsPanel(QtWidgets.QWidget):
             path = url.toLocalFile()
             if (
                 os.path.isfile(path)
-                and os.path.splitext(path)[1].lower() in _DROP_MEDIA_EXTENSIONS
+                and os.path.splitext(path)[1].lower() in (_DROP_MEDIA_EXTENSIONS | {'.hrox'})
             ):
                 paths.append(path)
 
@@ -586,6 +590,13 @@ class ProjectsPanel(QtWidgets.QWidget):
         media_path = self._single_media_from_mime(event.mimeData())
         self._drop_has_supported_media = media_path is not None
         if self._drop_has_supported_media:
+            overlay_label = self._drop_overlay.findChild(QtWidgets.QLabel, 'ProjectMediaDropOverlayLabel')
+            if overlay_label is not None:
+                overlay_label.setText(
+                    'Drop project to save a Nuke 16 copy'
+                    if os.path.splitext(media_path)[1].lower() == '.hrox'
+                    else 'Drop media to import at the playhead'
+                )
             event.acceptProposedAction()
             self._set_media_drop_overlay_visible(True)
         else:
@@ -607,7 +618,7 @@ class ProjectsPanel(QtWidgets.QWidget):
         self._set_media_drop_overlay_visible(False)
         media_path = self._single_media_from_mime(event.mimeData())
         if media_path is None:
-            debug_print("[Drop media] Drop ignorado: se espera un unico archivo de media local soportado.")
+            debug_print("[Drop] Se espera un unico archivo local de media o proyecto soportado.")
             event.ignore()
             return
 
@@ -617,9 +628,37 @@ class ProjectsPanel(QtWidgets.QWidget):
         QtCore.QTimer.singleShot(
             0,
             lambda path=media_path: (
-                self._import_dropped_media(path) if is_widget_alive(self) else None
+                self._handle_dropped_file(path) if is_widget_alive(self) else None
             ),
         )
+
+    def _handle_dropped_file(self, path):
+        if os.path.splitext(path)[1].lower() == '.hrox':
+            self._convert_dropped_project(path)
+        else:
+            self._import_dropped_media(path)
+
+    def _convert_dropped_project(self, path):
+        dialog = self._project_conversion_dialog
+        if dialog is not None and is_widget_alive(dialog):
+            dialog.raise_()
+            dialog.activateWindow()
+            return
+        dialog = ProjectConversionDialog(path, parent=self)
+        self._project_conversion_dialog = dialog
+        dialog.saved.connect(self._on_project_copy_saved)
+        dialog.finished.connect(self._on_project_conversion_finished)
+        dialog.open()
+
+    def _on_project_copy_saved(self, path):
+        debug_print('[Drop project] Copia compatible guardada: %s' % path)
+        self.start_scan()
+
+    def _on_project_conversion_finished(self, _result):
+        dialog = self._project_conversion_dialog
+        self._project_conversion_dialog = None
+        if dialog is not None and is_widget_alive(dialog):
+            dialog.deleteLater()
 
     def resizeEvent(self, event):
         super(ProjectsPanel, self).resizeEvent(event)

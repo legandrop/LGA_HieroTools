@@ -2,6 +2,7 @@ import ast
 import copy
 import os
 import tempfile
+from types import SimpleNamespace
 import unittest
 from pathlib import Path
 
@@ -184,7 +185,7 @@ class ProjectsPanelMediaDropTests(unittest.TestCase):
 
     def test_accepts_each_requested_local_format_and_only_one_url(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            for extension in (".mp4", ".mov", ".mxf", ".jpg", ".png", ".exr"):
+            for extension in (".mp4", ".mov", ".mxf", ".jpg", ".png", ".exr", ".hrox", ".HROX"):
                 path = os.path.join(temp_dir, "media" + extension)
                 Path(path).touch()
                 self.assertEqual(path, self.media_from_mime(_FakeMime([_FakeUrl(path)])))
@@ -197,6 +198,51 @@ class ProjectsPanelMediaDropTests(unittest.TestCase):
             Path(unsupported).touch()
             self.assertIsNone(self.media_from_mime(_FakeMime([_FakeUrl(unsupported)])))
             self.assertIsNone(self.media_from_mime(_FakeMime([_FakeUrl(temp_dir)])))
+
+    def test_project_drop_is_deferred_and_never_enters_media_import(self):
+        pending, converted, imported = [], [], []
+        panel_type = _load_panel_methods(
+            {'dropEvent', '_handle_dropped_file'},
+            {'os': os, 'debug_print': lambda *args: None,
+             'is_widget_alive': lambda widget: True,
+             'QtCore': SimpleNamespace(QTimer=SimpleNamespace(
+                 singleShot=lambda delay, callback: pending.append(callback)))})
+        panel = panel_type()
+        panel._single_media_from_mime = self.media_from_mime
+        panel._set_media_drop_overlay_visible = lambda visible: None
+        panel._convert_dropped_project = converted.append
+        panel._import_dropped_media = imported.append
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = str(Path(temp_dir) / 'PROJA_SUP_v105.hrox')
+            Path(path).write_text('<hieroXML/>', encoding='utf-8')
+            accepted = []
+            event = SimpleNamespace(mimeData=lambda: _FakeMime([_FakeUrl(path)]),
+                                    acceptProposedAction=lambda: accepted.append(True),
+                                    ignore=lambda: accepted.append(False))
+            panel.dropEvent(event)
+            self.assertEqual([True], accepted)
+            self.assertEqual([], converted)
+            self.assertEqual([], imported)
+            pending.pop()()
+            self.assertEqual([path], converted)
+            self.assertEqual([], imported)
+            panel._handle_dropped_file('media.mov')
+            self.assertEqual(['media.mov'], imported)
+
+    def test_saved_project_copy_only_refreshes_list_and_cancel_releases_dialog(self):
+        panel_type = _load_panel_methods(
+            {'_on_project_copy_saved', '_on_project_conversion_finished'},
+            {'debug_print': lambda *args: None, 'is_widget_alive': lambda widget: True})
+        panel = panel_type()
+        scans, deleted = [], []
+        panel.start_scan = lambda: scans.append(True)
+        panel._project_conversion_dialog = SimpleNamespace(deleteLater=lambda: deleted.append(True))
+        panel._on_project_conversion_finished(0)
+        self.assertEqual([], scans)
+        self.assertEqual([True], deleted)
+        self.assertIsNone(panel._project_conversion_dialog)
+        panel._on_project_copy_saved('PROJA_SUP_v106.hrox')
+        self.assertEqual([True], scans)
 
     def test_image_kind_comes_from_hiero_detected_range(self):
         self.assertEqual("video", self.detect_kind(_FakeClip(100, [(0, 99)]), ".mov"))
@@ -470,6 +516,8 @@ class ProjectsPanelMediaDropTests(unittest.TestCase):
             "LGA_NKS_Shared.LGA_UI_Style_HieroTools",
             "LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectsPanel_Logging",
             "LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectMediaPreview",
+            "LGA_NKS_Project_Downgrade",
+            "LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectDrop_Dialog",
             "LGA_NKS_Projects_Panel_py.LGA_NKS_TrackNames_Section",
         ):
             self.assertIn(module_name, source)

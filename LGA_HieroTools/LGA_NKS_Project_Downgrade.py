@@ -1,12 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Project_Downgrade v1.00 | Lega
+  LGA_NKS_Project_Downgrade v1.01 | Lega
 
   Crea una copia de proyectos Hiero/NKS 16.1 o 17 compatible con 16.0.
   Conserva el XML original salvo la version del formato; no reconstruye
   el timeline. Las annotations nuevas requieren descarte explicito.
 
+  v1.01: Inspeccion y nombre con siguiente version para el Projects Panel.
   v1.00: Conversion segura de formato 12 a 11, sin sobrescrituras.
 ____________________________________________________________________
 """
@@ -21,6 +22,47 @@ import xml.etree.ElementTree as ET
 from xml.parsers import expat
 
 DEBUG = False
+
+
+def suggest_project_name(source):
+    """Incrementa el ultimo bloque de version; sin version, agrega _NKS16."""
+    stem = Path(source).stem
+    matches = list(re.finditer(r'(?:^|_)([vV]?)(\d+)(?=_|$)', stem))
+    if not matches:
+        return stem + '_NKS16.hrox'
+    match = matches[-1]
+    start, end = match.span(2)
+    number = match.group(2)
+    return stem[:start] + str(int(number) + 1).zfill(len(number)) + stem[end:] + '.hrox'
+
+
+def _read_project(source):
+    source = Path(source).expanduser().resolve(strict=True)
+    if source.suffix.lower() != '.hrox' or not source.is_file():
+        raise ValueError('El origen debe ser un archivo .hrox.')
+    data = source.read_bytes()
+    if b'<!ENTITY' in data:
+        raise ValueError('El proyecto contiene declaraciones XML de entidades.')
+    root = ET.fromstring(data)
+    if root.tag != 'hieroXML' or not any(c.tag == 'Project' for c in root):
+        raise ValueError('El XML no es un proyecto Hiero/Nuke Studio completo.')
+    return source, data, root
+
+
+def inspect_project(source):
+    """Lee el formato real y las annotations sin escribir una copia ni abrir el host."""
+    logger = _logger()
+    try:
+        path, _data, root = _read_project(source)
+        info = dict(version=int(root.get('version', '0')),
+                    release=root.get('release', ''),
+                    annotations=sum(1 for _node in root.iter('Annotation')))
+        logger.info('Inspeccion: %s; formato=%s; release=%s; annotations=%s',
+                    path, info['version'], info['release'], info['annotations'])
+        return info
+    except Exception:
+        logger.exception('No se pudo inspeccionar el proyecto.')
+        raise
 
 
 def _logger():
@@ -74,9 +116,7 @@ def convert_project(source, destination=None, *, drop_annotations=False):
     """
     logger = _logger()
     try:
-        source = Path(source).expanduser().resolve(strict=True)
-        if source.suffix.lower() != '.hrox' or not source.is_file():
-            raise ValueError('El origen debe ser un archivo .hrox.')
+        source, data, root = _read_project(source)
         destination = (Path(destination).expanduser().absolute() if destination
                        else source.with_name(source.stem + '_NKS16.hrox'))
         logger.info('Origen: %s; destino: %s; descartar annotations: %s',
@@ -85,13 +125,6 @@ def convert_project(source, destination=None, *, drop_annotations=False):
             raise ValueError('El destino debe tener extension .hrox.')
         if destination.resolve() == source or os.path.lexists(destination):
             raise FileExistsError('El destino ya existe o es el original; no se sobrescribe.')
-        data = source.read_bytes()
-        # No se admiten entidades declaradas: un hrox normal no las necesita.
-        if b'<!ENTITY' in data:
-            raise ValueError('El proyecto contiene declaraciones XML de entidades.')
-        root = ET.fromstring(data)
-        if root.tag != 'hieroXML' or not any(c.tag == 'Project' for c in root):
-            raise ValueError('El XML no es un proyecto Hiero/Nuke Studio completo.')
         if root.get('version') != '12':
             raise ValueError('Se admite solamente formato hrox 12 (NKS/Hiero 16.1 y 17).')
         release = root.get('release', '')

@@ -116,6 +116,12 @@
 
 ## UI del panel
 - Titulo centrado `Projects`.
+- **Drop project:** un único `.hrox` local abre el diálogo compacto `Save a Nuke 16 copy` después de terminar el evento nativo de drop. No entra al importador de media ni consulta el timeline activo. El original se muestra de solo lectura; `Save as` propone el siguiente número de versión y permite editarlo; `Folder` empieza en la carpeta original y `Browse...` permite cambiarla. Sin número de versión se propone el sufijo `_NKS16`.
+  - La inspección y conversión corren fuera del hilo UI. Un formato 11 informa que ya es compatible; un formato 12 de 16.1/17 ofrece la copia; versiones desconocidas o archivos inválidos dejan Save deshabilitado.
+  - Las annotations incompatibles muestran una advertencia y exigen marcar `Discard annotations in the copy`. El original y cualquier destino existente se conservan siempre. Durante el guardado se bloquean campos y cierre para evitar una confirmación ambigua.
+  - Guardar actualiza la lista con `start_scan()`, sin abrir la copia ni alterar la secuencia activa. Cancelar no escribe archivos. Un segundo drop mientras el diálogo sigue abierto trae al frente el mismo diálogo.
+  - Reload Panel recarga también el conversor y este diálogo. Detalle y límites: [Docu_Project_Downgrade.md](Docu_Project_Downgrade.md).
+  - Referencias: `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Projects_Panel_py\LGA_NKS_ProjectDrop_Dialog.py` (`ProjectConversionDialog`, `_ProjectTask`); `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Project_Downgrade.py` (`inspect_project`, `suggest_project_name`, `convert_project`); el panel (`dropEvent`, `_handle_dropped_file`, `_on_project_copy_saved`).
 - **Drop media:** al arrastrar un único archivo local `.mp4`, `.mov`, `.mxf`,
   `.jpg`, `.png` o `.exr` aparece un borde punteado. Hiero recibe directamente
   el frame arrastrado y detecta de forma nativa las secuencias JPG, PNG y EXR

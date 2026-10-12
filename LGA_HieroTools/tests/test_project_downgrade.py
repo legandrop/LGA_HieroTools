@@ -78,6 +78,24 @@ class DowngradeTests(unittest.TestCase):
             converter.convert_project(self.source, self.root / 'missing' / 'new.hrox')
         self.assertEqual(self.source.read_bytes(), DOCUMENT)
 
+    def test_inspection_is_read_only_and_counts_real_annotations(self):
+        info = converter.inspect_project(self.source)
+        self.assertEqual(info, dict(version=12, release='17.0v4', annotations=0))
+        self.assertEqual(self.source.read_bytes(), DOCUMENT)
+        self.assertEqual(list(self.root.iterdir()), [self.source])
+        self.source.write_bytes(DOCUMENT.replace(b'<items/>', b'<annotations><Annotation/></annotations>'))
+        self.assertEqual(converter.inspect_project(self.source)['annotations'], 1)
+
+    def test_next_filename_preserves_padding_prefix_and_suffix(self):
+        for before, after in (
+            ('PROJA_SUP_105.hrox', 'PROJA_SUP_106.hrox'),
+            ('PROJA_SUP_v009.hrox', 'PROJA_SUP_v010.hrox'),
+            ('PROJA_SUP_V099_Mac.HROX', 'PROJA_SUP_V100_Mac.hrox'),
+            ('PROJA_SUP_999.hrox', 'PROJA_SUP_1000.hrox'),
+            ('PROJA_SUP.hrox', 'PROJA_SUP_NKS16.hrox'),
+        ):
+            self.assertEqual(converter.suggest_project_name(before), after)
+
 
 if __name__ == '__main__':
     unittest.main()

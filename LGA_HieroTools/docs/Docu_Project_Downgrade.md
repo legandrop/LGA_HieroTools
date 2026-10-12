@@ -6,7 +6,7 @@ introdujo el formato hrox 12 en 16.1; NKS/Hiero 16.0 admite hasta el 11 y rechaz
 el proyecto antes de cargarlo. El numero del formato es independiente de la version
 del programa. Cambiar solamente el atributo `release` no resuelve el problema.
 
-`LGA_NKS_Project_Downgrade.py` v1.00 crea otra copia con formato 11. Conserva
+`LGA_NKS_Project_Downgrade.py` v1.01 crea otra copia con formato 11. Conserva
 todos los bytes del proyecto salvo el valor de `hieroXML/@version`, sin
 reconstruir bins, versiones, cortes, media, efectos, presets ni CDATA. El destino
 por defecto es `<nombre>_NKS16.hrox`, junto al original, para conservar tambien
@@ -14,6 +14,30 @@ la base de las rutas relativas. Si se elige otra carpeta, comprobar esas rutas.
 Nunca sobrescribe el original ni un destino existente. Tampoco abre el host.
 
 ## Uso
+
+### Desde Projects Panel
+
+Arrastrar un único `.hrox` local sobre el panel abre `Save a Nuke 16 copy`,
+el diálogo compacto de `LGA_NKS_ProjectDrop_Dialog.py` v1.00. Muestra el original,
+un nombre editable y la carpeta original con `Browse...` para elegir otra.
+Si el nombre contiene un número de versión, propone el siguiente conservando
+prefijo y padding: `PROJA_SUP_v105.hrox` pasa a `PROJA_SUP_v106.hrox`.
+Sin número propone `<nombre>_NKS16.hrox`. Un nombre ocupado exige otro nombre
+o carpeta; no se sobrescribe ni se elige una versión adicional en silencio.
+
+Inspección y escritura corren en un worker; Save se habilita sólo al reconocer
+formato 12 de 16.1/17. Formato 11 informa que ya es compatible, y formatos
+desconocidos o XML inválido no permiten convertir. Si hay annotations nuevas,
+exige marcar `Discard annotations in the copy` antes de guardar. Cancelar no
+escribe nada. Durante el guardado se deshabilitan controles y cierre.
+
+Guardar refresca la lista de proyectos sin abrir la copia ni tocar el timeline
+activo. No pasa por el importador de media. El diálogo se abre después de salir
+del evento de drop, para no retener el loop nativo de Windows. Reload Panel
+recarga el conversor y el diálogo. Su log es
+`LGA_NKS_Projects_Panel_py/logs/DebugPy_ProjectDrop_Dialog.log`.
+
+### CLI y API
 
 En Windows, desde cmd, con el runtime que ya trae este pack:
 
@@ -34,8 +58,8 @@ threading.Thread(
 ).start()
 ```
 
-Abrir `PROJA_SUP_v001_NKS16.hrox` desde NKS/Hiero 16.0. La herramienta es
-independiente de los paneles: no agrega botones ni se ejecuta durante el startup.
+Abrir `PROJA_SUP_v001_NKS16.hrox` desde NKS/Hiero 16.0. El CLI conserva su
+nombre de salida con sufijo `_NKS16`; el diálogo propone la siguiente versión.
 El CLI sale con codigo 1 si falla y avisa la causa. Cada corrida escribe
 `logs/DebugPy_LGA_NKS_Project_Downgrade.log`; consola de debug apagada por defecto.
 
@@ -83,6 +107,14 @@ La sonda reutilizable es `+Building_Blocks/explore_hrox_downgrade.py`; su
 inventario es de solo lectura. Las muestras de clientes y resultados completos
 son privados y no se publican. El launcher local de 16 usa el puerto 54329;
 17 conserva 54326. Los dev-links solo se habilitan por lanzamiento.
+
+La integración del panel tiene 27 tests focales del conversor y Drop media/project,
+7 pruebas del diálogo productivo y 8 comprobaciones del recorrido integrado con Qt
+real: drop diferido, padre/señales, Browse, nombre editado, guardado con reescaneo,
+cancelación, media y original intacto. Los bancos usan XML ficticio y el harness,
+sin abrir el host. Se inspeccionaron los estados normal, annotations, destino
+ocupado y versión desconocida contra el diseño compacto. Esto verifica la UI y
+el enrutado Qt; el arrastre físico dentro del host no se repitió en esta etapa.
 
 ## Fuentes
 
