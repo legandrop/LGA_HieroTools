@@ -1,5 +1,16 @@
 # What's new in LGA HieroTools
 
+## v4.00 (2026-10-13)
+
+- **New:** Drop a Nuke Studio or Hiero 17 project onto the Projects panel to save a separate Nuke 16.0 copy, with an editable next-version name, a folder chooser and an explicit choice to discard incompatible annotations.
+- **New:** In projects framed for 3:2, the Projects panel now turns the 3:2 viewer mask on at half opacity every time you switch to one of their timelines.
+- **Improved:** Flow Shot Info separates the responsible artists from Viewers who retain task access, while preserving version and assignment history.
+- **Improved:** TL | Refresh and timeline switches apply the preferred Media Spreadsheet column order, widths and visibility, with rows sorted by Clip.
+- **Improved:** Download AMF downloads the look files of every selected shot at once when two or more clips are selected, instead of one shot at a time.
+- **Improved:** Shot Info opens as tall as its content instead of at a fixed size, so a shot with little to show no longer opens a mostly empty window.
+- **Fixed:** Switching timelines in the Projects panel keeps one Media Spreadsheet tab instead of accumulating duplicates.
+- **Fixed:** Apply AMF applies the shot's .cdl and .clf again instead of reporting that valid look files could not be loaded.
+
 ## v3.99 (2026-10-08)
 
 - **Improved:** Apply AMF now applies the shot's .cube LUT, together with the .cdl grade when there is one.

@@ -4,6 +4,44 @@
   "name": "LGA HieroTools",
   "versions": [
     {
+      "version": "4.00",
+      "items": [
+        {
+          "kind": "improved",
+          "text": "Flow Shot Info separates the responsible artists from Viewers who retain task access, while preserving version and assignment history."
+        },
+        {
+          "kind": "new",
+          "text": "Drop a Nuke Studio or Hiero 17 project onto the Projects panel to save a separate Nuke 16.0 copy, with an editable next-version name, a folder chooser and an explicit choice to discard incompatible annotations."
+        },
+        {
+          "kind": "fixed",
+          "text": "Switching timelines in the Projects panel keeps one Media Spreadsheet tab instead of accumulating duplicates."
+        },
+        {
+          "kind": "improved",
+          "text": "TL | Refresh and timeline switches apply the preferred Media Spreadsheet column order, widths and visibility, with rows sorted by Clip."
+        },
+        {
+          "kind": "new",
+          "text": "In projects framed for 3:2, the Projects panel now turns the 3:2 viewer mask on at half opacity every time you switch to one of their timelines."
+        },
+        {
+          "kind": "improved",
+          "text": "Download AMF downloads the look files of every selected shot at once when two or more clips are selected, instead of one shot at a time."
+        },
+        {
+          "kind": "fixed",
+          "text": "Apply AMF applies the shot's .cdl and .clf again instead of reporting that valid look files could not be loaded."
+        },
+        {
+          "kind": "improved",
+          "text": "Shot Info opens as tall as its content instead of at a fixed size, so a shot with little to show no longer opens a mostly empty window."
+        }
+      ],
+      "date": "2026-10-13"
+    },
+    {
       "version": "3.99",
       "items": [
         {
