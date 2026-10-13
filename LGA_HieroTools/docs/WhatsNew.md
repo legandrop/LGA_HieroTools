@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.00
+- [improved] Flow Shot Info separates the responsible artists from Viewers who retain task access, while preserving version and assignment history.
 - [new] Drop a Nuke Studio or Hiero 17 project onto the Projects panel to save a separate Nuke 16.0 copy, with an editable next-version name, a folder chooser and an explicit choice to discard incompatible annotations.
 - [fixed] Switching timelines in the Projects panel keeps one Media Spreadsheet tab instead of accumulating duplicates.
 - [improved] TL | Refresh and timeline switches apply the preferred Media Spreadsheet column order, widths and visibility, with rows sorted by Clip.

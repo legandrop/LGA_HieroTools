@@ -1,4 +1,8 @@
 v4.00:
+Shot Info distingue grupos de acceso e identidades desconocidas utilizando tipo e ID de las asignaciones sincronizadas en PipeSync. Sólo HumanUser con ID acreditado puede mostrarse como responsable; una base anterior conserva nombres bajo Assigned (type unavailable). La lectura mantiene Viewer, acceso e historial y no modifica ni migra bases desde Hiero. [ Flow Shot Info - Grupos e identidad desconocida ]
+
+Shot Info de Flow (`LGA_NKS_Flow_Shot_info v2.04`) muestra responsables y Viewers por separado, leyendo todas las asignaciones de la tarea en la base de PipeSync. Quien conserva acceso como Viewer deja de presentarse como responsable actual; una tarea sin responsables indica Unassigned. La descripción y el historial de versiones, registros y asignaciones conservan sus autores y fechas. Las bases anteriores sin el indicador de Viewer siguen siendo legibles. [ Flow Shot Info - Responsables y Viewers ]
+
 
         - Projects Panel integra Drop project para guardar una copia NKS/Hiero 16.0 de un .hrox 16.1/17 (`LGA_NKS_Projects_Panel v2.50`, `LGA_NKS_ProjectDrop_Dialog v1.00`, `LGA_NKS_Project_Downgrade v1.01`, Smart Reload v2.26). Dialogo compacto con original, nombre editable con siguiente version y Browse; inspeccion y conversion fuera del hilo UI, annotations con descarte explicito y prohibicion de sobrescribir originales/destinos. El drop se difiere hasta salir del evento nativo, guardar reescanea la lista y cancelar no importa media ni altera el timeline. Reload Panel recarga las nuevas dependencias. [ Projects Panel - Guardar copia Nuke 16 al arrastrar proyecto ]
 

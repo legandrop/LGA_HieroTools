@@ -216,6 +216,8 @@ or `TL |`, so similarly colored controls do not imply an unrelated function.
   of centered, replacing the previous Shot Info window in the same position.
   Other reviewers can be enabled in
   `LGA_NKS_ShotInfoOnReview.py`.
+  Flow Shot Info distinguishes responsible artists from Viewers who retain
+  access to the task; recorded work and version authors remain unchanged.
 - **TL | ON Clips / OFF v00**
   Click: enables all timeline clips and disables `v00`/`v000` task clips.
   Shift+Click: applies only to selected clips.

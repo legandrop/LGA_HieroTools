@@ -53,3 +53,7 @@ EditRef, playhead, Zoom to Fit) con dos copias del codigo. No se unificaron en
 la v1 para no tocar el Pull sin poder probarlo contra Flow en la misma pasada.
 Unificarlo es hacer que el Pull llame a `_focus_clip()` (publicandolo) y
 probar un click en una fila del Pull, con y sin EditRef.
+
+### Shot Info: migrar QSS heredado a hojas Style del pack
+
+- [ ] En C:/Users/leg4-pc/.nuke/Python/Startup/LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py, migrar los bloques QSS manuales de fuentes, scrollbar de flowNotesScrollArea y botones/miniaturas a las hojas existentes de LGA_NKS_Shared/Style, conforme lga-nuke-ui. El lint confirma 18 errores y 1 advertencia tanto en HEAD como en el estado actual: cero hallazgos introducidos por el cambio de roles. La comparación privada de QA está en C:/Portable/LGA_PipeSync_2/.git/lga-delegar/recursos/assignees_viewers_2026-10-12/cierre/hiero_style_delta.json. Se posterga la migración porque excede el alcance de acceso/responsabilidad y requiere una revisión visual completa del Shot Info; conservar el adapter y las capas Style existentes, sin rediseñar paleta ni copiar UI. Verificar luego con la clase real GUIWindow y el host Hiero cuando esté autorizado.

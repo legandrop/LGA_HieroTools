@@ -1,11 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Shot_info v2.03 | Lega
+  LGA_NKS_Flow_Shot_info v2.04 | Lega
 
   Imprime informacion del shot y las versiones de la task seleccionada
   (comp, roto o cleanup) en el playhead.
 
+  v2.04: Distingue responsables de Viewers leyendo todas las asignaciones
+         de la task. Conserva acceso e historial de autores y asignaciones.
   v2.03: La ventana se abre al alto de su contenido. El 900x700 de antes
          deja de ser el tamano fijo y pasa a ser el TOPE: con poco para
          mostrar abria igual a 700 de alto y quedaba casi toda vacia. Si
@@ -1187,6 +1189,11 @@ class ShotGridManager:
         # Obtener las tasks asociadas a este shot
         cur.execute("SELECT * FROM tasks WHERE shot_id = ?", (shot["id"],))
         tasks = cur.fetchall()
+        cur.execute("PRAGMA table_info(task_assignments)")
+        has_viewer_flag = any(row["name"] == "is_viewer" for row in cur.fetchall())
+        cur.execute("PRAGMA table_info(task_assignments)")
+        columns = {row['name'] for row in cur.fetchall()}
+        has_identity = {'entity_type','entity_id'} <= columns
         for task in tasks:
             task_dict = {
                 "task_type": task["task_type"],
@@ -1195,18 +1202,26 @@ class ShotGridManager:
                 # tasks.task_id = id de Flow (clave de task_assignment_history en stats).
                 "task_sg_id": int(task["task_id"] or 0) if task["task_id"] is not None else 0,
                 "task_assigned_to": None,
+                "responsible_assignees": [],
+                "viewers": [],
+                "access_groups": [],
+                "unknown_assignees": [],
                 "versions": [],
             }
             # Obtener asignado
             cur.execute(
-                "SELECT assigned_to FROM task_assignments WHERE task_id = ?",
+                "SELECT assigned_to," + ("COALESCE(is_viewer,0)" if has_viewer_flag else "0")
+                + " AS is_viewer," + ("entity_type,entity_id" if has_identity else "NULL AS entity_type,NULL AS entity_id")
+                + " FROM task_assignments WHERE task_id = ? ORDER BY assigned_to",
                 (task["id"],),
             )
-            assign = cur.fetchone()
-            if assign:
-                task_dict["task_assigned_to"] = assign["assigned_to"]
-            else:
-                task_dict["task_assigned_to"] = "No asignado"
+            for assign in cur.fetchall():
+                if not assign['entity_id'] or assign['entity_type'] not in ('HumanUser','Group'):
+                    target='unknown_assignees'
+                elif assign['entity_type']=='Group':target='access_groups'
+                else:target = "viewers" if assign["is_viewer"] else "responsible_assignees"
+                task_dict[target].append(assign["assigned_to"])
+            task_dict["task_assigned_to"] = ", ".join(task_dict["responsible_assignees"]) or "Unassigned"
             # Obtener timelogs y agruparlos por numero de version (regex v0*N)
             timelog_minutes_by_version = {}
             try:
@@ -1487,6 +1502,10 @@ class HieroOperations:
                     "task_type": task_type_display,
                     "description": task_description,
                     "assignee": assignee,
+                    "responsible_assignees": task.get("responsible_assignees", []) if task else [],
+                    "viewers": task.get("viewers", []) if task else [],
+                    "access_groups":task.get('access_groups',[]) if task else [],
+                    "unknown_assignees":task.get('unknown_assignees',[]) if task else [],
                     "task_sg_id": task_sg_id,
                     "versions": version_info,
                 }
@@ -1797,7 +1816,7 @@ class GUIWindow(QWidget):
             except RuntimeError:
                 continue
 
-    def create_task_description_widget(self, description):
+    def create_task_description_widget(self, description, responsible=None, viewers=None, access_groups=None, unknown_assignees=None):
         """Crea el bloque inicial de descripcion general de la task."""
         section = QWidget()
         section.setMinimumWidth(0)
@@ -1811,7 +1830,13 @@ class GUIWindow(QWidget):
             raw_description = "Sin descripcion"
 
         esc_description = _html_escape(raw_description).replace("\n", "<br/>")
-        html = (
+        roles_html = "<b>Responsible:</b> " + _html_escape(", ".join(responsible or []) or ("Unavailable" if unknown_assignees else "Unassigned"))
+        if viewers:
+            roles_html += "<br/><b>Viewers:</b> " + _html_escape(", ".join(viewers))
+        if access_groups:roles_html += '<br/><b>Access groups:</b> '+_html_escape(', '.join(access_groups))
+        if unknown_assignees:roles_html += '<br/><b>Assigned (type unavailable):</b> '+_html_escape(', '.join(unknown_assignees))
+        roles_html = f"<span style='color: {COLORS['txt_body']};'>{roles_html}</span>"
+        html = roles_html + "<br/><br/>" + (
             f"<span style='color: {COLORS['txt_desc_title']}; font-weight: 700; font-size: 15px;'>"
             f"Descripción de task:</span> "
             f"<span style='color: {COLORS['txt_body']};'>{esc_description}</span>"
@@ -2350,7 +2375,9 @@ class GUIWindow(QWidget):
         for result in results:
             debug_print(f"Processing result: {result}")
             self.scroll_layout.addWidget(
-                self.create_task_description_widget(result.get("description", ""))
+                self.create_task_description_widget(result.get("description", ""),
+                    result.get("responsible_assignees", []), result.get("viewers", []),
+                    result.get('access_groups',[]),result.get('unknown_assignees',[]))
             )
             for version in result.get("versions", []):
                 self.scroll_layout.addWidget(self.create_version_widget(version))
