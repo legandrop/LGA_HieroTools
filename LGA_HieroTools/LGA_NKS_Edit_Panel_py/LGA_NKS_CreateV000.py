@@ -860,12 +860,11 @@ def _folder_and_parsed_are_same_shot(folder_code, shot_code):
 
       - Se queda CORTO cuando el filename no trae mas bloques que el shot:
         carpeta PROJA_1013_0800_VEN, parseo PROJA_1013_0800.
-      - Se pasa de LARGO con la convencion real de los plates, que es el caso
-        que de verdad ocurre: el archivo es PROJA_1013_0800_VEN_aPlate_v001
-        .%04d.exr, o sea shot + vendor + plate. Sin el vendor en la DB el
-        bloque base se calcula de 3, los dos bloques que sobran disparan la
-        regla de "shot con descripcion" de _analyze_shotname y el sufijo del
-        plate entra al nombre: el parseo devuelve PROJA_1013_0800_VEN_aPlate.
+      - Se pasaba de LARGO con la convencion real de los plates: el archivo es
+        PROJA_1013_0800_VEN_aPlate_v001.%04d.exr, o sea shot + vendor + plate,
+        y sin el vendor en la DB el sufijo del plate entraba al nombre
+        (PROJA_1013_0800_VEN_aPlate). Desde NamingUtils v1.22 el plate ancla
+        el parseo y ese caso ya no se da, pero la carpeta sigue mandando.
 
     En los dos casos manda la carpeta, que sale de cortar la ruta en _input y
     por lo tanto no depende de la DB. Es ademas lo que ya hacen las tools

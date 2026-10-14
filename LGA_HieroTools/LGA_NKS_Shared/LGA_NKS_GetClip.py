@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_GetClip v1.89 | Lega
+  LGA_NKS_GetClip v1.90 | Lega
 
   Usado por runtime activo:
   - LGA_NKS_Assignee_Panel.py
@@ -31,6 +31,9 @@ ____________________________________________________________________
 
   Utilidades para obtener clips del timeline de Hiero/Nuke Studio.
 
+  v1.90: Borra la copia local del parser de shot names que se usaba si
+         fallaba el import de NamingUtils: era codigo muerto, todavia con la
+         deteccion de series. El parser vive solo en NamingUtils.
   v1.89: Actualiza la lista de consumidores tras mover los toggles de clips al
          ViewerTL Panel; no cambia la logica de seleccion.
   v1.88: Actualiza la lista de consumidores tras mover las comparaciones al
@@ -136,70 +139,11 @@ try:
     debug_print("NamingUtils importado correctamente")
 except ImportError as e:
     NAMING_UTILS_AVAILABLE = False
-    debug_print(f"NamingUtils NO importado, usando fallback: {e}")
-
-    # OJO: este fallback es CODIGO MUERTO y esta DESACTUALIZADO a proposito.
-    # extract_shot_code_from_filename() corta antes con "" cuando
-    # NAMING_UTILS_AVAILABLE es False, asi que nada de esto llega a ejecutarse.
-    # Ademas no reconoce el naming PROYECTO_SEQ_SHOT_VENDOR (v1.14 de
-    # NamingUtils), porque los vendor codes salen de la DB de PipeSync y no se
-    # pueden adivinar por estructura. Si algun dia se reactiva esta rama, hay
-    # que borrarla y resolver el import, no sincronizar la copia a mano.
-    _VERSION_RE = re.compile(r"^v\d+$", re.IGNORECASE)
-
-    def _strip_version_suffix(parts):
-        if parts and _VERSION_RE.match(parts[-1]):
-            return parts[:-1]
-        return parts
-
-    def _is_numeric_block(value):
-        return bool(value) and value[0].isdigit()
-
-    def _is_series_format(parts):
-        return len(parts) >= 4 and all(_is_numeric_block(p) for p in parts[1:4])
-
-    def _is_vendor_format(parts):
-        return (
-            len(parts) >= 4
-            and parts[1].isalpha()
-            and _is_numeric_block(parts[2])
-            and _is_numeric_block(parts[3])
-        )
-
-    def _analyze_shotname(base_name):
-        if not base_name:
-            return [], False, False, 0
-        parts = base_name.split("_")
-        core_parts = _strip_version_suffix(parts)
-        if not core_parts:
-            return [], False, False, 0
-        is_series = _is_series_format(core_parts) or _is_vendor_format(core_parts)
-        base_count = 4 if is_series else 3
-        has_description = len(core_parts) >= (base_count + 2)
-        return core_parts, is_series, has_description, base_count
-
-    def extract_shot_code(base_name):
-        """Fallback básico si no hay módulo naming"""
-        core_parts, _, has_description, base_count = _analyze_shotname(base_name)
-        if not core_parts:
-            return ""
-        desc_count = 2 if has_description else 0
-        target_count = base_count + desc_count
-        if len(core_parts) >= target_count:
-            return "_".join(core_parts[:target_count])
-        return "_".join(core_parts)
-
-    def clean_base_name(file_name):
-        """Fallback básico si no hay módulo naming"""
-        import os
-        return os.path.splitext(file_name)[0]
-
-    def detect_shotname_format(base_name):
-        """Fallback básico si no hay módulo naming"""
-        core_parts, _, has_description, _ = _analyze_shotname(base_name)
-        if not core_parts:
-            return False
-        return has_description
+    # Sin copia local del parser, a proposito: extract_shot_code_from_filename()
+    # devuelve "" cuando NAMING_UTILS_AVAILABLE es False. La copia que habia
+    # era codigo muerto y desactualizado (sin vendor ni ancla de task); si este
+    # import falla, se arregla el import, no se mantiene un parser duplicado.
+    debug_print(f"NamingUtils NO importado, sin comparacion de shots: {e}")
 
 
 def extract_shot_code_from_filename(file_path):

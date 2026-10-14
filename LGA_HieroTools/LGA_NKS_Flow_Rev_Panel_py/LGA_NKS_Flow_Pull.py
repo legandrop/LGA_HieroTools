@@ -1,11 +1,17 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.71 | Lega
+  LGA_NKS_Flow_Pull v3.72 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
+
+  v3.72: El cartel de shots no encontrados distingue el motivo: si el proyecto
+         no esta en la DB pide sincronizar PipeSync; si esta, avisa que los
+         nombres no coinciden con Flow y lista los que se buscaron. Antes
+         siempre culpaba a la sincronizacion, aun cuando la DB estaba completa
+         y el problema era el parseo del nombre.
 
   v3.71: "Only in review" y "Only for me" persisten igual que "Keep this
          window on top": los tres se guardan en FlowPull.ini al tocarlos y la
@@ -1043,6 +1049,23 @@ class ShotGridManager:
             debug_print(f"Error contando proyectos en DB: {e}")
             return -1
 
+    def project_exists(self, project_name):
+        """True si el proyecto esta en la DB. None si no se pudo consultar.
+
+        Separa los dos motivos del cartel de shots no encontrados: sin proyecto
+        es la DB sin sincronizar; con proyecto, el nombre buscado no coincide.
+        """
+        try:
+            cur = self.conn.cursor()
+            cur.execute(
+                "SELECT 1 FROM projects WHERE project_name COLLATE NOCASE = ? LIMIT 1",
+                (project_name,),
+            )
+            return cur.fetchone() is not None
+        except Exception as e:
+            debug_print(f"Error buscando el proyecto '{project_name}' en DB: {e}")
+            return None
+
     def close(self):
         if hasattr(self, "conn") and self.conn:
             self.conn.close()
@@ -1243,6 +1266,50 @@ def fix_colorspaces_si_proyecto_managed():
                 pass
 
 
+def _shots_not_found_message(not_found, sg_manager, max_names=8):
+    """Texto del cartel cuando ningun shot del timeline esta en la DB.
+
+    Distingue los dos motivos, porque se arreglan distinto: si el proyecto no
+    esta en la DB falta sincronizar PipeSync; si esta, el nombre que se leyo del
+    archivo no coincide con Flow, y sincronizar no cambia nada. Por eso muestra
+    los nombres que se buscaron.
+    """
+    projects = sorted({project for project, _shot in not_found if project})
+    missing = []
+    for project in projects:
+        exists = sg_manager.project_exists(project)
+        if exists is None:
+            missing = None
+            break
+        if not exists:
+            missing.append(project)
+
+    text = (
+        f"None of the {len(not_found)} timeline shot(s) were found in the "
+        "PipeSync database.\n\n"
+    )
+    if missing:
+        return text + (
+            f"Project {', '.join(missing)} is not in the database for this "
+            "context. Open PipeSync, set up Flow and sync."
+        )
+    if missing is None:
+        return text + (
+            "The database may not be synced for this context, or the "
+            "project/shot names may not match Flow."
+        )
+
+    names = [shot for _project, shot in not_found]
+    listed = "\n".join(f"  •  {name}" for name in names[:max_names])
+    if len(names) > max_names:
+        listed += f"\n  …and {len(names) - max_names} more"
+    return text + (
+        "The project is in the database, so this is not a sync problem: the "
+        "shot names read from the files don't match Flow.\n\n"
+        f"Searched for:\n{listed}"
+    )
+
+
 class GUI_Table(QtWidgets.QDialog):
     def __init__(self, sg_manager, parent=None):
         super(GUI_Table, self).__init__(parent)
@@ -1310,13 +1377,9 @@ class GUI_Table(QtWidgets.QDialog):
             def show_shots_not_found_warning():
                 show_warning(
                     self,
-                    "Shots no encontrados en PipeSync",
-                    (
-                        f"Ninguno de los {self.hiero_ops.shots_not_found} shot(s) del timeline "
-                        "se encontro en la base de datos de PipeSync.\n\n"
-                        "Puede que la DB no este sincronizada para este contexto, o que los "
-                        "nombres de proyecto/shot no coincidan con Flow.\n\n"
-                        "Abri PipeSync, configura Flow y sincroniza."
+                    "Shots not found in PipeSync",
+                    _shots_not_found_message(
+                        self.hiero_ops.shots_not_found_names, self.sg_manager
                     ),
                 )
 
@@ -2048,6 +2111,8 @@ class HieroOperations:
         # Contadores para distinguir "sin cambios" de "shots no encontrados en la DB"
         self.shots_found_in_db = 0
         self.shots_not_found = 0
+        # (proyecto, shot buscado) de cada shot no encontrado, para el cartel
+        self.shots_not_found_names = []
         login, self.current_user_key = _current_flow_user()
         self.current_user_review_status_codes = _current_user_review_status_codes(
             login, self.current_user_key
@@ -2725,6 +2790,7 @@ class HieroOperations:
                             pass
                     else:
                         self.shots_not_found += 1
+                        self.shots_not_found_names.append((project_name, shot_code))
                         debug_print(
                             f"No se encontro shot '{shot_code}' en el proyecto '{project_name}'"
                         )

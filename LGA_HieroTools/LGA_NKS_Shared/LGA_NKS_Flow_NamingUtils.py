@@ -1,16 +1,16 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_NamingUtils v1.21 | Lega
+  LGA_NKS_Flow_NamingUtils v1.22 | Lega
 
   Utilidades para detectar y extraer información de nombres de archivos/shots
-  Compatible con sistemas de nomenclatura actuales y series:
+  Compatible con estos sistemas de nomenclatura:
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
-  - PROYECTO_TempEP_SEQ_SHOT_DESC1_DESC2 (6 bloques con descripción)
-  - PROYECTO_TempEP_SEQ_SHOT (4 bloques simplificado)
   - Cualquiera de esas variantes + VENDOR al final del bloque base
     (PROYECTO_SEQ_SHOT_VENDOR), donde VENDOR sale de la DB de PipeSync.
+  Si el ultimo bloque antes de la version es una task registrada o un plate
+  (aPlate, bPlate...), el shot es todo lo anterior y no se cuentan bloques.
 
   Usado por runtime activo:
   - LGA_NKS_Flow_Panel.py
@@ -40,6 +40,12 @@ ____________________________________________________________________
   - LGA_NKS_Review_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py
   - LGA_NKS_Edit_Panel_py/LGA_NKS_CreateV000.py
 
+  v1.22: El shot code se ancla en el ultimo bloque cuando es una task
+         registrada (comp, roto, cleanup, cg y sus aliases) o un plate: el shot
+         es todo lo anterior, tenga la descripcion uno o dos bloques. Se saca
+         la deteccion de series (tres bloques numericos tras el proyecto): ya
+         no se usan, y confundia PROYECTO_SEQ_SHOT_DESC1_DESC2 cuando DESC1 es
+         numerico, con lo que el shot code terminaba incluyendo la task.
   v1.21: SUP se conserva en el shot code de Flow y Hiero, igual que los
          vendors externos. Sigue siendo un token interno solo para resolver
          acceso y task, sin pasar a ser un vendor externo de PipeSync.
@@ -173,14 +179,6 @@ def _is_numeric_block(value):
     return bool(value) and value[0].isdigit()
 
 
-def _is_series_format(parts):
-    """
-    Detecta formato de serie:
-    Después del proyecto, los 3 bloques siguientes empiezan con dígito.
-    """
-    return len(parts) >= 4 and all(_is_numeric_block(p) for p in parts[1:4])
-
-
 def _is_vendor_format(parts):
     """
     Detecta formato con vendor delante:
@@ -192,6 +190,56 @@ def _is_vendor_format(parts):
         and _is_numeric_block(parts[2])
         and _is_numeric_block(parts[3])
     )
+
+
+def _base_block_count(parts):
+    """Bloques del shot sin descripcion ni vendor final: PROYECTO_SEQ_SHOT.
+
+    Son 4 solo en el formato historico con el vendor adelante. Ya no existe la
+    base de serie (PROYECTO_TEMP_EP_SEQ_SHOT): no se usa mas, y detectarla por
+    "tres bloques numericos tras el proyecto" confundia un shot con descripcion
+    cuyo primer bloque es numerico (PROYECTO_SEQ_SHOT_010_Desc).
+    """
+    return 4 if _is_vendor_format(parts) else 3
+
+
+# Ancla del parser: los plates de _input se llaman <shot>_aPlate_v01, <shot>_bPlate...
+_PLATE_TOKEN_RE = re.compile(r"^[a-z]plate$", re.IGNORECASE)
+
+# Bloques minimos de un shot (PROYECTO_SEQ_SHOT). El ancla nunca deja menos.
+_MIN_SHOT_BLOCKS = 3
+
+# Tasks reconocibles por nombre, cacheadas tras el primer intento.
+_anchor_tasks = None
+
+
+def _get_anchor_tasks():
+    """Tasks con track registrado + aliases, en minuscula.
+
+    Sale de LGA_NKS_TaskScope (no importa hiero) con el mismo import tolerante
+    que _apply_cg_family. Si no carga, usa la lista conocida para que el ancla
+    funcione igual en scripts sueltos y tests.
+    """
+    global _anchor_tasks
+    if _anchor_tasks is not None:
+        return _anchor_tasks
+    try:
+        try:
+            from LGA_NKS_TaskScope import all_track_task_names
+        except ImportError:
+            from LGA_NKS_Shared.LGA_NKS_TaskScope import all_track_task_names
+        tasks = set(all_track_task_names())
+    except Exception:
+        tasks = {"comp", "roto", "cleanup", "cg"}
+    _anchor_tasks = frozenset(tasks | set(TASK_NAME_ALIASES))
+    return _anchor_tasks
+
+
+def _is_anchor_token(block):
+    """True si el bloque es una task registrada (o alias) o un plate."""
+    if not block:
+        return False
+    return block.lower() in _get_anchor_tasks() or bool(_PLATE_TOKEN_RE.match(block))
 
 
 # Resolver de vendor codes, cacheado tras el primer intento. _analyze_shotname
@@ -246,77 +294,71 @@ def _is_known_vendor_code(block, project_name):
 
 def _analyze_shotname(base_name):
     """
-    Analiza el shotname y retorna:
-    (core_parts, is_series, has_description, base_count)
+    Separa el nombre base en shot y task. Retorna:
+    (shot_parts, task_block | None, base_count)
+
+    base_count son los bloques del shot sin descripcion (3, o 4 con vendor).
+
+    1. Ancla: si el ultimo bloque es una task registrada o un plate, el shot es
+       todo lo anterior. No depende de contar, asi que no importa si la
+       descripcion tiene uno o dos bloques ni si el vendor esta en la DB.
+    2. Conteo, cuando el ultimo bloque no se reconoce (en client, las
+       disciplinas de la familia CG): base de 3 bloques, +1 si sigue un vendor
+       conocido, +2 de descripcion si sobran al menos dos bloques.
     """
     if not base_name:
-        return [], False, False, 0
+        return [], None, 0
 
-    parts = base_name.split("_")
-    core_parts = _strip_version_suffix(parts)
+    core_parts = _strip_version_suffix(base_name.split("_"))
     if not core_parts:
-        return [], False, False, 0
+        return [], None, 0
 
-    # Base de 4 bloques para:
-    # - Series (PROYECTO_EP_SEQ_SHOT numérico)
-    # - Vendor delante (PROYECTO_VENDOR_SEQ_SHOT)
-    is_series = _is_series_format(core_parts) or _is_vendor_format(core_parts)
-    base_count = 4 if is_series else 3
+    base_count = _base_block_count(core_parts)
 
-    # Vendor al final del bloque base: PROYECTO_SEQ_SHOT_VENDOR (y su variante
-    # de serie PROYECTO_EP_SEQ_SHOT_VENDOR). Se aplica sobre la base ya
-    # resuelta, asi que cubre las dos formas sin duplicar reglas.
+    # Vendor al final del bloque base: PROYECTO_SEQ_SHOT_VENDOR.
     if len(core_parts) > base_count and _is_known_vendor_code(
         core_parts[base_count], core_parts[0]
     ):
         base_count += 1
 
-    has_description = len(core_parts) >= (base_count + 2)
+    if len(core_parts) > _MIN_SHOT_BLOCKS and _is_anchor_token(core_parts[-1]):
+        return core_parts[:-1], core_parts[-1], base_count
 
-    return core_parts, is_series, has_description, base_count
+    shot_count = base_count + (2 if len(core_parts) >= base_count + 2 else 0)
+    task = core_parts[shot_count] if len(core_parts) > shot_count else None
+    return core_parts[:shot_count], task, base_count
 
 
 def detect_shotname_format(base_name):
     """
-    Detecta el formato del shotname basado en el nombre base del archivo.
-    
-    Técnicas de detección:
-    - Si después del proyecto los 3 bloques siguientes empiezan con dígito → formato de serie
-    - Si hay al menos 2 bloques adicionales tras el bloque base → formato con descripción
-    
+    Detecta si el shotname lleva bloques de descripción.
+
+    Es descripción todo bloque del shot que sobra después del bloque base
+    (PROYECTO_SEQ_SHOT, más el vendor si lo hay). Ver _analyze_shotname.
+
     Args:
         base_name (str): Nombre base del archivo sin extensión ni versión
-        
-    Returns:
-        bool: True si es formato con descripción (5/6 bloques), False si es simplificado (3/4 bloques)
-    """
-    core_parts, _, has_description, _ = _analyze_shotname(base_name)
-    if not core_parts:
-        return False
 
-    return has_description
+    Returns:
+        bool: True si el shot tiene descripción, False si es simplificado
+    """
+    shot_parts, _, base_count = _analyze_shotname(base_name)
+    return len(shot_parts) > base_count
 
 
 def extract_shot_code(base_name):
     """
     Extrae el shot_code de un nombre base de archivo.
     Detecta automáticamente el formato y extrae el shot_code correcto.
-    
+
     Args:
         base_name (str): Nombre base del archivo sin extensión ni versión
-        
+
     Returns:
-        str: Shot code extraído con o sin descripción (incluye variante de serie)
+        str: Shot code extraído con o sin descripción
     """
-    core_parts, _, has_description, base_count = _analyze_shotname(base_name)
-    if not core_parts:
-        return ""
-
-    desc_count = 2 if has_description else 0
-    target_count = base_count + desc_count
-
-    selected = list(core_parts[:target_count]) if len(core_parts) >= target_count else list(core_parts)
-    return "_".join(selected)
+    shot_parts, _, _ = _analyze_shotname(base_name)
+    return "_".join(shot_parts)
 
 
 def extract_vendor_token(base_name, project_name=None):
@@ -324,7 +366,7 @@ def extract_vendor_token(base_name, project_name=None):
     parts = _strip_version_suffix((base_name or "").split("_"))
     if not parts:
         return ""
-    original_base = 4 if (_is_series_format(parts) or _is_vendor_format(parts)) else 3
+    original_base = _base_block_count(parts)
     if len(parts) <= original_base:
         return ""
     candidate = parts[original_base]
@@ -344,7 +386,7 @@ def find_unknown_vendor_slot(
     parts = _strip_version_suffix((base_name or "").split("_"))
     if not parts:
         return ""
-    base_count = 4 if (_is_series_format(parts) or _is_vendor_format(parts)) else 3
+    base_count = _base_block_count(parts)
     if len(parts) != base_count + 2:
         return ""
     candidate, task = parts[base_count], parts[base_count + 1]
@@ -361,7 +403,7 @@ def extract_shot_code_with_vendor_candidate(base_name, candidate):
     parts = _strip_version_suffix((base_name or "").split("_"))
     if not parts or not candidate:
         return extract_shot_code(base_name)
-    base_count = 4 if (_is_series_format(parts) or _is_vendor_format(parts)) else 3
+    base_count = _base_block_count(parts)
     if len(parts) > base_count and normalize_vendor_token(parts[base_count]) == normalize_vendor_token(candidate):
         return "_".join(parts[:base_count + 1])
     return extract_shot_code(base_name)
@@ -565,17 +607,7 @@ def extract_task_name(base_name):
     Returns:
         str: Nombre de la tarea o None si no se encuentra
     """
-    core_parts, _, has_description, base_count = _analyze_shotname(base_name)
-    if not core_parts:
-        return None
-
-    # Estructura base:
-    # - Standard: PROYECTO_SEQ_SHOT
-    # - Serie: PROYECTO_TEMP_EP_SEQ_SHOT
-    # Si hay descripción, suma DESC1_DESC2 antes de TASK
-    task_index = base_count + (2 if has_description else 0)
-
-    if len(core_parts) > task_index:
-        return core_parts[task_index]
-
-    return None
+    # Devuelve el bloque tal cual ("Compo", "aPlate"): normalizarlo es cosa
+    # del caller, con normalize_task_name().
+    _, task, _ = _analyze_shotname(base_name)
+    return task

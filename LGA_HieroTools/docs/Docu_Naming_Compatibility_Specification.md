@@ -9,7 +9,7 @@ Este documento describe la evolución del sistema de nomenclatura utilizado en l
 
 **Nota:** Este proyecto está basado en la experiencia previa del proyecto de Nuke (LGA_ToolPack), donde se implementó exitosamente la compatibilidad de nomenclatura. Ver sección "Referencia: Proyecto Nuke" al final del documento.
 
-**Actualización:** Se incorpora un bloque opcional de **Temporada/Episodio** inmediatamente después del proyecto cuando se trabaja en series (ej: `PROJB_101_060_010`).
+**Actualización:** El formato de series (`PROYECTO_TEMP_EP_SEQ_SHOT`) ya no se detecta: no se usa más. Ver "Sistema de Nomenclatura para Series" y "Técnica de Detección Implementada".
 
 ## Sistema de Nomenclatura Actual (Con Campos de Descripción)
 
@@ -89,46 +89,24 @@ PROYECTO_SEQ_SHOT_TASK_vVERSION.EXT
 - **Shot Code:** `SEQ_SHOT` (ej: `000_140`)
 - **Task:** `TASK` (ej: `comp`)
 
-## Sistema de Nomenclatura para Series (Con Bloque Temporada/Episodio)
+## Sistema de Nomenclatura para Series (ya no se detecta)
 
-### Estructura del Shotname
-El sistema para series agrega un bloque de temporada/episodio antes de la secuencia y el shot:
+Existió un formato con un bloque de temporada/episodio antes de la secuencia
+(`PROYECTO_TEMP_EP_SEQ_SHOT`, ej. `PROJB_101_060_010`). Se reconocía porque
+los tres bloques siguientes al proyecto empezaban con dígito, y entonces la
+base del shot pasaba a ser de 4 bloques.
 
-```
-PROYECTO_TEMP_EP_SEQ_SHOT
-```
+**Desde NamingUtils v1.22 esa detección no existe.** Ya no se usan series, y
+la regla rompía un caso real: un shot con descripción cuyo primer bloque es
+numérico, como `PROJA_000_115_010_Desc` (`SEQ=000`, `SHOT=115`,
+`DESC1=010`, `DESC2=Desc`). Se leía como serie con base de 4 y una sola
+descripción de dos bloques (`Desc_comp`), así que el shot code se llevaba la
+task y el Pull no encontraba ningún shot en la DB.
 
-**Ejemplo:**
-```
-PROJB_101_060_010
-```
-
-### Con Campos de Descripción
-```
-PROYECTO_TEMP_EP_SEQ_SHOT_DESC1_DESC2
-```
-
-**Ejemplo:**
-```
-PROJB_101_060_010_Chroma_Auto
-```
-
-### Campos y su Significado
-
-| Campo | Posición | Descripción | Ejemplo |
-|-------|----------|-------------|---------|
-| PROYECTO | 1 | Código del proyecto | `PROJB` |
-| TEMP_EP | 2 | Temporada/Episodio (3 dígitos) | `101` |
-| SEQ | 3 | Secuencia interna (3 dígitos) | `060` |
-| SHOT | 4 | Número de shot (3-4 dígitos) | `010` |
-| DESC1 | 5 | Primera descripción | `Chroma` |
-| DESC2 | 6 | Segunda descripción | `Auto` |
-| TASK | 7 | Nombre de la tarea | `comp` |
-| VERSION | 8 | Número de versión | `v19` |
-
-### Uso en Flow/ShotGrid (Series)
-- **Sequence:** `TEMP_EP` (ej: `101`)
-- **Shot Code:** Mantiene el bloque de temporada/episodio dentro del nombre del shot
+Un shot viejo de serie se sigue resolviendo bien cuando el archivo termina en
+una task con track o en un plate (por el ancla, ver más abajo). Lo que se
+pierde es el caso sin ancla: un archivo de serie sin task o con una disciplina
+CG al final.
 
 ## Sistema de Nomenclatura con Vendor Code
 
@@ -180,8 +158,11 @@ Los dos tienen un bloque alfabetico despues de dos bloques numericos. Solo la
 lista de vendors del proyecto permite decidir cual es cual.
 
 **Degradacion:** si PipeSync nunca sincronizo, la DB no existe o el proyecto no
-tiene vendors cargados, el naming se comporta como si no hubiera vendor. No hay
-fallback estructural, a proposito.
+tiene vendors cargados, el bloque no se reconoce como vendor. No hay fallback
+estructural, a proposito. Desde v1.22 eso solo afecta al shot code cuando el
+archivo NO termina en una task con track o un plate: con `_comp` el ancla
+resuelve `PROJA_1013_0800_VEN` igual, aunque `extract_vendor_token()` siga
+sin devolver el vendor (el acceso de vendor depende de la DB, no del ancla).
 
 ### Uso en Flow/ShotGrid (Vendor)
 - **Shot Code:** incluye el bloque del vendor (ej: `PROJA_1013_0800_VEN`)
@@ -242,40 +223,46 @@ if len(parts) >= 5:
 
 ### 🎯 **Detección Inteligente por Bloques Base**
 
-**Principio:** Primero se detecta si es serie; luego se determina si hay descripción.
+**Principio:** Primero se mira el último bloque antes de la versión. Si se lo
+reconoce, el shot es todo lo anterior. Solo si no se lo reconoce se cuentan
+bloques. Todo vive en `_analyze_shotname()`.
 
 **Lógica:**
 ```
-Si después del proyecto los 3 bloques siguientes empiezan con dígito:
-    → Formato de serie (base = 4 bloques: PROYECTO_TEMP_EP_SEQ_SHOT)
-Sino:
-    → Formato estándar (base = 3 bloques: PROYECTO_SEQ_SHOT)
+1. ANCLA
+Si el último bloque es una task con track (comp, roto, cleanup, cg, de
+LGA_NKS_TaskScope), un alias (compo) o un plate (aPlate, bPlate...: ^[a-z]plate$),
+y quedan al menos 3 bloques antes:
+    → task = ese bloque, shot = todo lo anterior
 
-Si el bloque que sigue al bloque base es un vendor code conocido (DB de PipeSync):
-    → El bloque base crece 1 (PROYECTO_SEQ_SHOT_VENDOR)
-
-Si el bloque es SUP:
-    → El bloque base también crece 1, sin consultar PipeSync
-
-Si existen al menos 2 bloques adicionales tras el bloque base:
-    → Formato con Descripción
-Sino:
-    → Formato Simplificado
+2. CONTEO (último bloque no reconocido: disciplinas CG en client, archivos sin task)
+Base = 3 bloques (PROYECTO_SEQ_SHOT), o 4 con el vendor adelante (PROYECTO_VENDOR_SEQ_SHOT)
+Si el bloque que sigue a la base es un vendor code conocido (DB de PipeSync) o SUP:
+    → La base crece 1 (PROYECTO_SEQ_SHOT_VENDOR)
+Si quedan al menos 2 bloques más:
+    → Son DESC1_DESC2 y forman parte del shot
+El bloque siguiente, si existe, es la task
 ```
 
-**Casos de Uso:**
-- `PROJA_000_140_comp_v19.exr` → **Simplificado** → Shot Code: `PROJA_000_140`
-- `PROJA_1013_0800_VEN_comp_v001.exr` → **Vendor** → Shot Code: `PROJA_1013_0800_VEN`
-- `PROJA_1013_0800_SUP_comp_v001.exr` → **Interno** → Shot Code: `PROJA_1013_0800_SUP`
-- `PROJA_000_140_Chroma_Auto_comp_v19.exr` → **Con Descripción** → Shot Code: `PROJA_000_140_Chroma_Auto`
-- `PROJB_101_060_010_comp_v05.exr` → **Serie Simplificado** → Shot Code: `PROJB_101_060_010`
-- `PROJB_101_060_010_Chroma_Auto_comp_v05.exr` → **Serie con Descripción** → Shot Code: `PROJB_101_060_010_Chroma_Auto`
+El ancla no depende de cuántos bloques tiene la descripción ni de que el vendor
+esté cargado en la DB. El conteo sí: supone descripciones de dos bloques y
+necesita la DB para reconocer un vendor.
 
-**Ventajas:**
-- ✅ **100% preciso** - No hay falsos positivos
-- ✅ **Automático** - Sin configuración manual
-- ✅ **Robusto** - Funciona con cualquier nombre de task o descripción
-- ✅ **Compatible** - Mantiene funcionamiento actual para formato con descripción
+**Casos de Uso:**
+- `PROJA_000_140_comp_v19.exr` → **ancla** → Shot Code: `PROJA_000_140`
+- `PROJA_1013_0800_VEN_comp_v001.exr` → **ancla** → Shot Code: `PROJA_1013_0800_VEN`
+- `PROJA_1013_0800_SUP_comp_v001.exr` → **ancla** → Shot Code: `PROJA_1013_0800_SUP`
+- `PROJA_000_140_Chroma_Auto_comp_v19.exr` → **ancla** → Shot Code: `PROJA_000_140_Chroma_Auto`
+- `PROJA_000_140_Chroma_comp_v19.exr` → **ancla** (descripción de un bloque) → Shot Code: `PROJA_000_140_Chroma`
+- `PROJA_000_115_010_Desc_comp_v001.exr` → **ancla** → Shot Code: `PROJA_000_115_010_Desc`
+- `PROJA_000_140_aPlate_v01_1001.exr` → **ancla** (plate) → Shot Code: `PROJA_000_140`
+- `PROJA_000_140_Chroma_Auto_layout_v001.exr` → **conteo** → Shot Code: `PROJA_000_140_Chroma_Auto`, task `layout`
+- `PROJA_1013_0800_VEN_layout_v001.exr` → **conteo** → con VEN en la DB: `PROJA_1013_0800_VEN`; sin VEN en la DB: `PROJA_1013_0800_VEN_layout` y sin task
+
+Medido contra los 513 shots de la DB local con 8 sufijos (comp, roto, cleanup,
+Compo, aPlate, lighting, layout y sin task): el parser anterior acertaba 4000
+de 4104 nombres y este acierta 4101. Los 3 que fallan son el único shot de
+serie, sin ancla.
 
 ## Estrategia de Solución
 
@@ -343,7 +330,7 @@ Sino:
 2. **Detección automática:** Cada script detecta automáticamente si hay descripción o no SIN configuración previa
 3. **Código centralizado:** Todas las funciones de naming están en un módulo compartido
 4. **Shot codes correctos:** Se generan códigos de shot correctos para Flow en ambos formatos
-5. **Soporte para series:** Se detecta el bloque TEMP_EP y se usa como secuencia en Flow
+5. **Ancla en task o plate:** si el último bloque es una task con track o un plate, el shot es todo lo anterior (las series ya no se detectan)
 6. **Sin errores:** No se producen errores independientemente del formato del nombre
 7. **Transparente para el usuario:** El usuario no necesita configurar nada, todo funciona automáticamente
 

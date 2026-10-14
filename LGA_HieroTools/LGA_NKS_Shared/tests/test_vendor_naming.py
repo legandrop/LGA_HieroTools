@@ -82,12 +82,39 @@ def _check_naming():
         ("PROJB_101_060_010_comp_v05.exr", "PROJB_101_060_010", "comp"),
         # vendor adelante (formato historico, se detecta por estructura)
         ("PROJA_VEN_1013_0800_comp_v001_%04d.exr", "PROJA_VEN_1013_0800", "comp"),
-        # PROJB esta en la DB SIN vendors cargados, asi que VEN no se reconoce y
-        # el nombre degrada al parseo previo (VEN_comp leidos como DESC1_DESC2).
-        # No es un bug del parser: es la DB diciendo que ese proyecto no tiene
-        # vendors. Se arregla cargando el vendor code en el Projects tab de
-        # PipeSync, no adivinando aca.
-        ("PROJB_1013_0800_VEN_comp_v001_%04d.exr", "PROJB_1013_0800_VEN_comp", None),
+        # PROJB esta en la DB SIN vendors cargados, asi que VEN no se reconoce
+        # como vendor. Igual resuelve porque comp ancla el shot (v1.22).
+        ("PROJB_1013_0800_VEN_comp_v001_%04d.exr", "PROJB_1013_0800_VEN", "comp"),
+        # Sin ancla (disciplina CG) el conteo si depende de la DB: VEN_layout se
+        # lee como DESC1_DESC2. Se arregla cargando el vendor en PipeSync.
+        ("PROJB_1013_0800_VEN_layout_v001_%04d.exr", "PROJB_1013_0800_VEN_layout", None),
+        # --- Ancla en task o plate (v1.22) ---
+        # El caso que fallaba: DESC1 numerico se confundia con una serie y el
+        # shot code se llevaba la task.
+        (
+            "PROJA_000_115_010_Desc_comp_v001_%04d.exr",
+            "PROJA_000_115_010_Desc",
+            "comp",
+        ),
+        (
+            "PROJA_000_115_010_Desc_aPlate_v01_1001.exr",
+            "PROJA_000_115_010_Desc",
+            "aPlate",
+        ),
+        ("PROJA_000_140_bPlate_v01_1001.exr", "PROJA_000_140", "bPlate"),
+        # descripcion de un solo bloque
+        ("PROJA_000_140_Chroma_comp_v001_%04d.exr", "PROJA_000_140_Chroma", "comp"),
+        ("PROJA_000_140_Chroma_Compo_v001_%04d.exr", "PROJA_000_140_Chroma", "Compo"),
+        ("PROJA_000_140_Chroma_Auto_roto_v002.exr", "PROJA_000_140_Chroma_Auto", "roto"),
+        # Sin ancla se cuenta con base de 3 bloques: ya no hay base de serie.
+        (
+            "PROJA_000_115_010_Desc_layout_v001_%04d.exr",
+            "PROJA_000_115_010_Desc",
+            "layout",
+        ),
+        ("PROJA_000_140_layout_v001_%04d.exr", "PROJA_000_140", "layout"),
+        # un shot nunca queda con menos de 3 bloques
+        ("PROJA_000_comp_v001.exr", "PROJA_000_comp", None),
     ]
     for file_name, shot_esperado, task_esperada in casos:
         shot, task = _parse(file_name)
@@ -156,11 +183,16 @@ def _check_shot_code_from_path():
 
 
 def _check_sin_db():
-    """Sin DB, el naming degrada al comportamiento previo al soporte de vendor."""
+    """Sin DB, solo degrada lo que no ancla en una task o plate conocidos."""
     shot, task = _parse("PROJA_1013_0800_VEN_comp_v000_%04d.exr")
     _expect(
-        shot == "PROJA_1013_0800_VEN_comp",
-        "Sin DB el shot_code deberia degradar, dio {0!r}".format(shot),
+        (shot, task) == ("PROJA_1013_0800_VEN", "comp"),
+        "Sin DB, comp tiene que seguir anclando el shot, dio {0!r}".format((shot, task)),
+    )
+    shot, task = _parse("PROJA_1013_0800_VEN_layout_v000_%04d.exr")
+    _expect(
+        shot == "PROJA_1013_0800_VEN_layout",
+        "Sin DB y sin ancla el shot_code deberia degradar, dio {0!r}".format(shot),
     )
     _expect(task is None, "Sin DB la task deberia ser None, dio {0!r}".format(task))
 

@@ -12,6 +12,10 @@ platforms: [win, mac]
 
 ## Unreleased
 
+## v4.01
+- [fixed] Flow Pull, Push, Shot Info and the other Flow tools find shots whose name has a single description block or a description that starts with a number, instead of reporting that they aren't in PipeSync.
+- [improved] When Flow Pull finds none of the timeline shots, the warning tells you whether the project is missing from PipeSync or the shot names don't match Flow, and lists the names it searched for.
+
 ## v4.00
 - [improved] Flow Shot Info separates the responsible artists from Viewers who retain task access, while preserving version and assignment history.
 - [new] Drop a Nuke Studio or Hiero 17 project onto the Projects panel to save a separate Nuke 16.0 copy, with an editable next-version name, a folder chooser and an explicit choice to discard incompatible annotations.

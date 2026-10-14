@@ -1,3 +1,6 @@
+v4.01:
+El Pull no encontraba ningún shot de un proyecto cuyo nombre lleva un primer bloque de descripción numérico (`PROJA_000_115_010_Desc`), y el cartel culpaba a la sincronización con la DB completa. La detección de series (tres bloques numéricos tras el proyecto) lo leía como `TEMP_EP_SEQ_SHOT` y el shot code se llevaba la task. NamingUtils v1.22 ancla el shot en el último bloque cuando es una task con track o un plate (el shot es todo lo anterior) y saca las series: el conteo queda solo para lo que no se reconoce. Contra los 513 shots de la DB local pasa de 4000 a 4101 aciertos sobre 4104 nombres. El cartel del Pull (v3.72) distingue proyecto ausente de nombres que no coinciden y lista lo buscado. GetClip v1.90 borra su copia muerta del parser. [ Flow Naming - Anclar el shot en la task y sacar series ]
+
 v4.00:
 Shot Info distingue grupos de acceso e identidades desconocidas utilizando tipo e ID de las asignaciones sincronizadas en PipeSync. Sólo HumanUser con ID acreditado puede mostrarse como responsable; una base anterior conserva nombres bajo Assigned (type unavailable). La lectura mantiene Viewer, acceso e historial y no modifica ni migra bases desde Hiero. [ Flow Shot Info - Grupos e identidad desconocida ]
 
