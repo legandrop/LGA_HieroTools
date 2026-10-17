@@ -1,4 +1,6 @@
 v4.021:
+Flow Thumbs tenia un refresh del viewer con `Viewer.flushCache()` sin reanudar el cacheo, el mismo llamado que colgaba el viewer con BurnIn. No lo llamaba nadie: se borra para que no se reactive (`LGA_NKS_Flow_Thumbs v1.04`). Medido por dev-link en NKS 17.0v4 antes y despues: la captura del thumbnail (apaga el track BurnIn, zoom to fill, espera y lee el viewer) no deja el cacheo pausado y el viewer sigue dibujando al mover el playhead. [ Flow Thumbs - Sacar el refresh con flushCache ]
+
 Al agregar el soft effect LGA BurnIn el viewer del timeline se colgaba: mover el playhead no cambiaba la imagen hasta pasar a otro timeline y volver. La causa era el refresh que corria en cada knobChanged del efecto: `Viewer.flushCache()` pausa el cacheo del viewer en diferido (~140 ms despues), el `resumeCaching()` inmediato no llegaba a deshacerlo, y con el cacheo pausado el viewer no dibuja frames nuevos. El onCreate escribe knobs del efecto, asi que pasaba siempre al agregarlo. Se saca el flush: medido por dev-link que el cambio de un knob ya re-renderiza el frame actual, rotacion incluida (`LGA_NKS_BurnIn v1.05`). [ BurnIn - Viewer colgado al agregar el efecto ]
 
 v4.020:

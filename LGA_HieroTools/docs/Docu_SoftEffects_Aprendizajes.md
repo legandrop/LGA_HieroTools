@@ -327,8 +327,15 @@ frame cacheado") probablemente estaba contaminada por esta misma pausa.
 Herramientas de diagnostico utiles: `viewer.isCachingPaused()`,
 `viewer.frameDisplayed` (signal), `viewer.image()` (QImage del frame mostrado,
 sirve para capturar sin control de pantalla). `hiero.ui.updateViewer()` pide
-dos argumentos: no se usa. Ojo: `LGA_NKS_Flow_Thumbs` tambien llama a
-`flushCache()` sin reanudar.
+dos argumentos: no se usa.
+
+`LGA_NKS_Flow_Thumbs` tenia un `force_viewer_refresh_conservative()` con el
+mismo `flushCache()` sin reanudar, pero no lo llamaba nadie: se borro en v1.04
+para que nadie lo reactive. La captura real (apagar el track BurnIn, zoom to
+fill, 0,5 s con eventos, `viewer.image()`, restaurar) se midio el 17-10 en NKS
+17.0v4: `isCachingPaused()` False a 0, 0,8 y 1,6 s, y al mover el playhead el
+viewer dibuja el frame nuevo. Apagar el track alcanza para que el viewer
+re-renderice: no hace falta ningun flush.
 
 ## Medir texto por API vs en render (medido 01-09)
 

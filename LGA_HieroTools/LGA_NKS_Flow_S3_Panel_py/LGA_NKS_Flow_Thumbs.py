@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Thumbs v1.03 | Lega
+  LGA_NKS_Flow_Thumbs v1.04 | Lega
 
   Crea un snapshot del viewer actual con zoom to fill y lo guarda en <drive>/<proyecto>/Thumbs.
   Organiza por nombre de proyecto extraído del archivo.
@@ -10,6 +10,9 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v1.04: Fuera force_viewer_refresh_conservative(): no la llamaba nadie y
+         usaba Viewer.flushCache(), que deja el viewer congelado. Medido
+         en NKS 17.0v4: la captura no deja el cacheo pausado.
   v1.03: La captura compartida apaga el VideoTrack BurnIn, espera el refresco
          del viewer antes de leerlo y restaura el estado aun si falla.
   v1.02: Project name extraído desde el segmento VFX-NOMBRE del path del archivo
@@ -202,34 +205,10 @@ def get_shot_name_from_selected_clip():
     return sequence_name
 
 
-def force_viewer_refresh_conservative():
-    """
-    Fuerza el refresh del viewer usando métodos conservadores que no rompan el player.
-    """
-    debug_print("🔄 Iniciando refresh conservador del viewer...")
-
-    try:
-        viewer = hiero.ui.currentViewer()
-        if not viewer:
-            debug_print("❌ No hay viewer activo")
-            return False
-
-        # Método 1: Solo flush cache básico
-        viewer.flushCache()
-        debug_print("✅ viewer.flushCache() aplicado")
-
-        # Método 2: Procesar eventos Qt una sola vez
-        QApplication.processEvents()
-        debug_print("✅ QApplication.processEvents() ejecutado")
-
-        # NO usar hiero.ui.flushAllViewersCache() - puede ser demasiado agresivo
-        # NO mover el tiempo del viewer - puede causar problemas
-        # NO usar QTimer.singleShot - puede causar conflictos
-
-        return True
-    except Exception as e:
-        debug_print(f"❌ Error en force_viewer_refresh_conservative: {e}")
-        return False
+# NO llamar a Viewer.flushCache() para refrescar el viewer: pausa el cacheo en
+# diferido (~140 ms) y el viewer deja de dibujar frames nuevos hasta cambiar de
+# timeline. Apagar el track BurnIn ya hace que el viewer re-renderice el frame.
+# Ver docs/Docu_SoftEffects_Aprendizajes.md, "Refrescar el viewer...".
 
 
 def zoom_to_fill_simple():
@@ -326,7 +305,7 @@ def get_next_available_filename(base_path, shot_name):
 
 def main():
     _reset_log()
-    debug_print("🚀 Iniciando LGA_NKS_Flow_Thumbs v1.03...")
+    debug_print("🚀 Iniciando LGA_NKS_Flow_Thumbs v1.04...")
 
     # Obtener el nombre del proyecto
     project_name = get_project_name_from_clip()
