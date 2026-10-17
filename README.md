@@ -354,6 +354,10 @@ Project browser and sequence switcher built around the studio's project structur
   with the preferred columns and rows sorted by Clip.
 - **Collapse / expand**
   Clicking the name or the triangle of an open project collapses or expands its sequences without closing it.
+- **Save incremental (floppy with +)**  
+  Appears when hovering an open project. Saves it as the next version (v012 → v013). If a newer version already exists on disk, it asks before saving as the next free number; it never overwrites a file.
+- **Upload to Wasabi (cloud with arrow)**  
+  Appears when hovering an open project. Uploads that project file to its mirror on Wasabi through FileManager S3, which shows the progress in its Activity tab. The icon spins while uploading, shows a check when done, and a warning with the reason if it failed (click it to retry). Asks first if the project has unsaved changes. Requires a FileManager S3 version that supports single-file uploads.
 - **Close project (×)**  
   Appears when hovering an open project. Asks before discarding unsaved changes, and jumps to another open project if the closed one was active.
 - **Refresh** — Bold circular-arrow icon. Re-scans projects.

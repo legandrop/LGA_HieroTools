@@ -3,10 +3,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectItem v1.04 | Lega
+  LGA_NKS_ProjectItem v1.05 | Lega
 
   Widget personalizado para mostrar proyectos y secuencias en el panel de proyectos LGA.
 
+  v1.05: Iconos Save incremental (disquete con +) y Upload to Wasabi (nube con
+         flecha) antes de la x, con el mismo trazo. RowIconButton los dibuja
+         con QPainter y tokens de Color: hover gris, y en upload spinner,
+         check o error. El estado de la subida vive en el panel y sobrevive
+         al rearmado de la lista. Tras guardar, el nombre se ilumina un momento.
   v1.04: El triangulo pasa a ser un label propio con hover compartido con el
          nombre (los dos hacen lo mismo y se iluminan juntos). Un proyecto
          abierto se colapsa y expande sin cerrarlo, y el estado sobrevive al
@@ -21,6 +26,7 @@ ____________________________________________________________________
 """
 
 # Forzar recarga del módulo para evitar problemas de cache en Nuke
+import os
 import sys
 if 'LGA_NKS_ProjectItem' in sys.modules:
     import importlib
@@ -78,12 +84,220 @@ def _close_icon(color, dpr=1.0, size=CLOSE_ICON_SIZE):
     return QtGui.QIcon(pixmap)
 
 
+# Iconos de accion de la fila (Save incremental, Upload to Wasabi): misma caja
+# que la x y glifo de 12 px dibujado con el mismo trazo de 1.6 px, para que los
+# tres se lean como familia. Diseno elegido en
+# +Building_Blocks/Mockups/ProjectsPanel_RowIcons_Mockup.html (S1 y U1).
+ACTION_GLYPH_SIZE = 12
+ACTION_PEN_WIDTH = 1.6
+SPINNER_INTERVAL_MS = 50
+# Tras una subida correcta el check queda este tiempo y vuelve al icono.
+UPLOAD_OK_HOLD_MS = 2500
+# Tras un Save incremental el nombre queda iluminado este tiempo.
+SAVE_FLASH_MS = 1200
+
+# Estados del boton de upload. El error queda hasta el proximo click: su
+# motivo tiene que poder leerse en el tooltip.
+STATE_IDLE = "idle"
+STATE_BUSY = "busy"
+STATE_OK = "ok"
+STATE_ERROR = "error"
+
 # Tooltips en un solo lugar: van a pasar a ser bilingues y asi la migracion es
 # un cambio de datos, no de widgets.
 TOOLTIPS = {
     "toggle": "Colapsar / expandir las secuencias (no cierra el proyecto)",
     "close": "Cerrar el proyecto. Si tiene cambios sin guardar, pregunta antes",
+    "save": "Guardar versión incremental: {current} → {next}",
+    "save_unknown": "Guardar versión incremental (sube un número de versión)",
+    "upload": "Subir {name} a Wasabi con FileManager S3",
+    "upload_busy": "Subiendo {name} a Wasabi… El progreso está en la pestaña Activity de FileManager S3",
+    "upload_ok": "{name} subido a Wasabi",
+    "upload_error": "No se pudo subir {name}: {message}\nClick para reintentar",
 }
+
+
+def _save_glyph_path():
+    """S1: disquete con un + en la esquina. Devuelve (cuerpo, recorte, plus) en viewBox 16."""
+    body = QtGui.QPainterPath()
+    body.moveTo(2.0, 2.0)
+    body.lineTo(9.6, 2.0)
+    body.lineTo(12.5, 4.9)
+    body.lineTo(12.5, 12.5)
+    body.lineTo(2.0, 12.5)
+    body.closeSubpath()
+    body.moveTo(4.6, 2.0)
+    body.lineTo(4.6, 4.8)
+    body.lineTo(9.2, 4.8)
+    body.lineTo(9.2, 2.0)
+    # El + va recortado del disquete: un circulo de aire alrededor.
+    cutout = QtGui.QPainterPath()
+    cutout.addEllipse(QtCore.QPointF(12.2, 12.2), 4.4, 4.4)
+    plus = QtGui.QPainterPath()
+    plus.moveTo(12.2, 9.7)
+    plus.lineTo(12.2, 14.7)
+    plus.moveTo(9.7, 12.2)
+    plus.lineTo(14.7, 12.2)
+    return body, cutout, plus
+
+
+def _upload_glyph_path():
+    """U1: nube con flecha hacia arriba. Devuelve (nube, recorte, flecha) en viewBox 16."""
+    cloud = QtGui.QPainterPath()
+    cloud.addEllipse(QtCore.QPointF(4.45, 9.6), 3.0, 3.0)
+    top = QtGui.QPainterPath()
+    top.addEllipse(QtCore.QPointF(8.45, 7.5), 4.25, 4.25)
+    right = QtGui.QPainterPath()
+    right.addEllipse(QtCore.QPointF(12.2, 9.45), 3.15, 3.15)
+    base = QtGui.QPainterPath()
+    base.addRect(QtCore.QRectF(4.45, 9.0, 7.75, 3.6))
+    cloud = cloud.united(top).united(right).united(base).simplified()
+    # La flecha sale de la nube por abajo: se abre un hueco en el borde.
+    cutout = QtGui.QPainterPath()
+    cutout.addRect(QtCore.QRectF(5.6, 11.4, 4.8, 3.0))
+    arrow = QtGui.QPainterPath()
+    arrow.moveTo(8.0, 14.2)
+    arrow.lineTo(8.0, 7.8)
+    arrow.moveTo(5.8, 10.0)
+    arrow.lineTo(8.0, 7.8)
+    arrow.lineTo(10.2, 10.0)
+    return cloud, cutout, arrow
+
+
+def _check_glyph_path():
+    path = QtGui.QPainterPath()
+    path.moveTo(3.0, 8.4)
+    path.lineTo(6.5, 11.8)
+    path.lineTo(13.0, 4.6)
+    return None, None, path
+
+
+def _warning_glyph_path():
+    path = QtGui.QPainterPath()
+    path.moveTo(8.0, 2.5)
+    path.lineTo(14.0, 13.2)
+    path.lineTo(2.0, 13.2)
+    path.closeSubpath()
+    path.moveTo(8.0, 6.6)
+    path.lineTo(8.0, 9.4)
+    path.moveTo(8.0, 11.4)
+    path.lineTo(8.0, 11.5)
+    return None, None, path
+
+
+_GLYPHS = {
+    "save": _save_glyph_path,
+    "upload": _upload_glyph_path,
+    "check": _check_glyph_path,
+    "warning": _warning_glyph_path,
+}
+
+
+class RowIconButton(QtWidgets.QAbstractButton):
+    """
+    Boton de icono de la fila de proyecto, dibujado a mano.
+
+    No hay hoja de estilo para un boton plano con hover gris: BTN_ICON trae
+    caja y borde, y BTN_CLOSE pinta de rojo. Se dibuja con QPainter y los
+    tokens de Color, sin QSS propio. Ademas tiene que poder mostrar estados
+    (spinner, check, error), que un QPushButton con QSS no resuelve.
+    """
+
+    def __init__(self, glyph, parent=None):
+        super(RowIconButton, self).__init__(parent)
+        self.glyph = glyph
+        self.state = STATE_IDLE
+        self._angle = 0
+        self._spinner = QtCore.QTimer(self)
+        self._spinner.setInterval(SPINNER_INTERVAL_MS)
+        self._spinner.timeout.connect(self._advance_spinner)
+        self.setFixedSize(CLOSE_BUTTON_SIZE, CLOSE_BUTTON_SIZE)
+        self.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.setAttribute(QtCore.Qt.WA_Hover, True)
+        policy = self.sizePolicy()
+        policy.setRetainSizeWhenHidden(True)
+        self.setSizePolicy(policy)
+
+    def set_state(self, state):
+        self.state = state
+        if state == STATE_BUSY:
+            self._spinner.start()
+        else:
+            self._spinner.stop()
+        self.update()
+
+    def _advance_spinner(self):
+        self._angle = (self._angle + 30) % 360
+        self.update()
+
+    def enterEvent(self, event):
+        self.update()
+        super(RowIconButton, self).enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.update()
+        super(RowIconButton, self).leaveEvent(event)
+
+    def sizeHint(self):
+        return QtCore.QSize(CLOSE_BUTTON_SIZE, CLOSE_BUTTON_SIZE)
+
+    def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        hovered = self.underMouse() and self.state in (STATE_IDLE, STATE_ERROR)
+        if hovered:
+            painter.setPen(QtCore.Qt.NoPen)
+            painter.setBrush(QtGui.QColor(Color.SURFACE_HOVER))
+            painter.drawRoundedRect(QtCore.QRectF(self.rect()), 3, 3)
+
+        if self.state == STATE_BUSY:
+            self._paint_spinner(painter)
+        elif self.state == STATE_OK:
+            self._paint_glyph(painter, "check", Color.OK_TEXT)
+        elif self.state == STATE_ERROR:
+            self._paint_glyph(painter, "warning", Color.ERROR_TEXT)
+        else:
+            self._paint_glyph(painter, self.glyph, Color.TEXT_STRONG if hovered else Color.TEXT)
+        painter.end()
+
+    def _paint_glyph(self, painter, glyph, color):
+        outline, cutout, stroke = _GLYPHS[glyph]()
+        scale = ACTION_GLYPH_SIZE / 16.0
+        offset = (CLOSE_BUTTON_SIZE - ACTION_GLYPH_SIZE) / 2.0
+        painter.save()
+        painter.translate(offset, offset)
+        painter.scale(scale, scale)
+        pen = QtGui.QPen(QtGui.QColor(color))
+        pen.setWidthF(ACTION_PEN_WIDTH / scale)  # grosor visual igual al de la x
+        pen.setCapStyle(QtCore.Qt.RoundCap)
+        pen.setJoinStyle(QtCore.Qt.RoundJoin)
+        painter.setPen(pen)
+        painter.setBrush(QtCore.Qt.NoBrush)
+        if outline is not None:
+            painter.save()
+            if cutout is not None:
+                visible = QtGui.QPainterPath()
+                visible.addRect(QtCore.QRectF(-4, -4, 24, 24))
+                painter.setClipPath(visible.subtracted(cutout))
+            painter.drawPath(outline)
+            painter.restore()
+        painter.drawPath(stroke)
+        painter.restore()
+
+    def _paint_spinner(self, painter):
+        radius = ACTION_GLYPH_SIZE / 2.0 - 1.0
+        center = QtCore.QPointF(self.width() / 2.0, self.height() / 2.0)
+        rect = QtCore.QRectF(center.x() - radius, center.y() - radius, radius * 2, radius * 2)
+        track = QtGui.QPen(QtGui.QColor(Color.BORDER_STRONG))
+        track.setWidthF(2.0)
+        painter.setPen(track)
+        painter.drawEllipse(rect)
+        arc = QtGui.QPen(QtGui.QColor(Color.INFO))
+        arc.setWidthF(2.0)
+        arc.setCapStyle(QtCore.Qt.RoundCap)
+        painter.setPen(arc)
+        # drawArc va en 1/16 de grado, antihorario desde las 3
+        painter.drawArc(rect, int((90 - self._angle) * 16), int(-100 * 16))
 
 # Importar funciones necesarias del módulo principal
 # Estas serán importadas desde el archivo principal cuando se importe este módulo
@@ -187,6 +401,17 @@ class ProjectItem(QtWidgets.QWidget):
         self.update_button.clicked.connect(self.on_update_click)
         project_layout.addWidget(self.update_button)
 
+        # Save incremental y Upload to Wasabi: antes de la x, que queda ultima
+        # para que el mouse no caiga en cerrar al ir a guardar. Igual que la x,
+        # solo en proyectos abiertos y con el mouse sobre la fila; el de upload
+        # queda visible mientras sube y mientras muestra el resultado.
+        self.save_button = RowIconButton("save")
+        self.upload_button = RowIconButton("upload")
+        project_layout.addSpacing(3)  # aire entre el ")" del nombre y el primer icono
+        for button in (self.save_button, self.upload_button):
+            button.setVisible(False)
+            project_layout.addWidget(button)
+
         # Boton de cerrar: pegado al nombre (despues de la flecha de update, si
         # esta), solo en proyectos abiertos y solo con el mouse sobre la fila.
         # Reserva su lugar oculto para que la fila no salte al aparecer.
@@ -214,6 +439,11 @@ class ProjectItem(QtWidgets.QWidget):
         project_container.enterEvent = lambda event: self._set_close_visible(True)
         project_container.leaveEvent = lambda event: self._set_close_visible(False)
         self.project_container = project_container
+        self._row_hovered = False
+        self._upload_tooltip_name = ""
+        self._upload_ok_timer = QtCore.QTimer(self)
+        self._upload_ok_timer.setSingleShot(True)
+        self._upload_ok_timer.timeout.connect(lambda: self.set_upload_state(STATE_IDLE))
 
         layout.addWidget(project_container)
 
@@ -263,13 +493,27 @@ class ProjectItem(QtWidgets.QWidget):
             label.setProperty("hover_color", hover_color)
             label.setProperty("is_project_label", True)  # Para distinguir del resto
         self._paint_title("base_color")
+        if (
+            self.is_open
+            and self.panel is not None
+            and hasattr(self.panel, "take_flash_after_save")
+            and self.panel.take_flash_after_save(self.project_key())
+        ):
+            # Recien guardado como v+1: el nombre se ilumina un momento. Sin cartel.
+            self._paint_title("hover_color")
+            QtCore.QTimer.singleShot(SAVE_FLASH_MS, self._end_save_flash)
 
         if self.is_open and self.sequences and not self.collapsed:
             self.show_sequences()
         else:
             self.sequences_widget.hide()
-        if not self.is_open:
-            self.close_button.setVisible(False)
+        if self.panel is not None and hasattr(self.panel, "upload_state_for"):
+            # La subida sigue aunque la lista se rearme: el estado vive en el panel
+            state, message, file_name = self.panel.upload_state_for(self.project_key())
+            self.upload_button.set_state(state)
+            self._upload_tooltip_name = file_name or self._upload_tooltip_name
+            self._apply_upload_tooltip(message)
+        self._set_close_visible(self._row_hovered)
 
         # Debug: mostrar exactamente qué texto se está configurando
         debug_print(f"UI: Configurando texto para {project_name}: '{display_text}' (longitud: {len(display_text)})")
@@ -431,11 +675,85 @@ class ProjectItem(QtWidgets.QWidget):
         )
 
     def _set_close_visible(self, visible):
-        """La x aparece con el mouse sobre la fila, y solo en proyectos abiertos."""
+        """Los iconos aparecen con el mouse sobre la fila, y solo en proyectos abiertos."""
         try:
-            self.close_button.setVisible(bool(visible and self.is_open))
+            self._row_hovered = bool(visible)
+            show = bool(visible and self.is_open)
+            if show:
+                self._refresh_action_tooltips()
+            self.close_button.setVisible(show)
+            self.save_button.setVisible(show)
+            # Mientras sube o muestra el resultado, el de upload no depende del hover
+            busy = self.upload_button.state != STATE_IDLE
+            self.upload_button.setVisible(bool(self.is_open and (show or busy)))
         except RuntimeError:
             pass  # la fila ya se destruyo (rearmado de la lista)
+
+    def _end_save_flash(self):
+        try:
+            if not self.project_label.underMouse() and not self.toggle_label.underMouse():
+                self._paint_title("base_color")
+        except RuntimeError:
+            pass  # la fila ya se destruyo
+
+    def project_key(self):
+        """Clave estable de la fila: sobrevive al rearmado y al cambio de version."""
+        return self.project_info.get("nombre_base", "")
+
+    def open_project_path(self):
+        """Ruta del .hrox ABIERTO (puede no ser la mas alta del disco)."""
+        proyecto = self.project_info.get("proyecto_abierto") or self.project_info.get("proyecto_obj")
+        try:
+            if proyecto is not None and proyecto.path():
+                return proyecto.path()
+        except Exception:
+            pass
+        return self.project_info.get("ruta_hrox", "")
+
+    def _refresh_action_tooltips(self):
+        """Tooltips de save y upload con la version y el archivo reales."""
+        from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectRowActions import split_version
+
+        path = self.open_project_path()
+        parts = split_version(path) if path else None
+        if parts:
+            _folder, _prefix, number, _suffix = parts
+            next_number = str(int(number) + 1).zfill(len(number))
+            self.save_button.setToolTip(
+                TOOLTIPS["save"].format(current="v" + number, next="v" + next_number)
+            )
+        else:
+            self.save_button.setToolTip(TOOLTIPS["save_unknown"])
+        self._upload_tooltip_name = os.path.basename(path) if path else self.project_key()
+        self._apply_upload_tooltip()
+
+    def _apply_upload_tooltip(self, message=""):
+        name = self._upload_tooltip_name or self.project_key()
+        state = self.upload_button.state
+        if state == STATE_BUSY:
+            text = TOOLTIPS["upload_busy"].format(name=name)
+        elif state == STATE_OK:
+            text = TOOLTIPS["upload_ok"].format(name=name)
+        elif state == STATE_ERROR:
+            text = TOOLTIPS["upload_error"].format(name=name, message=message or "error")
+        else:
+            text = TOOLTIPS["upload"].format(name=name)
+        self.upload_button.setToolTip(text)
+
+    def set_upload_state(self, state, message="", file_name=""):
+        """Lo llama el panel: spinner, check o error en el icono de upload."""
+        try:
+            if file_name:
+                self._upload_tooltip_name = file_name
+            self.upload_button.set_state(state)
+            self._apply_upload_tooltip(message)
+            if state == STATE_OK:
+                self._upload_ok_timer.start(UPLOAD_OK_HOLD_MS)
+            else:
+                self._upload_ok_timer.stop()
+            self._set_close_visible(self._row_hovered)
+        except RuntimeError:
+            pass  # la fila ya se destruyo
 
     def toggle_collapsed(self):
         """Colapsa o expande las secuencias. Solo el panel: no toca Hiero."""

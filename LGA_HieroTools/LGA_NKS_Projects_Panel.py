@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.50 | Lega
+  LGA_NKS_Projects_Panel v2.51 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,11 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.51: Save incremental y Upload to Wasabi desde la fila del proyecto.
+         save_incremental() guarda con saveAs() como v+1 y pregunta si en
+         disco ya hay una version mayor. upload_project() lanza FileManager
+         S3 con --upload-file y --notify-completion, y un timer lee los
+         marcadores de logs/upload_project_done/ para mostrar ok o error.
   v2.50: El drop de .hrox ofrece guardar una copia compatible con NKS 16,
          sin importarla como media ni exigir un timeline activo.
   v2.49: El switch Studio/Client escribe siempre en el INI de cambio local
@@ -127,6 +132,7 @@ import importlib
 import importlib.util
 import sys
 import configparser
+import subprocess
 import time
 from pathlib import Path
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt, is_widget_alive
@@ -145,8 +151,9 @@ from LGA_NKS_Shared.LGA_NKS_Project_Colors_Config import (
     get_project_colors_db_path,
     load_project_colors as load_project_colors_from_db,
 )
-from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning, ask_save_discard_cancel
+from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning, ask_save_discard_cancel, ask_question
 from LGA_NKS_Projects_Panel_py import LGA_NKS_TimelineMemory as timeline_memory
+from LGA_NKS_Projects_Panel_py import LGA_NKS_ProjectRowActions as row_actions
 from LGA_NKS_Edit_Panel_py import LGA_import_shots_timeline as timeline_mod
 from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectMediaPreview import (
     ProjectMediaPreviewDialog,
@@ -198,6 +205,12 @@ POST_OPEN_TIMEOUT_MS = 3000
 # hasta el final de la post-apertura. Sin esto se ve el timeline que abre Hiero
 # y los restos del proyecto anterior antes de que arranque el switch.
 FREEZE_DURING_PROJECT_OPEN = True
+
+# Cada cuanto se mira la carpeta de marcadores mientras hay subidas a Wasabi.
+# El timer corre solo con subidas pendientes.
+UPLOAD_POLL_MS = 1000
+# Carpeta del wrapper de FileManager S3 en macOS (fm_cli_mac.sh)
+FILEMANAGERS3_SCRIPT_DIR = os.path.join(os.path.dirname(__file__), "LGA_NKS_Flow_S3_Panel_py")
 
 # Primer grupo de formatos para el drop de media. Las secuencias JPG/PNG/EXR
 # no se arman a mano: hiero.core.Clip reconoce la secuencia desde cualquiera
@@ -381,7 +394,14 @@ except ImportError as e:
 
 # Importar módulo ProjectItem
 try:
-    from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectItem import ProjectItem, initialize_dependencies
+    from LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectItem import (
+        ProjectItem,
+        initialize_dependencies,
+        STATE_BUSY,
+        STATE_ERROR,
+        STATE_IDLE,
+        STATE_OK,
+    )
     # Inicializar dependencias del módulo ProjectItem
     initialize_dependencies(get_project_colors, debug_print, switch_to_sequence)
     debug_print("✅ Módulo LGA_NKS_ProjectItem importado exitosamente")
@@ -504,6 +524,14 @@ class ProjectsPanel(QtWidgets.QWidget):
         # Proyectos abiertos que el usuario colapso (por nombre_base). Estado del
         # panel: sobrevive al rearmado de la lista, no a reabrir NKS.
         self.collapsed_projects = set()
+        # Subidas a Wasabi lanzadas desde la fila, por nombre_base. Viven en el
+        # panel y no en la fila porque la lista se rearma mientras suben.
+        self._uploads = {}
+        self._upload_poll_timer = QtCore.QTimer(self)
+        self._upload_poll_timer.setInterval(UPLOAD_POLL_MS)
+        self._upload_poll_timer.timeout.connect(self._poll_upload_markers)
+        # Filas a iluminar al rearmarse despues de un Save incremental
+        self._flash_after_save = {}
         self._drop_has_supported_media = False
         self._drop_overlay = None
         self._project_conversion_dialog = None
@@ -1498,6 +1526,212 @@ class ProjectsPanel(QtWidgets.QWidget):
                 debug_print(f"[Cerrar] Vuelta a '{target}' de {project.name()}")
                 return
         debug_print("[Cerrar] No hay otro proyecto abierto en el panel: sin timeline")
+
+    # =========================
+    #   SAVE INCREMENTAL
+    # =========================
+    def save_incremental(self, project, item):
+        """
+        Guarda el proyecto abierto como version +1 (v012 -> v013), como File >
+        Save As con el numero subido.
+
+        Si en disco ya hay una version mayor (la guardo otro, o hay una v014
+        suelta), pregunta si guardar como la mas alta +1: nunca pisa un archivo.
+        """
+        try:
+            name, path = project.name(), project.path()
+        except Exception as e:
+            debug_print(f"[SaveIncremental] Proyecto invalido: {e}")
+            return
+
+        plan = row_actions.plan_incremental_save(path)
+        debug_print(f"[SaveIncremental] {name} | path={path} | plan={plan}")
+        if not plan["ok"]:
+            show_warning(self, "Save incremental", plan["error"])
+            return
+
+        target, label = plan["next_path"], plan["next_label"]
+        if plan["conflict"]:
+            if os.path.exists(plan["next_path"]):
+                reason = f"{os.path.basename(plan['next_path'])} already exists on disk."
+            else:
+                reason = f"There is already a newer version on disk ({plan['highest_label']})."
+            text = f"{reason}\n\nSave {name} as {plan['free_label']} instead?"
+            if not ask_question(
+                self, "Save incremental", text,
+                yes_text=f"Save as {plan['free_label']}", no_text="Cancel",
+            ):
+                debug_print("[SaveIncremental] Cancelado por conflicto de version")
+                return
+            target, label = plan["free_path"], plan["free_label"]
+
+        if os.path.exists(target):  # carrera: aparecio entre el plan y ahora
+            show_warning(self, "Save incremental", f"{os.path.basename(target)} already exists.")
+            return
+
+        try:
+            project.saveAs(target)
+        except Exception as e:
+            debug_print(f"[SaveIncremental] saveAs fallo: {e}")
+            show_warning(self, "Save incremental", f"Couldn't save {os.path.basename(target)}:\n{e}")
+            return
+
+        # Lo pedido contra lo que quedo: la API de saveAs esta poco documentada.
+        # Foundry anota que con kProjectSaveDontChangeProjectPath deja el path
+        # vacio; sin flags deberia quedar apuntando al archivo nuevo.
+        try:
+            after_path, after_name = project.path(), project.name()
+        except Exception:
+            after_path, after_name = "", ""
+        debug_print(
+            f"[SaveIncremental] pedido={target} | existe={os.path.exists(target)} "
+            f"| path despues={after_path} | name despues={after_name}"
+        )
+        if not os.path.exists(target):
+            show_warning(self, "Save incremental", f"{os.path.basename(target)} wasn't written to disk.")
+            return
+        if row_actions.normalize_path(after_path) != row_actions.normalize_path(target):
+            try:
+                project.setPath(target)
+                debug_print(f"[SaveIncremental] path corregido a {target}")
+            except Exception as e:
+                debug_print(f"[SaveIncremental] setPath fallo: {e}")
+
+        self._flash_after_save[item.project_key()] = time.time()
+        self.start_scan()
+
+    def take_flash_after_save(self, key):
+        """La fila rearmada pregunta si tiene que iluminar su version (una sola vez)."""
+        started = self._flash_after_save.pop(key, None)
+        return bool(started and time.time() - started < 15)
+
+    # =========================
+    #   UPLOAD TO WASABI
+    # =========================
+    def upload_state_for(self, key):
+        """(estado, mensaje, archivo) de la subida de una fila, para pintarla al rearmarse."""
+        entry = self._uploads.get(key)
+        if not entry:
+            return STATE_IDLE, "", ""
+        return entry["state"], entry.get("message", ""), entry.get("file", "")
+
+    def _set_upload_state(self, key, state, message="", file_name=""):
+        entry = self._uploads.get(key)
+        if state in (STATE_IDLE, STATE_OK):
+            # El check lo sostiene la fila; el panel ya no tiene nada pendiente
+            self._uploads.pop(key, None)
+        elif entry is not None:
+            entry["state"], entry["message"] = state, message
+        item = self.project_items.get(key)
+        if item is not None:
+            item.set_upload_state(state, message, file_name or (entry or {}).get("file", ""))
+
+    def upload_project(self, project, item):
+        """
+        Sube el .hrox abierto a su espejo en Wasabi con FileManager S3
+        (--upload-file). FileManager S3 hace la subida, muestra el progreso en
+        su Activity y pregunta si el archivo ya existe; al terminar deja un
+        marcador .json que este panel lee para mostrar ok o error en la fila.
+        """
+        key = item.project_key()
+        if self._uploads.get(key, {}).get("state") == STATE_BUSY:
+            return  # ya esta subiendo: el click no lanza otra
+        try:
+            name, path = project.name(), project.path()
+        except Exception as e:
+            debug_print(f"[Upload] Proyecto invalido: {e}")
+            return
+        if not path or not os.path.isfile(path):
+            show_warning(self, "Upload to Wasabi", f"{name} has no saved file on disk to upload.")
+            return
+
+        modified = None
+        try:
+            modified = bool(project.modifiedSinceLastSave())
+        except Exception as e:
+            debug_print(f"[Upload] modifiedSinceLastSave() fallo: {e}")
+        if modified:
+            answer = ask_save_discard_cancel(
+                self, "Upload to Wasabi",
+                f"{name} has unsaved changes. The upload sends the file saved on disk.\n\n"
+                "Save before uploading?",
+                save_text="Save and upload", discard_text="Upload saved file",
+            )
+            debug_print(f"[Upload] Cambios sin guardar | respuesta: {answer}")
+            if answer == "cancel":
+                return
+            if answer == "save":
+                try:
+                    project.save()
+                except Exception as e:
+                    show_warning(self, "Upload to Wasabi", f"Couldn't save {name}:\n{e}")
+                    return
+
+        file_name = os.path.basename(path)
+        notify_dir = row_actions.get_notify_dir()
+        try:
+            os.makedirs(notify_dir, exist_ok=True)
+            from LGA_NKS_Shared.LGA_NKS_FileManagerS3Launcher import (
+                build_filemanagers3_command,
+                resolve_context_mode,
+            )
+            cmd = build_filemanagers3_command(
+                row_actions.build_upload_args(path, notify_dir),
+                desarrollo=True,
+                script_dir=FILEMANAGERS3_SCRIPT_DIR,
+                context_mode=resolve_context_mode(),
+            )
+            debug_print(f"[Upload] Ejecutando: {cmd}")
+            subprocess.Popen(cmd, shell=False)
+        except Exception as e:
+            debug_print(f"[Upload] No se pudo lanzar FileManager S3: {e}")
+            self._uploads[key] = {"path": "", "file": file_name, "state": STATE_ERROR,
+                                  "message": "", "started": time.time()}
+            self._set_upload_state(key, STATE_ERROR, f"FileManager S3 couldn't be started ({e})", file_name)
+            return
+
+        self._uploads[key] = {
+            "path": row_actions.normalize_path(path),
+            "file": file_name,
+            "state": STATE_BUSY,
+            "message": "",
+            "started": time.time(),
+        }
+        self._set_upload_state(key, STATE_BUSY, file_name=file_name)
+        if not self._upload_poll_timer.isActive():
+            self._upload_poll_timer.start()
+
+    def _poll_upload_markers(self):
+        """Lee los marcadores de FileManager S3 y pasa cada fila a ok o error."""
+        pending = {k: v for k, v in self._uploads.items() if v.get("state") == STATE_BUSY}
+        if not pending:
+            self._upload_poll_timer.stop()
+            return
+
+        for marker_path, data in row_actions.read_markers(row_actions.get_notify_dir()):
+            paths = row_actions.marker_paths(data)
+            key = next((k for k, v in pending.items() if v["path"] in paths), None)
+            if key is None:
+                # Ilegible, o de una subida que este panel ya no espera
+                if data is None or row_actions.marker_age_seconds(marker_path) > row_actions.ORPHAN_MARKER_TTL_SECONDS:
+                    row_actions.safe_remove(marker_path)
+                continue
+            row_actions.safe_remove(marker_path)
+            pending.pop(key, None)
+            success, message = row_actions.marker_result(data)
+            debug_print(f"[Upload] Marcador {os.path.basename(marker_path)} | {key} | ok={success} | {message}")
+            if success:
+                self._set_upload_state(key, STATE_OK)
+            elif row_actions.is_cancel_marker(data):
+                self._set_upload_state(key, STATE_IDLE)
+            else:
+                self._set_upload_state(key, STATE_ERROR, message)
+
+        now = time.time()
+        for key, entry in pending.items():
+            if now - entry["started"] > row_actions.UPLOAD_TIMEOUT_SECONDS:
+                debug_print(f"[Upload] Sin marcador tras {row_actions.UPLOAD_TIMEOUT_SECONDS}s: {key}")
+                self._set_upload_state(key, STATE_IDLE)
 
     def _finish_context_switch(self, mode):
         """

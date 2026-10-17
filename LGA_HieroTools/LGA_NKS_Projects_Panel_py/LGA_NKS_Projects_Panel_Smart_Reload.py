@@ -1,12 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel_Smart_Reload v2.26 | Lega
+  LGA_NKS_Projects_Panel_Smart_Reload v2.27 | Lega
 
   Script para recarga inteligente del panel Projects
   Destruye el panel actual, crea uno nuevo y lo dockea automáticamente
   usando el método nativo de Hiero wm.showWindow().
 
+  v2.27: Recarga LGA_NKS_ProjectRowActions (Save incremental y Upload de la fila).
   v2.26: Recarga el conversor de proyectos y su dialogo al recargar el panel.
   v2.25: Recarga el estilo compartido antes del preview para que Reload Panel
          aplique switches o tokens nuevos sin reiniciar Nuke.
@@ -330,6 +331,8 @@ def create_new_panel_anyway(wm):
             'LGA_NKS_Project_Downgrade',
             'LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectDrop_Dialog',
             'LGA_NKS_Projects_Panel_py.LGA_NKS_TrackNames_Section',
+            # Lo importan ProjectItem y el panel: va antes que los dos.
+            'LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectRowActions',
             'LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectItem',
             'LGA_NKS_Projects_Panel_py.LGA_NKS_ProjectHandler',
             'LGA_NKS_Projects_Panel_py.LGA_NKS_ScanManager',

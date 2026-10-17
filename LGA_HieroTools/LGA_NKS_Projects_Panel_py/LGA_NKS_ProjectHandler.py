@@ -3,10 +3,12 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectHandler v1.07 | Lega
+  LGA_NKS_ProjectHandler v1.08 | Lega
 
   Gestor de manejo de proyectos para el panel de proyectos LGA.
 
+  v1.08: Los iconos Save incremental y Upload to Wasabi de la fila delegan en
+         save_incremental() y upload_project() del panel.
   v1.07: Click en el nombre o el triangulo de un proyecto abierto lo colapsa
          o expande (antes volvia a llamar a openProject sobre un proyecto ya
          abierto). La x de la fila cierra el proyecto via el panel.
@@ -167,6 +169,12 @@ class ProjectHandler:
             item.close_button.clicked.connect(
                 lambda _checked=False, it=item: ProjectHandler.on_close_project_click(panel, it)
             )
+            item.save_button.clicked.connect(
+                lambda _checked=False, it=item: ProjectHandler.on_row_action_click(panel, it, "save")
+            )
+            item.upload_button.clicked.connect(
+                lambda _checked=False, it=item: ProjectHandler.on_row_action_click(panel, it, "upload")
+            )
             # El hover del nombre y el triangulo lo maneja el propio ProjectItem,
             # que los ilumina juntos: el filtro del panel los iluminaba por separado.
 
@@ -221,6 +229,17 @@ class ProjectHandler:
         proyecto = item.project_info.get("proyecto_abierto") or item.project_info.get("proyecto_obj")
         if proyecto is not None and hasattr(panel, "close_project"):
             panel.close_project(proyecto)
+
+    @staticmethod
+    def on_row_action_click(panel, item, action):
+        """Iconos Save incremental y Upload to Wasabi: delegan en el panel."""
+        proyecto = item.project_info.get("proyecto_abierto") or item.project_info.get("proyecto_obj")
+        if proyecto is None:
+            return
+        if action == "save" and hasattr(panel, "save_incremental"):
+            panel.save_incremental(proyecto, item)
+        elif action == "upload" and hasattr(panel, "upload_project"):
+            panel.upload_project(proyecto, item)
 
     @staticmethod
     def on_project_click(panel, proyecto_info):
