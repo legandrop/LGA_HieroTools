@@ -85,11 +85,13 @@ def _close_icon(color, dpr=1.0, size=CLOSE_ICON_SIZE):
 
 
 # Iconos de accion de la fila (Save incremental, Upload to Wasabi): caja de 18 px
-# y glifo de 15 px con el mismo trazo de 1.6 px que la x, para que los
+# y glifo de 16 px con el mismo trazo de 1.6 px que la x, para que los
 # tres se lean como familia. Diseno elegido en
 # +Building_Blocks/Mockups/ProjectsPanel_RowIcons_Mockup.html (S1 y U1).
 ACTION_BUTTON_SIZE = 18
-ACTION_GLYPH_SIZE = 15
+ACTION_GLYPH_SIZE = 16
+# Aire entre icono e icono (save, upload y la x)
+ACTION_SPACING = 2
 ACTION_PEN_WIDTH = 1.6
 SPINNER_INTERVAL_MS = 50
 # Tras una subida correcta el check queda este tiempo y vuelve al icono.
@@ -121,47 +123,52 @@ TOOLTIPS = {
 def _save_glyph_path():
     """S1: disquete con un + en la esquina. Devuelve (cuerpo, recorte, plus) en viewBox 16."""
     body = QtGui.QPainterPath()
-    body.moveTo(2.0, 2.0)
-    body.lineTo(9.6, 2.0)
-    body.lineTo(12.5, 4.9)
-    body.lineTo(12.5, 12.5)
-    body.lineTo(2.0, 12.5)
+    body.moveTo(1.5, 1.5)
+    body.lineTo(10.2, 1.5)
+    body.lineTo(13.2, 4.5)
+    body.lineTo(13.2, 13.2)
+    body.lineTo(1.5, 13.2)
     body.closeSubpath()
-    body.moveTo(4.6, 2.0)
-    body.lineTo(4.6, 4.8)
-    body.lineTo(9.2, 4.8)
-    body.lineTo(9.2, 2.0)
+    body.moveTo(4.3, 1.5)
+    body.lineTo(4.3, 4.6)
+    body.lineTo(9.6, 4.6)
+    body.lineTo(9.6, 1.5)
     # El + va recortado del disquete: un circulo de aire alrededor.
     cutout = QtGui.QPainterPath()
-    cutout.addEllipse(QtCore.QPointF(12.2, 12.2), 4.4, 4.4)
+    cutout.addEllipse(QtCore.QPointF(12.6, 12.6), 4.3, 4.3)
     plus = QtGui.QPainterPath()
-    plus.moveTo(12.2, 9.7)
-    plus.lineTo(12.2, 14.7)
-    plus.moveTo(9.7, 12.2)
-    plus.lineTo(14.7, 12.2)
+    plus.moveTo(12.6, 10.1)
+    plus.lineTo(12.6, 15.1)
+    plus.moveTo(10.1, 12.6)
+    plus.lineTo(15.1, 12.6)
     return body, cutout, plus
 
 
 def _upload_glyph_path():
-    """U1: nube con flecha hacia arriba. Devuelve (nube, recorte, flecha) en viewBox 16."""
+    """
+    U1: nube con flecha hacia arriba. Devuelve (nube, recorte, flecha) en viewBox 16.
+
+    La nube llena el ancho y casi todo el alto de la caja: con la proporcion
+    del mockup quedaba chata y se veia mas chica que el disquete y la x.
+    """
     cloud = QtGui.QPainterPath()
-    cloud.addEllipse(QtCore.QPointF(4.45, 9.6), 3.0, 3.0)
+    cloud.addEllipse(QtCore.QPointF(4.2, 9.6), 3.4, 3.4)
     top = QtGui.QPainterPath()
-    top.addEllipse(QtCore.QPointF(8.45, 7.5), 4.25, 4.25)
+    top.addEllipse(QtCore.QPointF(8.4, 6.6), 4.6, 4.6)
     right = QtGui.QPainterPath()
-    right.addEllipse(QtCore.QPointF(12.2, 9.45), 3.15, 3.15)
+    right.addEllipse(QtCore.QPointF(11.9, 9.3), 3.7, 3.7)
     base = QtGui.QPainterPath()
-    base.addRect(QtCore.QRectF(4.45, 9.0, 7.75, 3.6))
+    base.addRect(QtCore.QRectF(4.2, 9.0, 7.7, 4.0))
     cloud = cloud.united(top).united(right).united(base).simplified()
     # La flecha sale de la nube por abajo: se abre un hueco en el borde.
     cutout = QtGui.QPainterPath()
-    cutout.addRect(QtCore.QRectF(5.6, 11.4, 4.8, 3.0))
+    cutout.addRect(QtCore.QRectF(5.4, 12.0, 5.2, 3.0))
     arrow = QtGui.QPainterPath()
-    arrow.moveTo(8.0, 14.2)
-    arrow.lineTo(8.0, 7.8)
-    arrow.moveTo(5.8, 10.0)
-    arrow.lineTo(8.0, 7.8)
-    arrow.lineTo(10.2, 10.0)
+    arrow.moveTo(8.0, 15.0)
+    arrow.lineTo(8.0, 7.4)
+    arrow.moveTo(5.6, 9.8)
+    arrow.lineTo(8.0, 7.4)
+    arrow.lineTo(10.4, 9.8)
     return cloud, cutout, arrow
 
 
@@ -412,6 +419,7 @@ class ProjectItem(QtWidgets.QWidget):
         for button in (self.save_button, self.upload_button):
             button.setVisible(False)
             project_layout.addWidget(button)
+            project_layout.addSpacing(ACTION_SPACING)
 
         # Boton de cerrar: pegado al nombre (despues de la flecha de update, si
         # esta), solo en proyectos abiertos y solo con el mouse sobre la fila.
