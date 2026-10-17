@@ -1,11 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_UIManager v1.09 | Lega
+  LGA_NKS_UIManager v1.10 | Lega
 
   Gestor de interfaz de usuario para el panel de proyectos LGA.
   Centraliza creación de widgets, conexión de señales, y manejo de eventos.
 
+  v1.10: Los tooltips del panel usan el de los botones de los otros paneles
+         en version neutra (create_neutral_tooltip_stylesheet: padding 4,
+         radio 3, borde 1). Style.TOOLTIP, con 12 px de padding, quedaba
+         enorme para tooltips de una linea.
   v1.09: El toggle Studio/Client usa el estilo compartido PILL y fuerza el
          fondo del contenedor para que la capsula se pinte en cualquier host.
   v1.08: Reordenado el rail a Refresh, Reload Panel y Settings; Refresh usa
@@ -42,6 +46,7 @@ import configparser
 from pathlib import Path
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color, Style
+from LGA_NKS_Shared.LGA_NKS_StyleUtils import create_neutral_tooltip_stylesheet
 
 # Importar variable global
 # Esta será importada desde el archivo principal cuando se importe este módulo
@@ -98,10 +103,14 @@ class UIManager:
     @staticmethod
     def setup_ui(panel):
         """Configurar la interfaz de usuario del panel"""
-        # QToolTip es un popup separado: si el panel no instala la hoja
-        # compartida, Qt cae al tooltip nativo del host. Se concatena para no
-        # pisar una hoja que el contenedor pudiera traer en el futuro.
-        panel.setStyleSheet("\n".join(filter(None, (panel.styleSheet(), Style.TOOLTIP))))
+        # QToolTip es un popup separado: si el panel no instala una hoja, Qt
+        # cae al tooltip nativo del host. Es la caja de los tooltips de botones
+        # de los otros paneles, en gris porque estos iconos no tienen color
+        # propio; Style.TOOLTIP (12 px de padding) quedaba enorme para una
+        # linea. Se concatena para no pisar una hoja que el contenedor traiga.
+        panel.setStyleSheet(
+            "\n".join(filter(None, (panel.styleSheet(), create_neutral_tooltip_stylesheet())))
+        )
 
         # Layout principal horizontal para dividir en dos columnas
         panel.main_layout = QtWidgets.QHBoxLayout(panel)

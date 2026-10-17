@@ -1,4 +1,6 @@
 v4.02:
+Los tooltips del Projects Panel tenian demasiado padding, sobre todo vertical: usaban `Style.TOOLTIP` (12 px en los cuatro lados). Pasan a la misma caja que los tooltips de botones de los otros paneles (padding 4, radio 3, borde 1) en version gris, con `create_neutral_tooltip_stylesheet()` nuevo en `LGA_NKS_StyleUtils v1.04`, que comparte la geometria con `create_tooltip_stylesheet()`. Una linea pasa de 46 a 32 px de alto (`LGA_NKS_UIManager v1.10`). [ Projects Panel - Tooltips compactos como los de los botones ]
+
 La x de cerrar del Projects Panel quedaba chica al lado de los iconos nuevos de la fila: la cruz pasa de 10 a 12 px (`CLOSE_ICON_SIZE`) y la caja roja del hover sigue en 16 px (`LGA_NKS_ProjectItem v1.05`). [ Projects Panel - Cruz de cerrar mas grande ]
 
 Iconos de la fila del Projects Panel otra vez mas grandes y separados: glifo de 16 px en caja de 18 px y 2 px entre icono e icono. La nube de Upload ocupaba un tercio menos de alto que el disquete y se veia mas chica; se redibuja llenando casi toda la caja, y el disquete tambien gana un poco de tamaño (`LGA_NKS_ProjectItem v1.05`). [ Projects Panel - Iconos de la fila mas grandes y separados ]

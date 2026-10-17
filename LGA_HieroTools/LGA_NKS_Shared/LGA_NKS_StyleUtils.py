@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_StyleUtils v1.03 | Lega
+  LGA_NKS_StyleUtils v1.04 | Lega
 
   Utilidades para estilos dinámicos de botones en paneles Hiero.
   Incluye funciones para conversión de colores, cálculo de bordes
@@ -17,6 +17,10 @@ ____________________________________________________________________
   - LGA_NKS_Review_Panel.py
   - LGA_NKS_ViewerTL_Panel.py
 
+  v1.04: create_neutral_tooltip_stylesheet(): el tooltip de los botones de
+         panel (padding 4, radio 3, borde 1) sin color de boton, para paneles
+         de iconos como el Projects Panel. Comparte la geometria via
+         _tooltip_qss(), asi los dos no derivan.
   v1.03: Suma la hoja reutilizable de botones cuyo fondo es un color de dato.
   v1.02: Los gradientes pasan a un catalogo semantico reutilizable. Suma los
          cruces Flow-Priority y Flow-Reveal del panel Flow S3.
@@ -444,7 +448,30 @@ def create_tooltip_stylesheet(style):
     """
     Crea un stylesheet CSS completo para tooltip basado en el color del botón.
     """
-    colors = calculate_dynamic_tooltip(style)
+    return _tooltip_qss(calculate_dynamic_tooltip(style))
+
+
+# Tooltip neutro: mismos tonos que la superficie elevada y el borde de hover del
+# modulo de estilo (Color.SURFACE_RAISED / BORDER_HOVER / TEXT_STRONG). Van
+# escritos aca porque este modulo no importa Qt ni el modulo de estilo.
+NEUTRAL_TOOLTIP_COLORS = {
+    "background": "#2E2E2E",
+    "border": "#555555",
+    "text": "#E8E8E8",
+}
+
+
+def create_neutral_tooltip_stylesheet():
+    """
+    Tooltip de boton de panel sin color de boton: misma caja que
+    create_tooltip_stylesheet(), con la paleta gris del pack. Para paneles de
+    iconos (Projects Panel), donde el boton no tiene un color propio.
+    """
+    return _tooltip_qss(NEUTRAL_TOOLTIP_COLORS)
+
+
+def _tooltip_qss(colors):
+    """Geometria unica de los tooltips de botones de panel."""
     return f"""
         QToolTip {{
             color: {colors['text']};
