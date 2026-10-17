@@ -63,7 +63,7 @@ def _triangle_pixmap(color, pointing_down, dpr=1.0, size=TRIANGLE_SIZE):
 # Boton de cerrar proyecto: caja chica (el rojo del hover de BTN_CLOSE ocupa toda
 # la caja) y la x dibujada, mas grande y clara que el glifo de la hoja.
 CLOSE_BUTTON_SIZE = 16
-CLOSE_ICON_SIZE = 10
+CLOSE_ICON_SIZE = 12
 
 
 def _close_icon(color, dpr=1.0, size=CLOSE_ICON_SIZE):

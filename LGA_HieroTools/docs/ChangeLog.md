@@ -1,4 +1,6 @@
 v4.02:
+La x de cerrar del Projects Panel quedaba chica al lado de los iconos nuevos de la fila: la cruz pasa de 10 a 12 px (`CLOSE_ICON_SIZE`) y la caja roja del hover sigue en 16 px (`LGA_NKS_ProjectItem v1.05`). [ Projects Panel - Cruz de cerrar mas grande ]
+
 Iconos de la fila del Projects Panel otra vez mas grandes y separados: glifo de 16 px en caja de 18 px y 2 px entre icono e icono. La nube de Upload ocupaba un tercio menos de alto que el disquete y se veia mas chica; se redibuja llenando casi toda la caja, y el disquete tambien gana un poco de tamaño (`LGA_NKS_ProjectItem v1.05`). [ Projects Panel - Iconos de la fila mas grandes y separados ]
 
 Los iconos Save incremental y Upload de la fila del Projects Panel quedaban chicos al lado del nombre: glifo de 12 px en la caja de 16 px de la x. Pasan a glifo de 15 px en caja de 18 px, con el mismo trazo de 1.6 px (`LGA_NKS_ProjectItem v1.05`, `ACTION_BUTTON_SIZE` / `ACTION_GLYPH_SIZE`). [ Projects Panel - Iconos de la fila mas grandes ]
