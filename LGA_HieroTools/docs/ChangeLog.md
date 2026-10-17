@@ -1,4 +1,4 @@
-v4.02:
+v4.020:
 Los tooltips del Projects Panel tenian demasiado padding, sobre todo vertical: usaban `Style.TOOLTIP` (12 px en los cuatro lados). Pasan a la misma caja que los tooltips de botones de los otros paneles (padding 4, radio 3, borde 1) en version gris, con `create_neutral_tooltip_stylesheet()` nuevo en `LGA_NKS_StyleUtils v1.04`, que comparte la geometria con `create_tooltip_stylesheet()`. Una linea pasa de 46 a 32 px de alto (`LGA_NKS_UIManager v1.10`). [ Projects Panel - Tooltips compactos como los de los botones ]
 
 La x de cerrar del Projects Panel quedaba chica al lado de los iconos nuevos de la fila: la cruz pasa de 10 a 12 px (`CLOSE_ICON_SIZE`) y la caja roja del hover sigue en 16 px (`LGA_NKS_ProjectItem v1.05`). [ Projects Panel - Cruz de cerrar mas grande ]
