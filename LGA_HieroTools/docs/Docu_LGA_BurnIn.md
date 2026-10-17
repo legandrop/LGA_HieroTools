@@ -170,6 +170,11 @@ y al cambiar el mtime del JSON.
 
 - Aplicar defaults de config a instancias nuevas (hoy los defaults viven en
   el gizmo generado).
+- **Texto un poco desalineado dentro de su panel** (visto por Lega el 17-10,
+  tras el fix de paneles alineados en cualquier formato): el panel ya sigue al
+  texto, pero el texto no queda del todo centrado en la caja. Falta medirlo
+  en NKS con `viewer.image()` en una secuencia de formato distinto al del clip
+  y en una igual, y corregirlo. Se dejo para cuando la GPU este libre.
 
 ## Deuda de diagnostico
 
