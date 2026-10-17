@@ -84,11 +84,12 @@ def _close_icon(color, dpr=1.0, size=CLOSE_ICON_SIZE):
     return QtGui.QIcon(pixmap)
 
 
-# Iconos de accion de la fila (Save incremental, Upload to Wasabi): misma caja
-# que la x y glifo de 12 px dibujado con el mismo trazo de 1.6 px, para que los
+# Iconos de accion de la fila (Save incremental, Upload to Wasabi): caja de 18 px
+# y glifo de 15 px con el mismo trazo de 1.6 px que la x, para que los
 # tres se lean como familia. Diseno elegido en
 # +Building_Blocks/Mockups/ProjectsPanel_RowIcons_Mockup.html (S1 y U1).
-ACTION_GLYPH_SIZE = 12
+ACTION_BUTTON_SIZE = 18
+ACTION_GLYPH_SIZE = 15
 ACTION_PEN_WIDTH = 1.6
 SPINNER_INTERVAL_MS = 50
 # Tras una subida correcta el check queda este tiempo y vuelve al icono.
@@ -211,7 +212,7 @@ class RowIconButton(QtWidgets.QAbstractButton):
         self._spinner = QtCore.QTimer(self)
         self._spinner.setInterval(SPINNER_INTERVAL_MS)
         self._spinner.timeout.connect(self._advance_spinner)
-        self.setFixedSize(CLOSE_BUTTON_SIZE, CLOSE_BUTTON_SIZE)
+        self.setFixedSize(ACTION_BUTTON_SIZE, ACTION_BUTTON_SIZE)
         self.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
         self.setAttribute(QtCore.Qt.WA_Hover, True)
         policy = self.sizePolicy()
@@ -239,7 +240,7 @@ class RowIconButton(QtWidgets.QAbstractButton):
         super(RowIconButton, self).leaveEvent(event)
 
     def sizeHint(self):
-        return QtCore.QSize(CLOSE_BUTTON_SIZE, CLOSE_BUTTON_SIZE)
+        return QtCore.QSize(ACTION_BUTTON_SIZE, ACTION_BUTTON_SIZE)
 
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
@@ -263,7 +264,7 @@ class RowIconButton(QtWidgets.QAbstractButton):
     def _paint_glyph(self, painter, glyph, color):
         outline, cutout, stroke = _GLYPHS[glyph]()
         scale = ACTION_GLYPH_SIZE / 16.0
-        offset = (CLOSE_BUTTON_SIZE - ACTION_GLYPH_SIZE) / 2.0
+        offset = (ACTION_BUTTON_SIZE - ACTION_GLYPH_SIZE) / 2.0
         painter.save()
         painter.translate(offset, offset)
         painter.scale(scale, scale)
