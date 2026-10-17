@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn v1.04 | Lega
+  LGA_NKS_BurnIn v1.05 | Lega
 
   Registra los soft effects LGA_BurnIn (BlinkScript + Text2, paneles
   redondeados) y LGA_BurnIn_v0 (solo Text2) en el menu Effects del
@@ -14,6 +14,13 @@ ____________________________________________________________________
   "foundry.timeline.effect." + setData(clase del nodo), via
   hiero.ui.registerAction (patron oficial de custom_soft_effect.py).
 
+  v1.05: Fuera el refresh con Viewer.flushCache(): la pausa del cacheo
+         que trae flushCache llega asincronica, el resumeCaching()
+         inmediato no la deshacia y el viewer quedaba pausado. Con el
+         cacheo pausado el viewer no dibuja frames nuevos: al agregar el
+         efecto (el onCreate escribe knobs bi_*) mover el playhead dejaba
+         de actualizar la imagen hasta cambiar de timeline. Medido que el
+         setValue de un knob del gizmo ya re-renderiza el frame actual.
   v1.04: Refresco del viewer SIN abrir tabs. Tras cualquier cambio de
          un knob bi_* (del panel, de un script o de la UI) se programa
          UN refresh_viewer() diferido (QTimer de 0 ms: una rafaga de
@@ -71,76 +78,26 @@ def _log(message):
         pass
 
 
-def _log_once(key, message):
-    try:
-        import LGA_NKS_BurnIn_Logic as bi_logic
-
-        bi_logic._log_error_once("registro:" + key, message)
-    except Exception:
-        pass
-
-
 # ── Refresco del viewer del timeline ─────────────────────────────────────────
 #
-# Medido en NKS 16: un setValue por API en el gizmo deja al viewer del timeline
-# mostrando frames CACHEADOS con el estado anterior; saltar el playhead o
-# nuke.clearRAMCache() no alcanzan. La API documentada de hiero.ui trae lo que
-# hace falta sin cerrar ni abrir tabs: Viewer.flushCache() ("flush the cache
-# on the viewer and pause caching"), Viewer.resumeCaching() y
-# hiero.ui.updateViewer(). El detalle de que flushCache PAUSA el cacheo es la
-# trampa: sin el resume el viewer deja de cachear para siempre.
+# NO se llama a Viewer.flushCache(). Medido en NKS 17.0v4 (2026-10-17): la
+# pausa del cacheo que trae flushCache aterriza ASINCRONICA (~140 ms despues;
+# ni un QTimer de 0 ms llega antes), asi que el resumeCaching() inmediato no
+# hace nada y el viewer queda pausado. Con el cacheo pausado el viewer no
+# dibuja ningun frame nuevo: mover el playhead no cambia la imagen hasta pasar
+# a otro timeline (que resetea el viewer). Como el onCreate escribe knobs bi_*
+# (bi_font, pivotes), el viewer se congelaba apenas se agregaba el efecto.
+#
+# Tampoco hace falta: un setValue en un knob del gizmo cambia el hash del nodo
+# y el viewer re-renderiza el frame actual solo (medido: frameDisplayed se
+# dispara y la imagen refleja la opacidad y la rotacion nuevas). Lo unico que
+# no ensucia el nodo es el write del blob animation_layers, y para eso esta
+# nudge() en el modulo Blink.
 
-# Knobs bi_* que no cambian el render (no disparan refresh).
+# Knobs bi_* que no cambian el render.
 _KNOBS_SIN_RENDER = ("bi_open_panel",)
 
-_state = {"in_handler": False, "refresh_pending": False}
-
-
-def refresh_viewer():
-    """Fuerza el re-render del frame actual del viewer del timeline sin abrir
-    tabs. Devuelve True si pudo flushear el viewer actual. Llamar SIEMPRE desde
-    el hilo principal (los metodos del viewer lo exigen)."""
-    _state["refresh_pending"] = False
-    try:
-        import hiero.ui
-    except Exception:
-        return False
-    ok = False
-    try:
-        viewer = hiero.ui.currentViewer()
-        if viewer is not None:
-            was_paused = False
-            try:
-                was_paused = bool(viewer.isCachingPaused())
-            except Exception:
-                pass
-            viewer.flushCache()
-            # flushCache pausa el cacheo: se reanuda salvo que YA estuviera
-            # pausado por el usuario (se respeta su estado).
-            if not was_paused:
-                viewer.resumeCaching()
-            ok = True
-    except Exception as exc:
-        _log_once("flush", "viewer.flushCache fallo: {}".format(exc))
-    # hiero.ui.updateViewer() pide dos argumentos (medido: "expected 2
-    # arguments, got 0"); el flush + el nudge alcanzan para que el viewer
-    # vuelva a pedir el frame, asi que no se llama.
-    return ok
-
-
-def schedule_refresh():
-    """Programa UN refresh_viewer() para cuando el event loop quede libre: una
-    rafaga de writes (el panel escribe varios knobs, apply_rotation escribe
-    ax/ay por campo, el nudge escribe dos veces) termina en un solo flush."""
-    if _state["refresh_pending"]:
-        return
-    _state["refresh_pending"] = True
-    try:
-        from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtCore
-
-        QtCore.QTimer.singleShot(0, refresh_viewer)
-    except Exception:
-        refresh_viewer()
+_state = {"in_handler": False}
 
 
 def _apply_layout_change(gizmo, name):
@@ -195,8 +152,6 @@ def _on_knob_changed():
         _log("ERROR en knobChanged {}: {}".format(name, exc))
     finally:
         _state["in_handler"] = False
-    # Cualquier knob bi_* cambia el render: un solo refresh diferido.
-    schedule_refresh()
 
 
 def _register():
@@ -228,7 +183,7 @@ def _register():
     registerAction(action_v0)
 
     # Un cambio de knob del gizmo (panel, script o UI) re-aplica fuente y
-    # rotacion segun corresponda y programa el refresh del viewer.
+    # rotacion segun corresponda (el viewer re-renderiza solo).
     nuke.addKnobChanged(_on_knob_changed, nodeClass="LGA_BurnIn")
 
     # La config cacheada por proyecto se invalida en los eventos de proyecto:

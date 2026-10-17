@@ -1,3 +1,6 @@
+v4.021:
+Al agregar el soft effect LGA BurnIn el viewer del timeline se colgaba: mover el playhead no cambiaba la imagen hasta pasar a otro timeline y volver. La causa era el refresh que corria en cada knobChanged del efecto: `Viewer.flushCache()` pausa el cacheo del viewer en diferido (~140 ms despues), el `resumeCaching()` inmediato no llegaba a deshacerlo, y con el cacheo pausado el viewer no dibuja frames nuevos. El onCreate escribe knobs del efecto, asi que pasaba siempre al agregarlo. Se saca el flush: medido por dev-link que el cambio de un knob ya re-renderiza el frame actual, rotacion incluida (`LGA_NKS_BurnIn v1.05`). [ BurnIn - Viewer colgado al agregar el efecto ]
+
 v4.020:
 Los tooltips del Projects Panel tenian demasiado padding, sobre todo vertical: usaban `Style.TOOLTIP` (12 px en los cuatro lados). Pasan a la misma caja que los tooltips de botones de los otros paneles (padding 4, radio 3, borde 1) en version gris, con `create_neutral_tooltip_stylesheet()` nuevo en `LGA_NKS_StyleUtils v1.04`, que comparte la geometria con `create_tooltip_stylesheet()`. Una linea pasa de 46 a 32 px de alto (`LGA_NKS_UIManager v1.10`). [ Projects Panel - Tooltips compactos como los de los botones ]
 

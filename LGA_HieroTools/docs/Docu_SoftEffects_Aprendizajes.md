@@ -216,6 +216,9 @@ text_pad / weight) y el panel. Dos trampas mas, medidas al cablear:
   un refresh de verdad: ni el nudge de opacity ni un toggle de enable alcanzan
   siempre; el `LGA_NKS_Timeline_Refresh` del pack (cerrar/reabrir el viewer) lo
   garantiza. En interaccion normal de UI el problema no aparece.
+  **Revisado el 17-10:** al menos parte de esto era el viewer con el cacheo
+  PAUSADO por nuestro propio `flushCache()` (ver la seccion de refresco mas
+  abajo). Sin flush, el `setValue` y la rotacion se ven solos.
 
 
 ## Crear y BORRAR soft effects por codigo (medido con Apply AMF)
@@ -298,16 +301,34 @@ seleccionarlos primero.
 -ni `SubTrackItem` ni `TrackItemBase` la listan- pero existe y es la via buena:
 al llamarla, el knob `disable` del nodo se mueve solo.
 
-## Refrescar el viewer tras un cambio de knobs por API (medido 01-09)
+## Refrescar el viewer tras un cambio de knobs: NO usar flushCache (medido 17-10)
 
-Un `setValue` por API deja al viewer del timeline mostrando el frame CACHEADO
-del estado anterior; saltar el playhead o `nuke.clearRAMCache()` no alcanzan y
-`LGA_NKS_Timeline_Refresh` abre un tab duplicado por llamada. Lo que si anda,
-sin tabs: `hiero.ui.currentViewer().flushCache()` seguido de
-`resumeCaching()` (flushCache PAUSA el cacheo, documentado) mas el nudge de
-opacidad. `hiero.ui.updateViewer()` existe pero pide dos argumentos: no se usa.
-`LGA_NKS_BurnIn` lo programa diferido (QTimer 0 ms) en cada knobChanged de un
-`bi_*`, asi el panel refresca solo.
+**`Viewer.flushCache()` congela el viewer.** Medido en NKS 17.0v4 por
+dev-link: la pausa del cacheo que trae flushCache (documentada: "flush the
+cache on the viewer and pause caching") aterriza ASINCRONICA, unos 140 ms
+despues. `isCachingPaused()` da False justo despues del flush y True al rato;
+un `resumeCaching()` inmediato, o en un `QTimer.singleShot(0)`, llega antes de
+la pausa y no la deshace. Con el cacheo pausado el viewer **no dibuja ningun
+frame nuevo**: `setTime()` no dispara `frameDisplayed` y mover el playhead no
+cambia la imagen. Cambiar de timeline resetea el viewer y vuelve a andar.
+
+Sintoma real (v1.04 de `LGA_NKS_BurnIn`, que flusheaba en cada knobChanged de
+un `bi_*`): agregar el efecto colgaba el viewer, porque el onCreate escribe
+`bi_font` y los pivotes. Contraprueba: con el flush, re-agregar el efecto deja
+`isCachingPaused() == True`; sin el flush, False.
+
+**Tampoco hace falta.** Un `setValue` en un knob del gizmo cambia el hash del
+nodo y el viewer re-renderiza el frame actual solo: medido con
+`frameDisplayed` y con `viewer.image()` (opacidad y rotacion nuevas visibles).
+El unico write que no ensucia el nodo es el blob `animation_layers`: para eso
+esta el nudge de opacidad. La medicion vieja del 01-09 ("un setValue deja el
+frame cacheado") probablemente estaba contaminada por esta misma pausa.
+
+Herramientas de diagnostico utiles: `viewer.isCachingPaused()`,
+`viewer.frameDisplayed` (signal), `viewer.image()` (QImage del frame mostrado,
+sirve para capturar sin control de pantalla). `hiero.ui.updateViewer()` pide
+dos argumentos: no se usa. Ojo: `LGA_NKS_Flow_Thumbs` tambien llama a
+`flushCache()` sin reanudar.
 
 ## Medir texto por API vs en render (medido 01-09)
 

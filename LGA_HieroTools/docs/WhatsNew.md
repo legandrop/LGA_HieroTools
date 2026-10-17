@@ -12,6 +12,9 @@ platforms: [win, mac]
 
 ## Unreleased
 
+## v4.021
+- [fixed] Adding the LGA BurnIn soft effect no longer freezes the timeline viewer; moving the playhead updates the image right away.
+
 ## v4.020
 - [new] Hover an open project in the Projects panel to save it as the next version with one click; if a newer version already exists on disk, it asks before using the next free number.
 - [new] Hover an open project in the Projects panel to upload it to Wasabi through FileManager S3; the icon shows when the upload is running, finished or failed.

@@ -152,10 +152,12 @@ y al cambiar el mtime del JSON.
 - El costo GPU del kernel es una pasada full-frame por instancia; con "Use
   GPU if available" activo es despreciable frente a un Denoise.
 - **Rotacion por campo**: funciona (0/90/180/270 desde el panel, aplicada a la
-  seleccion; texto y fondo giran juntos sobre el centro del panel). Si el
-  viewer no refleja un cambio de rotacion hecho por codigo, el boton Refresh
-  Timeline del ViewerTL lo fuerza. Mecanismo y trampas en
-  `Docu_SoftEffects_Aprendizajes.md`.
+  seleccion; texto y fondo giran juntos sobre el centro del panel). Mecanismo
+  y trampas en `Docu_SoftEffects_Aprendizajes.md`.
+- **Refresco del viewer**: el efecto no fuerza ningun refresh; el cambio de un
+  knob ya re-renderiza el frame. Nunca usar `Viewer.flushCache()`: pausa el
+  cacheo en diferido y el viewer deja de dibujar frames al mover el playhead
+  (era el cuelgue al agregar el efecto, hasta v1.04 de `LGA_NKS_BurnIn`).
 
 ## Pendientes
 
