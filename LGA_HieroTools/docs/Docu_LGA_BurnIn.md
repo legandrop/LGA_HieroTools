@@ -51,7 +51,7 @@ dibuja panel.
 ## Arquitectura del gizmo
 
 ```
-Input -> Dot -> BlinkScript (Blink_Panels) -> 8x Text2 -> Output
+Input -> Dot -> Crop_Format -> BlinkScript (Blink_Panels) -> 8x Text2 -> Output
 ```
 
 **Fuente**: es **Inter**, fija (la del pack); el usuario elige solo el PESO
@@ -64,6 +64,13 @@ descubre el Inter del repo —incluido Bold, que el Inter de Windows no trae—
 sin instalar nada. Al cambiar el peso, el fondo se recalcula (mide con el
 TTF del peso nuevo).
 
+- **Crop_Format**: Crop al formato (`box 0 0 width height`, `intersect`
+  apagado) para que el bbox que ve el kernel sea EXACTAMENTE el formato. Sin
+  el, con un clip reformateado que no llena justo el cuadro (1920x1080 en una
+  secuencia 4094x2160 escalado al ancho: bbox de -74 a 2234) el kernel
+  reparte sus coordenadas sobre el bbox y los paneles salian estirados en
+  vertical respecto del texto (arriba pegados al borde, abajo corridos hacia
+  abajo). Detalle en `Docu_SoftEffects_Aprendizajes.md`.
 - **Blink_Panels**: kernel `LGA_RoundedPanels.blink` (SDF de rounded box,
   antialiasing 1px, los 6 paneles en UNA pasada, params solo float). Su
   `onCreate` llama a `LGA_NKS_BurnIn_Blink.setup()`, que compila el kernel

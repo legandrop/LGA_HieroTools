@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.021
+- [fixed] LGA BurnIn's background panels stay lined up with their text when the sequence format differs from the clip's.
 - [fixed] Adding the LGA BurnIn soft effect no longer freezes the timeline viewer; moving the playhead updates the image right away.
 
 ## v4.020

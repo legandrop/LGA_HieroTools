@@ -337,6 +337,42 @@ fill, 0,5 s con eventos, `viewer.image()`, restaurar) se midio el 17-10 en NKS
 viewer dibuja el frame nuevo. Apagar el track alcanza para que el viewer
 re-renderice: no hace falta ningun flush.
 
+## BlinkScript y un bbox distinto del formato: paneles estirados (medido 17-10)
+
+Sintoma, en NKS 17.0v4: secuencia 4094x2160 con un clip 1920x1080 (reformat
+"to format", resize "width", centrado). El texto de los Text2 quedaba donde
+debia, pero los paneles del BlinkScript salian corridos hacia los bordes:
+arriba pegados al borde superior, abajo mas abajo que el texto, y una sonda
+en y=0,50 coincidia mientras otra en y=0,25 quedaba ~31 px corrida. O sea,
+los paneles salian estirados en vertical (x1,07) alrededor del centro.
+
+Medido en render con una expresion `[python ...]` en un param del kernel:
+el BlinkScript ve formato 4094x2160 (`width`/`height` correctos), pero el
+bbox de su input va de -74 a 2234 (2308 de alto): es el clip escalado al
+ancho de la secuencia, SIN recortar. El kernel reparte sus coordenadas sobre
+ese bbox, no sobre el formato, y 2308/2160 = 1,07 es justo el estiramiento.
+El Text2 no tiene el problema porque ubica su box en el formato.
+
+Arreglo: un **Crop** al formato antes del BlinkScript (`box 0 0 {width}
+{height}`, `intersect` apagado). Con `intersect` apagado el bbox queda
+EXACTAMENTE en la caja: lo recorta si el clip desborda y lo agranda (con
+negro) si el clip es mas chico que el cuadro. Medido despues del Crop: bbox
+del Blink de -2 a 2164 (los 2 px de margen los pone el Blink) y paneles
+centrados con su texto en una secuencia igual al clip (1920x1080), en la
+4094x2160 con resize "width" y con resize "height" (bandas a los costados).
+Costo: lo que el clip tenia fuera del cuadro se pierde desde ese efecto en
+adelante, que en el timeline no se ve.
+
+Regla general: un BlinkScript dentro de un soft effect necesita bbox ==
+formato si sus params estan en pixeles del formato.
+
+**Capturar por dev-link:** antes de `viewer.image()` conviene llamar a
+`viewer.resumeCaching()`. Medido el 17-10: el viewer no dibujaba frames
+nuevos (`frameDisplayed` no llegaba, `cachedFrames()` vacio) con
+`isCachingPaused()` en False, y despues de abrir otra secuencia y cerrar un
+proyecto de prueba quedo en True; en los dos casos `resumeCaching()` lo
+destrabo. Ninguno de los dos casos pasaba por `flushCache()`.
+
 ## Medir texto por API vs en render (medido 01-09)
 
 Por API el Input del gizmo no tiene stream: los campos de metadata miden texto
