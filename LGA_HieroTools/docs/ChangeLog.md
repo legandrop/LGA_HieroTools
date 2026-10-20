@@ -1,4 +1,4 @@
-v4.021:
+v4.020:
 Create NK v000 tambien le da prioridad al `.csp` del shot. Con un `.csp` en `Look_Files`, cada `OCIOFileTransform` del look del template lo carga con interpolation `linear` y working space ACEScg (`"ACES - ACEScg"` en configs ACES 1.x, `ACEScg` en los v2), y cada `OCIOCDLTransform` del look queda deshabilitado; ya no se avisa la falta de `.cdl`, `.clf` ni `.amf`. Si el template no trae un nodo de look donde cargarlo, el cartel lo avisa. Verificado sobre un template real con `aces_1.2`. `LGA_NKS_CreateNKScript v1.18`. [ Create NK - Prioridad del csp ]
 
 Apply AMF le da prioridad a un `.csp` en `Look_Files` sobre todo lo demas. Algunos shows mandan el look del shot como LUT `.csp`, y la tool no lo reconocia. Ahora, si hay un `.csp`, el plan es ese archivo solo, en un `OCIOFileTransform` con interpolation `linear` y working space `ACEScg` fijos, sin buscar `.amf`, `.cdl`, `.clf` ni `.cube`. Con varios `.csp` se elige como con los `.cube`: version mas alta y, entre distintos, el ultimo alfabetico, avisado. `LGA_NKS_ApplyAMF v0.95`, `LGA_EditToolsPanel v3.14` (tooltip). [ Apply AMF - Prioridad del csp ]
@@ -9,7 +9,6 @@ Flow Thumbs tenia un refresh del viewer con `Viewer.flushCache()` sin reanudar e
 
 Al agregar el soft effect LGA BurnIn el viewer del timeline se colgaba: mover el playhead no cambiaba la imagen hasta pasar a otro timeline y volver. La causa era el refresh que corria en cada knobChanged del efecto: `Viewer.flushCache()` pausa el cacheo del viewer en diferido (~140 ms despues), el `resumeCaching()` inmediato no llegaba a deshacerlo, y con el cacheo pausado el viewer no dibuja frames nuevos. El onCreate escribe knobs del efecto, asi que pasaba siempre al agregarlo. Se saca el flush: medido por dev-link que el cambio de un knob ya re-renderiza el frame actual, rotacion incluida (`LGA_NKS_BurnIn v1.05`). [ BurnIn - Viewer colgado al agregar el efecto ]
 
-v4.020:
 Los tooltips del Projects Panel tenian demasiado padding, sobre todo vertical: usaban `Style.TOOLTIP` (12 px en los cuatro lados). Pasan a la misma caja que los tooltips de botones de los otros paneles (padding 4, radio 3, borde 1) en version gris, con `create_neutral_tooltip_stylesheet()` nuevo en `LGA_NKS_StyleUtils v1.04`, que comparte la geometria con `create_tooltip_stylesheet()`. Una linea pasa de 46 a 32 px de alto (`LGA_NKS_UIManager v1.10`). [ Projects Panel - Tooltips compactos como los de los botones ]
 
 La x de cerrar del Projects Panel quedaba chica al lado de los iconos nuevos de la fila: la cruz pasa de 10 a 12 px (`CLOSE_ICON_SIZE`) y la caja roja del hover sigue en 16 px (`LGA_NKS_ProjectItem v1.05`). [ Projects Panel - Cruz de cerrar mas grande ]
