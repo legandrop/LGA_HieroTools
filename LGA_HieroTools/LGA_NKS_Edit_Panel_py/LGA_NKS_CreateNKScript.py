@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateNKScript v1.18 | Lega
+  LGA_NKS_CreateNKScript v1.19 | Lega
 
   Crea el script de comp de Nuke de un shot a partir del template .nk
   del proyecto (<raiz>/ASSETS/*.nk), editandolo como texto plano:
@@ -12,6 +12,9 @@ ____________________________________________________________________
   el frame range del proyecto. El resultado se escribe en
   <shot>/Comp/1_projects/<shot>_comp_v000.nk (si existe, pregunta antes de pisar).
 
+  v1.19: Los frames del EditRef se leen del JSON de ffprobe. Con FFmpeg 9
+         un mov con pista de timecode imprimia nb_frames dos veces en el
+         formato plano y la duracion quedaba sin medir.
   v1.18: Un .csp en Look_Files le gana a todo el look: cada
          OCIOFileTransform del look lo carga con interpolation linear y
          working_space ACEScg (nombre segun el config del template), y cada
@@ -109,6 +112,7 @@ ____________________________________________________________________
 ____________________________________________________________________
 """
 
+import json
 import os
 import re
 import shutil
@@ -696,16 +700,20 @@ def probe_mov_frames(mov_path):
     extra = {}
     if os.name == "nt":
         extra["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    # JSON y no "default=nw=1:nk=1": desde FFmpeg 9 un mov con pista de
+    # timecode arma un stream group (Track Reference) y el formato plano
+    # imprime nb_frames dos veces, una por el stream y otra por el grupo.
     try:
         out = subprocess.run(
             [
                 binario, "-v", "error", "-select_streams", "v:0",
                 "-show_entries", "stream=nb_frames",
-                "-of", "default=nw=1:nk=1", mov_path,
+                "-of", "json", mov_path,
             ],
             capture_output=True, text=True, timeout=60, **extra
         )
-        value = out.stdout.strip()
+        streams = json.loads(out.stdout or "{}").get("streams") or [{}]
+        value = str(streams[0].get("nb_frames", ""))
         return int(value) if value.isdigit() else None
     except (OSError, subprocess.SubprocessError, ValueError):
         return None

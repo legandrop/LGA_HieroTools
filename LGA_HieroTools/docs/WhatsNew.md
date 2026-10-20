@@ -12,6 +12,10 @@ platforms: [win, mac]
 
 ## Unreleased
 
+## v4.021
+- [improved] La descarga de LGA HieroTools pasa de 435 MB a unos 35 MB: el pack ya no trae programas de terceros que ninguna herramienta usa.
+- [fixed][win] Create V000, Import Shots y el transcode de EXR ya no fallan en una máquina que no tiene instalado el runtime de Visual C++ de Microsoft.
+
 ## v4.020
 - [improved] Apply AMF uses the shot's .csp LUT before any other look file: when there is one, it applies only that LUT, with linear interpolation in ACEScg.
 - [improved] Create NK v000 loads the shot's .csp LUT into the template's look nodes (linear, ACEScg) and turns off the CDL nodes when there is one.

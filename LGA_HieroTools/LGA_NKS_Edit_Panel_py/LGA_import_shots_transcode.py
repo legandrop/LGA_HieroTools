@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_transcode v1.06 | Lega
+  LGA_import_shots_transcode v1.07 | Lega
 
   Helper de transcode EXR para LGA_import_shots.
 
@@ -10,6 +10,9 @@ ____________________________________________________________________
   en serie; el paralelismo por frame lo maneja internamente
   LGA_EXR_Convert.py con concurrent.futures.
 
+  v1.07: El convert corre solo con el Python del pack, aislado (-I). Si
+         falta, la secuencia falla antes de mover ningun EXR, nombrando la
+         ruta; antes caia en silencio al "python" del PATH de la maquina.
   v1.06: El worker se puede saltear desde la cola (request_skip): corta
          LGA_EXR_Convert junto con sus oiiotool/exrmetrics (Job Object en
          Windows, grupo de procesos en macOS/Linux), restaura los originales
@@ -927,6 +930,13 @@ class TranscodeWorker(QRunnable):
             if self._skip_requested:
                 raise TranscodeSkipped(SKIPPED_BY_USER)
 
+            # Antes de mover un solo EXR: sin el Python del pack no hay convert,
+            # y no se usa ningun otro Python de la maquina.
+            if not self._python_exe.exists():
+                raise RuntimeError(
+                    "Falta el Python del pack: %s. Reinstalar LGA HieroTools." % self._python_exe
+                )
+
             # ── 1. Preparar paths de src / dst ────────────────────────
             if self.test_mode:
                 src_dir = item_path
@@ -1062,13 +1072,11 @@ class TranscodeWorker(QRunnable):
             log_json_path = manifest_path.with_suffix(".result.json")
 
             # ── 4. Ejecutar LGA_EXR_Convert.py ───────────────────────
-            python_exe = str(self._python_exe)
-            if not self._python_exe.exists():
-                # Fallback: Python del PATH (menos confiable en Nuke, pero mejor que nada)
-                python_exe = "python"
-
+            # -I: aislado de PYTHONPATH/PYTHONHOME que hereda de NKS; el convert
+            # usa solo la libreria estandar del Python del pack.
             cmd = [
-                python_exe,
+                str(self._python_exe),
+                "-I",
                 str(self._convert_script),
                 "--manifest", str(manifest_path),
                 "--log-json", str(log_json_path),
