@@ -49,7 +49,9 @@ Lo que hay que saber, medido sobre shots reales:
 - **El look puede venir como un `.csp`** (LUT de Cinespace) en algunos shows.
   Apply AMF le da prioridad sobre todo: si hay un `.csp`, aplica solo ese, en
   ACEScg con interpolacion lineal, y no mira `.amf`, `.cdl`, `.clf` ni `.cube`.
-  Ver `Docu_ApplyAMF_NKS.md`.
+  Create NK v000 hace lo mismo con los nodos de look del template: los LUT
+  cargan el `.csp` y los CDL quedan deshabilitados. Ver `Docu_ApplyAMF_NKS.md`
+  y `Docu_CreateNKScript.md`.
 - **Un plate puede tener varias versiones** (`bPlate_v001`, `bPlate_v002`). En
   todos los casos medidos las versiones de un mismo plate traen el MISMO grade,
   asi que ofrecer todas seria ruido: se toma la mas alta.

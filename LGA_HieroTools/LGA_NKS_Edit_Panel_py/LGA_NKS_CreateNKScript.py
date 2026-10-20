@@ -1,17 +1,22 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_CreateNKScript v1.17 | Lega
+  LGA_NKS_CreateNKScript v1.18 | Lega
 
   Crea el script de comp de Nuke de un shot a partir del template .nk
   del proyecto (<raiz>/ASSETS/*.nk), editandolo como texto plano:
   reemplaza los Reads de plates/denoised por las rutas reales del shot
   (version mas alta con EXR), borra los trios Read+Anchor+Stamp de los
   plates que no existen, clona trios para plates extra, apunta los
-  OCIO (CDL/CLF/.cube) a los Look_Files del shot, centra el EditRef y ajusta
+  OCIO (CDL/CLF/.cube/.csp) a los Look_Files del shot, centra el EditRef y ajusta
   el frame range del proyecto. El resultado se escribe en
   <shot>/Comp/1_projects/<shot>_comp_v000.nk (si existe, pregunta antes de pisar).
 
+  v1.18: Un .csp en Look_Files le gana a todo el look: cada
+         OCIOFileTransform del look lo carga con interpolation linear y
+         working_space ACEScg (nombre segun el config del template), y cada
+         OCIOCDLTransform del look queda deshabilitado. Si el template no
+         tiene donde cargarlo, el cartel avisa que el comp sale sin look.
   v1.17: Dos cambios del template. (1) El limit range sin handles ya no
          depende del nombre WRITE_DNXHD: lo reciben TODOS los Write cuya
          salida es video (.mov o .mxf), sea cual sea su nombre. (2) Un nodo
@@ -172,6 +177,11 @@ COLUMN_STEP = 161
 INPUT_DIR_NAME = "_input"
 LOOK_DIR_NAME = "Look_Files"
 ASSETS_DIR_NAME = "ASSETS"
+# Un .csp en Look_Files le gana a todo el look (mismo criterio que Apply AMF):
+# los OCIOFileTransform del look lo cargan con estos dos valores fijos, y los
+# OCIOCDLTransform del look quedan deshabilitados.
+CSP_WORKING_SPACE = "ACEScg"
+CSP_INTERPOLATION = "linear"
 DEFAULT_HANDLE = 8
 START_FRAME = 1001  # los .nk arrancan siempre en 1001
 # Primer frame del clip del EditRef tal como lo entrega el Read del .mov.
@@ -531,20 +541,61 @@ def resolve_cube_file(shot_root):
     return os.path.join(look_dir, cubes[-1]).replace("\\", "/")
 
 
+def resolve_csp_file(shot_root):
+    """Ruta del .csp del shot en Look_Files, o None.
+
+    Un .csp (LUT de Cinespace) es el look completo del shot y le gana a todo
+    lo demas, igual que en Apply AMF. Entre varios, el de version mas alta
+    (_vNN); si empatan, el ultimo por orden alfabetico."""
+    look_dir = os.path.join(shot_root, INPUT_DIR_NAME, LOOK_DIR_NAME)
+    if not os.path.isdir(look_dir):
+        return None
+    csps = [f for f in sorted(os.listdir(look_dir)) if f.lower().endswith(".csp")]
+    if not csps:
+        return None
+    csps.sort(key=get_version)
+    return os.path.join(look_dir, csps[-1]).replace("\\", "/")
+
+
+def csp_working_space_value(chunks):
+    """Valor del knob working_space para ACEScg, escrito como lo guarda Nuke.
+
+    El .nk se edita como texto, sin Nuke, asi que no hay enum contra el cual
+    matchear: el nombre del colorspace sale del config del template. Los
+    configs ACES 1.x (aces_1.0.3, aces_1.1, aces_1.2) lo llaman
+    'ACES - ACEScg', y los v2 de Foundry 'ACEScg'. Si el Root no dice el
+    config pero algun nodo ya guarda un 'ACES - ...', es un config 1.x."""
+    config = ""
+    estilo_aces1 = False
+    for chunk in chunks:
+        if chunk_class(chunk) == "Root":
+            config = (chunk_knob(chunk, "OCIO_config") or "").strip('"').lower()
+        for line in chunk:
+            if re.match(r'^\s+(working_space|in_colorspace|out_colorspace) "ACES - ', line):
+                estilo_aces1 = True
+    if config.startswith("aces_1") or estilo_aces1:
+        return '"ACES - %s"' % CSP_WORKING_SPACE
+    return CSP_WORKING_SPACE
+
+
 def look_node_kind(cls, current_file):
     """Que archivo del shot le corresponde a un nodo de look del template:
-    'cdl', 'clf' o 'cube'.
+    'cdl', 'clf', 'cube' o 'csp'.
 
-    Un OCIOCDLTransform es siempre 'cdl'. Un OCIOFileTransform es 'cube' si
-    el file que trae el template NOMBRA un .cube -una ruta o la expresion TCL
-    que busca *.cube en Look_Files-, y 'clf' en cualquier otro caso. Un
+    Un OCIOCDLTransform es siempre 'cdl'. Un OCIOFileTransform es 'csp' o
+    'cube' si el file que trae el template NOMBRA un .csp o un .cube -una ruta
+    o la expresion TCL que busca *.csp / *.cube en Look_Files-, y 'clf' en
+    cualquier otro caso. Un
     OCIOFileTransform sin file no dice que formato espera: se asume clf, que
     es lo que hacia la tool antes de existir el soporte de .cube. Si el
     template de un show con LMT .cube trae el nodo vacio, hay que dejarle el
     file puesto (aunque sea con la ruta de otro shot)."""
     if cls == "OCIOCDLTransform":
         return "cdl"
-    return "cube" if ".cube" in (current_file or "").lower() else "clf"
+    low = (current_file or "").lower()
+    if ".csp" in low:
+        return "csp"
+    return "cube" if ".cube" in low else "clf"
 
 
 # Salidas de video: Writes cuyo archivo es .mov o .mxf. Son los reviews y
@@ -1250,11 +1301,26 @@ def build_script(
     # apunte a un archivo fijo puesto a mano NO se pisa.
     cdl, clf = resolve_look_files(shot_root)
     cube = resolve_cube_file(shot_root)
+    csp = resolve_csp_file(shot_root)
     log.append("  CDL del shot: %s" % (cdl or "NINGUNO"))
     log.append("  CLF del shot: %s" % (clf or "NINGUNO"))
     log.append("  CUBE del shot: %s" % (cube or "NINGUNO"))
-    shot_looks = {"cdl": cdl, "clf": clf, "cube": cube}
-    nodos_por_tipo = {"cdl": 0, "clf": 0, "cube": 0}
+    log.append("  CSP del shot: %s" % (csp or "NINGUNO"))
+    shot_looks = {"cdl": cdl, "clf": clf, "cube": cube, "csp": csp}
+    nodos_por_tipo = {"cdl": 0, "clf": 0, "cube": 0, "csp": 0}
+    # Con un .csp en el shot, el .csp le gana a todo: cada OCIOFileTransform del
+    # look lo carga (linear, ACEScg) sea cual sea el formato que esperaba el
+    # template, y cada OCIOCDLTransform del look queda deshabilitado. No se
+    # avisa la falta de .cdl, .clf, .cube ni .amf: con .csp no hacen falta.
+    csp_space = csp_working_space_value(chunks) if csp else None
+    if csp:
+        log.append(
+            "  CSP manda: los LUT del look cargan el .csp (interpolation %s, "
+            "working_space %s) y los CDL del look se deshabilitan"
+            % (CSP_INTERPOLATION, csp_space)
+        )
+    csp_cargados = 0
+    cdl_deshabilitados = 0
     grupos = grupo_de_cada_chunk(chunks)
     ocio_total = 0
     ocio_tocados = 0
@@ -1272,7 +1338,7 @@ def build_script(
         # de lo que el template ya trae en el file del nodo.
         tipo = look_node_kind(cls, current)
         nodos_por_tipo[tipo] += 1
-        target = shot_looks[tipo]
+        target = csp if (csp and tipo != "cdl") else shot_looks[tipo]
         # Tres formas de que un nodo sea "del look del shot":
         #   - su path nombra Look_Files
         #   - es la expresion TCL que resuelve desde root.name
@@ -1294,6 +1360,12 @@ def build_script(
                 % (nombre, donde, current[:120])
             )
             continue
+        if csp and tipo == "cdl":
+            set_or_add_chunk_knob(chunk, "disable", "true")
+            cdl_deshabilitados += 1
+            ocio_tocados += 1
+            log.append("  OCIO %s (%s) [cdl]: DESHABILITADO, el .csp manda" % (nombre, donde))
+            continue
         if not target:
             # No se suma a ocio_intactos: la falta de CDL/CLF ya tiene su
             # propio aviso y repetirla por nodo seria ruido.
@@ -1309,6 +1381,11 @@ def build_script(
             # Sin knob file en el template: hay que agregarlo, no reemplazarlo.
             set_or_add_chunk_knob(chunk, "file", quote_if_needed(target))
             motivo = " [venia sin file]"
+        if csp:
+            set_or_add_chunk_knob(chunk, "interpolation", CSP_INTERPOLATION)
+            set_or_add_chunk_knob(chunk, "working_space", csp_space)
+            csp_cargados += 1
+            tipo = "%s -> csp" % tipo
         ocio_tocados += 1
         log.append("  OCIO %s (%s) [%s]%s -> %s" % (nombre, donde, tipo, motivo, target))
     log.append("  OCIO: %d nodos, %d reemplazados" % (ocio_total, ocio_tocados))
@@ -1321,7 +1398,20 @@ def build_script(
             "template path (%s): check their CDL/LUT by hand"
             % (len(ocio_intactos), ", ".join(ocio_intactos)),
         )
-    if not cdl:
+    if csp:
+        log.append(
+            "  CSP: %d LUT cargados, %d CDL deshabilitados" % (csp_cargados, cdl_deshabilitados)
+        )
+        if not csp_cargados:
+            # Hay .csp pero el template no trae ningun OCIOFileTransform del look
+            # que lo pueda recibir: el comp sale sin el look del shot.
+            _warn(
+                log, warnings,
+                "The shot has a .csp LUT (%s) but the template has no OCIOFileTransform "
+                "pointing to %s to load it: the comp has no look. Add one to the "
+                "template or use AMF in Nuke" % (os.path.basename(csp), LOOK_DIR_NAME),
+            )
+    elif not cdl:
         _warn(
             log, warnings,
             "No aPlate .cdl found in %s/%s: the CDL nodes keep the template path"
@@ -1330,7 +1420,7 @@ def build_script(
     # El aviso del .clf se mantiene como siempre, salvo en un template cuyos
     # nodos de LUT son todos .cube: ahi un shot sin .clf es lo normal y el
     # aviso saldria en todos los shots.
-    if not clf and (nodos_por_tipo["clf"] or not nodos_por_tipo["cube"]):
+    if not csp and not clf and (nodos_por_tipo["clf"] or not nodos_por_tipo["cube"]):
         _warn(
             log, warnings,
             "No .clf LUT found in %s/%s: the LUT nodes keep the template path"
@@ -1338,14 +1428,20 @@ def build_script(
         )
     # El del .cube solo si el template tiene nodos de .cube: en el resto de
     # los proyectos no tener .cube es lo normal.
-    if not cube and nodos_por_tipo["cube"]:
+    if not csp and not cube and nodos_por_tipo["cube"]:
         _warn(
             log, warnings,
             "No .cube LUT found in %s/%s: the .cube look nodes keep the "
             "template path" % (INPUT_DIR_NAME, LOOK_DIR_NAME),
         )
+    if not csp and nodos_por_tipo["csp"]:
+        _warn(
+            log, warnings,
+            "No .csp LUT found in %s/%s: the .csp look nodes keep the template path"
+            % (INPUT_DIR_NAME, LOOK_DIR_NAME),
+        )
     amf_con_extension, amf_con_sufijo = find_amf(shot_root)
-    if not amf_con_extension:
+    if not amf_con_extension and not csp:
         if amf_con_sufijo:
             _warn(
                 log, warnings,

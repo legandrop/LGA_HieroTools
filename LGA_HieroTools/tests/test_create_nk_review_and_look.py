@@ -291,7 +291,50 @@ class ReviewWriteAndCubeTest(unittest.TestCase):
         self.assertEqual(kind("OCIOCDLTransform", "x.cube"), "cdl")
         self.assertEqual(kind("OCIOFileTransform", "a/b.CUBE"), "cube")
         self.assertEqual(kind("OCIOFileTransform", "a/b.clf"), "clf")
+        self.assertEqual(kind("OCIOFileTransform", "a/b.csp"), "csp")
         self.assertEqual(kind("OCIOFileTransform", ""), "clf")
+
+    # ---- .csp: le gana a todo ---------------------------------------------
+
+    def test_csp_wins_over_everything(self):
+        self.touch_look("PROJA_503_010_LMT_v01.cube", "show_lmt.clf",
+                        "PROJA_503_010_aPlate_v001.cdl",
+                        "PROJA_503_010_VFXrefLUT_ACEScg_64_v001.csp")
+        text = self.build(template(
+            ocio_file("LMT_cube", SOURCE_LOOKS + "/x_v01.cube"),
+            ocio_file("LMT_clf", SOURCE_LOOKS + "/x.clf"),
+            ocio_file("CDL1", SOURCE_LOOKS + "/x_aPlate_v001.cdl", cls="OCIOCDLTransform"),
+        ))
+        csp = self.look("PROJA_503_010_VFXrefLUT_ACEScg_64_v001.csp")
+        for name in ("LMT_cube", "LMT_clf"):
+            self.assertEqual(self.knob(text, name, "file"), csp, name)
+            self.assertEqual(self.knob(text, name, "interpolation"), "linear", name)
+            self.assertEqual(self.knob(text, name, "working_space"), "ACEScg", name)
+        self.assertEqual(self.knob(text, "CDL1", "disable"), "true")
+        # Con .csp no se avisa la falta de .amf ni de nada mas.
+        look_warnings = [w for w in self.warnings
+                         if any(e in w for e in (".amf", ".cdl", ".clf", ".cube", ".csp"))]
+        self.assertEqual(look_warnings, [])
+
+    def test_csp_working_space_follows_the_template_config(self):
+        self.touch_look("look_v002.csp", "look_v001.csp")
+        base = template(ocio_file("LMT", None))
+        aces12 = base.replace(" frame 1001", " OCIO_config aces_1.2\n frame 1001", 1)
+        text = self.build(aces12)
+        self.assertEqual(self.knob(text, "LMT", "working_space"), '"ACES - ACEScg"')
+        self.assertEqual(self.knob(text, "LMT", "file"), self.look("look_v002.csp"))
+
+    def test_csp_without_a_look_node_in_the_template_warns(self):
+        self.touch_look("look_v001.csp")
+        self.build(template())
+        self.assertTrue(any("has a .csp LUT" in w for w in self.warnings), self.warnings)
+
+    def test_csp_template_without_csp_in_the_shot_warns(self):
+        self.touch_look("show_lmt.clf")
+        text = self.build(template(ocio_file("LMT", SOURCE_LOOKS + "/x_v01.csp")))
+        self.assertTrue(any(w.startswith("No .csp LUT found") for w in self.warnings),
+                        self.warnings)
+        self.assertIsNone(self.knob(text, "LMT", "interpolation"))
 
 
 if __name__ == "__main__":

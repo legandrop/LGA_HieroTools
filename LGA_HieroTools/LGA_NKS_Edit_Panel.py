@@ -5,7 +5,8 @@ ____________________________________________________________________
 
   Tools panel for Hiero / Nuke Studio
 
-  v3.14: El tooltip de Apply AMF dice que un .csp tiene prioridad sobre todo.
+  v3.14: Los tooltips de Apply AMF y Create NK dicen que un .csp tiene
+         prioridad sobre todo.
   v3.13: El tooltip de Apply AMF nombra el .cube como archivo de look.
   v3.12: Las comparaciones de versiones pasan al Review Panel, Check Frames
          queda junto a Fix Zombies y New Video Track comparte la familia
@@ -68,7 +69,8 @@ from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
 # Tooltips fuera del widget (capa intermedia para la futura migracion bilingue)
 TOOLTIP_CREATE_NK_SCRIPT = (
     "Crea el script de comp de Nuke del shot activo desde el template del proyecto "
-    "(ASSETS), con los plates y denoised reales, el CDL/CLF del shot y el EditRef centrado"
+    "(ASSETS), con los plates y denoised reales, el look del shot (CDL/CLF/.cube, o solo el "
+    ".csp si hay uno) y el EditRef centrado"
 )
 TOOLTIP_REPLACE_CLIP = (
     "Reemplaza el media del clip seleccionado por un archivo que elegis, aunque tenga "

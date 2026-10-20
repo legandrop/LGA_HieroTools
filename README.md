@@ -265,7 +265,9 @@ indicators.
   Opens the validator that prepares black EXR `v000` sequences for one or more shots/tasks,
   preserving the vendor portion of the shot code.
 - **Create NK v000**  
-  Builds the shot's Nuke comp script from the project template. See [Docu_CreateNKScript.md](LGA_HieroTools/docs/Docu_CreateNKScript.md).
+  Builds the shot's Nuke comp script from the project template. A .csp LUT in
+  Look_Files takes priority: the look nodes load it and the CDL nodes are
+  disabled. See [Docu_CreateNKScript.md](LGA_HieroTools/docs/Docu_CreateNKScript.md).
 - **New Video Track**
   Creates a new video track above the selected track.
 - **Extend &Edit**  

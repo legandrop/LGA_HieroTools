@@ -73,7 +73,7 @@ v1.15 se exigían los 16 y la corrida abortaba con la lista de los que faltaban.
   coordenadas fijas medidas sobre un template: en otro armado en otra zona
   del node graph, los plates caían fuera de su backdrop.
 
-## Nodos de look: CDL, CLF y .cube
+## Nodos de look: CDL, CLF, .cube y .csp
 
 Los nodos OCIO del template (`OCIOCDLTransform`, `OCIOFileTransform`) se
 apuntan a los archivos del shot en `<shot>/_input/Look_Files`. Cada nodo recibe
@@ -98,6 +98,33 @@ shot no tenia `.clf`.
 `.clf`), asi que no se filtra por plate: entre varios gana el de version mas
 alta (`_vNN` del nombre) y, si empatan o ninguno trae version, el ultimo por
 orden alfabetico. Las mayusculas de la extension no importan.
+
+**Un `.csp` le gana a todo** (mismo criterio que Apply AMF). Si `Look_Files`
+trae un `.csp` (LUT de Cinespace; entre varios, el de version mas alta):
+
+- **Todo `OCIOFileTransform` del look carga el `.csp`**, sea cual sea el formato
+  que esperaba el template (`.clf`, `.cube`, sin `file`), con `interpolation
+  linear` y `working_space` ACEScg, los dos fijos por decision de Lega.
+- **Todo `OCIOCDLTransform` del look queda `disable true`**: con `.csp` no se
+  aplica el grade del `.cdl`. Se deshabilita y no se borra, para no romper las
+  conexiones del template y que el artista lo pueda prender si hace falta.
+- No salen los avisos de falta de `.cdl`, `.clf`, `.cube` ni `.amf`.
+
+El `.nk` se edita como texto, sin Nuke, asi que no hay enum de colorspaces contra
+el cual matchear el nombre de ACEScg (`csp_working_space_value`): si el Root dice
+un config ACES 1.x (`OCIO_config aces_1.2`, `aces_1.1`...) o algun nodo del
+template ya guarda un valor `"ACES - ..."`, se escribe `"ACES - ACEScg"`; si no,
+`ACEScg`, que es el nombre en los configs v2 de Foundry. Verificado contra un
+template real con `aces_1.2`: los dos `OCIOFileTransform` del look (uno suelto y
+otro en el grupo del viewer) quedan con `working_space "ACES - ACEScg"`, como
+guarda Nuke ese knob en ese config.
+
+**Si el template no tiene ningun `OCIOFileTransform` del look**, el `.csp` no
+tiene donde cargarse y el cartel final lo avisa: el comp sale sin look. La tool
+no inserta nodos en el arbol del template. Para un show con `.csp`, el template
+tiene que traer un `OCIOFileTransform` cuyo `file` apunte a `Look_Files` (o
+vacio), y la tool lo completa. Al reves, un nodo cuyo `file` nombra un `.csp`
+en un shot sin `.csp` conserva la ruta del template y avisa `No .csp LUT found`.
 
 **Reglas que no cambian:**
 

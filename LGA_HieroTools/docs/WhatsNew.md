@@ -14,6 +14,7 @@ platforms: [win, mac]
 
 ## v4.021
 - [improved] Apply AMF uses a .csp LUT from the shot's Look_Files folder before anything else: when there is one, it applies only that LUT, with linear interpolation in ACEScg.
+- [improved] Create NK v000 loads the shot's .csp LUT into the template's look nodes (linear, ACEScg) and turns off the CDL nodes when there is one.
 - [fixed] LGA BurnIn's background panels stay lined up with their text when the sequence format differs from the clip's.
 - [fixed] Adding the LGA BurnIn soft effect no longer freezes the timeline viewer; moving the playhead updates the image right away.
 
