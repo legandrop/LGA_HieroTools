@@ -1,10 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ApplyAMF v0.94 | Lega
+  LGA_NKS_ApplyAMF v0.95 | Lega
 
   Pone y saca los soft effects de color de un shot, siguiendo lo que
   declara el .amf que viene con el shot.
+
+  Un .csp en Look_Files le gana a todo: si hay uno, se aplica SOLO ese en
+  un OCIOFileTransform (interpolation linear, working space ACEScg) y no
+  se mira ningun .amf, .cdl, .clf ni .cube.
 
   Con TOGGLE_CREATE_DELETE en True (el default) el boton es un TOGGLE:
   si los clips objetivo YA tienen la cadena AMF, la BORRA; si no la
@@ -79,6 +83,11 @@ ____________________________________________________________________
   (ver pick_amf_for_plate). El aviso de 'hay mas de uno de esa extension'
   quedo solo para el plan de respaldo, donde no hay .amf que consultar.
 
+  v0.95: Un .csp en Look_Files tiene prioridad sobre todo lo demas: si
+         existe, el plan es ese .csp solo, en un OCIOFileTransform con
+         interpolation linear y working space ACEScg fijos, y no se busca
+         .amf, .cdl, .clf ni .cube. Con varios .csp se elige igual que con
+         los .cube (version mas alta, ultimo alfabetico, avisado).
   v0.94: Fix: Node.hasError() deja de decidir. La v0.93 sacaba del timeline
          todo efecto cuyo nodo quedaba con hasError() en True, y en una sesion
          real de NKS eso pasaba con un .cdl y un .clf VALIDOS (el CDL hasta
@@ -244,6 +253,15 @@ AMF_WORKING_SPACE = "ACES2065-1"
 CDL_EXTENSION = ".cdl"
 CLF_EXTENSION = ".clf"
 CUBE_EXTENSION = ".cube"
+
+# Un .csp (LUT de Cinespace) en Look_Files es el look completo del shot y le
+# gana a todo: si hay uno, se aplica ese solo y no se busca .amf, .cdl, .clf ni
+# .cube. Decision de Lega: los shows que mandan .csp lo arman para correr en
+# ACEScg con interpolacion lineal, asi que esos dos valores van fijos y no se
+# deducen del nombre como en el .cube.
+CSP_EXTENSION = ".csp"
+CSP_WORKING_SPACE = "ACEScg"
+CSP_INTERPOLATION = "linear"
 
 # Un .cube es un LUT 1D/3D pelado: no trae metadata, ni siquiera dice en que
 # espacio espera su entrada. Se deduce del nombre del archivo y, sin pista, se
@@ -700,7 +718,17 @@ def parse_lut_name(basename):
 
 
 def pick_cube(look_dir):
-    """El .cube del shot, o None si no hay. SIN cartel de eleccion.
+    """El .cube del shot, o None si no hay. Ver _pick_lut."""
+    return _pick_lut(look_dir, CUBE_EXTENSION)
+
+
+def pick_csp(look_dir):
+    """El .csp del shot, o None si no hay. Ver _pick_lut."""
+    return _pick_lut(look_dir, CSP_EXTENSION)
+
+
+def _pick_lut(look_dir, extension):
+    """El LUT (.cube o .csp) del shot, o None si no hay. SIN cartel de eleccion.
 
     Se agrupa por nombre sin el '_vNNN' final y de cada LUT se queda la version
     mas alta. Si quedan varios LUT distintos no se pregunta -la tool procesa
@@ -713,11 +741,12 @@ def pick_cube(look_dir):
     """
     if not look_dir:
         return None
-    if look_dir in _CUBE_CACHE:
-        return _CUBE_CACHE[look_dir]
+    clave_cache = (look_dir, extension)
+    if clave_cache in _CUBE_CACHE:
+        return _CUBE_CACHE[clave_cache]
 
     cubes = [
-        p for p in _archivos_de(look_dir) if p.lower().endswith(CUBE_EXTENSION)
+        p for p in _archivos_de(look_dir) if p.lower().endswith(extension)
     ]
     elegido = None
     if cubes:
@@ -736,15 +765,16 @@ def pick_cube(look_dir):
         ordenados = sorted(por_lut)
         elegido = por_lut[ordenados[-1]][1]
         debug_print(
-            "  .cube encontrados    : %d (%d LUT distinto%s)"
-            % (len(cubes), len(ordenados), "" if len(ordenados) == 1 else "s")
+            "  %s encontrados    : %d (%d LUT distinto%s)"
+            % (extension, len(cubes), len(ordenados), "" if len(ordenados) == 1 else "s")
         )
         if len(ordenados) > 1:
             aviso = (
-                "%d distintos .cube en %s: se usa '%s' (el ultimo por orden "
+                "%d distintos %s en %s: se usa '%s' (el ultimo por orden "
                 "alfabetico, en su version mas alta); no se uso: %s"
                 % (
                     len(ordenados),
+                    extension,
                     LOOK_DIR_NAME,
                     os.path.basename(elegido),
                     ", ".join(os.path.basename(por_lut[c][1]) for c in ordenados[:-1]),
@@ -753,8 +783,23 @@ def pick_cube(look_dir):
             debug_print("  [AVISO] " + aviso)
             _anotar_aviso_corrida(aviso)
 
-    _CUBE_CACHE[look_dir] = elegido
+    _CUBE_CACHE[clave_cache] = elegido
     return elegido
+
+
+def csp_spec(csp_path):
+    """El .csp como unico eslabon: OCIOFileTransform en ACEScg, interpolacion lineal."""
+    debug_print(
+        "    [APLICAR] CSP -> %s (working space: %s, interpolation: %s, fijos)"
+        % (os.path.basename(csp_path), CSP_WORKING_SPACE, CSP_INTERPOLATION)
+    )
+    return {
+        "type": "OCIOFileTransform",
+        "file": re.sub(r"[\\/]+", "/", csp_path),
+        "cccid": None,
+        "working_space": CSP_WORKING_SPACE,
+        "interpolation": CSP_INTERPOLATION,
+    }
 
 
 def cube_working_space(cube_path):
@@ -1011,6 +1056,12 @@ def build_effect_plan(look_dir, plate=None):
 
 def _build_effect_plan_sin_cache(look_dir, plate):
     """El trabajo real de build_effect_plan. Ver el cache alla."""
+    # Un .csp le gana a todo: si esta, es el look del shot y no se mira nada mas.
+    csp_path = pick_csp(look_dir)
+    if csp_path:
+        debug_print("  [PLAN] Hay .csp: se usa solo ese, sin buscar nada mas.")
+        return [csp_spec(csp_path)]
+
     amf_path = pick_amf_for_plate(look_dir, plate)
     if not amf_path:
         debug_print("  [AVISO] El shot no trae .amf: se usa el plan fijo por extension.")
@@ -1555,6 +1606,8 @@ def configure_effect_node(node, spec):
             debug_print("    [WARN] Sin cccid: el nodo toma la primera correccion del archivo.")
     else:
         ok &= _set_knob(node, "file", spec["file"])
+        if spec.get("interpolation"):
+            ok &= _set_knob(node, "interpolation", spec["interpolation"])
     debug_print("    [ESTADO] con el archivo cargado : %s" % _estado_error(node))
 
     # El working space sale del .amf, o de AMF_WORKING_SPACE si el .amf no lo
@@ -1931,7 +1984,7 @@ def _avisar_fallos(fallos, total_clips):
         lineas.append("    ... and %d more" % (len(fallos) - MAX))
     lineas.append("")
     lineas.append(
-        "The look files live in <shot>/%s/%s (.amf, .cdl, .clf and .cube)."
+        "The look files live in <shot>/%s/%s (.csp, .amf, .cdl, .clf and .cube)."
         % (INPUT_DIR_NAME, LOOK_DIR_NAME)
     )
 
@@ -2004,7 +2057,7 @@ def process_track_item(track_item, fallos):
         _anotar_fallo(
             fallos,
             shot,
-            f"nothing to apply (no pending .amf look and no .cdl, .clf or .cube in {LOOK_DIR_NAME})",
+            f"nothing to apply (no .csp, no pending .amf look and no .cdl, .clf or .cube in {LOOK_DIR_NAME})",
         )
         resumen["error"] += 1
         return resumen

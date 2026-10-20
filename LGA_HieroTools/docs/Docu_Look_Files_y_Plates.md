@@ -46,6 +46,10 @@ Lo que hay que saber, medido sobre shots reales:
   suelto (si hay) mas UN LMT -el `.clf` y, si no hay, el `.cube`-. Con `.cdl` y
   `.cube` se aplican los dos; nunca `.clf` y `.cube` juntos. Ver
   `Docu_ApplyAMF_NKS.md`.
+- **El look puede venir como un `.csp`** (LUT de Cinespace) en algunos shows.
+  Apply AMF le da prioridad sobre todo: si hay un `.csp`, aplica solo ese, en
+  ACEScg con interpolacion lineal, y no mira `.amf`, `.cdl`, `.clf` ni `.cube`.
+  Ver `Docu_ApplyAMF_NKS.md`.
 - **Un plate puede tener varias versiones** (`bPlate_v001`, `bPlate_v002`). En
   todos los casos medidos las versiones de un mismo plate traen el MISMO grade,
   asi que ofrecer todas seria ruido: se toma la mas alta.

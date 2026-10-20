@@ -171,6 +171,36 @@ class ApplyAmfNksTest(unittest.TestCase):
         self.m.pick_cube(self.tmp.replace("\\", "/"))
         self.assertEqual(len(self.m._AVISOS_CORRIDA), 1)
 
+    # ------------------------------------------------------------------ .csp
+    def test_csp_le_gana_a_todo(self):
+        # Con .amf, .cdl, .clf y .cube en la carpeta, el plan es el .csp solo.
+        self.write("PROJA_0010_aPlate_v001.amf", "<aces:acesMetadataFile/>")
+        self.write("PROJA_0010_aPlate_v001.cdl", "<ColorDecisionList/>")
+        self.write("lmt.clf", "<ProcessList/>")
+        self.cube3("PROJA_LMT_v001.cube", 2)
+        self.write("PROJA_0010_VFXrefLUT_ACEScg_64_v001.csp", "CSPLUTV100\n")
+        plan = self.m.build_effect_plan(self.tmp.replace("\\", "/"), "aplate")
+        self.assertEqual(len(plan), 1)
+        spec = plan[0]
+        self.assertEqual(spec["type"], "OCIOFileTransform")
+        self.assertTrue(spec["file"].endswith("PROJA_0010_VFXrefLUT_ACEScg_64_v001.csp"))
+        self.assertNotIn("\\", spec["file"])
+        self.assertEqual(spec["working_space"], "ACEScg")
+        self.assertEqual(spec["interpolation"], "linear")
+
+    def test_csp_varias_versiones_toma_la_mas_alta(self):
+        for nombre in ("X_LUT_v001.csp", "X_LUT_v003.csp", "X_LUT_v002.csp"):
+            self.write(nombre, "CSPLUTV100\n")
+        elegido = self.m.pick_csp(self.tmp.replace("\\", "/"))
+        self.assertTrue(elegido.endswith("X_LUT_v003.csp"), elegido)
+
+    def test_sin_csp_sigue_el_plan_de_siempre(self):
+        self.write("PROJA_0010_aPlate_v001.cdl", "<ColorDecisionList/>")
+        self.cube3("PROJA_LMT_v001.cube", 2)
+        plan = self.m.build_effect_plan(self.tmp.replace("\\", "/"), "aplate")
+        self.assertEqual([s["type"] for s in plan], ["OCIOCDLTransform", "OCIOFileTransform"])
+        self.assertNotIn("interpolation", plan[1])
+
     # ------------------------------------------------------ working space
     def test_cube_working_space(self):
         casos = {

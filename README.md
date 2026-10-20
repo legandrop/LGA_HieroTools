@@ -253,7 +253,8 @@ indicators.
   or `gamma2.2`.
 - **Apply AMF**
   Adds or removes the shot's CDL/CLF/.cube effects on selected EXRs, or on EXRs
-  under the playhead when fewer than two clips are selected. Effects you added
+  under the playhead when fewer than two clips are selected. A .csp LUT in
+  Look_Files takes priority and is applied alone (linear, ACEScg). Effects you added
   to the clip are kept; the look goes on top of them. Shortcut: `Shift+L`.
 - **Import shot**  
   Imports shots into the project: plates and references into the shot bin and onto their tracks.

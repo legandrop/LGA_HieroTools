@@ -11,6 +11,7 @@ Con 2 o mas clips seleccionados trabaja sobre esos; con uno o ninguno, sobre los
 
 | Archivo | Efecto | De donde sale el working space |
 |---|---|---|
+| `.csp` | `OCIOFileTransform`, y nada mas | fijo: ACEScg, con `interpolation=linear` |
 | `.amf` | uno por cada `lookTransform` con `applied="false"` | del propio `.amf`; si no declara, ACES2065-1 |
 | `.cdl` | `OCIOCDLTransform` | del `<cdlWorkingSpace>` del `.amf`; sin `.amf`, el default del nodo (`scene_linear`) |
 | `.clf` | `OCIOFileTransform` | ACES2065-1 (un LMT `.clf` entra y sale en AP0) |
@@ -18,6 +19,7 @@ Con 2 o mas clips seleccionados trabaja sobre esos; con uno o ninguno, sobre los
 
 ## Prioridad entre formatos
 
+0. **Un `.csp` le gana a todo.** Si `Look_Files` trae un `.csp` (LUT de Cinespace), el plan es ese archivo solo, en un `OCIOFileTransform` con working space `ACEScg` e `interpolation=linear`, y no se busca ningun `.amf`, `.cdl`, `.clf` ni `.cube` (`pick_csp` + `csp_spec`, al principio de `_build_effect_plan_sin_cache`). Los dos valores son fijos por decision de Lega: los shows que mandan el look como `.csp` lo arman para correr en ACEScg, y el nombre del archivo no se usa para deducir nada. Con varios `.csp` se elige como con los `.cube` (version mas alta, ultimo alfabetico, avisado en el RESUMEN). El resto de esta lista vale solo cuando NO hay `.csp`.
 1. **El `.amf` manda.** Si hay uno, el plan sale de el: orden, `applied`, working space y archivos. El `.cdl` es el hermano del `.amf` elegido. Un `.cube` en la carpeta que el `.amf` NO nombra se ignora (apilarlo aplicaria el look dos veces).
 2. **Un `.cube` que el `.amf` nombra** en su `<file>` entra por el camino del `.amf`, con ACES2065-1 (el espacio de la cadena del `.amf`), no por la regla del nombre de abajo. Si el `.amf` nombra un `.cube` que no esta en la carpeta, se usa el que elige `pick_cube`.
 3. **Sin ningun `.amf`**, plan de respaldo (`_fallback_plan`): el `.cdl` suelto (si hay) mas **UN** LMT, que es el `.clf` y, si no hay, el `.cube`.
