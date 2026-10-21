@@ -1,5 +1,10 @@
 # What's new in LGA HieroTools
 
+## v4.021 (2026-10-20)
+
+- **Improved:** La descarga de LGA HieroTools pasa de 435 MB a unos 35 MB: el pack ya no trae programas de terceros que ninguna herramienta usa.
+- **Fixed:** Create V000, Import Shots y el transcode de EXR ya no fallan en una máquina que no tiene instalado el runtime de Visual C++ de Microsoft. (Windows only)
+
 ## v4.020 (2026-10-20)
 
 - **New:** Hover an open project in the Projects panel to save it as the next version with one click; if a newer version already exists on disk, it asks before using the next free number.

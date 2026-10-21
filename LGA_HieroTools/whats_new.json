@@ -4,6 +4,23 @@
   "name": "LGA HieroTools",
   "versions": [
     {
+      "version": "4.021",
+      "items": [
+        {
+          "kind": "improved",
+          "text": "La descarga de LGA HieroTools pasa de 435 MB a unos 35 MB: el pack ya no trae programas de terceros que ninguna herramienta usa."
+        },
+        {
+          "kind": "fixed",
+          "text": "Create V000, Import Shots y el transcode de EXR ya no fallan en una máquina que no tiene instalado el runtime de Visual C++ de Microsoft.",
+          "platform": [
+            "win"
+          ]
+        }
+      ],
+      "date": "2026-10-20"
+    },
+    {
       "version": "4.020",
       "items": [
         {
