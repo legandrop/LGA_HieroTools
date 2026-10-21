@@ -166,6 +166,12 @@ def load_modules(estado):
         setattr(qt_mod, nombre, None)
     qt_mod.is_widget_alive = lambda widget: True
     qt_mod.iter_live_widgets = lambda: iter(())
+    # SwitchSequence lo importa a nivel de modulo; aca no se prueba el spreadsheet.
+    columns_mod = types.ModuleType("LGA_NKS_Shared.LGA_NKS_MediaSpreadsheetColumns")
+    columns_mod.tab_count = lambda: 0
+    columns_mod.refresh = lambda *args, **kwargs: 0
+    columns_mod.close_for_refresh = lambda: 0
+    shared_pkg.LGA_NKS_MediaSpreadsheetColumns = columns_mod
 
     viewer_pkg = types.ModuleType("LGA_NKS_ViewerTL_Panel_py")
     viewer_pkg.__path__ = []
@@ -180,6 +186,7 @@ def load_modules(estado):
         "LGA_NKS_Projects_Panel_py.LGA_NKS_TimelineMemory": memory_mod,
         "LGA_NKS_Shared": shared_pkg,
         "LGA_NKS_Shared.LGA_QtAdapter_HieroTools": qt_mod,
+        "LGA_NKS_Shared.LGA_NKS_MediaSpreadsheetColumns": columns_mod,
         "LGA_NKS_ViewerTL_Panel_py": viewer_pkg,
     }
     previos = {nombre: sys.modules.get(nombre) for nombre in stubs}
