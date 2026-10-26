@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Nav v1.01 | Lega
+  LGA_NKS_ShotMarks_Nav v1.02 | Lega
 
   Previous / Next Mark: Shift+Click en Previous / Next Annotation del
   panel Review. Salta el playhead a la marca de Shot Marks anterior o
@@ -17,6 +17,11 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Nav.log.
 
+  v1.02: Una celda con varios vendors ("Vendor A, Vendor B") pinta cada
+         uno con su color; antes se buscaba la celda entera y salia sin
+         color. El alto se recalcula invalidando los layouts: al pasar a
+         una marca con mas lineas en el encabezado la ventana quedaba con
+         el alto viejo, la descripcion recortada y restos del pie abajo.
   v1.01: La ventana sigue al playhead: al entrar en otra marca (scrub o
          playback) muestra esa sin tocar Previous/Next. Engancha la
          senal timeChanged del visor y busca la marca con
@@ -144,15 +149,16 @@ def mark_info(sequence, tag, index, total):
     info["duration"] = module.format_timecode(info["frames"], fps)
     info["index"] = index
     info["total"] = total
-    info["vendor_color"] = None
+    # [(vendor, color o None)]: una celda puede traer varios vendors.
+    info["vendor_colors"] = []
     if info.get("vendor"):
         try:
             # Import aca: el modulo resuelve la DB por contexto con imports que
             # solo existen con el startup del pack (no en el harness de UI).
-            from LGA_NKS_Shared.LGA_NKS_Vendor_Colors_Config import find_vendor_color
+            from LGA_NKS_Shared.LGA_NKS_Vendor_Colors_Config import find_vendor_colors
 
             project = sequence.project()
-            info["vendor_color"] = find_vendor_color(
+            info["vendor_colors"] = find_vendor_colors(
                 info["vendor"], project.name() if project is not None else None)
         except Exception as exc:
             # Sin color no es un error de la marca: se muestra el texto solo.
@@ -203,6 +209,7 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
         header.setStyleSheet(
             "QWidget#shotMarkHeader { border-bottom: 1px solid %s; }" % Color.BORDER)
         head = QtWidgets.QVBoxLayout(header)
+        self._header = header
         margin = Metric.WINDOW_MARGIN
         head.setContentsMargins(margin, margin - 4, margin, 10)
         head.setSpacing(4)
@@ -254,10 +261,9 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
             if not info.get(field):
                 continue
             value = esc(info[field])
-            if field == "vendor" and info.get("vendor_color"):
-                # Dato, no estilo: el color del vendor en PipeSync.
-                value = '<span style="color:%s; %s">%s</span>' % (
-                    info["vendor_color"], semibold_css(), value)
+            if field == "vendor" and any(color for _name, color in info.get("vendor_colors", ())):
+                value = ", ".join(_vendor_html(name, color)
+                                  for name, color in info["vendor_colors"])
             meta.append("%s %s" % (_dim(label), value))
         self.meta.setText(" &nbsp;&middot;&nbsp; ".join(meta))
         self.meta.setVisible(bool(meta))
@@ -272,7 +278,15 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
     def _fit(self):
         # Ancho fijo y alto segun el texto: una descripcion larga crece hacia
         # abajo en vez de recortarse.
+        # invalidate() antes de medir: el cambio de texto de un label solo
+        # pide re-layout por un evento que todavia no se proceso, y el layout
+        # devuelve el alto cacheado de la marca anterior. Medido en NKS 16:
+        # sin esto, si Vendor/Category pasaba a dos lineas, la ventana quedaba
+        # con el alto viejo, la descripcion recortada y restos del pie abajo.
         self.setFixedWidth(WINDOW_WIDTH)
+        self._header.layout().invalidate()
+        self._header.updateGeometry()
+        self.layout().invalidate()
         self.layout().activate()
         self.setFixedHeight(self.layout().totalHeightForWidth(self.width())
                             if self.layout().hasHeightForWidth()
@@ -381,6 +395,13 @@ def _dim(text):
     return '<span style="color:%s">%s</span>' % (Color.TEXT_DIM, text)
 
 
+def _vendor_html(name, color):
+    # Dato, no estilo: el color del vendor en PipeSync. Sin color, texto comun.
+    if not color:
+        return _escape(name)
+    return '<span style="color:%s; %s">%s</span>' % (color, semibold_css(), _escape(name))
+
+
 def _body(text):
     return _escape(text) if text else _dim("&mdash;")
 
@@ -427,7 +448,9 @@ def go_to_mark(direction):
     info = mark_info(sequence, tag, index, len(tags))
     log.info("%s: %s %d -> %d (%s, marca %d de %d, metadata completa %s, vendor %s)",
              sequence.name(), direction, current, starts[index], tag.name(), index + 1,
-             len(tags), info["complete"], info["vendor_color"] or "sin color")
+             len(tags), info["complete"],
+             ", ".join("%s %s" % (name, color or "sin color")
+                       for name, color in info["vendor_colors"]) or "-")
     window = info_window()
     # El seguimiento se arma ANTES del salto: setTime dispara timeChanged y la
     # ventana ya tiene que saber que esa marca es la que esta mostrando.

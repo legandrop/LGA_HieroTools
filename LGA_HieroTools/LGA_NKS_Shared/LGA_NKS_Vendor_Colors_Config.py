@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Vendor_Colors_Config v1.00 | Lega
+  LGA_NKS_Vendor_Colors_Config v1.01 | Lega
 
   Color de cada vendor para HieroTools.
 
@@ -25,6 +25,9 @@ ____________________________________________________________________
   Usado por runtime activo:
   - LGA_NKS_Review_Panel_py/LGA_NKS_ShotMarks_Nav.py
 
+  v1.01: find_vendor_colors: una celda con varios vendors ("Vendor A,
+         Vendor B") se separa y cada uno lleva su color. Antes se buscaba
+         la celda entera como un solo vendor y salia sin color.
   v1.00: Version inicial.
 ____________________________________________________________________
 
@@ -43,6 +46,10 @@ except ImportError:  # importado como paquete desde afuera de LGA_NKS_Shared
 
 STATS_DB_FILENAME = "pipesync_stats.db"
 HEX_COLOR_PATTERN = re.compile(r"^#[0-9A-Fa-f]{6}$")
+# Separadores de una celda con varios vendors: coma, barra, mas, ampersand,
+# punto y coma, y "y" / "and" como palabra sola. El guion no separa: es parte
+# de nombres como "Vendor-B".
+VENDOR_SEPARATOR_PATTERN = re.compile(r"\s*(?:[,/+&;]|\by\b|\band\b)\s*", re.IGNORECASE)
 
 # Cache de proceso con la misma invalidacion que LGA_NKS_Vendors_Config:
 # mtime+size de la DB y de su -wal (la DB esta en modo WAL y los commits de
@@ -196,3 +203,28 @@ def find_vendor_color(vendor, hiero_project_name=None):
     """Color '#RRGGBB' del vendor en el contexto activo, o None."""
     return pick_vendor_color(load_vendor_colors(), vendor,
                              project_names_for(hiero_project_name))
+
+
+def split_vendors(text):
+    """Los vendors de una celda, en orden ("Vendor A, Vendor B" -> 2)."""
+    return [part.strip() for part in VENDOR_SEPARATOR_PATTERN.split(str(text or ""))
+            if part.strip()]
+
+
+def pick_vendor_colors(colors, text, project_names=()):
+    """[(vendor, '#RRGGBB' o None)] de una celda que puede traer varios.
+
+    Si la celda entera es un vendor conocido se respeta tal cual: un nombre
+    con barra o "y" adentro no se parte.
+    """
+    whole = pick_vendor_color(colors, text, project_names)
+    if whole:
+        return [(str(text).strip(), whole)]
+    return [(part, pick_vendor_color(colors, part, project_names))
+            for part in split_vendors(text)]
+
+
+def find_vendor_colors(text, hiero_project_name=None):
+    """[(vendor, '#RRGGBB' o None)] de la celda en el contexto activo."""
+    return pick_vendor_colors(load_vendor_colors(), text,
+                              project_names_for(hiero_project_name))

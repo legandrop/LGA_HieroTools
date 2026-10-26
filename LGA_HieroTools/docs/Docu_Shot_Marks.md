@@ -53,6 +53,16 @@ Previous, con el playhead adentro de un shot, vuelve al IN de ese shot.
   y, de respaldo, `vendor_colors` del envelope del proyecto. Compara sin mayusculas ni signos
   (`Vendor-B` = `VENDORB`), primero en el proyecto del `.hrox` (nombre o prefijo) y si no esta, en
   todos, salvo que el mismo vendor tenga colores distintos. Sin color, se muestra el texto solo.
+  Una celda con varios vendors (`Vendor A, Vendor B`) se separa por coma, barra, `+`, `&`, `;`
+  o "y"/"and" como palabra sola, y cada uno lleva su color; el guion no separa. Si la celda
+  entera ya es un vendor conocido, no se parte.
+- **El alto se mide con los layouts invalidados.** La ventana tiene ancho fijo y alto segun el
+  texto. Al cambiar el texto de un label, el layout recien se entera por un evento diferido: si
+  se mide en el mismo paso devuelve el alto de la marca anterior. Medido en NKS 16 al pasar de
+  una marca con Category en una linea a otra con dos: la ventana quedaba con el alto viejo, la
+  descripcion cortada a un renglon y restos del pie anterior abajo. `_fit()` invalida el layout
+  del encabezado, llama `updateGeometry()` del encabezado (su alto lo cachea el layout de
+  arriba) e invalida el de la ventana antes de medir.
 - **Letra mas grande.** 15 px el cuerpo y 19 px el titulo, por `apply_ui_font` y QFont: con el
   tamano del host (~12 px) no se leia. El titulo no usa `lgaTitle` porque esa regla fija 11 pt.
 - **Los datos salen del tag, no del Excel.** Shot Marks guarda la fila en la metadata del tag

@@ -61,6 +61,17 @@ class VendorColorsTest(unittest.TestCase):
         self.assertIsNone(vc.pick_vendor_color(colors, "Unknown", names))
         self.assertIsNone(vc.pick_vendor_color(colors, "", names))
 
+    def test_cell_with_several_vendors(self):
+        colors, names = self._colors(), ("PROJA",)
+        self.assertEqual(vc.split_vendors("Vendor A, VNB / Bad y Otro"),
+                         ["Vendor A", "VNB", "Bad", "Otro"])
+        self.assertEqual(vc.split_vendors("Vendor-B"), ["Vendor-B"])
+        self.assertEqual(vc.pick_vendor_colors(colors, "Vendor A, VNB", names),
+                         [("Vendor A", "#6784BD"), ("VNB", "#222222")])
+        self.assertEqual(vc.pick_vendor_colors(colors, "VNA & Unknown", names),
+                         [("VNA", "#6784BD"), ("Unknown", None)])
+        self.assertEqual(vc.pick_vendor_colors(colors, "", names), [])
+
     def test_other_project_uses_its_own_color(self):
         colors = self._colors()
         self.assertEqual(vc.pick_vendor_color(colors, "VNA", ("PROJB",)), "#999999")
