@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks v1.00 | Lega
+  LGA_NKS_ShotMarks v1.01 | Lega
 
   Shot Marks: lee una planilla de breakdown (xlsx o csv) y pone un tag
   de rango por shot en el timeline activo, en el REC TC de la planilla,
@@ -21,6 +21,9 @@ ____________________________________________________________________
   Nucleo sin host (lectura y plan): LGA_NKS_ShotMarks_Sheet.py.
   Log de cada corrida: logs/DebugPy_LGA_NKS_ShotMarks.log.
 
+  v1.01: Columnas de descripcion, escena, vendor y categoria; cada tag
+         guarda la info de su fila para Previous/Next Mark
+         (LGA_NKS_ShotMarks_Nav).
   v1.00: Version inicial.
 ____________________________________________________________________
 """
@@ -50,8 +53,6 @@ from LGA_NKS_Shared.LGA_NKS_MessageBox import show_error, show_info, show_warnin
 DEBUG = False
 
 TAG_KEY = "tag.lga_shotmarks"
-TAG_ROW_KEY = "tag.lga_shotmarks_row"
-TAG_SOURCE_KEY = "tag.lga_shotmarks_source"
 TAG_ICON = "icons:Tag.png"
 UNDO_NAME = "Shot Marks from Sheet"
 NONE_LABEL = "(none)"
@@ -71,7 +72,11 @@ TOOLTIPS = {
     "tc_out": "Timecode de salida. Es exclusivo: el tag termina un cuadro antes.",
     "episode": "Columna de episodio, para filtrar los shots de este timeline.",
     "status": "Columna de status, para saltear los Omit.",
-    "note": "Columna que va a la nota del tag (brief o descripcion).",
+    "note": "Columna del brief: va a la nota del tag y a la ventana de Next Mark.",
+    "description": "Descripcion del shot, para la ventana de Next Mark.",
+    "scene": "Escena, para la ventana de Next Mark.",
+    "vendor": "Vendor, para la ventana de Next Mark.",
+    "category": "Categoria del shot, para la ventana de Next Mark.",
     "episode_filter": "Solo los shots de este episodio. Se sugiere el que aparece en el nombre del timeline.",
     "skip_omit": "No marcar los shots con status Omit.",
     "reference": "Contra que timecode se mide el REC TC de la planilla.",
@@ -224,13 +229,13 @@ def apply_plan(sequence, plan, align_start=None, source_label=""):
         if align_start is not None and align_start != sequence.timecodeStart():
             log.info("TC de inicio del timeline: %s -> %s", sequence.timecodeStart(), align_start)
             sequence.setTimecodeStart(int(align_start))
+        module = _sheet_module()
         for mark in plan.marks:
             tag = hiero.core.Tag(mark.shot, TAG_ICON)
             tag.setNote(mark.note)
             data = tag.metadata()
-            data.setValue(TAG_KEY, "1")
-            data.setValue(TAG_ROW_KEY, str(mark.row))
-            data.setValue(TAG_SOURCE_KEY, source_label)
+            for key, value in module.mark_metadata(mark, source_label).items():
+                data.setValue(key, value)
             sequence.addTagToRange(tag, int(mark.frame_in), int(mark.frame_out))
     log.info("Aplicado: %d tags nuevos, %d tags propios anteriores reemplazados",
              len(plan.marks), removed)
@@ -337,7 +342,9 @@ class ShotMarksDialog(QtWidgets.QDialog):
 
         self.column_combos = {}
         labels = (("shot", "Shot"), ("tc_in", "TC In"), ("tc_out", "TC Out"),
-                  ("episode", "Episode"), ("status", "Status"), ("note", "Note"))
+                  ("episode", "Episode"), ("status", "Status"), ("note", "Brief"),
+                  ("description", "Description"), ("scene", "Scene"),
+                  ("vendor", "Vendor"), ("category", "Category"))
         for index, (role, label) in enumerate(labels):
             combo = self._combo(role)
             combo.currentIndexChanged.connect(self._columns_changed)
@@ -346,7 +353,7 @@ class ShotMarksDialog(QtWidgets.QDialog):
             grid_col = (index % 2) * 2
             grid.addWidget(QtWidgets.QLabel(label + " column"), grid_row, grid_col)
             grid.addWidget(combo, grid_row, grid_col + 1)
-        row += 3
+        row += (len(labels) + 1) // 2
 
         self.episode_combo = self._combo("episode_filter")
         self.episode_combo.currentIndexChanged.connect(self._refresh_plan)

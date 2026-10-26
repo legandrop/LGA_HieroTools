@@ -1,10 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_ReviewPanel v2.88 | Lega
+  LGA_ReviewPanel v2.89 | Lega
 
   Tools panel for Hiero / Nuke Studio
 
+  v2.89: Shift+Click en Previous/Next Annotation salta entre las marcas de
+         Shot Marks y muestra la info del shot.
   v2.88: Boton Shot Marks: tags de rango por shot desde una planilla de
          breakdown, junto a la navegacion de anotaciones.
   v2.87: Los tres toggles de clips/tracks pasan al ViewerTL Panel, donde
@@ -228,14 +230,14 @@ class ReviewPanel(QtWidgets.QWidget):
                 self.execute_PreviousAnnotation,
                 "#263d43",
                 None,
-                "Salta a la anotacion anterior del clip seleccionado. Al llegar al inicio vuelve a la ultima.",
+                "Click: salta a la anotacion anterior del clip seleccionado. Al llegar al inicio vuelve a la ultima.\nShift+Click: salta a la marca de Shot Marks anterior y muestra su info de la planilla.",
             ),
             (
                 "Next Annotation",
                 self.execute_NextAnnotation,
                 "#263d43",
                 None,
-                "Salta a la proxima anotacion del clip seleccionado. Al llegar al final vuelve a la primera.",
+                "Click: salta a la proxima anotacion del clip seleccionado. Al llegar al final vuelve a la primera.\nShift+Click: salta a la proxima marca de Shot Marks y muestra su info de la planilla.",
             ),
             (
                 "Shot Marks",
@@ -354,6 +356,14 @@ class ReviewPanel(QtWidgets.QWidget):
                 button = CustomButton(name)
                 button.setCustomClickHandler(self.compare_exr_aplate)
                 button.setShiftClickHandler(self.compare_exr_aplate_force_all)
+            elif name == "Previous Annotation":
+                button = CustomButton(name)
+                button.setCustomClickHandler(self.execute_PreviousAnnotation)
+                button.setShiftClickHandler(self.execute_PreviousMark)
+            elif name == "Next Annotation":
+                button = CustomButton(name)
+                button.setCustomClickHandler(self.execute_NextAnnotation)
+                button.setShiftClickHandler(self.execute_NextMark)
             else:
                 button = QtWidgets.QPushButton(name)
                 button.clicked.connect(handler)
@@ -569,6 +579,12 @@ class ReviewPanel(QtWidgets.QWidget):
 
     def execute_ShotMarks(self):
         self.execute_external_script("LGA_NKS_ShotMarks.py")
+
+    def execute_NextMark(self):
+        self.execute_external_script("LGA_NKS_ShotMarks_Nav.py", "next")
+
+    def execute_PreviousMark(self):
+        self.execute_external_script("LGA_NKS_ShotMarks_Nav.py", "previous")
 
 
 # Crear la instancia del widget y anadirlo al gestor de ventanas de Hiero

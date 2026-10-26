@@ -315,14 +315,21 @@ opening related Nuke scripts.
   creates an `LGA_ContactSheet` from their Reads, and connects the Viewer. The
   network request and the NukeX operation run without blocking Nuke Studio.
 - **Previous Annotation**
-  Jumps to the previous annotation on the selected clip and wraps to the last.
+  Click: jumps to the previous annotation on the selected clip and wraps to the last.
+  Shift+Click: jumps to the previous Shot Mark (see below) and shows its sheet info.
 - **Next Annotation**
-  Jumps to the next annotation on the selected clip and wraps to the first.
+  Click: jumps to the next annotation on the selected clip and wraps to the first.
+  Shift+Click: jumps to the next Shot Mark and shows its sheet info: shot,
+  REC TC in and out, duration, status, vendor, scene, category, description
+  and brief. It is a single small window that updates on every jump and does
+  not take the keyboard focus.
 - **Shot Marks**
   Reads a VFX breakdown sheet (`.xlsx` or `.csv`) and adds a range tag for
   each shot to the active timeline, at the sheet's REC TC, named after the
   shot and with the brief as its note. Jump from shot to shot with
-  Viewer > Next Tag / Previous Tag (`Alt+Shift+Right` / `Alt+Shift+Left`).
+  Shift+Click on Previous / Next Annotation, which also shows the shot's
+  info, or with Viewer > Next Tag / Previous Tag (`Alt+Shift+Right` /
+  `Alt+Shift+Left`, with the viewer focused).
   The window suggests the sheet, the columns and the episode, and shows a
   dry run before writing: marks, omitted shots, and rows that cannot be
   placed. When the timeline is a single reference movie, timecodes are

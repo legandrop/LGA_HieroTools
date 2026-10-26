@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Sheet v1.00 | Lega
+  LGA_NKS_ShotMarks_Sheet v1.01 | Lega
 
   Nucleo sin host de Shot Marks: lee una planilla (xlsx o csv),
   detecta la fila de encabezado y las columnas de shot y timecode,
@@ -13,6 +13,8 @@ ____________________________________________________________________
   los sharedStrings), sin openpyxl: NKS no lo trae, y asi una
   planilla de cientos de MB por las imagenes se lee en segundos.
 
+  v1.01: Columnas de descripcion, escena, vendor y categoria; cada marca
+         lleva su info para la ventana de Previous/Next Mark.
   v1.00: Version inicial.
 ____________________________________________________________________
 """
@@ -48,11 +50,19 @@ TC_OUT_HEADERS = (
 )
 EPISODE_HEADERS = ("ep", "episode", "episodio", "epi", "reel")
 STATUS_HEADERS = ("status", "estado", "shotstatus")
-NOTE_HEADERS = ("brief", "description", "descripcion", "notes", "notas")
+# "note" es el brief: va a la nota del tag. La descripcion es aparte.
+NOTE_HEADERS = ("brief", "notes", "notas", "vfxnotes")
+DESCRIPTION_HEADERS = ("descripcion", "description", "desc", "shotdescription")
+SCENE_HEADERS = ("esc", "escena", "scene", "sc")
+VENDOR_HEADERS = ("vendor", "proveedor")
+CATEGORY_HEADERS = ("shotcategory", "category", "categoria", "type")
 
 OMIT_TOKENS = ("omit", "omitted", "cbb", "removed")
 
-ROLES = ("shot", "tc_in", "tc_out", "episode", "status", "note")
+ROLES = ("shot", "tc_in", "tc_out", "episode", "status", "note",
+         "description", "scene", "vendor", "category")
+# Roles que viajan como texto a cada marca, para la ventana de info.
+INFO_ROLES = ("status", "description", "scene", "vendor", "category", "episode")
 _ROLE_HEADERS = {
     "shot": SHOT_HEADERS,
     "tc_in": TC_IN_HEADERS,
@@ -60,6 +70,10 @@ _ROLE_HEADERS = {
     "episode": EPISODE_HEADERS,
     "status": STATUS_HEADERS,
     "note": NOTE_HEADERS,
+    "description": DESCRIPTION_HEADERS,
+    "scene": SCENE_HEADERS,
+    "vendor": VENDOR_HEADERS,
+    "category": CATEGORY_HEADERS,
 }
 
 
@@ -82,7 +96,7 @@ class Table(object):
 
 
 class Mark(object):
-    def __init__(self, row, shot, frame_in, frame_out, tc_in, tc_out, note):
+    def __init__(self, row, shot, frame_in, frame_out, tc_in, tc_out, note, info=None):
         self.row = row
         self.shot = shot
         self.frame_in = frame_in
@@ -90,6 +104,7 @@ class Mark(object):
         self.tc_in = tc_in
         self.tc_out = tc_out
         self.note = note
+        self.info = info or {}  # {rol: texto} de INFO_ROLES con valor
 
 
 class Issue(object):
@@ -367,6 +382,67 @@ def load_table(path, sheet):
     return Table(str(path), sheet, header_number, headers, data)
 
 
+# -- metadata del tag ------------------------------------------------------
+
+# Las keys de metadata de un Tag tienen que empezar con "tag.": si no,
+# DataCollection.setValue tira RuntimeError.
+META_KEY = "tag.lga_shotmarks"
+_META_FIELDS = ("row", "source", "tc_in", "tc_out", "brief") + INFO_ROLES
+
+
+def meta_key(field):
+    return "%s_%s" % (META_KEY, field)
+
+
+def mark_metadata(mark, source):
+    """{key: texto} que se guarda en el tag de una marca."""
+    values = {
+        META_KEY: "1",
+        meta_key("row"): str(mark.row),
+        meta_key("source"): source,
+        meta_key("tc_in"): mark.tc_in,
+        meta_key("tc_out"): mark.tc_out,
+        meta_key("brief"): mark.note,
+    }
+    for role, text in mark.info.items():
+        values[meta_key(role)] = text
+    return values
+
+
+def mark_info_from_metadata(get):
+    """Lee lo guardado por mark_metadata. `get(key)` devuelve texto o None.
+
+    Los tags creados por la v1.00 solo tienen fila y origen: lo que falta
+    vuelve vacio y la ventana avisa que hay que volver a correr Shot Marks.
+    """
+    info = {}
+    for field in _META_FIELDS:
+        value = get(meta_key(field))
+        info[field] = str(value) if value is not None else ""
+    info["complete"] = get(meta_key("tc_in")) is not None
+    return info
+
+
+def next_mark_index(starts, current, direction):
+    """Indice de la marca a la que salta Next/Previous Mark, o None si no hay.
+
+    `starts` son los IN ordenados. Next va al primer IN despues del playhead;
+    Previous, al ultimo antes (si el playhead esta adentro de un shot, vuelve
+    a su IN). En los extremos da la vuelta, como Next/Previous Annotation.
+    """
+    if not starts:
+        return None
+    if direction == "next":
+        for index, start in enumerate(starts):
+            if start > current:
+                return index
+        return 0
+    for index in range(len(starts) - 1, -1, -1):
+        if starts[index] < current:
+            return index
+    return len(starts) - 1
+
+
 # -- timecode y plan -------------------------------------------------------
 
 def parse_timecode(text, fps):
@@ -466,8 +542,14 @@ def build_plan(table, columns, fps, reference_start, duration,
         else:
             seen_shots[shot] = number
         note = _value(row, columns.get("note"))
+        info = {}
+        for role in INFO_ROLES:
+            value = _value(row, columns.get(role))
+            if value:
+                # Episodio y escena: Excel guarda los numeros como float.
+                info[role] = normalize_episode(value) if role in ("episode", "scene") else value
         plan.marks.append(Mark(number, shot, frame_in, frame_out,
-                               tc_in_text, tc_out_text, note))
+                               tc_in_text, tc_out_text, note, info))
     plan.marks.sort(key=lambda m: (m.frame_in, m.row))
     for previous, current in zip(plan.marks, plan.marks[1:]):
         if current.frame_in <= previous.frame_out:

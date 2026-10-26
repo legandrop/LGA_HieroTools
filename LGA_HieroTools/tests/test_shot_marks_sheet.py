@@ -160,6 +160,43 @@ class ShotMarksSheetTests(unittest.TestCase):
         self.assertEqual([(m.shot, m.frame_in, m.frame_out) for m in plan.marks],
                          [("PROJA_0010", 0, 23)])
 
+    def test_marks_carry_sheet_info_and_round_trip_through_metadata(self):
+        _table, columns, plan = self._plan(episode="101")
+        self.assertIsNotNone(columns["status"])
+        first = plan.marks[0]
+        self.assertEqual(first.info, {"status": "WIP", "episode": "101"})
+        stored = sheet.mark_metadata(first, "PROJA.xlsx | BREAKDOWN")
+        self.assertTrue(all(key.startswith("tag.") for key in stored))
+        info = sheet.mark_info_from_metadata(stored.get)
+        self.assertTrue(info["complete"])
+        self.assertEqual((info["tc_in"], info["tc_out"], info["brief"], info["status"]),
+                         ("01:00:07:09", "01:00:21:11", "Steam", "WIP"))
+        self.assertEqual(info["description"], "")
+
+    def test_metadata_from_first_version_is_incomplete(self):
+        old = {"tag.lga_shotmarks": "1", "tag.lga_shotmarks_row": "8"}
+        info = sheet.mark_info_from_metadata(old.get)
+        self.assertFalse(info["complete"])
+        self.assertEqual(info["row"], "8")
+
+    def test_description_is_its_own_column(self):
+        table = sheet.Table("x", "s", 1, ["SHOTNAME", "REC TC IN", "DESCRIPCIÓN", "BRIEF",
+                                          "ESC", "SHOT CATEGORY", "VENDOR"], [])
+        columns = sheet.detect_columns(table.headers)
+        self.assertEqual([table.headers[columns[r]] for r in
+                          ("description", "note", "scene", "category", "vendor")],
+                         ["DESCRIPCIÓN", "BRIEF", "ESC", "SHOT CATEGORY", "VENDOR"])
+
+    def test_next_and_previous_mark_wrap_around(self):
+        starts = [10, 50, 90]
+        self.assertEqual(sheet.next_mark_index(starts, 0, "next"), 0)
+        self.assertEqual(sheet.next_mark_index(starts, 10, "next"), 1)
+        self.assertEqual(sheet.next_mark_index(starts, 90, "next"), 0)
+        self.assertEqual(sheet.next_mark_index(starts, 60, "previous"), 1)
+        self.assertEqual(sheet.next_mark_index(starts, 50, "previous"), 0)
+        self.assertEqual(sheet.next_mark_index(starts, 10, "previous"), 2)
+        self.assertIsNone(sheet.next_mark_index([], 0, "next"))
+
     def test_sheet_without_shot_and_tc_is_rejected(self):
         with self.assertRaises(ValueError):
             sheet.load_table(self.xlsx, "Notes")

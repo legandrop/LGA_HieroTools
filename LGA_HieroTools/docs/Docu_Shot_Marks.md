@@ -15,13 +15,37 @@ suyas.
 1. Lee la planilla (`.xlsx` o `.csv`) fuera del hilo de UI y sugiere la hoja con columnas de shot y
    REC TC (en un archivo de 55 hojas tarda ~1,5 s).
 2. Detecta la fila de encabezado (puede no ser la primera: suele haber una tablita de resumen arriba)
-   y las columnas de shot, TC IN, TC OUT, episodio, status y nota. Todo se puede corregir en la
+   y las columnas de shot, TC IN, TC OUT, episodio, status, brief, descripcion, escena, vendor y
+   categoria. Todo se puede corregir en la
    ventana y queda guardado en `%APPDATA%\LGA\HieroTools\ShotMarks.ini`.
 3. Prueba en seco en vivo: cuantas marcas, cuantas Omit salteadas, cuales no se pueden ubicar y por
    que. El log de cada corrida va a `LGA_NKS_Review_Panel_py/logs/DebugPy_LGA_NKS_ShotMarks.log`.
 4. Al aplicar, en un solo undo: borra los tags que puso antes, opcionalmente alinea el TC de inicio
    del timeline y crea un tag de rango por shot (`Sequence.addTagToRange`), con el shot como nombre y
    el brief como nota.
+
+## Previous / Next Mark
+
+Shift+Click en Previous Annotation / Next Annotation del panel Review (el Click normal sigue
+navegando anotaciones del clip). Salta el playhead al IN de la marca anterior o siguiente del
+timeline del visor y muestra su info en una ventanita: shot, REC TC IN y OUT de la planilla,
+duracion, status, vendor, escena, categoria, descripcion y brief. En los extremos da la vuelta.
+Previous, con el playhead adentro de un shot, vuelve al IN de ese shot.
+
+- **Por que no alcanza el salto nativo.** Viewer > Next Tag salta, pero no muestra la nota, y la
+  ventana del tag de Hiero la muestra recortada.
+- **Una sola ventana.** El panel re-ejecuta el modulo en cada click, asi que la ventana no se
+  guarda en una variable: se busca entre los `topLevelWidgets()` por `objectName`
+  (`LGA_ShotMarkInfo`) y se actualiza en el lugar. Si cambio su API (`WINDOW_API`), se reemplaza
+  por una nueva en la misma posicion.
+- **Sin robar foco.** `Qt.Tool` con la ventana principal de NKS como padre (flota sobre NKS y
+  se esconde con el) y `WA_ShowWithoutActivating`. Medido en NKS 16.0v4: tres saltos seguidos,
+  la ventana nunca quedo activa y el primer plano de Windows no cambio.
+- **Los datos salen del tag, no del Excel.** Shot Marks guarda la fila en la metadata del tag
+  (`tag.lga_shotmarks_tc_in`, `_tc_out`, `_brief`, `_description`, `_status`, `_vendor`,
+  `_scene`, `_category`, `_episode`). Releer el Excel tardaria medio segundo por salto y fallaria
+  si la planilla se mueve. Los tags creados antes de esta version solo tienen nombre y nota: la
+  ventana muestra eso y pide volver a correr Shot Marks.
 
 ## Decisiones que no se deducen del codigo
 
@@ -65,6 +89,12 @@ suyas.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks.py`:
   `TimelineInfo` (TC de secuencia y de media), `own_tags`, `apply_plan`, `guess_episode`,
   `ShotMarksDialog`, `main`.
+- `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks_Nav.py`:
+  `go_to_mark`, `mark_tags`, `mark_info`, `ShotMarkInfoWindow`, `info_window`. La eleccion del
+  salto es `next_mark_index` y la metadata `mark_metadata` / `mark_info_from_metadata`, en el
+  nucleo sin host.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel.py`: boton `Shot Marks`,
-  `execute_ShotMarks`.
-- Captura: `+Building_Blocks/UI_Capture/fixtures/h11_shot_marks.py` -> `ShotMarks_Dialog.png`.
+  `execute_ShotMarks`; Shift+Click de Previous/Next Annotation en `execute_PreviousMark` /
+  `execute_NextMark`.
+- Capturas: `+Building_Blocks/UI_Capture/fixtures/h11_shot_marks.py` -> `ShotMarks_Dialog.png`;
+  `h11b_shot_mark_info.py` -> `ShotMarks_Info.png` y `ShotMarks_Info-OldTag.png`.
