@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Sheet v1.01 | Lega
+  LGA_NKS_ShotMarks_Sheet v1.02 | Lega
 
   Nucleo sin host de Shot Marks: lee una planilla (xlsx o csv),
   detecta la fila de encabezado y las columnas de shot y timecode,
@@ -13,12 +13,15 @@ ____________________________________________________________________
   los sharedStrings), sin openpyxl: NKS no lo trae, y asi una
   planilla de cientos de MB por las imagenes se lee en segundos.
 
+  v1.02: mark_index_at: que marca cubre un cuadro, para que la ventana
+         de Previous/Next Mark siga al playhead.
   v1.01: Columnas de descripcion, escena, vendor y categoria; cada marca
          lleva su info para la ventana de Previous/Next Mark.
   v1.00: Version inicial.
 ____________________________________________________________________
 """
 
+import bisect
 import csv
 import re
 import unicodedata
@@ -441,6 +444,23 @@ def next_mark_index(starts, current, direction):
         if starts[index] < current:
             return index
     return len(starts) - 1
+
+
+def mark_index_at(starts, ends, frame):
+    """Indice de la marca que cubre `frame` (IN y OUT inclusivos), o None.
+
+    La llama la ventana de Previous/Next Mark en CADA cambio de cuadro del
+    visor, tambien durante el playback: por eso es una busqueda binaria sobre
+    listas ya armadas y no recorre los tags. `starts` va ordenado. Si dos
+    marcas se solapan (shot repetido en la planilla), gana la que empieza
+    mas tarde.
+    """
+    # Entre dos marcas el retroceso recorre las anteriores (una marca larga y
+    # solapada podria cubrir el cuadro): con 200 marcas son microsegundos.
+    for index in range(bisect.bisect_right(starts, frame) - 1, -1, -1):
+        if ends[index] >= frame:
+            return index
+    return None
 
 
 # -- timecode y plan -------------------------------------------------------

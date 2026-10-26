@@ -13,7 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.022
-- [new] Shot Marks, en el panel Review, lee la planilla de breakdown y marca cada shot en el timeline en su timecode; con Shift+Click en Previous Annotation y Next Annotation saltás de un shot al otro y se abre una ventanita con la descripción, el brief y los datos de ese shot en la planilla.
+- [new] Shot Marks, en el panel Review, lee la planilla de breakdown y marca cada shot en el timeline en su timecode; con Shift+Click en Previous Annotation y Next Annotation saltás de un shot al otro y se abre una ventanita con la descripción, el brief y los datos de ese shot en la planilla, con el vendor en su color; mientras está abierta, cambia sola cuando el playhead entra en otro shot.
 
 ## v4.021
 - [improved] La descarga de LGA HieroTools pasa de 435 MB a unos 35 MB: el pack ya no trae programas de terceros que ninguna herramienta usa.

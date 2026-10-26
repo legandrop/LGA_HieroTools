@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Nav v1.00 | Lega
+  LGA_NKS_ShotMarks_Nav v1.01 | Lega
 
   Previous / Next Mark: Shift+Click en Previous / Next Annotation del
   panel Review. Salta el playhead a la marca de Shot Marks anterior o
@@ -17,6 +17,13 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Nav.log.
 
+  v1.01: La ventana sigue al playhead: al entrar en otra marca (scrub o
+         playback) muestra esa sin tocar Previous/Next. Engancha la
+         senal timeChanged del visor y busca la marca con
+         mark_index_at sobre listas cacheadas; solo redibuja cuando
+         cambia de marca. El vendor sale con el color de su grupo en
+         PipeSync (contexto studio o client). Letra 2 px mas grande
+         (15 px, titulo 19 px) y ventana mas ancha.
   v1.00: Version inicial.
 ____________________________________________________________________
 """
@@ -35,6 +42,7 @@ from LGA_NKS_Shared.LGA_UI_Style_HieroTools import (
     Metric,
     Style,
     apply_ui_font,
+    semibold,
     semibold_css,
 )
 from LGA_NKS_Shared.LGA_NKS_MessageBox import show_info
@@ -44,9 +52,15 @@ DEBUG = False
 WINDOW_NAME = "LGA_ShotMarkInfo"
 # Sube cuando cambia la API de la ventana: el panel re-ejecuta este modulo en
 # cada click, y una ventana creada por una version vieja se reemplaza.
-WINDOW_API = 1
-WINDOW_WIDTH = 460
+WINDOW_API = 2
+WINDOW_WIDTH = 520
 SCREEN_MARGIN = 24
+# Lega pidio la letra mas grande: con el tamano del host (~12 px en NKS) no
+# llegaba a leerla. Va por apply_ui_font (QFont), no por font-size en la hoja.
+INFO_FONT_PX = Metric.FORM_FONT_SIZE + 1
+TITLE_FONT_PX = INFO_FONT_PX + 4
+
+LOGGER_NAME = "LGA_NKS_ShotMarks_Nav"
 
 _sheet = None
 
@@ -65,7 +79,7 @@ def _sheet_module():
 def _logger():
     log_dir = Path(__file__).resolve().parent / "logs"
     log_dir.mkdir(exist_ok=True)
-    logger = logging.getLogger("LGA_NKS_ShotMarks_Nav")
+    logger = logging.getLogger(LOGGER_NAME)
     logger.setLevel(logging.DEBUG)
     for handler in list(logger.handlers):
         handler.close()
@@ -130,6 +144,19 @@ def mark_info(sequence, tag, index, total):
     info["duration"] = module.format_timecode(info["frames"], fps)
     info["index"] = index
     info["total"] = total
+    info["vendor_color"] = None
+    if info.get("vendor"):
+        try:
+            # Import aca: el modulo resuelve la DB por contexto con imports que
+            # solo existen con el startup del pack (no en el harness de UI).
+            from LGA_NKS_Shared.LGA_NKS_Vendor_Colors_Config import find_vendor_color
+
+            project = sequence.project()
+            info["vendor_color"] = find_vendor_color(
+                info["vendor"], project.name() if project is not None else None)
+        except Exception as exc:
+            # Sin color no es un error de la marca: se muestra el texto solo.
+            logging.getLogger(LOGGER_NAME).warning("Color de vendor no disponible: %s", exc)
     return info
 
 
@@ -150,8 +177,20 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
         self.setWindowTitle("Shot Mark")
         self.setStyleSheet(Style.FORM)
         self._placed = False
+        # Seguimiento del playhead: visor enganchado y marcas de su secuencia
+        # (IN y OUT como enteros, para no tocar los tags en cada cuadro).
+        self._viewer = None
+        self._sequence = None
+        self._tags = []
+        self._starts = []
+        self._ends = []
+        self._index = None
         self._build()
-        apply_ui_font(self)
+        apply_ui_font(self, INFO_FONT_PX)
+        # Despues de apply_ui_font, que le pisa la familia a todos los hijos.
+        title_font = semibold(self.title.font())
+        title_font.setPixelSize(TITLE_FONT_PX)
+        self.title.setFont(title_font)
 
     def _build(self):
         layout = QtWidgets.QVBoxLayout(self)
@@ -168,7 +207,9 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
         head.setContentsMargins(margin, margin - 4, margin, 10)
         head.setSpacing(4)
         self.title = QtWidgets.QLabel()
-        self.title.setProperty("lgaTitle", True)
+        # Sin lgaTitle: esa regla de la hoja fija 11 pt y quedaba mas chica que
+        # el cuerpo agrandado. El tamano va por QFont en __init__.
+        self.title.setStyleSheet("color: %s;" % Color.TEXT_STRONG)
         self.title.setTextInteractionFlags(Qt.TextSelectableByMouse)
         head.addWidget(self.title)
         self.timecode = self._label(head)
@@ -210,8 +251,14 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
         meta = []
         for field, label in (("status", "Status"), ("vendor", "Vendor"),
                              ("scene", "Scene"), ("category", "Category")):
-            if info.get(field):
-                meta.append("%s %s" % (_dim(label), esc(info[field])))
+            if not info.get(field):
+                continue
+            value = esc(info[field])
+            if field == "vendor" and info.get("vendor_color"):
+                # Dato, no estilo: el color del vendor en PipeSync.
+                value = '<span style="color:%s; %s">%s</span>' % (
+                    info["vendor_color"], semibold_css(), value)
+            meta.append("%s %s" % (_dim(label), value))
         self.meta.setText(" &nbsp;&middot;&nbsp; ".join(meta))
         self.meta.setVisible(bool(meta))
         self.description.setText(_body(info.get("description")))
@@ -245,6 +292,81 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
         area = screen.availableGeometry()
         self.move(area.left() + SCREEN_MARGIN, area.top() + SCREEN_MARGIN * 3)
         self._placed = True
+
+    # -- seguimiento del playhead ------------------------------------------
+    #
+    # Mientras la ventana esta abierta escucha Viewer.timeChanged. El costo
+    # por cuadro (tambien en playback) es leer viewer.time() y una busqueda
+    # binaria sobre enteros: no se tocan los tags ni se loguea. Solo cuando el
+    # playhead entra en OTRA marca se arma la info y se redibuja. Entre dos
+    # marcas la ventana queda mostrando la ultima.
+
+    def follow(self, viewer, sequence, tags, index):
+        """Engancha el visor (una sola vez) y cachea las marcas de la secuencia."""
+        if viewer is not self._viewer:
+            self.unfollow()
+            try:
+                viewer.timeChanged.connect(self._on_time_changed)
+                viewer.sequenceChanged.connect(self._on_sequence_changed)
+                self._viewer = viewer
+            except Exception as exc:
+                # Sin la senal la ventana sigue andando con Previous/Next.
+                logging.getLogger(LOGGER_NAME).warning(
+                    "No se pudo seguir el playhead: %s", exc)
+        self._set_marks(sequence, tags)
+        self._index = index
+
+    def unfollow(self):
+        viewer, self._viewer = self._viewer, None
+        if viewer is None:
+            return
+        for signal, slot in (("timeChanged", self._on_time_changed),
+                             ("sequenceChanged", self._on_sequence_changed)):
+            try:
+                getattr(viewer, signal).disconnect(slot)
+            except Exception:
+                # El visor ya no existe (tab cerrado): Qt corto la conexion.
+                pass
+
+    def _set_marks(self, sequence, tags):
+        self._sequence = sequence
+        self._tags = list(tags)
+        self._starts = [int(t.inTime()) for t in self._tags]
+        self._ends = [int(t.outTime()) for t in self._tags]
+        self._index = None
+
+    def _on_sequence_changed(self, *args):
+        try:
+            _viewer, sequence = _viewer_and_sequence()
+            self._set_marks(sequence, mark_tags(sequence) if sequence is not None else [])
+        except Exception as exc:
+            logging.getLogger(LOGGER_NAME).warning("Cambio de secuencia: %s", exc)
+            self._set_marks(None, [])
+
+    def _on_time_changed(self, *args):
+        if not self._starts or self._viewer is None or not self.isVisible():
+            return
+        try:
+            frame = int(self._viewer.time())
+        except Exception:
+            return
+        index = _sheet_module().mark_index_at(self._starts, self._ends, frame)
+        if index is None or index == self._index:
+            return
+        try:
+            info = mark_info(self._sequence, self._tags[index], index, len(self._tags))
+        except Exception:
+            # Tag borrado (Shot Marks se volvio a correr): se releen las marcas.
+            self._on_sequence_changed()
+            return
+        self._index = index
+        self.show_mark(info)
+        logging.getLogger(LOGGER_NAME).info("Playhead %d: marca %s (%d de %d)", frame,
+                                            info["shot"], index + 1, len(self._tags))
+
+    def closeEvent(self, event):
+        self.unfollow()
+        super(ShotMarkInfoWindow, self).closeEvent(event)
 
 
 def _escape(text):
@@ -302,14 +424,18 @@ def go_to_mark(direction):
     starts = [int(t.inTime()) for t in tags]
     index = _sheet_module().next_mark_index(starts, current, direction)
     tag = tags[index]
-    viewer.setTime(starts[index])
     info = mark_info(sequence, tag, index, len(tags))
-    log.info("%s: %s %d -> %d (%s, marca %d de %d, metadata completa %s)", sequence.name(),
-             direction, current, starts[index], tag.name(), index + 1, len(tags), info["complete"])
+    log.info("%s: %s %d -> %d (%s, marca %d de %d, metadata completa %s, vendor %s)",
+             sequence.name(), direction, current, starts[index], tag.name(), index + 1,
+             len(tags), info["complete"], info["vendor_color"] or "sin color")
     window = info_window()
+    # El seguimiento se arma ANTES del salto: setTime dispara timeChanged y la
+    # ventana ya tiene que saber que esa marca es la que esta mostrando.
+    window.follow(viewer, sequence, tags, index)
     window.show_mark(info)
     if not window.isVisible():
         window.show()
+    viewer.setTime(starts[index])
     return True
 
 

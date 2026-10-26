@@ -197,6 +197,20 @@ class ShotMarksSheetTests(unittest.TestCase):
         self.assertEqual(sheet.next_mark_index(starts, 10, "previous"), 2)
         self.assertIsNone(sheet.next_mark_index([], 0, "next"))
 
+    def test_mark_index_at_frame(self):
+        starts, ends = [10, 50, 90], [49, 60, 120]
+        self.assertIsNone(sheet.mark_index_at(starts, ends, 5))
+        self.assertEqual(sheet.mark_index_at(starts, ends, 10), 0)
+        self.assertEqual(sheet.mark_index_at(starts, ends, 49), 0)
+        self.assertEqual(sheet.mark_index_at(starts, ends, 50), 1)
+        self.assertEqual(sheet.mark_index_at(starts, ends, 60), 1)
+        self.assertIsNone(sheet.mark_index_at(starts, ends, 70))
+        self.assertEqual(sheet.mark_index_at(starts, ends, 120), 2)
+        self.assertIsNone(sheet.mark_index_at(starts, ends, 121))
+        self.assertIsNone(sheet.mark_index_at([], [], 0))
+        # Una marca larga solapada cubre el hueco despues de la corta.
+        self.assertEqual(sheet.mark_index_at([0, 10], [100, 20], 30), 0)
+
     def test_sheet_without_shot_and_tc_is_rejected(self):
         with self.assertRaises(ValueError):
             sheet.load_table(self.xlsx, "Notes")

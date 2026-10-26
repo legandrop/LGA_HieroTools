@@ -322,7 +322,9 @@ opening related Nuke scripts.
   Shift+Click: jumps to the next Shot Mark and shows its sheet info: shot,
   REC TC in and out, duration, status, vendor, scene, category, description
   and brief. It is a single small window that updates on every jump and does
-  not take the keyboard focus.
+  not take the keyboard focus. While it is open it follows the playhead:
+  scrubbing or playing into another Shot Mark shows that shot. The vendor is
+  shown in its PipeSync color.
 - **Shot Marks**
   Reads a VFX breakdown sheet (`.xlsx` or `.csv`) and adds a range tag for
   each shot to the active timeline, at the sheet's REC TC, named after the

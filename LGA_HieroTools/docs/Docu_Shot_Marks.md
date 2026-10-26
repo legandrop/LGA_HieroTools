@@ -41,6 +41,20 @@ Previous, con el playhead adentro de un shot, vuelve al IN de ese shot.
 - **Sin robar foco.** `Qt.Tool` con la ventana principal de NKS como padre (flota sobre NKS y
   se esconde con el) y `WA_ShowWithoutActivating`. Medido en NKS 16.0v4: tres saltos seguidos,
   la ventana nunca quedo activa y el primer plano de Windows no cambio.
+- **Sigue al playhead.** Mientras esta abierta escucha `Viewer.timeChanged` del visor donde se
+  salto. En cada cuadro, tambien en playback, solo lee `viewer.time()` y busca la marca con
+  `mark_index_at` (busqueda binaria sobre los IN/OUT cacheados como enteros): medido ~8 µs por
+  cuadro con un visor simulado. Redibuja solo al entrar en OTRA marca; entre marcas queda la
+  ultima. `sequenceChanged` relee las marcas; cerrar la ventana desengancha el visor. El
+  seguimiento se arma antes del `setTime` del salto, porque ese salto ya dispara `timeChanged`.
+  Pendiente: medirlo en NKS en vivo (la senal y su frecuencia en playback).
+- **Vendor con color.** `LGA_NKS_Shared/LGA_NKS_Vendor_Colors_Config.py` lee de la DB de PipeSync
+  del contexto activo (studio o client) la tabla `project_vendor_groups` (token, nombre, color)
+  y, de respaldo, `vendor_colors` del envelope del proyecto. Compara sin mayusculas ni signos
+  (`Vendor-B` = `VENDORB`), primero en el proyecto del `.hrox` (nombre o prefijo) y si no esta, en
+  todos, salvo que el mismo vendor tenga colores distintos. Sin color, se muestra el texto solo.
+- **Letra mas grande.** 15 px el cuerpo y 19 px el titulo, por `apply_ui_font` y QFont: con el
+  tamano del host (~12 px) no se leia. El titulo no usa `lgaTitle` porque esa regla fija 11 pt.
 - **Los datos salen del tag, no del Excel.** Shot Marks guarda la fila en la metadata del tag
   (`tag.lga_shotmarks_tc_in`, `_tc_out`, `_brief`, `_description`, `_status`, `_vendor`,
   `_scene`, `_category`, `_episode`). Releer el Excel tardaria medio segundo por salto y fallaria
