@@ -1,10 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_ReviewPanel v2.87 | Lega
+  LGA_ReviewPanel v2.88 | Lega
 
   Tools panel for Hiero / Nuke Studio
 
+  v2.88: Boton Shot Marks: tags de rango por shot desde una planilla de
+         breakdown, junto a la navegacion de anotaciones.
   v2.87: Los tres toggles de clips/tracks pasan al ViewerTL Panel, donde
          pertenecen por actuar sobre el timeline.
   v2.86: Mueve Match Rev Ver, Compare Rev EdRef y Compare EXR aPlate al final
@@ -234,6 +236,13 @@ class ReviewPanel(QtWidgets.QWidget):
                 "#263d43",
                 None,
                 "Salta a la proxima anotacion del clip seleccionado. Al llegar al final vuelve a la primera.",
+            ),
+            (
+                "Shot Marks",
+                self.execute_ShotMarks,
+                "#263d43",
+                None,
+                "Lee una planilla de breakdown y pone un tag de rango por shot en el timeline activo, en el REC TC de la planilla. Se navegan con Viewer > Next Tag (Alt+Shift+Right). Volver a correrla reemplaza solo sus tags.",
             ),
             (
                 "Reveal in &Explorer",
@@ -557,6 +566,9 @@ class ReviewPanel(QtWidgets.QWidget):
 
     def execute_PreviousAnnotation(self):
         self.execute_external_script("LGA_NKS_NextPrev_Annotation.py", "previous")
+
+    def execute_ShotMarks(self):
+        self.execute_external_script("LGA_NKS_ShotMarks.py")
 
 
 # Crear la instancia del widget y anadirlo al gestor de ventanas de Hiero

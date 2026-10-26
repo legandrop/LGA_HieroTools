@@ -97,6 +97,7 @@ class PanelReviewReorganizationTests(unittest.TestCase):
             "Contact Sheet",
             "Previous Annotation",
             "Next Annotation",
+            "Shot Marks",
             "Reveal in &Explorer",
             "Reveal NKS Project",
             "Reveal NK Sc&ript",
@@ -113,6 +114,7 @@ class PanelReviewReorganizationTests(unittest.TestCase):
         self.assertEqual(utility_color, "#263d43")
         self.assertEqual(colors["Previous Annotation"], utility_color)
         self.assertEqual(colors["Next Annotation"], utility_color)
+        self.assertEqual(colors["Shot Marks"], utility_color)
         self.assertNotEqual(utility_color, colors["Difference Mode"])
         self.assertNotEqual(utility_color, colors["Compare Versions"])
 

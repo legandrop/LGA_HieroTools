@@ -12,6 +12,9 @@ platforms: [win, mac]
 
 ## Unreleased
 
+## v4.022
+- [new] Shot Marks, en el panel Review, lee la planilla de breakdown y marca cada shot en el timeline en su timecode, con el nombre del shot; después saltás de un shot al siguiente con Viewer > Next Tag (Alt+Shift+Right).
+
 ## v4.021
 - [improved] La descarga de LGA HieroTools pasa de 435 MB a unos 35 MB: el pack ya no trae programas de terceros que ninguna herramienta usa.
 - [fixed][win] Create V000, Import Shots y el transcode de EXR ya no fallan en una máquina que no tiene instalado el runtime de Visual C++ de Microsoft.

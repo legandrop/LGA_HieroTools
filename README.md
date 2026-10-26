@@ -318,6 +318,17 @@ opening related Nuke scripts.
   Jumps to the previous annotation on the selected clip and wraps to the last.
 - **Next Annotation**
   Jumps to the next annotation on the selected clip and wraps to the first.
+- **Shot Marks**
+  Reads a VFX breakdown sheet (`.xlsx` or `.csv`) and adds a range tag for
+  each shot to the active timeline, at the sheet's REC TC, named after the
+  shot and with the brief as its note. Jump from shot to shot with
+  Viewer > Next Tag / Previous Tag (`Alt+Shift+Right` / `Alt+Shift+Left`).
+  The window suggests the sheet, the columns and the episode, and shows a
+  dry run before writing: marks, omitted shots, and rows that cannot be
+  placed. When the timeline is a single reference movie, timecodes are
+  matched against the movie's own timecode, and it can also set the
+  timeline's start timecode to match it. Running it again replaces only the
+  tags it added; one Undo reverts the whole run.
 - **Reveal in Explorer**  
   Opens the selected clips' folders in the default file manager; without a
   selection it opens the first open project's folder.
