@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks v1.01 | Lega
+  LGA_NKS_ShotMarks v1.02 | Lega
 
   Shot Marks: lee una planilla de breakdown (xlsx o csv) y pone un tag
   de rango por shot en el timeline activo, en el REC TC de la planilla,
@@ -21,6 +21,13 @@ ____________________________________________________________________
   Nucleo sin host (lectura y plan): LGA_NKS_ShotMarks_Sheet.py.
   Log de cada corrida: logs/DebugPy_LGA_NKS_ShotMarks.log.
 
+  v1.02: Planillas sin timecode: si la hoja no tiene columna de TC pero
+         sus filas tienen thumbnail, el boton pasa a "Locate from
+         Thumbnails...", que abre LGA_NKS_ShotMarks_Locate (ubica cada
+         thumb en el video del timeline y deja revisar). Al volver, el
+         dialogo se reabre con los TC ubicados como columnas y sigue igual
+         que con una planilla con TC. Los tags guardan el thumb y el nivel
+         de confianza.
   v1.01: Columnas de descripcion, escena, vendor y categoria; cada tag
          guarda la info de su fila para Previous/Next Mark
          (LGA_NKS_ShotMarks_Nav).
@@ -81,9 +88,34 @@ TOOLTIPS = {
     "skip_omit": "No marcar los shots con status Omit.",
     "reference": "Contra que timecode se mide el REC TC de la planilla.",
     "align": "Cambia el TC de inicio del timeline al de la media, para que el timeline muestre el mismo TC que la imagen. Se puede deshacer.",
+    "locate": "Buscar el thumbnail de cada shot en el video del timeline y revisar los dudosos.",
 }
 
 _sheet = None
+_locate = None
+_thumbs = None
+
+
+def _module(name):
+    path = Path(__file__).resolve().parent / (name + ".py")
+    spec = importlib.util.spec_from_file_location(name, str(path))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _locate_module():
+    global _locate
+    if _locate is None:
+        _locate = _module("LGA_NKS_ShotMarks_Locate")
+    return _locate
+
+
+def _thumbs_module():
+    global _thumbs
+    if _thumbs is None:
+        _thumbs = _module("LGA_NKS_ShotMarks_Thumbs")
+    return _thumbs
 
 
 def _sheet_module():
@@ -279,13 +311,18 @@ class _Job(QtCore.QRunnable):
 # -- dialogo ---------------------------------------------------------------
 
 class ShotMarksDialog(QtWidgets.QDialog):
-    def __init__(self, sequence, parent=None):
+    def __init__(self, sequence, parent=None, preset=None):
         super(ShotMarksDialog, self).__init__(parent)
         self.sequence = sequence
         self.timeline = TimelineInfo(sequence)
         self.settings = _read_settings()
+        # preset: tabla ya ubicada desde los thumbnails {path, sheet, table}.
+        self.preset = preset
         self.table = None
         self.plan = None
+        # Hoja sin TC con thumbnails: el boton principal pasa a ubicarlos.
+        self.thumb_mode = False
+        self.thumb_rows = 0
         self._jobs = {}
         self._token = 0
         self._loading = False
@@ -322,7 +359,7 @@ class ShotMarksDialog(QtWidgets.QDialog):
         self.path_edit = QtWidgets.QLineEdit()
         self.path_edit.setReadOnly(True)
         self.path_edit.setPlaceholderText("Choose a .xlsx or .csv file")
-        browse = QtWidgets.QPushButton("Browse")
+        browse = self.browse_button = QtWidgets.QPushButton("Browse")
         browse.setStyleSheet(Style.BTN_SECONDARY)
         browse.setFixedHeight(Metric.BUTTON_HEIGHT)
         browse.setToolTip(TOOLTIPS["browse"])
@@ -430,16 +467,29 @@ class ShotMarksDialog(QtWidgets.QDialog):
 
     # estado inicial
     def _restore(self):
-        index = self.reference_combo.findData(self.settings.get("reference", "media"))
-        if index >= 0:
-            self.reference_combo.setCurrentIndex(index)
-        self.skip_omit.setChecked(self.settings.get("skip_omit", "true") != "false")
-        self.align_check.setChecked(self.settings.get("align", "false") == "true")
+        if self.preset:
+            self._restore_common()
+            self.path_edit.setText(self.preset["path"])
+            self.browse_button.setEnabled(False)
+            self._loading = True
+            self.sheet_combo.addItem(self.preset["sheet"] or "(CSV)", self.preset["sheet"])
+            self.sheet_combo.setEnabled(False)
+            self._loading = False
+            self._table_ready((self.preset["table"], 0), None)
+            return
+        self._restore_common()
         last = self.settings.get("last_file", "")
         if last and os.path.isfile(last):
             self._open_file(last)
         else:
             self._set_summary("Choose the breakdown sheet to start.")
+
+    def _restore_common(self):
+        index = self.reference_combo.findData(self.settings.get("reference", "media"))
+        if index >= 0:
+            self.reference_combo.setCurrentIndex(index)
+        self.skip_omit.setChecked(self.settings.get("skip_omit", "true") != "false")
+        self.align_check.setChecked(self.settings.get("align", "false") == "true")
 
     # archivo y hoja
     def _browse(self):
@@ -503,9 +553,25 @@ class ShotMarksDialog(QtWidgets.QDialog):
         sheet = self.sheet_combo.currentData()
         self._set_busy("Reading %s..." % (sheet or "file"))
         module = _sheet_module()
-        self._run(lambda: module.load_table(path, sheet), self._table_ready)
+        thumbs = _thumbs_module()
 
-    def _table_ready(self, table, error):
+        def read():
+            # require_tc=False: una hoja de shots sin TC puede traer thumbnails.
+            table = module.load_table(path, sheet, require_tc=False)
+            columns = module.detect_columns(table.headers)
+            if columns.get("tc_in") is not None or not sheet:
+                return table, 0
+            images = {img["row"] for img in thumbs.sheet_images(path, sheet)}
+            shot = columns.get("shot")
+            # Solo filas con shot: las de resumen o separadores tambien tienen fotos.
+            with_shot = {number for number, values in table.rows
+                         if shot is not None and shot < len(values) and module.is_shot_name(values[shot])}
+            return table, len(images & with_shot)
+
+        self._run(read, self._table_ready)
+
+    def _table_ready(self, result, error):
+        table, images = result if result is not None else (None, 0)
         if error is not None:
             self.table = None
             _logger_ref().warning("Hoja no utilizable: %s", error)
@@ -514,7 +580,11 @@ class ShotMarksDialog(QtWidgets.QDialog):
             self._clear_preview()
             return
         self.table = table
+        self.thumb_mode = _sheet_module().detect_columns(table.headers).get("tc_in") is None
+        self.thumb_rows = images
         self._fill_columns(table.headers)
+        for role in ("tc_in", "tc_out"):
+            self.column_combos[role].setEnabled(not self.thumb_mode)
         _logger_ref().info("Planilla: %s | hoja %s | encabezado en fila %d | %d filas",
                            table.path, table.sheet, table.header_row, len(table.rows))
         self._columns_changed()
@@ -525,7 +595,9 @@ class ShotMarksDialog(QtWidgets.QDialog):
         self._loading = True
         for role, combo in self.column_combos.items():
             combo.clear()
-            if role not in ("shot", "tc_in"):
+            # Hoja sin columna de TC (modo thumbnails): TC In tambien va en
+            # "(none)", no en la primera columna.
+            if role not in ("shot", "tc_in") or (role == "tc_in" and detected.get("tc_in") is None):
                 combo.addItem(NONE_LABEL, None)
             for index, header in enumerate(headers):
                 combo.addItem(header, index)
@@ -536,7 +608,14 @@ class ShotMarksDialog(QtWidgets.QDialog):
         self._loading = False
 
     def _columns(self):
-        return {role: combo.currentData() for role, combo in self.column_combos.items()}
+        columns = {role: combo.currentData() for role, combo in self.column_combos.items()}
+        # Thumb y nivel de ubicacion no tienen combo: son columnas que agrega
+        # la ubicacion desde thumbnails y viajan a la metadata de cada tag.
+        if self.table is not None:
+            detected = _sheet_module().detect_columns(self.table.headers)
+            for role in ("thumb", "located"):
+                columns[role] = detected.get(role)
+        return columns
 
     def _columns_changed(self, *_args):
         if self._loading or self.table is None:
@@ -574,6 +653,9 @@ class ShotMarksDialog(QtWidgets.QDialog):
     # plan
     def _refresh_plan(self, *_args):
         if self._loading or self.table is None:
+            return
+        if self.thumb_mode:
+            self._show_thumb_mode()
             return
         module = _sheet_module()
         columns = self._columns()
@@ -622,6 +704,51 @@ class ShotMarksDialog(QtWidgets.QDialog):
             log.info("  fila %d %s (%s): %s%s", issue.row, issue.shot, issue.tc_in,
                      issue.message, "" if issue.written else " [no se escribe]")
 
+    def _show_thumb_mode(self):
+        """Hoja sin columna de TC: ofrecer ubicar los thumbnails en el video."""
+        self.plan = None
+        self._clear_preview()
+        if not self.thumb_rows:
+            self._set_summary("This sheet has no timecode column and no thumbnails in its rows.",
+                              Color.WARNING_TEXT)
+            return
+        locate = _locate_module()
+        movie = locate.media_path(self.sequence)
+        missing = locate.missing_tools()
+        text = ("This sheet has no timecode column, but %s %s a thumbnail. Shot Marks can find "
+                "each one in %s and mark the shot from cut to cut. The first time it indexes the "
+                "movie (about 1 min per 40 min of movie); you review the doubtful ones before "
+                "adding the marks." % (emphasis(str(self.thumb_rows)),
+                                       "shot has" if self.thumb_rows == 1 else "shots have",
+                                       emphasis(os.path.basename(movie or "the timeline movie"))))
+        if missing:
+            text += "<br>" + _colored("Not available: missing %s." % ", ".join(missing), Color.ERROR_TEXT)
+        elif not movie:
+            text += "<br>" + _colored("The timeline needs a single movie clip to compare with.",
+                                      Color.ERROR_TEXT)
+        self._set_summary(text)
+        self.apply_button.setText("Locate from Thumbnails...")
+        self.apply_button.setToolTip(TOOLTIPS["locate"])
+        self.apply_button.setEnabled(bool(movie) and not missing)
+
+    def _locate(self):
+        """Cierra el dialogo y abre la ventana de ubicacion (no modal: hay que
+        poder mover el visor de NKS mientras se revisa)."""
+        self._save_settings()
+        sequence, timeline = self.sequence, self.timeline
+        path, sheet, table = self.path_edit.text(), self.sheet_combo.currentData(), self.table
+
+        def done(located):
+            located_table = _sheet_module().with_located_timecodes(table, located)
+            _logger_ref().info("Ubicadas %d filas desde thumbnails", len(located))
+            dialog = ShotMarksDialog(sequence, hiero.ui.mainWindow(),
+                                     preset={"path": path, "sheet": sheet, "table": located_table})
+            dialog.exec_() if hasattr(dialog, "exec_") else dialog.exec()
+
+        self.accept()
+        _locate_module().open_window(sequence, timeline, table, self._columns(),
+                                     self.skip_omit.isChecked(), done)
+
     def _fill_preview(self):
         plan = self.plan
         notes = {}
@@ -668,6 +795,9 @@ class ShotMarksDialog(QtWidgets.QDialog):
 
     # aplicar
     def _apply(self):
+        if self.thumb_mode:
+            self._locate()
+            return
         if not self.plan or not self.plan.marks:
             return
         align = None
@@ -676,6 +806,8 @@ class ShotMarksDialog(QtWidgets.QDialog):
             align = self.timeline.media_start
         source = "%s | %s" % (os.path.basename(self.path_edit.text()),
                               self.sheet_combo.currentData() or "")
+        if self.preset:
+            source += " | located from thumbnails"
         try:
             removed = apply_plan(self.sequence, self.plan, align, source)
         except Exception as exc:

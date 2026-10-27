@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Sheet v1.02 | Lega
+  LGA_NKS_ShotMarks_Sheet v1.03 | Lega
 
   Nucleo sin host de Shot Marks: lee una planilla (xlsx o csv),
   detecta la fila de encabezado y las columnas de shot y timecode,
@@ -13,6 +13,14 @@ ____________________________________________________________________
   los sharedStrings), sin openpyxl: NKS no lo trae, y asi una
   planilla de cientos de MB por las imagenes se lee en segundos.
 
+  v1.03: Hojas sin timecode (solo shot + thumbnail): load_table las acepta
+         con require_tc=False y with_located_timecodes les suma las
+         columnas de TC que ubico el motor de thumbnails, mas el thumb y
+         el nivel de confianza de cada fila. is_omit ya no descarta
+         "POSIBLE VFX OMIT (en corte)": un posible omit sigue en el corte.
+         status_kind distingue omit de posible omit para colorearlos.
+         Columnas "STATUS VFX" y "VFX Brief"; is_shot_name descarta los
+         titulos de grupo ("PROJA_001_") de una hoja con thumbnails.
   v1.02: mark_index_at: que marca cubre un cuadro, para que la ventana
          de Previous/Next Mark siga al playhead.
   v1.01: Columnas de descripcion, escena, vendor y categoria; cada marca
@@ -45,27 +53,37 @@ MAX_COLUMNS = 400
 SHOT_HEADERS = ("shotname", "shot", "shotcode", "vfxshot", "vfxshotname", "tcn")
 TC_IN_HEADERS = (
     "rectcin", "recordtcin", "recin", "recordin", "rectc", "tcin",
-    "timecodein", "mastertc", "start",
+    "timecodein", "mastertc", "start", "rectcinlocated",
 )
 TC_OUT_HEADERS = (
     "rectcout", "recordtcout", "recout", "recordout", "tcout",
-    "timecodeout", "end",
+    "timecodeout", "end", "rectcoutlocated",
 )
 EPISODE_HEADERS = ("ep", "episode", "episodio", "epi", "reel")
-STATUS_HEADERS = ("status", "estado", "shotstatus")
+STATUS_HEADERS = ("status", "estado", "shotstatus", "statusvfx", "vfxstatus", "estadovfx")
 # "note" es el brief: va a la nota del tag. La descripcion es aparte.
-NOTE_HEADERS = ("brief", "notes", "notas", "vfxnotes")
+NOTE_HEADERS = ("brief", "vfxbrief", "notes", "notas", "vfxnotes")
 DESCRIPTION_HEADERS = ("descripcion", "description", "desc", "shotdescription")
 SCENE_HEADERS = ("esc", "escena", "scene", "sc")
 VENDOR_HEADERS = ("vendor", "proveedor")
 CATEGORY_HEADERS = ("shotcategory", "category", "categoria", "type")
+# Columnas que agrega Shot Marks cuando ubica los TC desde los thumbnails.
+LOCATED_TC_IN = "REC TC IN (located)"
+LOCATED_TC_OUT = "REC TC OUT (located)"
+LOCATED_THUMB = "LGA Thumb"
+LOCATED_LEVEL = "LGA Located"
+THUMB_HEADERS = ("lgathumb",)
+LOCATED_HEADERS = ("lgalocated",)
 
 OMIT_TOKENS = ("omit", "omitted", "cbb", "removed")
+# "POSIBLE VFX OMIT (en corte)": todavia esta en el corte, se marca.
+MAYBE_TOKENS = ("posible", "possible", "maybe", "tentative")
 
 ROLES = ("shot", "tc_in", "tc_out", "episode", "status", "note",
-         "description", "scene", "vendor", "category")
+         "description", "scene", "vendor", "category", "thumb", "located")
 # Roles que viajan como texto a cada marca, para la ventana de info.
-INFO_ROLES = ("status", "description", "scene", "vendor", "category", "episode")
+INFO_ROLES = ("status", "description", "scene", "vendor", "category", "episode",
+              "thumb", "located")
 _ROLE_HEADERS = {
     "shot": SHOT_HEADERS,
     "tc_in": TC_IN_HEADERS,
@@ -77,6 +95,8 @@ _ROLE_HEADERS = {
     "scene": SCENE_HEADERS,
     "vendor": VENDOR_HEADERS,
     "category": CATEGORY_HEADERS,
+    "thumb": THUMB_HEADERS,
+    "located": LOCATED_HEADERS,
 }
 
 
@@ -294,12 +314,18 @@ def _read_rows(path, sheet, max_rows=None):
 
 # -- encabezado y columnas -------------------------------------------------
 
-def _header_score(values):
-    """Cuanto se parece una fila a un encabezado de breakdown con timecode."""
+def _header_score(values, require_tc=True):
+    """Cuanto se parece una fila a un encabezado de breakdown con timecode.
+
+    Sin require_tc solo cuenta la columna de shot: es la hoja que tiene
+    thumbnails en lugar de timecode.
+    """
     norm = [normalize_header(v) for v in values]
     score = 0
     if any(n in SHOT_HEADERS for n in norm):
         score += 2
+    if not require_tc:
+        return score + (1 if "shotname" in norm else 0)
     if any(n in TC_IN_HEADERS for n in norm):
         score += 2
     if any(n in TC_OUT_HEADERS for n in norm):
@@ -313,15 +339,15 @@ def _header_score(values):
     return score
 
 
-def detect_header_row(rows):
+def detect_header_row(rows, require_tc=True):
     """Indice en `rows` de la fila de encabezado, o None si ninguna sirve."""
     best_index, best_score = None, 0
     for index, (_number, values) in enumerate(rows[:HEADER_SEARCH_ROWS]):
-        score = _header_score(values)
+        score = _header_score(values, require_tc)
         if score > best_score:
             best_index, best_score = index, score
-    # Hace falta al menos shot + tc in para que la hoja sirva.
-    return best_index if best_score >= 4 else None
+    # Hace falta al menos shot + tc in (o solo shot, sin require_tc).
+    return best_index if best_score >= (4 if require_tc else 2) else None
 
 
 def detect_columns(headers):
@@ -337,9 +363,9 @@ def detect_columns(headers):
     return result
 
 
-def _rows_score(rows):
-    index = detect_header_row(rows)
-    return _header_score(rows[index][1]) if index is not None else 0
+def _rows_score(rows, require_tc=True):
+    index = detect_header_row(rows, require_tc)
+    return _header_score(rows[index][1], require_tc) if index is not None else 0
 
 
 def suggest_sheet(path, sheets=None):
@@ -352,6 +378,7 @@ def suggest_sheet(path, sheets=None):
     if path.suffix.lower() == ".csv":
         return "" if _rows_score(_read_rows(path, "", HEADER_SEARCH_ROWS)) else None
     best, best_score = None, 0
+    shot_only, shot_score = None, 0
     with zipfile.ZipFile(str(path)) as archive:
         strings = _shared_strings(archive)
         for sheet in sheets if sheets is not None else list_sheets(path):
@@ -363,14 +390,21 @@ def suggest_sheet(path, sheets=None):
             score = _rows_score(rows)
             if score > best_score:
                 best, best_score = sheet, score
-    return best
+            score = _rows_score(rows, require_tc=False)
+            if score > shot_score:
+                shot_only, shot_score = sheet, score
+    # Sin ninguna hoja con timecode: la que mejor parece de shots (thumbnails).
+    return best if best is not None else shot_only
 
 
-def load_table(path, sheet):
+def load_table(path, sheet, require_tc=True):
+    """Tabla de la hoja. Sin require_tc alcanza con la columna de shot."""
     rows = _read_rows(path, sheet)
     if not rows:
         raise ValueError("La hoja esta vacia.")
     index = detect_header_row(rows)
+    if index is None and not require_tc:
+        index = detect_header_row(rows, require_tc=False)
     if index is None:
         raise ValueError(
             "No se encontro una fila de encabezado con columnas de shot y timecode."
@@ -484,9 +518,41 @@ def format_timecode(frames, fps):
     return "%02d:%02d:%02d:%02d" % (hh, mm, ss, ff)
 
 
-def is_omit(status):
+def status_kind(status):
+    """'omit', 'maybe_omit' o '' segun el texto del status."""
     norm = normalize_header(status)
-    return any(token in norm for token in OMIT_TOKENS)
+    if not any(token in norm for token in OMIT_TOKENS):
+        return ""
+    return "maybe_omit" if any(token in norm for token in MAYBE_TOKENS) else "omit"
+
+
+def is_shot_name(text):
+    """Falso para los titulos de grupo de una planilla ("PROJA_001_", "PROJA_001-"):
+    son filas de seccion, a veces con foto, y no se ubican ni se marcan."""
+    text = str(text or "").strip()
+    return bool(text) and not text.endswith(("_", "-", "."))
+
+
+def is_omit(status):
+    return status_kind(status) == "omit"
+
+
+def with_located_timecodes(table, located):
+    """Copia de la tabla con las columnas que ubico el motor de thumbnails.
+
+    `located` = {fila: {"tc_in", "tc_out", "thumb", "level"}}; el TC OUT va
+    exclusivo, como en una planilla de montaje. Las filas sin entrada quedan
+    vacias y build_plan las reporta como "No TC IN".
+    """
+    headers = list(table.headers) + [LOCATED_TC_IN, LOCATED_TC_OUT, LOCATED_THUMB, LOCATED_LEVEL]
+    width = len(table.headers)
+    rows = []
+    for number, values in table.rows:
+        entry = located.get(number) or {}
+        padded = (list(values) + [""] * width)[:width]
+        rows.append((number, padded + [entry.get("tc_in", ""), entry.get("tc_out", ""),
+                                       entry.get("thumb", ""), entry.get("level", "")]))
+    return Table(table.path, table.sheet, table.header_row, headers, rows)
 
 
 def episode_values(table, column):
@@ -524,7 +590,7 @@ def build_plan(table, columns, fps, reference_start, duration,
     for number, row in table.rows:
         shot = _value(row, shot_col)
         tc_in_text = _value(row, in_col)
-        if not shot and not tc_in_text:
+        if not tc_in_text and not is_shot_name(shot):
             continue
         if episode and normalize_episode(_value(row, columns.get("episode"))) != episode:
             plan.skipped_episode += 1

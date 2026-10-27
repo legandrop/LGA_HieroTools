@@ -16,7 +16,8 @@ sin comprimir.
 | `OpenEXR_Win/exrheader.exe` | `LGA_NKS_mediaMissingFrames.py` | Leer el header de un EXR |
 | `OpenEXR_Win/exrmetrics.exe` | `LGA_EXR_Convert.py` | Recompresión rápida (motor `exrmetrics`) |
 | `FFmpeg_Win/bin/ffprobe.exe` | `LGA_import_shots.py`, `LGA_NKS_CreateNKScript.py` | Resolución, fps, codec y frames de MOV/MXF |
-| `OIIO_Win/bin/python/python.exe` | `LGA_import_shots_transcode.py` | Correr `LGA_EXR_Convert.py` fuera de NKS |
+| `FFmpeg_Win/bin/ffmpeg_lga.exe` | `LGA_NKS_ShotMarks_Locate_Engine.py` | Shot Marks sin TC: índice del video (huellas + `scdet`), huellas de los thumbs y cuadro exacto |
+| `OIIO_Win/bin/python/python.exe` | `LGA_import_shots_transcode.py`, `LGA_NKS_ShotMarks_Locate.py` | Correr `LGA_EXR_Convert.py` y el motor de Shot Marks fuera de NKS |
 
 Junto a cada ejecutable van **solo** las DLL que importa, sacadas de su tabla de
 imports y no a ojo. La config OCIO del round trip vive aparte, en
@@ -94,6 +95,21 @@ hacía Import Shots. Al leer ffprobe, usar siempre JSON y la clave `streams`.
 
 Licencia: sin x264/x265 la compilación es **LGPL 2.1** (configure lo dice al
 final). `FFmpeg_Win/LICENSE.txt` va en el ZIP.
+
+## ffmpeg_lga mínimo
+
+Shot Marks ubica los thumbnails de una planilla en el video del corte: necesita
+decodificar la película entera una vez, escalar, recortar y detectar cortes. Desde
+v4.022 viaja `ffmpeg_lga.exe` (4,2 MB, LGPL), compilado de la misma fuente
+verificada que el ffprobe y con la misma idea: solo los demuxers (MOV, MXF, AVI,
+MKV, MPEG-TS/PS, image2, MJPEG), los decoders de video de montaje (ProRes,
+DNxHD, H.264, HEVC, MPEG-1/2, MJPEG, DV, rawvideo, v210, QT RLE, PNG, CineForm),
+los encoders rawvideo y mjpeg, y los filtros `scale`, `crop`, `split`, `scdet`,
+`metadata` y `format`. Receta: `+Building_Blocks/Binarios_Pack/build_ffmpeg_lga.sh`.
+Lleva un nombre distinto de `ffmpeg.exe` para que el generador, que saca
+`ffmpeg.exe` del ZIP por nombre, no lo saque. `verificar_binarios.py --probar`
+corre la misma cadena de filtros del índice: si a una compilación nueva le falta
+un filtro, falla ahí.
 
 ## FFmpeg no está en Git
 

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Nav v1.02 | Lega
+  LGA_NKS_ShotMarks_Nav v1.03 | Lega
 
   Previous / Next Mark: Shift+Click en Previous / Next Annotation del
   panel Review. Salta el playhead a la marca de Shot Marks anterior o
@@ -17,6 +17,10 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Nav.log.
 
+  v1.03: Marcas ubicadas desde thumbnails: la ventana muestra el thumb de
+         la planilla y si el cuadro fue aceptado solo, confirmado a mano o
+         quedo sin confirmar. El status de omit va en rojo y el de posible
+         omit en ambar, para verlos de un vistazo al navegar.
   v1.02: Una celda con varios vendors ("Vendor A, Vendor B") pinta cada
          uno con su color; antes se buscaba la celda entera y salia sin
          color. El alto se recalcula invalidando los layouts: al pasar a
@@ -41,7 +45,7 @@ from pathlib import Path
 import hiero.core
 import hiero.ui
 
-from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtCore, QtWidgets, Qt
+from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtCore, QtGui, QtWidgets, Qt
 from LGA_NKS_Shared.LGA_UI_Style_HieroTools import (
     Color,
     Metric,
@@ -57,7 +61,7 @@ DEBUG = False
 WINDOW_NAME = "LGA_ShotMarkInfo"
 # Sube cuando cambia la API de la ventana: el panel re-ejecuta este modulo en
 # cada click, y una ventana creada por una version vieja se reemplaza.
-WINDOW_API = 2
+WINDOW_API = 3
 WINDOW_WIDTH = 520
 SCREEN_MARGIN = 24
 # Lega pidio la letra mas grande: con el tamano del host (~12 px en NKS) no
@@ -226,6 +230,14 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
         body = QtWidgets.QVBoxLayout()
         body.setContentsMargins(margin, 12, margin, margin - 4)
         body.setSpacing(4)
+        # Thumb de la planilla (solo marcas ubicadas desde thumbnails): se
+        # compara con el visor mientras se navega.
+        self.thumb = QtWidgets.QLabel()
+        self.thumb.setAlignment(Qt.AlignLeft)
+        body.addWidget(self.thumb)
+        self.thumb_caption = self._label(body)
+        self._thumb_gap = QtWidgets.QSpacerItem(0, 8)
+        body.addItem(self._thumb_gap)
         self.description = self._section(body, "Description")
         body.addSpacing(8)
         self.brief = self._section(body, "Brief")
@@ -261,12 +273,17 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
             if not info.get(field):
                 continue
             value = esc(info[field])
+            if field == "status":
+                color = STATUS_COLORS.get(_sheet_module().status_kind(info[field]))
+                if color:
+                    value = '<span style="color:%s; %s">%s</span>' % (color, semibold_css(), value)
             if field == "vendor" and any(color for _name, color in info.get("vendor_colors", ())):
                 value = ", ".join(_vendor_html(name, color)
                                   for name, color in info["vendor_colors"])
             meta.append("%s %s" % (_dim(label), value))
         self.meta.setText(" &nbsp;&middot;&nbsp; ".join(meta))
         self.meta.setVisible(bool(meta))
+        self._show_thumb(info)
         self.description.setText(_body(info.get("description")))
         self.brief.setText(_body(info.get("brief")))
         footer = "Mark %d of %d" % (info["index"] + 1, info["total"])
@@ -274,6 +291,20 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
             footer += ". Run Shot Marks again to see every column of the sheet here."
         self.footer.setText(_dim(footer))
         self._fit()
+
+    def _show_thumb(self, info):
+        path = info.get("thumb") or ""
+        image = QtGui.QImage(path) if path else QtGui.QImage()
+        has_thumb = not image.isNull()
+        self.thumb.setVisible(has_thumb)
+        self.thumb_caption.setVisible(bool(path))
+        self._thumb_gap.changeSize(0, 8 if path else 0)
+        if has_thumb:
+            width = WINDOW_WIDTH - 2 * Metric.WINDOW_MARGIN
+            self.thumb.setPixmap(QtGui.QPixmap.fromImage(image).scaledToWidth(
+                width, Qt.SmoothTransformation))
+        if path:
+            self.thumb_caption.setText(_located_html(info.get("located"), has_thumb))
 
     def _fit(self):
         # Ancho fijo y alto segun el texto: una descripcion larga crece hacia
@@ -400,6 +431,28 @@ def _vendor_html(name, color):
     if not color:
         return _escape(name)
     return '<span style="color:%s; %s">%s</span>' % (color, semibold_css(), _escape(name))
+
+
+# Dato, no estilo: un omit en rojo y un posible omit en ambar.
+STATUS_COLORS = {"omit": Color.ERROR_TEXT, "maybe_omit": Color.WARNING_TEXT}
+LOCATED_LABELS = {
+    "auto": ("accepted automatically", Color.TEXT_DIM),
+    "confirmed": ("confirmed by hand", Color.OK_TEXT),
+    "review": ("not confirmed: check it against the viewer", Color.WARNING_TEXT),
+}
+
+
+def _located_html(located, has_thumb):
+    """'Sheet thumbnail · <como se ubico>' a partir de 'nivel puntaje'."""
+    parts = (located or "").split()
+    level = parts[0] if parts else ""
+    label, color = LOCATED_LABELS.get(level, ("", Color.TEXT_DIM))
+    text = _dim("Sheet thumbnail" if has_thumb else "Sheet thumbnail not found on this computer")
+    if label:
+        text += _dim(" &middot; ") + '<span style="color:%s">%s</span>' % (color, label)
+        if len(parts) > 1 and level != "confirmed":
+            text += _dim(" (%s)" % _escape(parts[1]))
+    return text
 
 
 def _body(text):

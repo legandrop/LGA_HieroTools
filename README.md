@@ -338,6 +338,12 @@ opening related Nuke scripts.
   matched against the movie's own timecode, and it can also set the
   timeline's start timecode to match it. Running it again replaces only the
   tags it added; one Undo reverts the whole run.
+  Sheets without timecodes (Windows): if the sheet only has a thumbnail per
+  shot, **Locate from Thumbnails...** finds each one in the timeline movie and
+  marks the shot from cut to cut. Safe matches are accepted automatically; the
+  doubtful ones are listed first for review, stepping frames on the NKS viewer
+  next to the thumbnail. Confirmed frames are remembered per project. Marks
+  placed this way show their thumbnail in the Shift+Click info window.
 - **Reveal in Explorer**  
   Opens the selected clips' folders in the default file manager; without a
   selection it opens the first open project's folder.

@@ -71,6 +71,100 @@ Previous, con el playhead adentro de un shot, vuelve al IN de ese shot.
   si la planilla se mueve. Los tags creados antes de esta version solo tienen nombre y nota: la
   ventana muestra eso y pide volver a correr Shot Marks.
 
+## Planillas sin timecode: ubicar desde los thumbnails (solo Windows)
+
+Hay breakdowns que no traen REC TC: solo una foto por shot, pegada en la hoja. Si la hoja elegida
+no tiene columna de TC pero sus filas de shot tienen imagen, el boton del dialogo pasa a
+**Locate from Thumbnails...**: busca cada foto en el MOV del timeline y marca el plano que la
+contiene, de corte a corte. Al terminar, el dialogo se reabre con los TC ubicados como columnas
+nuevas (`REC TC IN (located)` / `OUT`) y sigue igual que con una planilla con TC.
+
+**Piezas**
+
+- `LGA_NKS_ShotMarks_Thumbs.py`: que imagen esta anclada en que fila (`xl/drawings/drawingN.xml`,
+  `twoCellAnchor` / `oneCellAnchor`). Una foto que termina en el borde de la fila siguiente es de
+  la primera; una que cruza varias, de la del medio. Varias fotos en una fila: gana la de la
+  columna mas a la izquierda. Se extraen una vez con su sha1 de nombre. Las imagenes "en celda"
+  (`xl/richData/`) son otro formato y todavia no se leen.
+- `LGA_NKS_ShotMarks_Locate_Engine.py`: el motor. **Corre como proceso aparte** con el Python
+  embebido del pack (`QProcess`), no en un hilo de NKS: es ~1 min de Python puro que en un hilo
+  se pelearia el GIL con la UI. Solo libreria estandar; progreso por stdout en lineas JSON.
+- `LGA_NKS_ShotMarks_Locate.py`: la ventana de revision.
+- `LGA_NKS_Shared/FFmpeg_Win/bin/ffmpeg_lga.exe`: un ffmpeg minimo propio (4,2 MB, LGPL), con la
+  misma receta que el ffprobe (`+Building_Blocks/Binarios_Pack/build_ffmpeg_lga.sh`). Solo trae
+  los demuxers/decoders de MOV, MXF, JPG y PNG y los filtros que usa el motor.
+
+**El motor, paso a paso**
+
+1. **Indice del video**, una vez por video (clave: ruta + tamano + fecha), en
+   `%LOCALAPPDATA%\LGA\HieroTools\ShotMarks_Locate\index\`. Una sola pasada de ffmpeg guarda por
+   cuadro una huella 9x8 gris (dHash, 64 bits), otra 32x18 gris y el puntaje de cambio de escena
+   de `scdet`. Medido: 225.498 cuadros (2,6 h ProRes LT HD) en ~3,5 min; despues queda en cache.
+2. **Thumbs**: se detecta el area de imagen (sin barras ni la UI de un player de dailies) y se
+   recorta igual que el video: mismo 92 % central, mismo paso por 160x86. **El recorte es por
+   lote**: todos los thumbs del mismo tamano usan la moda de las detecciones con buen aspecto. El
+   recorte de cada uno fallaba en escenas oscuras (aspectos de 0,99 a 2,86 medidos sobre un video
+   de 1,85) y daba por ausentes shots que estaban.
+3. **Busqueda global**: dHash contra todos los cuadros (filtro barato), los 30 planos mas cercanos,
+   y en cada uno la correlacion normalizada (NCC) en gris, que tolera un grade distinto. 8
+   procesos, ~13 s para 450 thumbs.
+4. **Anclas y orden**: los seguros (NCC >= 0,90 y margen >= 0,10 contra el mejor de OTRO plano a
+   menos de 2400 cuadros) son anclas. Un ancla que cae antes o despues de todas sus vecinas en
+   orden de planilla se marca como escena movida en el montaje. El resto se busca solo entre el
+   ancla anterior y la siguiente: asi se resuelven los planos que vuelven en el montaje (A-B-A),
+   que el dHash solo no distingue. El orden es por FILA y no por shot: un mismo shot puede estar
+   en varias filas intercaladas.
+5. **Dos shots distintos no pueden caer en el mismo plano**: el de menor puntaje pasa a revision.
+6. **Cuadro exacto**: a 32x18 los cuadros vecinos de un plano empatan; se decodifican +-24
+   cuadros a 192x104 y se elige el mejor (~0,4 s por shot, en paralelo).
+7. **IN/OUT**: el plano entre los cortes de `scdet` (picos locales con puntaje > 6; de dos
+   detecciones a menos de 3 cuadros queda la mas fuerte). Medido a ojo: 6 de 8 cortes al cuadro
+   y los otros 2 un cuadro tarde, que es lo que corrige el pico local. Un "plano" de mas de 60 s
+   es un encadenado o un corte que no se vio: la marca va solo en el cuadro del thumb.
+
+**Niveles**: `auto` (aceptado solo), `review` (puntaje >= 0,60 sin las condiciones de `auto`),
+`not_found`; y los que pone el usuario: `confirmed` y `not_in_cut`. Los seguros se aceptan solos
+desde la primera corrida; los `review` se marcan igual, como no confirmados.
+
+**Lo que ningun metodo por imagen resuelve**: una captura de dailies de un cuadro que no esta en
+el corte (otra toma, otro tramo de la toma). Medido: esos dan 0,73-0,77 aunque sea la escena
+correcta; cuando el cuadro de una captura de dailies si esta en el corte da >= 0,88. Por eso van a
+revision y nunca se aceptan solos. Con el EDL del armado se resolverian por clip + SRC TC; es la
+proxima etapa.
+
+**Revision**
+
+- La lista ordena primero lo dudoso. Cada fila mueve el playhead del timeline al cuadro
+  propuesto, y el usuario lo ve en el visor de NKS. La ventana muestra ese mismo cuadro al lado del
+  thumb (o mezclado al 50 %, o como diferencia) con la similitud en vivo; lo decodifica del MOV con
+  `ffmpeg_lga.exe` en otro hilo (960 px de ancho, el pedido viejo se descarta si el usuario siguio
+  moviendose).
+- **No usar `currentViewer().image()` para esto.** Llamada ~90 ms despues de `setTime`, con el
+  visor todavia decodificando el cuadro nuevo, tiro abajo NKS 16.0v4 con un access violation
+  (medido en una instancia aparte, MOV ProRes en una unidad de red; el volcado de faulthandler
+  apunta a esa linea).
+- Teclas: flechas, un cuadro; Shift, un segundo; RePag/AvPag, corte anterior/siguiente; 1-5,
+  candidatos; Enter, usar este cuadro; N, no esta en el corte; Arriba/Abajo, otra fila. La lista
+  no toma el foco para que las flechas sean de la navegacion.
+- `Viewer.setSequence` pide dos argumentos en NKS 16 (secuencia e indice de entrada).
+
+**Decisiones guardadas** en `%LOCALAPPDATA%\LGA\HieroTools\ShotMarks_Locate\decisions\<proyecto>.json`,
+por sha1 del thumb (no por fila ni por shot: las filas se mueven y los shots se repiten). Cada
+confirmacion guarda tambien la huella del cuadro elegido: con un corte nuevo se busca ese cuadro
+en lugar del thumb. No se escribe nada en el Excel.
+
+**En la ventanita de Previous/Next Mark** las marcas ubicadas muestran el thumb de la planilla
+(JPG de 480 px en la cache, `tag.lga_shotmarks_thumb`) y como se ubico (`_located`): aceptado
+solo, confirmado a mano o sin confirmar. El status de omit va en rojo y el de posible omit en
+ambar.
+
+**Filas que no se ubican**: los titulos de grupo (`PROJA_001_`, nombre terminado en `_`, `-` o
+`.`) aunque tengan foto. "POSIBLE VFX OMIT (en corte)" no cuenta como omit: sigue en el corte.
+
+**Ruta en la raiz de una unidad**: Hiero devuelve `Y:clip.mov` (sin barra) para un archivo en la
+raiz de una unidad. Es una ruta relativa al directorio actual de esa unidad; `media_path` le
+agrega la barra antes de pasarla a ffmpeg. Medido en NKS 16.
+
 ## Decisiones que no se deducen del codigo
 
 - **Tags y no anotaciones.** Viewer > Next Tag / Previous Tag (`Alt+Shift+Right/Left`) navega los
@@ -120,5 +214,10 @@ Previous, con el playhead adentro de un shot, vuelve al IN de ese shot.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel.py`: boton `Shot Marks`,
   `execute_ShotMarks`; Shift+Click de Previous/Next Annotation en `execute_PreviousMark` /
   `execute_NextMark`.
-- Capturas: `+Building_Blocks/UI_Capture/fixtures/h11_shot_marks.py` -> `ShotMarks_Dialog.png`;
-  `h11b_shot_mark_info.py` -> `ShotMarks_Info.png` y `ShotMarks_Info-OldTag.png`.
+- `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks_Locate_Engine.py`,
+  `LGA_NKS_ShotMarks_Locate.py` y `LGA_NKS_ShotMarks_Thumbs.py`: ubicar desde thumbnails. El motor
+  y el lector de thumbs se prueban sin host en `tests/test_shot_marks_locate.py`.
+- Capturas: `+Building_Blocks/UI_Capture/fixtures/h11_shot_marks.py` -> `ShotMarks_Dialog.png` y
+  `ShotMarks_Dialog-Thumbnails.png`; `h11b_shot_mark_info.py` -> `ShotMarks_Info.png`,
+  `ShotMarks_Info-OldTag.png` y `ShotMarks_Info-Located.png`; `h11c_shot_marks_locate.py` ->
+  `ShotMarks_Locate.png`.
