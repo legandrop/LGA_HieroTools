@@ -114,6 +114,27 @@ Si el token no resuelve contra el config activo, el clip **no se toca** y se rep
 transform disponible*. Si lo que falla es la lista misma del clip, se usa la de otro clip del
 proyecto (ver «Lo que costo descubrir», mas abajo).
 
+### Los videos (mp4, mov) van a Rec.709, no al token del track
+
+Desde `LGA_NKS_FixColorspaces v1.25`, un clip cuya media es `.mp4` o `.mov` (por extension, sin
+importar mayusculas) no sigue el token de su track: va al Rec.709 de display del config. Un video
+es material de display ya codificado en Rec.709, no un plate de camara. **Por que existe:** en un
+show con `plates: acescg`, un EditRef en mp4 puesto en el track `aPlate` (porque ese shot todavia no
+tenia plate) quedaba en ACEScg; «Default | Clip» lo dejaba bien porque vuelve al default del archivo.
+
+El nombre sale de `resolve_video_ocio_name()` (`LGA_NKS_ColorManagement_Config v1.01`), que busca en
+orden `Output - Rec.709` (ACES 1.x), `Rec.1886 Rec.709 - Display` (ACES 2.0 / studio config) y
+`rec709` (nuke-default), **solo por igualdad normalizada**. No usa `resolve_ocio_name("rec709")`
+porque su contencion matchearia `Utility - Linear - Rec.709` o `Utility - Rec.709 - Camera`, que
+son espacios lineales o de camara. Si ninguno esta, el clip queda *sin transform disponible*.
+
+Vale tambien para las demas versiones del BinItem: una version de otro tipo que la visible (un
+EditRef v01 en mp4 con una v02 en EXR) no hereda el nombre de la visible, se resuelve aparte una vez
+por tipo. Y para el clip de COMPARE de Compare Versions, que usa la misma resolucion.
+
+🔴 **Un `.mov` de camara en log (ProRes LogC, S-Log, ...) tambien va a Rec.709.** Hoy no se
+distingue: si un show trae plates en mov log, esta regla los deja mal y hay que sumar una excepcion.
+
 ## Todas las versiones del clip, no solo la visible
 
 Desde `LGA_NKS_FixColorspaces v1.24` el camino managed corrige, ademas del clip que muestra el

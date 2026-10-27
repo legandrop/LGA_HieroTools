@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ColorManagement_Config v1.00 | Lega
+  LGA_NKS_ColorManagement_Config v1.01 | Lega
 
   Config de color management por proyecto para HieroTools.
 
@@ -34,9 +34,14 @@ ____________________________________________________________________
   tiene el proyecto, o el proyecto no tiene `color_management`, se devuelve
   None y el caller sigue con su comportamiento sin color management.
 
+  Los archivos de video (mp4, mov) no siguen el token de su track: van al
+  Rec.709 de display del config (resolve_video_ocio_name).
+
   Usado por runtime activo:
   - LGA_NKS_Edit_Panel_py/LGA_NKS_FixColorspaces.py
 
+  v1.01: Suma es_archivo_de_video() y resolve_video_ocio_name(): los mp4 y mov
+         van a Rec.709 de display aunque esten en un track de plates.
   v1.00: Version inicial.
 ____________________________________________________________________
 
@@ -325,4 +330,45 @@ def resolve_ocio_name(token, available_transforms):
             if target in _normalize(opcion):
                 return opcion
 
+    return None
+
+
+# Archivos de video (mp4, mov): son material de display, codificado en Rec.709,
+# no plates de camara. En un proyecto managed van a Rec.709 aunque esten en un
+# track de plates. Ver es_archivo_de_video() y resolve_video_ocio_name().
+VIDEO_EXTENSIONS = (".mp4", ".mov")
+
+# Nombres de Rec.709 de display segun el config OCIO, en orden de preferencia:
+# ACES 1.x, ACES 2.0 / studio config, nuke-default. Se busca por igualdad
+# (normalizada), NUNCA por contencion: 'rec709' esta contenido en
+# 'Utility - Linear - Rec.709' y en 'Utility - Rec.709 - Camera', que son
+# espacios lineales o de camara y dejarian el video mal.
+VIDEO_OCIO_NAMES = (
+    "Output - Rec.709",
+    "Rec.1886 Rec.709 - Display",
+    "rec709",
+)
+
+
+def es_archivo_de_video(file_path):
+    """True si la ruta es un archivo de video (mp4, mov), sin importar mayusculas."""
+    return os.path.splitext(str(file_path or ""))[1].lower() in VIDEO_EXTENSIONS
+
+
+def resolve_video_ocio_name(available_transforms):
+    """
+    Nombre real del Rec.709 de display en `available_transforms`, o None.
+
+    Solo por igualdad normalizada, ver VIDEO_OCIO_NAMES. Si hay dos opciones
+    que normalizan igual, gana la primera de la lista.
+    """
+    if not available_transforms:
+        return None
+    normalizadas = {}
+    for opcion in available_transforms:
+        normalizadas.setdefault(_normalize(opcion), opcion)
+    for nombre in VIDEO_OCIO_NAMES:
+        encontrado = normalizadas.get(_normalize(nombre))
+        if encontrado is not None:
+            return encontrado
     return None

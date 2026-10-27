@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_FixColorspaces v1.24 | Lega
+  LGA_NKS_FixColorspaces v1.25 | Lega
 
   Corrige el color transform de los clips del timeline activo.
 
@@ -26,6 +26,9 @@ ____________________________________________________________________
            "_roto_", "_cleanup_", "_cg_"], case-insensitive) -> token
            'exr_publish'
          - cualquier otro track (EditRef, EditRefClean, ...)  -> NO SE TOCA
+       Excepcion: un clip de video (.mp4, .mov) en un track que si se toca va
+       al Rec.709 de display del config, no al token del track: es material de
+       display, no un plate de camara (resolve_video_ocio_name).
     3. El colorspace vive en el CLIP del bin (trackItem.source()), no en el
        TrackItem. Un mismo clip visto bajo dos reglas distintas (por ejemplo
        aparece en un track de plate Y en uno de publish) queda en
@@ -55,6 +58,11 @@ ____________________________________________________________________
   adentro de las funciones que los usan: este archivo se puede importar en
   un proceso sin Nuke/Hiero sin que explote y sin que haga nada.
 
+  v1.25: Los clips de video (.mp4, .mov) del camino managed van a Rec.709 de
+         display ('Output - Rec.709' en ACES 1.x) en lugar del token del track:
+         un EditRef en mp4 puesto en aPlate quedaba en ACEScg. Tambien en las
+         demas versiones del BinItem (una version de otro tipo que la visible se
+         resuelve aparte) y en el clip de COMPARE.
   v1.24: El camino managed corrige tambien las demas versiones ya cargadas del
          BinItem de cada clip, no solo la visible: al pasar a otra version el
          clip volvia al colorspace que traia. Sin escanear disco y sin tocar la
@@ -155,9 +163,11 @@ if _SHARED_DIR.exists() and str(_SHARED_DIR) not in sys.path:
     sys.path.insert(0, str(_SHARED_DIR))
 
 from LGA_NKS_ColorManagement_Config import (  # noqa: E402
+    es_archivo_de_video,
     get_color_management,
     is_color_managed,
     resolve_ocio_name,
+    resolve_video_ocio_name,
 )
 from LGA_NKS_Flow_NamingUtils import (  # noqa: E402
     clean_base_name,
@@ -199,6 +209,21 @@ def extraer_colorspace_desde_read(clip):
     return None
 
 
+def _ruta_media(clip):
+    """Ruta del primer archivo de la media del clip, o "" si no se puede leer."""
+    try:
+        media = clip.mediaSource()
+        fileinfos = media.fileinfos() if media else None
+        return fileinfos[0].filename() if fileinfos else ""
+    except Exception:
+        return ""
+
+
+def _es_video(clip):
+    """True si la media del clip es un archivo de video (mp4, mov)."""
+    return es_archivo_de_video(_ruta_media(clip))
+
+
 def _project_name_de_clip(clip):
     """
     Nombre canonico del proyecto al que pertenece un clip, sacado de la RUTA
@@ -206,12 +231,7 @@ def _project_name_de_clip(clip):
 
     Devuelve "" si no se puede resolver.
     """
-    try:
-        media = clip.mediaSource()
-        fileinfos = media.fileinfos() if media else None
-        file_path = fileinfos[0].filename() if fileinfos else ""
-    except Exception:
-        return ""
+    file_path = _ruta_media(clip)
     if not file_path:
         return ""
     return extract_project_name_from_path(file_path) or ""
@@ -505,9 +525,21 @@ class ListaTransformsDeRespaldo(object):
         return self._lista
 
 
+def _resolver_en_lista(clip, wanted_token, lista):
+    """
+    Un video (mp4, mov) va al Rec.709 de display del config, sin importar el
+    token de su track: es material de display, no un plate de camara. Un EditRef
+    en mp4 que quedo en un track de plates terminaba en ACEScg.
+    """
+    if _es_video(clip):
+        return resolve_video_ocio_name(lista)
+    return resolve_ocio_name(wanted_token, lista)
+
+
 def resolver_nombre_para_clip(clip, wanted_token, respaldo=None):
     """
-    Resuelve un token neutro contra el config OCIO activo del clip.
+    Resuelve un token neutro contra el config OCIO activo del clip. Si el clip es
+    un video (mp4, mov), resuelve Rec.709 en lugar del token (_resolver_en_lista).
 
     Devuelve (nombre_real, error, via_respaldo):
       - nombre_real: None si no resolvio o si no hubo lista contra la cual resolver.
@@ -523,8 +555,8 @@ def resolver_nombre_para_clip(clip, wanted_token, respaldo=None):
         lista = respaldo.obtener() if respaldo is not None else None
         if not lista:
             return None, e, False
-        return resolve_ocio_name(wanted_token, lista), None, True
-    return resolve_ocio_name(wanted_token, disponibles), None, False
+        return _resolver_en_lista(clip, wanted_token, lista), None, True
+    return _resolver_en_lista(clip, wanted_token, disponibles), None, False
 
 
 # Cuanto esperar para releer lo seteado. El set es diferido (lo aplica el event
@@ -637,7 +669,15 @@ def _bin_key(bin_item):
 
 
 def corregir_versiones_del_bin_item(
-    bin_item, nombre_real, ya_procesados, track_name, versiones_corregidas, pendientes=None
+    bin_item,
+    nombre_real,
+    ya_procesados,
+    track_name,
+    versiones_corregidas,
+    pendientes=None,
+    clip_visible=None,
+    wanted_token=None,
+    respaldo=None,
 ):
     """
     Aplica `nombre_real` a TODAS las versiones ya cargadas en el BinItem, no solo
@@ -659,6 +699,10 @@ def corregir_versiones_del_bin_item(
       TrackItems), para no tocarlos dos veces.
     - `pendientes`: si viene, cada version seteada se agrega para verificarla
       despues (se usa cuando el nombre salio de la lista de respaldo).
+    - `clip_visible` + `wanted_token` (+ `respaldo`): si vienen, una version de
+      OTRO tipo que la visible (video contra secuencia, ej. un EditRef en mp4 y
+      su v02 en EXR) no hereda `nombre_real`: se resuelve aparte, una vez por
+      tipo, porque los videos van a Rec.709 y el resto sigue el token.
 
     Costo medido: ~0.1 ms por version en Python mas ~5 ms por version que NKS
     procesa despues, al volver al event loop. No lee media: cuesta lo mismo con
@@ -671,6 +715,8 @@ def corregir_versiones_del_bin_item(
             "[managed][ERROR] No se pudieron leer las versiones de un BinItem: {0}".format(e)
         )
         return
+    por_tipo = clip_visible is not None and bool(wanted_token)
+    nombres_por_tipo = {_es_video(clip_visible): nombre_real} if por_tipo else {}
     for version in versiones:
         try:
             clip_version = version.item()
@@ -682,13 +728,28 @@ def corregir_versiones_del_bin_item(
         if key in ya_procesados:
             continue
         ya_procesados.add(key)
-        estado, actual = aplicar_nombre_a_clip(clip_version, nombre_real)
+        nombre_version = nombre_real
+        if por_tipo:
+            tipo = _es_video(clip_version)
+            if tipo not in nombres_por_tipo:
+                nombres_por_tipo[tipo] = resolver_nombre_para_clip(
+                    clip_version, wanted_token, respaldo
+                )[0]
+            nombre_version = nombres_por_tipo[tipo]
+            if not nombre_version:
+                debug_print(
+                    "[managed] version {0}: sin transform para su tipo, no se toca".format(
+                        _nombre_clip_seguro(clip_version)
+                    )
+                )
+                continue
+        estado, actual = aplicar_nombre_a_clip(clip_version, nombre_version)
         if estado == "corregido":
             versiones_corregidas.append(
-                (_nombre_clip_seguro(clip_version), track_name, actual, nombre_real)
+                (_nombre_clip_seguro(clip_version), track_name, actual, nombre_version)
             )
             if pendientes is not None:
-                pendientes.append(_pendiente(clip_version, nombre_real))
+                pendientes.append(_pendiente(clip_version, nombre_version))
 
 
 def corregir_clips_con_color_management(project_name, cm_config, seq, incluir_versiones=True):
@@ -772,11 +833,12 @@ def corregir_clips_con_color_management(project_name, cm_config, seq, incluir_ve
             if via_respaldo:
                 pendientes.append(_pendiente(clip, nombre_real))
             debug_print(
-                "[managed] {0} ({1}): {2} -> {3}{4}".format(
+                "[managed] {0} ({1}): {2} -> {3}{4}{5}".format(
                     _nombre_clip_seguro(clip),
                     track_name,
                     actual,
                     nombre_real,
+                    " (video: Rec.709)" if _es_video(clip) else "",
                     " (lista de respaldo)" if via_respaldo else "",
                 )
             )
@@ -805,6 +867,9 @@ def corregir_clips_con_color_management(project_name, cm_config, seq, incluir_ve
             track_name,
             versiones_corregidas,
             pendientes if via_respaldo else None,
+            clip_visible=clip,
+            wanted_token=wanted_token,
+            respaldo=respaldo,
         )
 
     _imprimir_resumen_managed(
@@ -1045,6 +1110,9 @@ def aplicar_a_track_item_si_managed(track_item, track_name_regla, seq=None):
                 track_name_regla,
                 versiones_corregidas,
                 pendientes if via_respaldo else None,
+                clip_visible=clip,
+                wanted_token=wanted_token,
+                respaldo=respaldo,
             )
         for nombre, _track, antes, despues in versiones_corregidas:
             debug_print("[compare]  version {0}: {1} -> {2}".format(nombre, antes, despues))

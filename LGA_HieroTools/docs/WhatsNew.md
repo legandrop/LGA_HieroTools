@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.022
+- [fixed] En los proyectos con color management, Fix Colorspaces deja los mp4 y mov en Rec.709 aunque estén en un track de plates, en vez de pasarlos a ACEScg.
 - [new] Shot Marks, en el panel Review, lee la planilla de breakdown y marca cada shot en el timeline en su timecode; con Shift+Click en Previous Annotation y Next Annotation saltás de un shot al otro y se abre una ventanita con la descripción, el brief y los datos de ese shot en la planilla, con el vendor en su color; mientras está abierta, cambia sola cuando el playhead entra en otro shot.
 - [new][win] Shot Marks también funciona con planillas sin timecode que solo traen una foto por shot: `Locate from Thumbnails...` encuentra cada foto en el video del timeline, marca el plano entero y te deja revisar los dudosos paso a paso sobre el visor, al lado de la foto; al navegar las marcas, la ventanita muestra la foto de la planilla y resalta los shots omitidos o posiblemente omitidos.
 
