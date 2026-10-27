@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_FixColorspaces v1.25 | Lega
+  LGA_NKS_FixColorspaces v1.26 | Lega
 
   Corrige el color transform de los clips del timeline activo.
 
@@ -25,8 +25,10 @@ ____________________________________________________________________
          - nombre esta en TASK_EXR_TRACKS (LGA_NKS_GetClip, hoy ["_comp_",
            "_roto_", "_cleanup_", "_cg_"], case-insensitive) -> token
            'exr_publish'
-         - cualquier otro track (EditRef, EditRefClean, ...)  -> NO SE TOCA
-       Excepcion: un clip de video (.mp4, .mov) en un track que si se toca va
+         - "editref" en el nombre (EditRef, EditRefClean, Edit Ref) -> solo
+           los videos (ver abajo); lo demas no se toca
+         - cualquier otro track                               -> NO SE TOCA
+       Excepcion: un clip de video (.mp4, .mov) en cualquiera de esos tracks va
        al Rec.709 de display del config, no al token del track: es material de
        display, no un plate de camara (resolve_video_ocio_name).
     3. El colorspace vive en el CLIP del bin (trackItem.source()), no en el
@@ -58,6 +60,9 @@ ____________________________________________________________________
   adentro de las funciones que los usan: este archivo se puede importar en
   un proceso sin Nuke/Hiero sin que explote y sin que haga nada.
 
+  v1.26: Los tracks EditRef (EditRefClean, "Edit Ref") tambien se revisan: sus
+         mp4 y mov van a Rec.709; lo que no es video ahi sigue sin tocarse. El
+         mismo video en aPlate y en EditRef ya no cuenta como conflicto.
   v1.25: Los clips de video (.mp4, .mov) del camino managed van a Rec.709 de
          display ('Output - Rec.709' en ACES 1.x) en lugar del token del track:
          un EditRef en mp4 puesto en aPlate quedaba en ACEScg. Tambien en las
@@ -356,8 +361,13 @@ def _resolve_active_project_name(seq):
 
 def _clasificar_track(track_name, exr_tracks):
     """
-    Devuelve el token ('plates' | 'exr_publish') que le corresponde a un
-    track por su nombre, o None si el track no se toca (EditRef y similares).
+    Devuelve el token ('plates' | 'exr_publish' | 'editref') que le corresponde
+    a un track por su nombre, o None si el track no se toca.
+
+    'editref' no es una clave de color_management: en esos tracks solo se tocan
+    los videos (ver _regla_de_clip). Se detecta como en LGA_import_shots
+    ("editref" en el nombre: EditRef, EditRefClean), ignorando ademas espacios y
+    guiones para que "Edit Ref" tambien entre.
     """
     nombre = (track_name or "").strip()
     if not nombre:
@@ -366,7 +376,37 @@ def _clasificar_track(track_name, exr_tracks):
         return "plates"
     if nombre.lower() in [t.lower() for t in exr_tracks]:
         return "exr_publish"
+    if "editref" in "".join(c for c in nombre.lower() if c.isalnum()):
+        return "editref"
     return None
+
+
+# Regla de los clips de video (mp4, mov): Rec.709 de display, este en el track
+# que este. No es una clave de color_management; el nombre real lo resuelve
+# _resolver_en_lista, que para un video ignora el token.
+REGLA_VIDEO = "video"
+
+
+def _regla_de_clip(clip, track_token):
+    """
+    Regla que le toca a un clip segun su track: un video va a REGLA_VIDEO en
+    cualquier track con token; en un track 'editref' lo que no es video no se
+    toca (None); el resto sigue el token del track.
+    """
+    if not track_token:
+        return None
+    if _es_video(clip):
+        return REGLA_VIDEO
+    if track_token == "editref":
+        return None
+    return track_token
+
+
+def _token_de_regla(cm_config, regla):
+    """Token a resolver para una regla: el del proyecto, o REGLA_VIDEO tal cual."""
+    if regla == REGLA_VIDEO:
+        return REGLA_VIDEO
+    return cm_config.get(regla) if regla else None
 
 
 def _clip_key(clip):
@@ -407,13 +447,17 @@ def _pendiente(clip, nombre_real):
 
 def _clips_por_regla(seq, exr_tracks):
     """
-    Agrupa, por token, los clips que le corresponden a cada regla.
+    Agrupa, por regla (ver _regla_de_clip), los clips que le corresponden a
+    cada una.
 
     Devuelve (asignaciones, conflictos):
-      - asignaciones: {clip_key: (token, clip, track_name)} para clips con
+      - asignaciones: {clip_key: (regla, clip, track_name)} para clips con
         UNA sola regla.
-      - conflictos: [(clip, [(token, track_name), ...])] para clips que
+      - conflictos: [(clip, [(regla, track_name), ...])] para clips que
         matchean mas de una regla.
+
+    Un video tiene siempre la regla REGLA_VIDEO, asi que el mismo mp4 en aPlate
+    y en EditRef no es un conflicto.
 
     Se agrupa TODO antes de aplicar nada, porque el colorspace vive en el
     Clip del bin y no en el TrackItem: si un mismo clip aparece bajo dos
@@ -438,10 +482,13 @@ def _clips_por_regla(seq, exr_tracks):
                 clip = None
             if clip is None:
                 continue
+            regla = _regla_de_clip(clip, token)
+            if not regla:
+                continue
 
             key = _clip_key(clip)
             entry = por_clip.setdefault(key, {"clip": clip, "reglas": set()})
-            entry["reglas"].add((token, track.name()))
+            entry["reglas"].add((regla, track.name()))
 
     asignaciones = {}
     conflictos = []
@@ -699,10 +746,11 @@ def corregir_versiones_del_bin_item(
       TrackItems), para no tocarlos dos veces.
     - `pendientes`: si viene, cada version seteada se agrega para verificarla
       despues (se usa cuando el nombre salio de la lista de respaldo).
-    - `clip_visible` + `wanted_token` (+ `respaldo`): si vienen, una version de
+    - `clip_visible` (+ `wanted_token`, `respaldo`): si viene, una version de
       OTRO tipo que la visible (video contra secuencia, ej. un EditRef en mp4 y
       su v02 en EXR) no hereda `nombre_real`: se resuelve aparte, una vez por
-      tipo, porque los videos van a Rec.709 y el resto sigue el token.
+      tipo. Un video va a Rec.709; lo que no es video sigue `wanted_token`, que
+      es el token del TRACK (None en un EditRef: esas versiones no se tocan).
 
     Costo medido: ~0.1 ms por version en Python mas ~5 ms por version que NKS
     procesa despues, al volver al event loop. No lee media: cuesta lo mismo con
@@ -715,7 +763,7 @@ def corregir_versiones_del_bin_item(
             "[managed][ERROR] No se pudieron leer las versiones de un BinItem: {0}".format(e)
         )
         return
-    por_tipo = clip_visible is not None and bool(wanted_token)
+    por_tipo = clip_visible is not None
     nombres_por_tipo = {_es_video(clip_visible): nombre_real} if por_tipo else {}
     for version in versiones:
         try:
@@ -732,9 +780,11 @@ def corregir_versiones_del_bin_item(
         if por_tipo:
             tipo = _es_video(clip_version)
             if tipo not in nombres_por_tipo:
-                nombres_por_tipo[tipo] = resolver_nombre_para_clip(
-                    clip_version, wanted_token, respaldo
-                )[0]
+                nombres_por_tipo[tipo] = (
+                    resolver_nombre_para_clip(clip_version, wanted_token, respaldo)[0]
+                    if tipo or wanted_token
+                    else None
+                )
             nombre_version = nombres_por_tipo[tipo]
             if not nombre_version:
                 debug_print(
@@ -775,24 +825,28 @@ def corregir_clips_con_color_management(project_name, cm_config, seq, incluir_ve
     ya_procesados = set(asignaciones.keys())
     ya_procesados.update(_clip_key(clip) for clip, _reglas in conflictos)
 
-    # BinItem -> tokens que le tocan por sus clips visibles. Si dos versiones del
-    # mismo BinItem estan en tracks con reglas distintas, sus demas versiones no
-    # tienen una regla clara y no se tocan.
+    # BinItem -> tokens de TRACK de sus clips visibles. Si dos versiones del mismo
+    # BinItem estan en tracks con reglas distintas, sus demas versiones no tienen
+    # una regla clara y no se tocan. Va por track y no por regla: un mp4 v01 y un
+    # EXR v02 del mismo BinItem en aPlate tienen reglas distintas (video, plates)
+    # pero un track claro.
     tokens_por_bin = {}
-    for token, clip, _track_name in asignaciones.values():
+    for _regla, clip, track_name in asignaciones.values():
         bin_item = _bin_item_seguro(clip)
         if bin_item is not None:
-            tokens_por_bin.setdefault(_bin_key(bin_item), set()).add(token)
+            tokens_por_bin.setdefault(_bin_key(bin_item), set()).add(
+                _clasificar_track(track_name, exr_tracks)
+            )
     for clip, reglas in conflictos:
         bin_item = _bin_item_seguro(clip)
         if bin_item is not None:
             tokens_por_bin.setdefault(_bin_key(bin_item), set()).update(
-                t for t, _n in reglas
+                _clasificar_track(n, exr_tracks) for _r, n in reglas
             )
     bins_hechos = set()
 
     for token, clip, track_name in asignaciones.values():
-        wanted_token = cm_config.get(token)
+        wanted_token = _token_de_regla(cm_config, token)
         if not wanted_token:
             # El proyecto es managed pero no declaro token para esta regla
             # (ej. exr_publish vacio): no hay nada que resolver para este clip.
@@ -868,7 +922,7 @@ def corregir_clips_con_color_management(project_name, cm_config, seq, incluir_ve
             versiones_corregidas,
             pendientes if via_respaldo else None,
             clip_visible=clip,
-            wanted_token=wanted_token,
+            wanted_token=cm_config.get(_clasificar_track(track_name, exr_tracks) or ""),
             respaldo=respaldo,
         )
 
@@ -1031,8 +1085,8 @@ def aplicar_a_track_item_si_managed(track_item, track_name_regla, seq=None):
     default del archivo y no con el que dicta el proyecto. El track COMPARE no
     matchea ninguna regla por nombre, por eso la regla sale de
     `track_name_regla`: el nombre del track del clip ORIGINAL (`_comp_` ->
-    exr_publish, `*plate` -> plates). Un track sin regla (EditRef, ...) no se
-    toca, igual que en el boton.
+    exr_publish, `*plate` -> plates). Un video (mp4, mov) va a Rec.709 y en un
+    EditRef solo se tocan los videos, igual que en el boton.
 
     Se corrigen TODAS las versiones del BinItem y no solo la del TrackItem
     porque Compare cambia la version con `binItem.setActiveVersion()` y el
@@ -1059,7 +1113,12 @@ def aplicar_a_track_item_si_managed(track_item, track_name_regla, seq=None):
 
     token = _clasificar_track(track_name_regla, _get_task_exr_tracks())
     cm_config = get_color_management(project_name)
-    wanted_token = cm_config.get(token) if token else None
+    try:
+        clip = track_item.source()
+    except Exception:
+        clip = None
+    regla = _regla_de_clip(clip, token) if clip is not None else None
+    wanted_token = _token_de_regla(cm_config, regla)
     if not wanted_token:
         debug_print(
             "[compare] track {0!r}: sin regla de color (token {1!r}), no se toca".format(
@@ -1069,7 +1128,6 @@ def aplicar_a_track_item_si_managed(track_item, track_name_regla, seq=None):
         return False
 
     try:
-        clip = track_item.source()
         respaldo = ListaTransformsDeRespaldo(seq)
         nombre_real, error, via_respaldo = resolver_nombre_para_clip(
             clip, wanted_token, respaldo
@@ -1111,7 +1169,7 @@ def aplicar_a_track_item_si_managed(track_item, track_name_regla, seq=None):
                 versiones_corregidas,
                 pendientes if via_respaldo else None,
                 clip_visible=clip,
-                wanted_token=wanted_token,
+                wanted_token=cm_config.get(token or ""),
                 respaldo=respaldo,
             )
         for nombre, _track, antes, despues in versiones_corregidas:

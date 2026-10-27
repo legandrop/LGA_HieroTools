@@ -81,7 +81,8 @@ Recorre `hiero.ui.activeSequence().videoTracks()` y clasifica cada track por su 
 |---|---|
 | el nombre TERMINA en `plate` (`aPlate`, `bPlate`, `fgPlate`, `bgPlate`, …) | `plates` |
 | el nombre esta en `TASK_EXR_TRACKS` (hoy `_comp_`, `_roto_`, `_cleanup_`, `_cg_`) | `exr_publish` |
-| cualquier otro (`EditRef`, `EditRefClean`, …) | **no se toca** |
+| el nombre contiene `editref`, sin contar espacios ni guiones (`EditRef`, `EditRefClean`, `Edit Ref`) | solo los videos (Rec.709); lo demas **no se toca** |
+| cualquier otro | **no se toca** |
 
 🔴 **La lista de tracks de publish NO se duplica aca**: se importa `TASK_EXR_TRACKS` de
 `LGA_NKS_Shared/LGA_NKS_GetClip.py`, que es donde el repo la declara y donde dice su propio
@@ -117,7 +118,10 @@ proyecto (ver «Lo que costo descubrir», mas abajo).
 ### Los videos (mp4, mov) van a Rec.709, no al token del track
 
 Desde `LGA_NKS_FixColorspaces v1.25`, un clip cuya media es `.mp4` o `.mov` (por extension, sin
-importar mayusculas) no sigue el token de su track: va al Rec.709 de display del config. Un video
+importar mayusculas) no sigue el token de su track: va al Rec.709 de display del config. Desde la
+v1.26 tambien se revisan los tracks EditRef, pero ahi **solo los videos**: un EDL, una secuencia
+de imagenes o cualquier otra cosa en un EditRef sigue sin tocarse. Un video tiene siempre la misma
+regla, asi que el mismo mp4 en `aPlate` y en `EditRef` no es un conflicto. Un video
 es material de display ya codificado en Rec.709, no un plate de camara. **Por que existe:** en un
 show con `plates: acescg`, un EditRef en mp4 puesto en el track `aPlate` (porque ese shot todavia no
 tenia plate) quedaba en ACEScg; «Default | Clip» lo dejaba bien porque vuelve al default del archivo.
@@ -130,7 +134,8 @@ son espacios lineales o de camara. Si ninguno esta, el clip queda *sin transform
 
 Vale tambien para las demas versiones del BinItem: una version de otro tipo que la visible (un
 EditRef v01 en mp4 con una v02 en EXR) no hereda el nombre de la visible, se resuelve aparte una vez
-por tipo. Y para el clip de COMPARE de Compare Versions, que usa la misma resolucion.
+por tipo; lo que no es video sigue el token del TRACK (en un EditRef, ninguno: no se toca). Y para
+el clip de COMPARE de Compare Versions, que usa la misma resolucion.
 
 🔴 **Un `.mov` de camara en log (ProRes LogC, S-Log, ...) tambien va a Rec.709.** Hoy no se
 distingue: si un show trae plates en mov log, esta regla los deja mal y hay que sumar una excepcion.
