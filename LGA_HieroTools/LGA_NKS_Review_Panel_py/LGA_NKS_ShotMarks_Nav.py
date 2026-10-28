@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Nav v1.03 | Lega
+  LGA_NKS_ShotMarks_Nav v1.04 | Lega
 
   Previous / Next Mark: Shift+Click en Previous / Next Annotation del
   panel Review. Salta el playhead a la marca de Shot Marks anterior o
@@ -17,6 +17,8 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Nav.log.
 
+  v1.04: Marcas ubicadas con EDL: una linea con el clip de camara y el
+         SRC TC IN/OUT del plano (el evento del EDL, en el tooltip).
   v1.03: Marcas ubicadas desde thumbnails: la ventana muestra el thumb de
          la planilla y si el cuadro fue aceptado solo, confirmado a mano o
          quedo sin confirmar. El status de omit va en rojo y el de posible
@@ -61,7 +63,13 @@ DEBUG = False
 WINDOW_NAME = "LGA_ShotMarkInfo"
 # Sube cuando cambia la API de la ventana: el panel re-ejecuta este modulo en
 # cada click, y una ventana creada por una version vieja se reemplaza.
-WINDOW_API = 3
+WINDOW_API = 4
+
+# Tooltips en castellano, separados del widget para que pasar a bilingue sea
+# un cambio de datos.
+TOOLTIPS = {
+    "edl_event": "Clip de camara y SRC TC del plano, del EDL del armado (evento %s).",
+}
 WINDOW_WIDTH = 520
 SCREEN_MARGIN = 24
 # Lega pidio la letra mas grande: con el tamano del host (~12 px en NKS) no
@@ -224,6 +232,8 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
         self.title.setTextInteractionFlags(Qt.TextSelectableByMouse)
         head.addWidget(self.title)
         self.timecode = self._label(head)
+        # Clip de camara y SRC TC (solo marcas ubicadas con el EDL del armado).
+        self.source = self._label(head)
         self.meta = self._label(head)
         layout.addWidget(header)
 
@@ -267,6 +277,16 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
             tc_line += " &ndash; %s" % _strong(info["tc_out"])
         tc_line += _dim(" &middot; %d frames (%s)" % (info["frames"], info["duration"]))
         self.timecode.setText(tc_line)
+        source = _sheet_module().parse_clip(info.get("clip"))
+        if source:
+            # Dos renglones fijos: un nombre de clip de camara real (~30
+            # caracteres) partia el SRC TC por la mitad. El evento del EDL, en
+            # el tooltip.
+            self.source.setText("%s %s<br>%s %s &ndash; %s" % (
+                _dim("Clip"), _strong(source["clip"]), _dim("SRC"), _strong(source["src_in"]),
+                _strong(source["src_out"])))
+            self.source.setToolTip(TOOLTIPS["edl_event"] % source["event"])
+        self.source.setVisible(bool(source))
         meta = []
         for field, label in (("status", "Status"), ("vendor", "Vendor"),
                              ("scene", "Scene"), ("category", "Category")):

@@ -117,10 +117,10 @@ nuevas (`REC TC IN (located)` / `OUT`) y sigue igual que con una planilla con TC
 5. **Dos shots distintos no pueden caer en el mismo plano**: el de menor puntaje pasa a revision.
 6. **Cuadro exacto**: a 32x18 los cuadros vecinos de un plano empatan; se decodifican +-24
    cuadros a 192x104 y se elige el mejor (~0,4 s por shot, en paralelo).
-7. **IN/OUT**: el plano entre los cortes de `scdet` (picos locales con puntaje > 6; de dos
-   detecciones a menos de 3 cuadros queda la mas fuerte). Medido a ojo: 6 de 8 cortes al cuadro
-   y los otros 2 un cuadro tarde, que es lo que corrige el pico local. Un "plano" de mas de 60 s
-   es un encadenado o un corte que no se vio: la marca va solo en el cuadro del thumb.
+7. **IN/OUT**: el plano del EDL que contiene el cuadro (ver abajo). Sin EDL, el plano entre los
+   cortes de `scdet` (picos locales con puntaje > 6; de dos detecciones a menos de 3 cuadros
+   queda la mas fuerte), y un "plano" de mas de 60 s es un encadenado o un corte que no se vio:
+   la marca va solo en el cuadro del thumb.
 
 **Niveles**: `auto` (aceptado solo), `review` (puntaje >= 0,60 sin las condiciones de `auto`),
 `not_found`; y los que pone el usuario: `confirmed` y `not_in_cut`. Los seguros se aceptan solos
@@ -129,8 +129,47 @@ desde la primera corrida; los `review` se marcan igual, como no confirmados.
 **Lo que ningun metodo por imagen resuelve**: una captura de dailies de un cuadro que no esta en
 el corte (otra toma, otro tramo de la toma). Medido: esos dan 0,73-0,77 aunque sea la escena
 correcta; cuando el cuadro de una captura de dailies si esta en el corte da >= 0,88. Por eso van a
-revision y nunca se aceptan solos. Con el EDL del armado se resolverian por clip + SRC TC; es la
-proxima etapa.
+revision y nunca se aceptan solos. El EDL no lo resuelve: la planilla no trae el clip de camara
+de cada foto (su "Shooting name" es escena_plano_toma, no el nombre del clip), asi que no hay con
+que cruzar el SRC TC.
+
+### EDL del armado (opcional)
+
+El dialogo, en modo thumbnails, tiene un campo **EDL** (se recuerda en `ShotMarks.ini`,
+`last_edl`). Va el EDL de la pista de video del mismo armado que el MOV.
+
+**Por que.** Medido contra el EDL de un armado de 2,6 h (1567 planos, 1586 cortes): `scdet` acerto
+1460 cortes al cuadro, perdio 126 y marco 35 que no existen. Los perdidos son cortes entre planos
+de la misma escena y la misma luz, con puntaje 2-6 contra el umbral de 6; los de mas son
+flashes, relampagos y movimientos rapidos (puntajes de 6 a 25). Mover el umbral cambia un error
+por el otro. Sin EDL, 46 de 407 filas quedaban con IN/OUT corrido o de un cuadro, y dos shots
+distintos se daban por el mismo plano porque scdet fundia sus planos.
+
+**Como entra** (`LGA_NKS_ShotMarks_EDL.py`, sin host):
+
+- CMX 3600: solo eventos de video con largo; el reel puede tener espacios; el lado "desde" de
+  una disolvencia (evento de largo cero) se descarta y el plano entrante empieza en el REC IN del
+  evento `D`; `* FROM CLIP NAME:` da el clip (en los titulos, solo la primera linea); `M2` marca
+  cambio de velocidad (sin SRC TC por cuadro). `FCM: DROP FRAME` se respeta para 30/60.
+- **Se verifica contra la imagen antes de usarlo.** El REC TC se lleva al cuadro del MOV con el
+  TC del MOV y se cruzan sus cortes con los de `scdet`, probando desfasajes de +-400 cuadros
+  (entra la cola de 10 s). Se usa si coincide al menos la mitad al cuadro; ante casi empate gana
+  el desfasaje 0. Un EDL de otro armado no pasa: se sigue con `scdet` y la ventana lo dice. En el
+  armado medido coinciden 1460 de 1586 con desfasaje 0.
+- Con EDL, sus planos reemplazan a los de `scdet` en todo: unidad de busqueda, "dos shots no
+  pueden caer en el mismo plano", IN/OUT (sin el tope de 60 s) y RePag/AvPag en la revision. Un
+  cuadro en un hueco de la pista usa el criterio de `scdet`.
+- Cada fila lleva el clip de camara, el SRC TC IN/OUT del plano y el evento. Viajan a la
+  planilla ubicada como columna `LGA Clip` (`clip | src in | src out | evento`) y a la metadata
+  del tag como `tag.lga_shotmarks_clip`. **No se llama `source`**: `tag.lga_shotmarks_source` ya
+  es el origen de la marca (archivo y hoja), y un rol con ese nombre lo pisaba.
+- **Plano que vuelve (A-B-A).** Si el segundo candidato de una fila dudosa es el mismo clip en
+  otro evento, la fila dice "Same clip also at candidate 2": el thumb puede ser de cualquiera de
+  los dos. Medido: una fila pasa de aceptada a revisar por esto (el clip esta dos veces en
+  15 s) y otra pasa de revisar a aceptada (el falso "mismo plano" de scdet).
+
+Verificado en NKS 17.0v4 por dev-link: 336 marcas, todas con el IN sobre un corte del EDL, ninguna
+de un cuadro, y el clip y el origen en la metadata de cada tag.
 
 **Revision**
 
@@ -156,7 +195,8 @@ en lugar del thumb. No se escribe nada en el Excel.
 **En la ventanita de Previous/Next Mark** las marcas ubicadas muestran el thumb de la planilla
 (JPG de 480 px en la cache, `tag.lga_shotmarks_thumb`) y como se ubico (`_located`): aceptado
 solo, confirmado a mano o sin confirmar. El status de omit va en rojo y el de posible omit en
-ambar.
+ambar. Con EDL, dos renglones con el clip y el SRC TC IN/OUT (el evento, en el tooltip): en uno
+solo, un nombre de clip real (~30 caracteres) partia el SRC TC.
 
 **Filas que no se ubican**: los titulos de grupo (`PROJA_001_`, nombre terminado en `_`, `-` o
 `.`) aunque tengan foto. "POSIBLE VFX OMIT (en corte)" no cuenta como omit: sigue en el corte.
@@ -217,7 +257,10 @@ agrega la barra antes de pasarla a ffmpeg. Medido en NKS 16.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks_Locate_Engine.py`,
   `LGA_NKS_ShotMarks_Locate.py` y `LGA_NKS_ShotMarks_Thumbs.py`: ubicar desde thumbnails. El motor
   y el lector de thumbs se prueban sin host en `tests/test_shot_marks_locate.py`.
-- Capturas: `+Building_Blocks/UI_Capture/fixtures/h11_shot_marks.py` -> `ShotMarks_Dialog.png` y
-  `ShotMarks_Dialog-Thumbnails.png`; `h11b_shot_mark_info.py` -> `ShotMarks_Info.png`,
+- `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks_EDL.py`:
+  `parse_edl`, `align`, `cut_frames`, `segments`, `segment_at`, `source_info`. El motor lo carga
+  por ruta (corre con `-I`) en `load_edl`. Tests: `tests/test_shot_marks_edl.py`.
+- Capturas: `+Building_Blocks/UI_Capture/fixtures/h11_shot_marks.py` -> `ShotMarks_Dialog.png`,
+  `ShotMarks_Dialog-Thumbnails.png` y `ShotMarks_Dialog-Thumbnails-EDL.png`; `h11b_shot_mark_info.py` -> `ShotMarks_Info.png`,
   `ShotMarks_Info-OldTag.png` y `ShotMarks_Info-Located.png`; `h11c_shot_marks_locate.py` ->
   `ShotMarks_Locate.png`.

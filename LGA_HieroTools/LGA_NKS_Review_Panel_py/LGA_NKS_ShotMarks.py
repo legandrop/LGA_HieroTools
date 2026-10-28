@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks v1.02 | Lega
+  LGA_NKS_ShotMarks v1.03 | Lega
 
   Shot Marks: lee una planilla de breakdown (xlsx o csv) y pone un tag
   de rango por shot en el timeline activo, en el REC TC de la planilla,
@@ -21,6 +21,10 @@ ____________________________________________________________________
   Nucleo sin host (lectura y plan): LGA_NKS_ShotMarks_Sheet.py.
   Log de cada corrida: logs/DebugPy_LGA_NKS_ShotMarks.log.
 
+  v1.03: Modo thumbnails: campo EDL opcional (se recuerda). El motor lo
+         cruza con la imagen y, si coincide, toma de ahi los cortes y el
+         clip de camara y SRC TC de cada shot (columna LGA Clip, que
+         viaja a la metadata del tag).
   v1.02: Planillas sin timecode: si la hoja no tiene columna de TC pero
          sus filas tienen thumbnail, el boton pasa a "Locate from
          Thumbnails...", que abre LGA_NKS_ShotMarks_Locate (ubica cada
@@ -89,6 +93,10 @@ TOOLTIPS = {
     "reference": "Contra que timecode se mide el REC TC de la planilla.",
     "align": "Cambia el TC de inicio del timeline al de la media, para que el timeline muestre el mismo TC que la imagen. Se puede deshacer.",
     "locate": "Buscar el thumbnail de cada shot en el video del timeline y revisar los dudosos.",
+    "edl": "EDL del mismo armado que el video. Opcional: da los cortes exactos (la deteccion por "
+           "imagen pierde cortes entre planos parecidos) y el clip de camara y SRC TC de cada shot.",
+    "edl_browse": "Elegir el EDL del armado (.edl).",
+    "edl_clear": "No usar EDL: los cortes se detectan en la imagen.",
 }
 
 _sheet = None
@@ -422,6 +430,33 @@ class ShotMarksDialog(QtWidgets.QDialog):
         self.align_check.setToolTip(TOOLTIPS["align"])
         self.align_check.toggled.connect(self._refresh_plan)
         grid.addWidget(self.align_check, row, 1, 1, 3)
+        row += 1
+
+        # EDL del armado: solo en modo thumbnails. Da los cortes exactos y el
+        # clip de camara de cada plano.
+        self.edl_label = QtWidgets.QLabel("EDL")
+        self.edl_edit = QtWidgets.QLineEdit()
+        self.edl_edit.setReadOnly(True)
+        self.edl_edit.setPlaceholderText("Optional: the EDL of this cut, for exact cuts and camera clips")
+        self.edl_edit.setToolTip(TOOLTIPS["edl"])
+        self.edl_browse = QtWidgets.QPushButton("Browse")
+        self.edl_clear = QtWidgets.QPushButton("Clear")
+        for button, key, slot in ((self.edl_clear, "edl_clear", self._clear_edl),
+                                  (self.edl_browse, "edl_browse", self._browse_edl)):
+            button.setStyleSheet(Style.BTN_SECONDARY)
+            button.setFixedHeight(Metric.BUTTON_HEIGHT)
+            button.setToolTip(TOOLTIPS[key])
+            button.clicked.connect(slot)
+        edl_row = QtWidgets.QHBoxLayout()
+        edl_row.addWidget(self.edl_edit, 1)
+        edl_row.addWidget(self.edl_clear)
+        edl_row.addWidget(self.edl_browse)
+        self.edl_row = QtWidgets.QWidget()
+        self.edl_row.setLayout(edl_row)
+        edl_row.setContentsMargins(0, 0, 0, 0)
+        grid.addWidget(self.edl_label, row, 0)
+        grid.addWidget(self.edl_row, row, 1, 1, 3)
+        self._show_edl_row(False)
         grid.setColumnStretch(1, 1)
         grid.setColumnStretch(3, 1)
         layout.addLayout(grid)
@@ -485,6 +520,8 @@ class ShotMarksDialog(QtWidgets.QDialog):
             self._set_summary("Choose the breakdown sheet to start.")
 
     def _restore_common(self):
+        edl = self.settings.get("last_edl", "")
+        self.edl_edit.setText(edl if edl and os.path.isfile(edl) else "")
         index = self.reference_combo.findData(self.settings.get("reference", "media"))
         if index >= 0:
             self.reference_combo.setCurrentIndex(index)
@@ -498,6 +535,23 @@ class ShotMarksDialog(QtWidgets.QDialog):
             self, "Choose sheet", start, "Sheets (*.xlsx *.csv)")
         if path:
             self._open_file(path)
+
+    def _browse_edl(self):
+        start = os.path.dirname(self.edl_edit.text() or self.path_edit.text()) or str(Path.home())
+        path, _filter = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Choose EDL", start, "EDL (*.edl)")
+        if path:
+            self.edl_edit.setText(path)
+            _logger_ref().info("EDL elegido: %s", path)
+            self._refresh_plan()
+
+    def _clear_edl(self):
+        self.edl_edit.clear()
+        self._refresh_plan()
+
+    def _show_edl_row(self, visible):
+        self.edl_label.setVisible(visible)
+        self.edl_row.setVisible(visible)
 
     def _run(self, func, callback):
         # El receptor es un metodo del dialogo (un QObject del hilo de UI):
@@ -585,6 +639,7 @@ class ShotMarksDialog(QtWidgets.QDialog):
         self._fill_columns(table.headers)
         for role in ("tc_in", "tc_out"):
             self.column_combos[role].setEnabled(not self.thumb_mode)
+        self._show_edl_row(self.thumb_mode)
         _logger_ref().info("Planilla: %s | hoja %s | encabezado en fila %d | %d filas",
                            table.path, table.sheet, table.header_row, len(table.rows))
         self._columns_changed()
@@ -609,11 +664,12 @@ class ShotMarksDialog(QtWidgets.QDialog):
 
     def _columns(self):
         columns = {role: combo.currentData() for role, combo in self.column_combos.items()}
-        # Thumb y nivel de ubicacion no tienen combo: son columnas que agrega
-        # la ubicacion desde thumbnails y viajan a la metadata de cada tag.
+        # Thumb, nivel de ubicacion y plano del EDL no tienen combo: son
+        # columnas que agrega la ubicacion desde thumbnails y viajan a la
+        # metadata de cada tag.
         if self.table is not None:
             detected = _sheet_module().detect_columns(self.table.headers)
-            for role in ("thumb", "located"):
+            for role in ("thumb", "located", "clip"):
                 columns[role] = detected.get(role)
         return columns
 
@@ -721,6 +777,13 @@ class ShotMarksDialog(QtWidgets.QDialog):
                 "adding the marks." % (emphasis(str(self.thumb_rows)),
                                        "shot has" if self.thumb_rows == 1 else "shots have",
                                        emphasis(os.path.basename(movie or "the timeline movie"))))
+        edl = self.edl_edit.text()
+        if edl:
+            text += "<br>Cuts from %s, checked against the movie before using it." % emphasis(
+                os.path.basename(edl))
+        else:
+            text += "<br>" + _colored("Without an EDL, cuts between similar shots may be missed.",
+                                      Color.TEXT_DIM)
         if missing:
             text += "<br>" + _colored("Not available: missing %s." % ", ".join(missing), Color.ERROR_TEXT)
         elif not movie:
@@ -747,7 +810,7 @@ class ShotMarksDialog(QtWidgets.QDialog):
 
         self.accept()
         _locate_module().open_window(sequence, timeline, table, self._columns(),
-                                     self.skip_omit.isChecked(), done)
+                                     self.skip_omit.isChecked(), done, edl=self.edl_edit.text())
 
     def _fill_preview(self):
         plan = self.plan
@@ -831,6 +894,7 @@ class ShotMarksDialog(QtWidgets.QDialog):
             "skip_omit": "true" if self.skip_omit.isChecked() else "false",
             "align": "true" if self.align_check.isChecked() else "false",
             "reference": self.reference_combo.currentData() or "media",
+            "last_edl": self.edl_edit.text(),
         }
         headers = self.table.headers if self.table else []
         for role, index in self._columns().items():

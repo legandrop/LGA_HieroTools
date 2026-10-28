@@ -122,7 +122,8 @@ class ThumbsAndLocatedTests(unittest.TestCase):
     def test_located_timecodes_feed_the_same_plan(self):
         table = sheet.load_table(self.xlsx, "Shots", require_tc=False)
         located = {
-            3: {"tc_in": "01:00:00:10", "tc_out": "01:00:01:00", "thumb": "C:/t/a.jpg", "level": "auto 0.98"},
+            3: {"tc_in": "01:00:00:10", "tc_out": "01:00:01:00", "thumb": "C:/t/a.jpg", "level": "auto 0.98",
+                "clip": "A001C001 | 10:00:00:00 | 10:00:05:00 | 3"},
             4: {"tc_in": "01:00:01:00", "tc_out": "01:00:02:00", "thumb": "C:/t/b.jpg", "level": "review 0.72"},
         }
         table = sheet.with_located_timecodes(table, located)
@@ -141,6 +142,9 @@ class ThumbsAndLocatedTests(unittest.TestCase):
         meta = sheet.mark_metadata(plan.marks[0], "src")
         info = sheet.mark_info_from_metadata(meta.get)
         self.assertEqual((info["thumb"], info["located"]), ("C:/t/a.jpg", "auto 0.98"))
+        self.assertEqual(sheet.parse_clip(info["clip"])["clip"], "A001C001")
+        # Sin EDL la columna queda vacia y la marca no lleva source.
+        self.assertNotIn("clip", plan.marks[1].info)
 
 
 class EngineTests(unittest.TestCase):

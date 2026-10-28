@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Sheet v1.03 | Lega
+  LGA_NKS_ShotMarks_Sheet v1.04 | Lega
 
   Nucleo sin host de Shot Marks: lee una planilla (xlsx o csv),
   detecta la fila de encabezado y las columnas de shot y timecode,
@@ -13,6 +13,10 @@ ____________________________________________________________________
   los sharedStrings), sin openpyxl: NKS no lo trae, y asi una
   planilla de cientos de MB por las imagenes se lee en segundos.
 
+  v1.04: Columna LGA Clip (clip de camara, SRC TC IN/OUT y evento del
+         EDL del armado) para las filas ubicadas con EDL: viaja a la
+         metadata del tag como rol "clip" ("source" ya era el origen de
+         la marca: archivo y hoja). clip_text / parse_clip.
   v1.03: Hojas sin timecode (solo shot + thumbnail): load_table las acepta
          con require_tc=False y with_located_timecodes les suma las
          columnas de TC que ubico el motor de thumbnails, mas el thumb y
@@ -72,18 +76,20 @@ LOCATED_TC_IN = "REC TC IN (located)"
 LOCATED_TC_OUT = "REC TC OUT (located)"
 LOCATED_THUMB = "LGA Thumb"
 LOCATED_LEVEL = "LGA Located"
+LOCATED_CLIP = "LGA Clip"
 THUMB_HEADERS = ("lgathumb",)
 LOCATED_HEADERS = ("lgalocated",)
+CLIP_HEADERS = ("lgaclip",)
 
 OMIT_TOKENS = ("omit", "omitted", "cbb", "removed")
 # "POSIBLE VFX OMIT (en corte)": todavia esta en el corte, se marca.
 MAYBE_TOKENS = ("posible", "possible", "maybe", "tentative")
 
 ROLES = ("shot", "tc_in", "tc_out", "episode", "status", "note",
-         "description", "scene", "vendor", "category", "thumb", "located")
+         "description", "scene", "vendor", "category", "thumb", "located", "clip")
 # Roles que viajan como texto a cada marca, para la ventana de info.
 INFO_ROLES = ("status", "description", "scene", "vendor", "category", "episode",
-              "thumb", "located")
+              "thumb", "located", "clip")
 _ROLE_HEADERS = {
     "shot": SHOT_HEADERS,
     "tc_in": TC_IN_HEADERS,
@@ -97,6 +103,7 @@ _ROLE_HEADERS = {
     "category": CATEGORY_HEADERS,
     "thumb": THUMB_HEADERS,
     "located": LOCATED_HEADERS,
+    "clip": CLIP_HEADERS,
 }
 
 
@@ -540,19 +547,39 @@ def is_omit(status):
 def with_located_timecodes(table, located):
     """Copia de la tabla con las columnas que ubico el motor de thumbnails.
 
-    `located` = {fila: {"tc_in", "tc_out", "thumb", "level"}}; el TC OUT va
-    exclusivo, como en una planilla de montaje. Las filas sin entrada quedan
-    vacias y build_plan las reporta como "No TC IN".
+    `located` = {fila: {"tc_in", "tc_out", "thumb", "level", "clip"}}; el
+    TC OUT va exclusivo, como en una planilla de montaje. "clip" es el
+    texto de clip_text (solo si se ubico con EDL). Las filas sin entrada
+    quedan vacias y build_plan las reporta como "No TC IN".
     """
-    headers = list(table.headers) + [LOCATED_TC_IN, LOCATED_TC_OUT, LOCATED_THUMB, LOCATED_LEVEL]
+    headers = list(table.headers) + [LOCATED_TC_IN, LOCATED_TC_OUT, LOCATED_THUMB,
+                                     LOCATED_LEVEL, LOCATED_CLIP]
     width = len(table.headers)
     rows = []
     for number, values in table.rows:
         entry = located.get(number) or {}
         padded = (list(values) + [""] * width)[:width]
         rows.append((number, padded + [entry.get("tc_in", ""), entry.get("tc_out", ""),
-                                       entry.get("thumb", ""), entry.get("level", "")]))
+                                       entry.get("thumb", ""), entry.get("level", ""),
+                                       entry.get("clip", "")]))
     return Table(table.path, table.sheet, table.header_row, headers, rows)
+
+
+def clip_text(info):
+    """Clip y SRC TC de un plano del EDL en una linea para la planilla y el tag:
+    'clip | src in | src out | evento'. Vacio sin info."""
+    if not info:
+        return ""
+    return " | ".join([str(info["clip"]), str(info["src_in"]), str(info["src_out"]),
+                       str(info["event"])])
+
+
+def parse_clip(text):
+    """Inversa de clip_text: {clip, src_in, src_out, event}, o {} si no aplica."""
+    parts = [p.strip() for p in str(text or "").split("|")]
+    if len(parts) != 4 or not parts[0]:
+        return {}
+    return {"clip": parts[0], "src_in": parts[1], "src_out": parts[2], "event": parts[3]}
 
 
 def episode_values(table, column):

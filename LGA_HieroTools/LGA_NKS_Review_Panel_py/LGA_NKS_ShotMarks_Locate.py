@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Locate v1.00 | Lega
+  LGA_NKS_ShotMarks_Locate v1.01 | Lega
 
   Shot Marks sin columna de timecode: ubica el thumbnail de cada fila
   de la planilla en el video del timeline y deja revisar los dudosos
@@ -30,6 +30,10 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Locate.log.
 
+  v1.01: EDL opcional: se pasa al motor, la ventana dice si se uso y
+         cuantos cortes coinciden con la imagen, el IN/OUT de lo
+         confirmado a mano sale del plano del EDL y cada fila muestra y
+         pasa a Shot Marks el clip de camara y el SRC TC.
   v1.00: Version inicial.
 ____________________________________________________________________
 """
@@ -108,6 +112,7 @@ TOOLTIPS = {
 _log = None
 _sheet = None
 _thumbs = None
+_edl = None
 
 
 def _load(name):
@@ -123,6 +128,13 @@ def _sheet_module():
     if _sheet is None:
         _sheet = _load("LGA_NKS_ShotMarks_Sheet")
     return _sheet
+
+
+def _edl_module():
+    global _edl
+    if _edl is None:
+        _edl = _load("LGA_NKS_ShotMarks_EDL")
+    return _edl
 
 
 def _thumbs_module():
@@ -271,7 +283,7 @@ class LocateWindow(QtWidgets.QWidget):
     """Ubicar y revisar. `on_done(located)` recibe {fila: {tc_in, tc_out,
     thumb, level}} cuando el usuario pasa los resultados a Shot Marks."""
 
-    def __init__(self, sequence, timeline, table, columns, skip_omit, on_done, parent=None):
+    def __init__(self, sequence, timeline, table, columns, skip_omit, on_done, parent=None, edl=""):
         super(LocateWindow, self).__init__(parent)
         self.setObjectName(WINDOW_NAME)
         self.setWindowFlags(Qt.Window)
@@ -286,7 +298,11 @@ class LocateWindow(QtWidgets.QWidget):
         self.on_done = on_done
         self.project_name = sequence.project().name()
         self.video = media_path(sequence)
+        self.edl = edl or ""
         self.result = None
+        # Planos del EDL (en cuadros del video) si el motor lo uso.
+        self.segments = []
+        self._seg_starts = []
         self.rows = []
         self.current = None
         self.process = None
@@ -551,7 +567,8 @@ class LocateWindow(QtWidgets.QWidget):
         self.result_path = str(root / "jobs" / "result.json")
         job = {"ffmpeg": str(FFMPEG), "ffprobe": str(FFPROBE), "video": self.video,
                "cache_dir": str(root), "rows": rows, "decisions": self.decisions,
-               "out": self.result_path, "workers": min(8, os.cpu_count() or 2)}
+               "out": self.result_path, "workers": min(8, os.cpu_count() or 2),
+               "edl": self.edl}
         with open(str(job_path), "w", encoding="utf-8", newline="\n") as handle:
             json.dump(job, handle)
         self.process = QtCore.QProcess(self)
@@ -559,7 +576,7 @@ class LocateWindow(QtWidgets.QWidget):
         self.process.readyReadStandardOutput.connect(self._read_stdout)
         self.process.finished.connect(self._finished)
         self._t0 = time.time()
-        _logger().info("Motor: %s %s %s", PYTHON, ENGINE, job_path)
+        _logger().info("Motor: %s %s %s | EDL: %s", PYTHON, ENGINE, job_path, self.edl or "-")
         self.process.start(str(PYTHON), ["-I", str(ENGINE), str(job_path)])
         self._set_status("Starting...")
 
@@ -597,15 +614,20 @@ class LocateWindow(QtWidgets.QWidget):
         self.fps = int(round(float(self.result["fps"])))
         self.tc0 = _sheet_module().parse_timecode(self.result.get("timecode") or "", self.fps) or 0
         self.cuts = self.result.get("cuts") or []
+        edl = self.result.get("edl") or {}
+        if edl.get("used"):
+            self.segments = self.result.get("segments") or []
+            self._seg_starts = [seg["in"] for seg in self.segments]
         self.rows = self.result["rows"]
         for r in self.rows:
             r["status"] = self._statuses.get(r["row"], "")
-        _logger().info("Motor listo en %.1f s: %s", time.time() - self._t0, self.result["levels"])
+        _logger().info("Motor listo en %.1f s: %s | EDL %s", time.time() - self._t0,
+                       self.result["levels"], {k: v for k, v in edl.items() if k != "cuts"})
         self.progress.setValue(self.progress.maximum())
         self.progress.hide()
         self._set_status("Done in %s. Review the doubtful ones: select a row, step frames with "
-                         "the arrows, Enter to use the frame, N if it is not in the cut."
-                         % _duration(time.time() - self._t0))
+                         "the arrows, Enter to use the frame, N if it is not in the cut.%s"
+                         % (_duration(time.time() - self._t0), _edl_status(edl)))
         self._connect_viewer()
         self._refresh_filters()
         self._set_review_enabled(True)
@@ -687,8 +709,11 @@ class LocateWindow(QtWidgets.QWidget):
         self.current = self._shown[rows[0].row()]
         r = self.current
         note = (" &middot; " + _colored(r["note"], Color.WARNING_TEXT)) if r.get("note") else ""
-        self.detail_title.setText("%s &nbsp;row %d &middot; %s%s" % (
-            emphasis(r["shot"]), r["row"], LEVEL_LABELS.get(r["level"], r["level"]), note))
+        shot = r.get("edl") or {}
+        clip = (" &middot; " + _colored("%s (EDL event %s)" % (shot["clip"], shot["event"]),
+                                        Color.TEXT_DIM)) if shot else ""
+        self.detail_title.setText("%s &nbsp;row %d &middot; %s%s%s" % (
+            emphasis(r["shot"]), r["row"], LEVEL_LABELS.get(r["level"], r["level"]), clip, note))
         for k, button in enumerate(self.candidate_buttons):
             cands = r.get("candidates") or []
             if k < len(cands):
@@ -892,11 +917,19 @@ class LocateWindow(QtWidgets.QWidget):
 
     def _set_row(self, r, frame, level):
         import bisect
-        k = bisect.bisect_right(self.cuts, frame)
-        start = self.cuts[k - 1] if k > 0 else 0
-        end = (self.cuts[k] - 1) if k < len(self.cuts) else int(self.result["frames"]) - 1
-        if end - start + 1 > 60 * self.fps:
-            start = end = frame
+        edl = _edl_module()
+        seg = edl.segment_at(self.segments, frame, self._seg_starts) if self.segments else None
+        if seg is not None:
+            # Plano del EDL: exacto, sin el tope de 60 s.
+            start, end = seg["in"], seg["out"]
+            r["edl"] = edl.source_info(seg, frame, self.fps)
+        else:
+            k = bisect.bisect_right(self.cuts, frame)
+            start = self.cuts[k - 1] if k > 0 else 0
+            end = (self.cuts[k] - 1) if k < len(self.cuts) else int(self.result["frames"]) - 1
+            if end - start + 1 > 60 * self.fps:
+                start = end = frame
+            r.pop("edl", None)
         r.update({"frame": frame, "in": start, "out": end, "level": level})
         d8, g32 = frame_prints(self.result["index_folder"], frame)
         self.decisions[r["sha1"]] = {"state": "confirmed", "frame": frame,
@@ -936,6 +969,7 @@ class LocateWindow(QtWidgets.QWidget):
                 "tc_out": fmt(self.tc0 + int(r["out"]) + 1, self.fps),
                 "thumb": r.get("thumb") or "",
                 "level": "%s %.2f" % (r["level"], r.get("score") or 0.0),
+                "clip": _sheet_module().clip_text(r.get("edl")),
             }
         _logger().info("Pasando %d filas ubicadas a Shot Marks", len(located))
         callback = self.on_done
@@ -967,6 +1001,19 @@ def _colored(text, color):
     return '<span style="color:%s">%s</span>' % (color, text)
 
 
+def _edl_status(edl):
+    """Una linea sobre el EDL para el estado de la ventana ('' sin EDL)."""
+    if not edl.get("path"):
+        return ""
+    name = os.path.basename(edl["path"])
+    if edl.get("used"):
+        return "<br>Cuts from %s: %d of %d match the picture to the frame%s." % (
+            emphasis(name), edl.get("matched", 0), edl.get("edl_cuts", 0),
+            "" if not edl.get("offset") else " (EDL shifted %+d frames)" % edl["offset"])
+    return "<br>" + _colored("%s not used: %s. Cuts were detected in the picture." % (
+        name, edl.get("reason", "it does not match the movie")), Color.WARNING_TEXT)
+
+
 def _duration(seconds):
     seconds = int(round(seconds))
     if seconds < 60:
@@ -974,14 +1021,14 @@ def _duration(seconds):
     return "%d min %02d s" % (seconds // 60, seconds % 60)
 
 
-def open_window(sequence, timeline, table, columns, skip_omit, on_done):
+def open_window(sequence, timeline, table, columns, skip_omit, on_done, edl=""):
     """Abre la ventana (una sola) y arranca el motor."""
     for widget in QtWidgets.QApplication.topLevelWidgets():
         if widget.objectName() == WINDOW_NAME:
             widget.close()
     _logger()
     window = LocateWindow(sequence, timeline, table, columns, skip_omit, on_done,
-                          hiero.ui.mainWindow())
+                          hiero.ui.mainWindow(), edl=edl)
     window.show()
     window.start()
     return window

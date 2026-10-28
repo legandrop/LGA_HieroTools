@@ -344,6 +344,10 @@ opening related Nuke scripts.
   doubtful ones are listed first for review, stepping frames on the NKS viewer
   next to the thumbnail. Confirmed frames are remembered per project. Marks
   placed this way show their thumbnail in the Shift+Click info window.
+  Optionally choose the **EDL** of the same cut: it is checked against the
+  movie and, when it matches, the shots go exactly from cut to cut of the EDL
+  (detecting cuts in the picture misses some between similar shots) and each
+  mark shows its camera clip and source timecode.
 - **Reveal in Explorer**  
   Opens the selected clips' folders in the default file manager; without a
   selection it opens the first open project's folder.

@@ -16,6 +16,7 @@ platforms: [win, mac]
 - [fixed] En los proyectos con color management, Fix Colorspaces deja en Rec.709 los mp4 y mov de los tracks de plates y de EditRef, en vez de pasarlos a ACEScg o dejarlos como venían.
 - [new] Shot Marks, en el panel Review, lee la planilla de breakdown y marca cada shot en el timeline en su timecode; con Shift+Click en Previous Annotation y Next Annotation saltás de un shot al otro y se abre una ventanita con la descripción, el brief y los datos de ese shot en la planilla, con el vendor en su color; mientras está abierta, cambia sola cuando el playhead entra en otro shot.
 - [new][win] Shot Marks también funciona con planillas sin timecode que solo traen una foto por shot: `Locate from Thumbnails...` encuentra cada foto en el video del timeline, marca el plano entero y te deja revisar los dudosos paso a paso sobre el visor, al lado de la foto; al navegar las marcas, la ventanita muestra la foto de la planilla y resalta los shots omitidos o posiblemente omitidos.
+- [new][win] Si además le das el EDL del armado, Shot Marks marca cada shot exactamente de corte a corte y la ventanita muestra el clip de cámara y el SRC TC de cada uno.
 
 ## v4.021
 - [improved] La descarga de LGA HieroTools pasa de 435 MB a unos 35 MB: el pack ya no trae programas de terceros que ninguna herramienta usa.

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Locate_Engine v1.00 | Lega
+  LGA_NKS_ShotMarks_Locate_Engine v1.01 | Lega
 
   Motor de Shot Marks sin columna de timecode: ubica cada thumbnail de
   la planilla en el video del corte y devuelve el plano (corte a corte)
@@ -24,10 +24,17 @@ ____________________________________________________________________
      gris (tolera grade distinto) -> anclas seguras -> el resto se busca
      entre anclas vecinas en orden de planilla.
   4. Cuadro exacto: refinado a 192x104 decodificando +-24 cuadros.
-  5. IN/OUT: el plano entre los cortes de scdet que rodean al cuadro.
+  5. IN/OUT: el plano del EDL que contiene el cuadro, o sin EDL el
+     plano entre los cortes de scdet que lo rodean.
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Locate_Engine.log.
 
+  v1.01: EDL del armado opcional (job["edl"]). Si sus cortes caen sobre
+         la imagen (la mitad al cuadro contra scdet, probando desfasajes),
+         reemplaza a scdet como unidad de busqueda y para el IN/OUT, sin
+         el tope de 60 s, y cada fila lleva el clip y el SRC TC de su
+         plano. Medido en un armado de 2,6 h: scdet perdia 125 de 1587
+         cortes y marcaba 32 de mas.
   v1.00: Version inicial.
 ____________________________________________________________________
 """
@@ -159,6 +166,69 @@ def cut_frames(scores, threshold=CUT_SCORE, radius=CUT_PEAK_RADIUS):
             continue
         cuts.append(i)
     return cuts
+
+
+_EDL_MODULE = None
+
+
+def _edl():
+    """LGA_NKS_ShotMarks_EDL, cargado por ruta: el motor corre con -I y la
+    carpeta del script no esta en sys.path."""
+    global _EDL_MODULE
+    if _EDL_MODULE is None:
+        import importlib.util
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LGA_NKS_ShotMarks_EDL.py")
+        spec = importlib.util.spec_from_file_location("LGA_NKS_ShotMarks_EDL", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _EDL_MODULE = module
+    return _EDL_MODULE
+
+
+def load_edl(path, info, total, detected):
+    """({estado del EDL}, planos) para un video.
+
+    El EDL se usa solo si sus cortes caen sobre la imagen: se cruzan con los
+    de scdet y tiene que coincidir al menos la mitad al cuadro. Si el TC del
+    MOV no es el del EDL se prueba un desfasaje. Un EDL de otro armado o de
+    otra pelicula no pasa y se sigue con scdet, avisando.
+    """
+    if not path:
+        return {"used": False, "path": ""}, []
+    state = {"used": False, "path": path}
+    if not os.path.isfile(path):
+        state["reason"] = "EDL not found"
+        _log.warning("EDL no encontrado: %s", path)
+        return state, []
+    edl = _edl()
+    fps = int(round(info["fps"]))
+    parsed = edl.read_edl(path, fps)
+    if not parsed.events:
+        state["reason"] = "The EDL has no video events"
+        _log.warning("EDL sin eventos de video: %s", path)
+        return state, []
+    if info.get("timecode"):
+        offset = edl.tc_frames(info["timecode"], fps)
+    else:
+        offset = parsed.rec_range()[0]
+    delta, matched, count = edl.align(parsed, offset, detected, total)
+    state.update({"title": parsed.title, "events": len(parsed.events), "edl_cuts": count,
+                  "matched": matched, "picture_cuts": len(detected), "offset": delta})
+    if not edl.is_aligned(matched, count):
+        state["reason"] = "Only %d of %d cuts of the EDL match the movie" % (matched, count)
+        _log.warning("EDL descartado: coinciden %d de %d cortes (desfasaje %d)",
+                     matched, count, delta)
+        return state, []
+    offset += delta
+    cuts = edl.cut_frames(parsed, offset, total)
+    segs = edl.segments(parsed, offset, total)
+    state.update({"used": True, "cuts": cuts,
+                  "missed": count - matched, "extra": len(detected) - matched})
+    _log.info("EDL %s: %d planos, %d cortes; coinciden %d al cuadro con los de la imagen "
+              "(desfasaje %d); scdet perdio %d y marco %d de mas",
+              parsed.title, len(parsed.events), count, matched, delta,
+              count - matched, len(detected) - matched)
+    return state, segs
 
 
 def shot_range(cuts, frame, total):
@@ -405,8 +475,13 @@ def thumb_prints(ffmpeg, thumb, rect, folder):
 _W = {}
 
 
-def _worker_init(index_folder):
-    """Cada proceso carga el indice una vez (dHash en ints, g32 por mmap)."""
+def _worker_init(index_folder, cuts):
+    """Cada proceso carga el indice una vez (dHash en ints, g32 por mmap).
+
+    `cuts` llega armado (del EDL o de scdet): los planos son la unidad de
+    busqueda, y con los del EDL dos planos parecidos pegados ya no se
+    funden en uno.
+    """
     with open(os.path.join(index_folder, "d8.bin"), "rb") as handle:
         raw = handle.read()
     frames = len(raw) // D8
@@ -414,10 +489,6 @@ def _worker_init(index_folder):
     handle = open(os.path.join(index_folder, "g32.bin"), "rb")
     _W["g32"] = mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ)
     _W["g32_handle"] = handle
-    scores = array.array("f")
-    with open(os.path.join(index_folder, "scd.bin"), "rb") as handle:
-        scores.frombytes(handle.read())
-    cuts = cut_frames(scores)
     _W["cuts"] = cuts
     _W["frames"] = frames
     seg = array.array("i", [0]) * frames
@@ -610,11 +681,20 @@ def main(job_path):
         p = thumbs[sha1]["prints"]
         return p["d8"], p["g32"]
 
+    # Cortes: los del EDL si hay uno que coincide con la imagen; si no, scdet.
+    with open(os.path.join(index_folder, "scd.bin"), "rb") as handle:
+        scores = array.array("f")
+        scores.frombytes(handle.read())
+    detected = cut_frames(scores)
+    edl_info, segs = load_edl(job.get("edl"), info, frames, detected)
+    cuts = edl_info.pop("cuts") if edl_info.get("used") else detected
+    seg_starts = [s["in"] for s in segs]
+
     keys = [s for s in thumbs if "prints" in thumbs[s]]
     t1 = time.time()
     cands = {}
     with concurrent.futures.ProcessPoolExecutor(workers, initializer=_worker_init,
-                                                initargs=(index_folder,)) as pool:
+                                                initargs=(index_folder, cuts)) as pool:
         tasks = []
         for sha1 in keys:
             d8, g32 = prints_for(sha1)
@@ -655,11 +735,6 @@ def main(job_path):
             if n % 10 == 0:
                 emit("progress", stage="window", done=n, total=len(window_tasks))
         _log.info("Busqueda entre anclas: %.1f s", time.time() - t1)
-
-    with open(os.path.join(index_folder, "scd.bin"), "rb") as handle:
-        scores = array.array("f")
-        scores.frombytes(handle.read())
-    cuts = cut_frames(scores)
 
     # Resultado por fila.
     results = []
@@ -733,21 +808,38 @@ def main(job_path):
             if n % 20 == 0:
                 emit("progress", stage="refine", done=n, total=len(to_refine))
 
-    # IN/OUT: el plano entre cortes. Sin corte claro, solo el cuadro.
+    # IN/OUT: el plano del EDL, o el plano entre cortes de scdet. Sin corte
+    # claro, solo el cuadro. Con EDL, el clip y el SRC TC del plano.
+    fps_int = int(round(info["fps"]))
     for r in results:
         if r["frame"] is None:
             r["in"] = r["out"] = None
             continue
-        start, end = shot_range(cuts, r["frame"], frames)
-        r["cut_ok"] = end - start + 1 <= MAX_SHOT_FRAMES
-        r["in"], r["out"] = (start, end) if r["cut_ok"] else (r["frame"], r["frame"])
+        seg = _edl().segment_at(segs, r["frame"], seg_starts) if segs else None
+        if seg is not None:
+            r["cut_ok"], (r["in"], r["out"]) = True, (seg["in"], seg["out"])
+            r["edl"] = _edl().source_info(seg, r["frame"], fps_int)
+        else:
+            start, end = shot_range(cuts, r["frame"], frames)
+            r["cut_ok"] = end - start + 1 <= MAX_SHOT_FRAMES
+            r["in"], r["out"] = (start, end) if r["cut_ok"] else (r["frame"], r["frame"])
         g = _frame_print_hex(index_folder, r["frame"])
         r["frame_d8"], r["frame_g32"] = g
+        # Plano que vuelve en el montaje (A-B-A): el segundo candidato es el
+        # mismo clip en otro evento. El thumb puede ser de cualquiera de los
+        # dos; se avisa para que la revision mire ambos. Solo en los dudosos:
+        # en los aceptados el segundo ya quedo 0,10 por debajo.
+        if seg is not None and r["level"] == "review" and not r["note"] and len(r["candidates"]) > 1 \
+                and r["candidates"][1][1] >= REVIEW_SCORE:
+            other = _edl().segment_at(segs, r["candidates"][1][0], seg_starts)
+            if other is not None and other["event"] != seg["event"] and other["clip"] == seg["clip"]:
+                r["note"] = "Same clip also at candidate 2 (EDL event %d)" % other["event"]
 
     result = {"video": job["video"], "video_key": vkey, "fps": info["fps"],
               "index_folder": index_folder, "cuts": cuts,
               "timecode": info["timecode"], "frames": frames, "rows": results,
               "width": info["width"], "height": info["height"],
+              "edl": edl_info, "segments": segs,
               "seconds": round(time.time() - t0, 1),
               "levels": dict(Counter(r["level"] for r in results))}
     with open(job["out"], "w", encoding="utf-8", newline="\n") as handle:
