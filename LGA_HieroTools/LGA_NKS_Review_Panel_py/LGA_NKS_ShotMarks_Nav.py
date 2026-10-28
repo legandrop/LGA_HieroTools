@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Nav v1.04 | Lega
+  LGA_NKS_ShotMarks_Nav v1.05 | Lega
 
   Previous / Next Mark: Shift+Click en Previous / Next Annotation del
   panel Review. Salta el playhead a la marca de Shot Marks anterior o
@@ -17,6 +17,11 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Nav.log.
 
+  v1.05: Seguir al playhead con marcas de un cuadro (fila con IN = OUT o
+         sin OUT): llegan hasta la siguiente marca, porque al arrastrar casi
+         nunca se pisaba su unico cuadro y la ventana no cambiaba. El log
+         anota cuantas se estiraron y cada vez que el playhead entra en un
+         cuadro sin marca.
   v1.04: Marcas ubicadas con EDL: una linea con el clip de camara y el
          SRC TC IN/OUT del plano (el evento del EDL, en el tooltip).
   v1.03: Marcas ubicadas desde thumbnails: la ventana muestra el thumb de
@@ -63,7 +68,7 @@ DEBUG = False
 WINDOW_NAME = "LGA_ShotMarkInfo"
 # Sube cuando cambia la API de la ventana: el panel re-ejecuta este modulo en
 # cada click, y una ventana creada por una version vieja se reemplaza.
-WINDOW_API = 4
+WINDOW_API = 5
 
 # Tooltips en castellano, separados del widget para que pasar a bilingue sea
 # un cambio de datos.
@@ -203,6 +208,7 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
         self._starts = []
         self._ends = []
         self._index = None
+        self._in_gap = False
         self._build()
         apply_ui_font(self, INFO_FONT_PX)
         # Despues de apply_ui_font, que le pisa la familia a todos los hijos.
@@ -397,8 +403,23 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
         self._sequence = sequence
         self._tags = list(tags)
         self._starts = [int(t.inTime()) for t in self._tags]
-        self._ends = [int(t.outTime()) for t in self._tags]
+        ends = [int(t.outTime()) for t in self._tags]
+        last_frame = 0
+        if sequence is not None:
+            try:
+                last_frame = int(sequence.duration()) - 1
+            except Exception:
+                last_frame = max(ends or [0])
+        # Las marcas de un cuadro (fila sin TC OUT valido) llegan hasta la
+        # siguiente: si no, al arrastrar el playhead la ventana no cambiaba.
+        self._ends = _sheet_module().follow_ends(self._starts, ends, last_frame)
         self._index = None
+        self._in_gap = False
+        single = sum(1 for start, end in zip(self._starts, ends) if end <= start)
+        if self._tags:
+            logging.getLogger(LOGGER_NAME).info(
+                "Siguiendo %s: %d marcas, %d de un cuadro estiradas hasta la siguiente",
+                sequence.name() if sequence is not None else "-", len(self._tags), single)
 
     def _on_sequence_changed(self, *args):
         try:
@@ -416,7 +437,16 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
         except Exception:
             return
         index = _sheet_module().mark_index_at(self._starts, self._ends, frame)
-        if index is None or index == self._index:
+        if index is None:
+            # Se loguea solo al ENTRAR en un hueco, no en cada cuadro: en
+            # playback serian 24 lineas por segundo.
+            if not self._in_gap:
+                self._in_gap = True
+                logging.getLogger(LOGGER_NAME).info(
+                    "Playhead %d: sin marca, queda la ultima mostrada", frame)
+            return
+        self._in_gap = False
+        if index == self._index:
             return
         try:
             info = mark_info(self._sequence, self._tags[index], index, len(self._tags))

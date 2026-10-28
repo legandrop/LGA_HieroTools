@@ -211,6 +211,20 @@ class ShotMarksSheetTests(unittest.TestCase):
         # Una marca larga solapada cubre el hueco despues de la corta.
         self.assertEqual(sheet.mark_index_at([0, 10], [100, 20], 30), 0)
 
+    def test_follow_ends_stretch_one_frame_marks(self):
+        # 10 y 30 son de un cuadro; 50-60 tiene rango real; 90 es la ultima.
+        starts, ends = [10, 30, 50, 90], [10, 30, 60, 90]
+        follow = sheet.follow_ends(starts, ends, 200)
+        self.assertEqual(follow, [29, 49, 60, 200])
+        self.assertEqual(sheet.mark_index_at(starts, follow, 20), 0)
+        self.assertEqual(sheet.mark_index_at(starts, follow, 45), 1)
+        # Despues de una marca con rango real el hueco sigue sin marca.
+        self.assertIsNone(sheet.mark_index_at(starts, follow, 70))
+        self.assertEqual(sheet.mark_index_at(starts, follow, 150), 3)
+        # Dos marcas en el mismo IN: llegan hasta la siguiente que empieza despues.
+        self.assertEqual(sheet.follow_ends([5, 5, 9], [5, 5, 9], 9), [8, 8, 9])
+        self.assertEqual(sheet.follow_ends([], [], 0), [])
+
     def test_sheet_without_shot_and_tc_is_rejected(self):
         with self.assertRaises(ValueError):
             sheet.load_table(self.xlsx, "Notes")

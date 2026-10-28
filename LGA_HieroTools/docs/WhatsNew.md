@@ -12,6 +12,9 @@ platforms: [win, mac]
 
 ## Unreleased
 
+## v4.023
+- [fixed] La ventanita de Shot Marks vuelve a cambiar sola al arrastrar el playhead en los timelines donde la planilla no trae REC TC OUT (o lo trae igual al IN): antes solo cambiaba si el playhead caía justo en el primer cuadro del shot.
+
 ## v4.022
 - [fixed] En los proyectos con color management, Fix Colorspaces deja en Rec.709 los mp4 y mov de los tracks de plates y de EditRef, en vez de pasarlos a ACEScg o dejarlos como venían.
 - [new] Shot Marks, en el panel Review, lee la planilla de breakdown y marca cada shot en el timeline en su timecode; con Shift+Click en Previous Annotation y Next Annotation saltás de un shot al otro y se abre una ventanita con la descripción, el brief y los datos de ese shot en la planilla, con el vendor en su color; mientras está abierta, cambia sola cuando el playhead entra en otro shot.

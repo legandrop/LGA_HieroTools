@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Sheet v1.04 | Lega
+  LGA_NKS_ShotMarks_Sheet v1.05 | Lega
 
   Nucleo sin host de Shot Marks: lee una planilla (xlsx o csv),
   detecta la fila de encabezado y las columnas de shot y timecode,
@@ -13,6 +13,8 @@ ____________________________________________________________________
   los sharedStrings), sin openpyxl: NKS no lo trae, y asi una
   planilla de cientos de MB por las imagenes se lee en segundos.
 
+  v1.05: follow_ends: para seguir al playhead, una marca de un cuadro
+         llega hasta la siguiente (si no, solo se veia al pisar su IN).
   v1.04: Columna LGA Clip (clip de camara, SRC TC IN/OUT y evento del
          EDL del armado) para las filas ubicadas con EDL: viaja a la
          metadata del tag como rol "clip" ("source" ya era el origen de
@@ -502,6 +504,26 @@ def mark_index_at(starts, ends, frame):
         if ends[index] >= frame:
             return index
     return None
+
+
+def follow_ends(starts, ends, last_frame):
+    """OUT para seguir al playhead: una marca de un cuadro llega hasta la siguiente.
+
+    Una fila con IN = OUT o sin OUT queda como marca de un cuadro (el IN alcanza
+    para Previous/Next). Pero la ventana busca la marca que CUBRE el cuadro, y
+    al arrastrar el playhead casi nunca se cae justo en ese cuadro: medido en
+    un episodio con las 174 marcas de un cuadro, la ventana solo cambiaba al
+    pisar el IN exacto. Esas marcas se estiran hasta el cuadro anterior a la
+    siguiente que empiece despues (o hasta `last_frame` si es la ultima). Las
+    marcas con rango real no se tocan. `starts` va ordenado.
+    """
+    result = list(ends)
+    for index, (start, end) in enumerate(zip(starts, ends)):
+        if end > start:
+            continue
+        following = bisect.bisect_right(starts, start)
+        result[index] = starts[following] - 1 if following < len(starts) else max(last_frame, start)
+    return result
 
 
 # -- timecode y plan -------------------------------------------------------

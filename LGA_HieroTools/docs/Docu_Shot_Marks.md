@@ -48,6 +48,13 @@ Previous, con el playhead adentro de un shot, vuelve al IN de ese shot.
   ultima. `sequenceChanged` relee las marcas; cerrar la ventana desengancha el visor. El
   seguimiento se arma antes del `setTime` del salto, porque ese salto ya dispara `timeChanged`.
   Pendiente: medirlo en NKS en vivo (la senal y su frecuencia en playback).
+- **Marcas de un cuadro: se estiran hasta la siguiente para seguir al playhead.** Una planilla con
+  REC TC OUT igual al IN (o vacio) deja marcas de un cuadro. Medido en NKS 17 en un episodio con
+  las 174 asi: al arrastrar, la ventana solo cambiaba si el playhead pisaba el IN exacto, y el log
+  lo delataba (cada cambio caia justo en un IN). `follow_ends` les da, solo para el seguimiento,
+  un OUT en el cuadro anterior a la marca siguiente; el tag no se toca y las marcas con rango real
+  siguen igual. El log anota cuantas se estiraron y cada entrada del playhead a un cuadro sin
+  marca (una linea por hueco, no por cuadro).
 - **Vendor con color.** `LGA_NKS_Shared/LGA_NKS_Vendor_Colors_Config.py` lee de la DB de PipeSync
   del contexto activo (studio o client) la tabla `project_vendor_groups` (token, nombre, color)
   y, de respaldo, `vendor_colors` del envelope del proyecto. Compara sin mayusculas ni signos
