@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.023
+- [fixed][win] Snapshot (con Shift+Click) y Review Pic abren FrameRev adelante y listo para anotar, en vez de dejarlo escondido detrás de Nuke Studio.
 - [fixed] La ventanita de Shot Marks vuelve a cambiar sola al arrastrar el playhead en los timelines donde la planilla no trae REC TC OUT (o lo trae igual al IN): antes solo cambiaba si el playhead caía justo en el primer cuadro del shot.
 
 ## v4.022

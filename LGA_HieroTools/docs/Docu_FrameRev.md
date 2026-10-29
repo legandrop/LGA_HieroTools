@@ -72,6 +72,30 @@ propio grupo, así que cerrar Hiero no cierra FrameRev. Cada llamada deja su log
 `LGA_HieroTools/logs/DebugPy_LGA_NKS_FrameRev.log`, con el registro leído, la versión y el
 comando.
 
+## Al frente y con foco (Windows)
+
+Hasta `LGA_NKS_FrameRev v1.00`, FrameRev se abría **detrás de Hiero**. La ventana la muestra
+un proceso nuevo, y Windows no deja que un proceso que no es el del frente se active solo: el
+`activateWindow()` de FrameRev apenas hacía titilar su botón en la barra de tareas. El que sí
+puede ceder el frente es Hiero, que es la app del frente en el momento del click.
+
+Por eso, después del `Popen`, `_bring_to_front_when_ready()`:
+
+1. Llama a `AllowSetForegroundWindow(pid)`: si Windows se lo respeta, FrameRev se activa solo.
+2. Arranca un `QTimer` de 100 ms **en el hilo de la UI** (no bloquea: cada vuelta es un
+   `EnumWindows`). Busca la ventana principal de FrameRev (`pick_main_window`: visible, sin
+   dueño, que no sea tool window ni esté encapada, la más grande) y, si Hiero sigue al frente,
+   le hace `SetForegroundWindow`. Tiene que ser desde el hilo de la UI de Hiero: el permiso es
+   del proceso del frente.
+3. Corta cuando FrameRev queda al frente, cuando FrameRev se cerró, a los 15 s, o **cuando el
+   usuario ya está en otra app**: en ese caso no se le roba el foco. La decisión de cada vuelta
+   es `front_step()`, pura y con test.
+
+Nada de `HWND_TOPMOST`: la ventana queda adelante y con foco, pero no "siempre encima". FrameRev
+encapa (DWM cloak) la ventana mientras ajusta el zoom de la captura, y Windows no trae al frente
+una ventana encapada: por eso se la espera destapada. El resultado se agrega al final del log
+(`Al frente: done a los 0.9 s (1 SetForegroundWindow)`).
+
 ## Otros consumidores
 
 La galería de Snapshots de LGA_ToolPack (`LGA_viewer_SnapShot_Gallery.py`, Shift+click)
@@ -82,7 +106,8 @@ porque los packs no importan código entre sí. Antes buscaba el ShareX de este 
 
 `LGA_NKS_Shared/tests/test_framerev.py`, sin Hiero: rutas del registro por sistema, versión
 mínima, registro faltante, roto o con un ejecutable que ya no existe, comando de cada flag, y
-que el temporal de Snapshot no quede en disco si FrameRev no arranca. Se corre con cualquier
-Python 3, por ejemplo el de Nuke:
+que el temporal de Snapshot no quede en disco si FrameRev no arranca, y la elección de ventana
+y la decisión de cada vuelta del traer-al-frente. En Windows además enumera ventanas reales
+(solo lectura) para validar los tipos de `ctypes`. Se corre con el Python embebido del pack:
 
-    "C:\Program Files\Nuke16.0v4\python.exe" LGA_NKS_Shared\tests\test_framerev.py
+    LGA_NKS_Shared\OIIO_Win\bin\python\python.exe LGA_NKS_Shared\tests\test_framerev.py

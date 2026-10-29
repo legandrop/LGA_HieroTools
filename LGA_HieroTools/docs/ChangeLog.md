@@ -1,4 +1,6 @@
 v4.023:
+El Shift+Click de Snapshot y Review Pic abrian FrameRev detras de Hiero. La ventana la muestra un proceso nuevo y Windows no lo deja activarse solo: su `activateWindow()` solo hacia titilar la barra de tareas. Ahora Hiero, que es la app del frente, le cede el permiso y un `QTimer` en el hilo de la UI espera la ventana de FrameRev y la trae con `SetForegroundWindow`, sin dejarla siempre encima; si el usuario ya se fue a otra app no le roba el foco. `LGA_NKS_FrameRev v1.01`, con tests. [ FrameRev - Abrir al frente ]
+
 La ventanita de Previous/Next Mark no seguia al playhead en un episodio cuya planilla trae REC TC OUT igual a REC TC IN: sus 174 marcas eran de un cuadro y `mark_index_at` busca la marca que CUBRE el cuadro, asi que al arrastrar solo cambiaba si se pisaba el IN exacto (el log lo mostraba: cada cambio caia justo en un IN). Ahora, para seguir al playhead, una marca de un cuadro llega hasta la siguiente (`follow_ends`, con test); las de rango real no cambian y el tag tampoco. El log anota cuantas se estiraron y cada entrada a un cuadro sin marca. Verificado en NKS 17 sobre ese timeline. `LGA_NKS_ShotMarks_Nav v1.05`, `_Sheet v1.05`. [ Shot Marks - Seguir al playhead con marcas de un cuadro ]
 
 v4.022:

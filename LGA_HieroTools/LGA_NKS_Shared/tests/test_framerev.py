@@ -164,11 +164,62 @@ def test_open_capture_temp_ownership(folder):
     _expect(error and os.listdir(temp_dir) == [], "sin FrameRev no se crea temporal")
 
 
+def _window(hwnd, area=1000, visible=True, owned=False, tool=False, cloaked=False):
+    return {"hwnd": hwnd, "visible": visible, "owned": owned, "tool": tool,
+            "cloaked": cloaked, "area": area}
+
+
+def test_pick_main_window():
+    _expect(framerev.pick_main_window([]) is None, "sin ventanas")
+    # El toast (tool), un dialogo (owned), una oculta y la encapada no cuentan.
+    windows = [
+        _window(1, area=50, tool=True),
+        _window(2, area=900000, owned=True),
+        _window(3, area=800000, visible=False),
+        _window(4, area=700000, cloaked=True),
+        _window(5, area=0),
+    ]
+    _expect(framerev.pick_main_window(windows) is None, "ninguna es la principal")
+    windows.append(_window(6, area=400000))
+    windows.append(_window(7, area=600000))
+    _expect(framerev.pick_main_window(windows) == 7, "la mas grande de las validas")
+
+
+def test_front_step():
+    own, child, other = 100, 200, 300
+    step = framerev.front_step
+    _expect(step(child, own, child, True, None) == "done", "FrameRev ya al frente")
+    _expect(step(own, own, child, False, None) == "exited", "FrameRev se cerro")
+    _expect(step(other, own, child, True, 7) == "user_left", "el usuario esta en otra app")
+    _expect(step(own, own, child, True, None) == "wait", "la ventana todavia no aparecio")
+    _expect(step(own, own, child, True, 7) == "raise", "Hiero al frente y ventana lista")
+    _expect(step(0, own, child, True, 7) == "wait", "sin ventana de frente no se fuerza nada")
+
+
+def test_win32_enumeration():
+    """Solo lectura: enumera ventanas reales para validar los tipos de ctypes."""
+    if not sys.platform.startswith("win"):
+        return
+    api = framerev._win32()
+    _expect(api is not None, "ctypes disponible en Windows")
+    user32 = api[2]
+    foreground_pid = framerev._window_pid(api, user32.GetForegroundWindow())
+    _expect(isinstance(foreground_pid, int), "pid de la ventana del frente")
+    if foreground_pid:
+        windows = framerev._windows_of(api, foreground_pid)
+        _expect(all(set(w) == {"hwnd", "visible", "owned", "tool", "cloaked", "area"}
+                    for w in windows), "formato de cada ventana")
+    _expect(framerev._windows_of(api, os.getpid()) == [], "este proceso no tiene ventanas")
+
+
 def run():
     with tempfile.TemporaryDirectory() as folder:
         framerev.LOG_PATH = os.path.join(folder, "logs", "DebugPy_LGA_NKS_FrameRev.log")
         test_registry_file_per_platform()
         test_parse_version()
+        test_pick_main_window()
+        test_front_step()
+        test_win32_enumeration()
         for test in (test_find_framerev_cases, test_edit_image_command,
                      test_edit_image_without_framerev_does_not_launch,
                      test_open_capture_temp_ownership):
