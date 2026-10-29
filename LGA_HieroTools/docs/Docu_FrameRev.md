@@ -101,6 +101,8 @@ una ventana encapada: por eso se la espera destapada. El resultado se agrega al 
 La galería de Snapshots de LGA_ToolPack (`LGA_viewer_SnapShot_Gallery.py`, Shift+click)
 también abre FrameRev con `--edit-image`. Tiene su propia copia de la búsqueda en el registro,
 porque los packs no importan código entre sí. Antes buscaba el ShareX de este repo.
+También tiene su copia del traer-al-frente (`py/LGA_FrameRev_Front_ToolPack.py`, la misma
+lógica que `_bring_to_front_when_ready()`): un arreglo en una se aplica en las dos.
 
 ## Tests
 
