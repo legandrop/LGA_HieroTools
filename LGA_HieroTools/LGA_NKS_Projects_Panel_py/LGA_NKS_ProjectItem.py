@@ -3,10 +3,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectItem v1.05 | Lega
+  LGA_NKS_ProjectItem v1.06 | Lega
 
   Widget personalizado para mostrar proyectos y secuencias en el panel de proyectos LGA.
 
+  v1.06: Clic derecho sobre un timeline abre un menu con Delete Timeline, que
+         delega en delete_sequence() del panel. El switch de timeline queda
+         solo en el boton izquierdo.
   v1.05: Iconos Save incremental (disquete con +) y Upload to Wasabi (nube con
          flecha) antes de la x, con el mismo trazo. RowIconButton los dibuja
          con QPainter y tokens de Color: hover gris, y en upload spinner,
@@ -117,6 +120,7 @@ TOOLTIPS = {
     "upload_busy": "Subiendo {name} a Wasabi… El progreso está en la pestaña Activity de FileManager S3",
     "upload_ok": "{name} subido a Wasabi",
     "upload_error": "No se pudo subir {name}: {message}\nClick para reintentar",
+    "delete_timeline": "Borrar este timeline del proyecto. Pregunta antes y se deshace con Ctrl+Z",
 }
 
 
@@ -629,8 +633,18 @@ class ProjectItem(QtWidgets.QWidget):
                 seq_label.installEventFilter(self.panel)
 
             seq_obj = sequences_dict.get(seq_name)
+            # Solo el boton izquierdo cambia de timeline: el derecho abre el menu
+            # contextual, y sin este filtro tambien hacia el switch.
             seq_label.mousePressEvent = (
-                lambda e, name=seq_name, so=seq_obj, po=self.project_info.get("proyecto_obj"): self.on_sequence_click(name, so, po)
+                lambda e, name=seq_name, so=seq_obj, po=self.project_info.get("proyecto_obj"): (
+                    self.on_sequence_click(name, so, po)
+                    if e.button() == QtCore.Qt.LeftButton
+                    else None
+                )
+            )
+            seq_label.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+            seq_label.customContextMenuRequested.connect(
+                lambda pos, lbl=seq_label, name=seq_name, so=seq_obj: self._show_sequence_menu(lbl, pos, name, so)
             )
 
             seq_layout.addWidget(seq_label)
@@ -656,6 +670,25 @@ class ProjectItem(QtWidgets.QWidget):
             import traceback
 
             debug_print(traceback.format_exc())
+
+    def _show_sequence_menu(self, label, pos, sequence_name, sequence_obj):
+        """Clic derecho sobre un timeline: menu con Delete Timeline."""
+        if self.panel is None or not hasattr(self.panel, "delete_sequence"):
+            return
+        menu = QtWidgets.QMenu(label)
+        menu.setToolTipsVisible(True)
+        delete_action = menu.addAction("Delete Timeline")
+        delete_action.setToolTip(TOOLTIPS["delete_timeline"])
+        chosen = menu.exec_(label.mapToGlobal(pos))
+        if chosen is not delete_action:
+            return
+        proyecto = self.project_info.get("proyecto_abierto") or self.project_info.get("proyecto_obj")
+        # Diferido: el borrado rearma la lista y destruye este label, que
+        # todavia esta despachando el evento del menu.
+        panel = self.panel
+        QtCore.QTimer.singleShot(
+            0, lambda: panel.delete_sequence(proyecto, sequence_name, sequence_obj)
+        )
 
     def eventFilter(self, obj, event):
         """Hover compartido: el triangulo y el nombre hacen lo mismo, se iluminan juntos."""

@@ -390,6 +390,8 @@ Project browser and sequence switcher built around the studio's project structur
   with the preferred columns and rows sorted by Clip.
 - **Collapse / expand**
   Clicking the name or the triangle of an open project collapses or expands its sequences without closing it.
+- **Delete Timeline**
+  Right-click a timeline of an open project and choose Delete Timeline. It asks first and can be undone with Ctrl+Z. If that timeline is open, the panel switches to another one before deleting it; if it is the only open timeline, it asks you to open another first.
 - **Save incremental (floppy with +)**  
   Appears when hovering an open project. Saves it as the next version (v012 → v013). If a newer version already exists on disk, it asks before saving as the next free number; it never overwrites a file.
 - **Upload to Wasabi (cloud with arrow)**  

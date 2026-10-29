@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.51 | Lega
+  LGA_NKS_Projects_Panel v2.52 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,10 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.52: delete_sequence() borra un timeline desde el menu contextual de su
+         fila, con confirmacion y en un undo. Borrar un timeline abierto tira
+         NKS 16, asi que antes se cierra su tab con el switch; si no se puede,
+         avisa y no borra.
   v2.51: Save incremental y Upload to Wasabi desde la fila del proyecto.
          save_incremental() guarda con saveAs() como v+1 y pregunta si en
          disco ya hay una version mayor. upload_project() lanza FileManager
@@ -135,7 +139,7 @@ import configparser
 import subprocess
 import time
 from pathlib import Path
-from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt, is_widget_alive
+from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt, is_widget_alive, iter_live_widgets
 from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color, Style
 from LGA_NKS_Shared.LGA_NKS_ContextProfile import (
     get_context_mode,
@@ -1526,6 +1530,146 @@ class ProjectsPanel(QtWidgets.QWidget):
                 debug_print(f"[Cerrar] Vuelta a '{target}' de {project.name()}")
                 return
         debug_print("[Cerrar] No hay otro proyecto abierto en el panel: sin timeline")
+
+    # =========================
+    #   BORRAR TIMELINE
+    # =========================
+    def delete_sequence(self, project, sequence_name, sequence=None):
+        """
+        Borra un timeline desde el clic derecho de su fila.
+
+        Pregunta siempre. Borrar un timeline ABIERTO tira NKS 16 (medido con
+        explore_delete_timeline: access violation apenas se procesan eventos),
+        asi que primero se cierra su tab con el switch, que cierra todos los
+        timelines y visores menos el destino:
+          - si es el activo, se cambia a otro (el ultimo usado del proyecto,
+            otro del proyecto, o el de otro proyecto abierto);
+          - si esta en una tab de fondo, se re-switchea al activo.
+        Si igual queda abierto, no se borra. El borrado va dentro de
+        beginUndo/endUndo para que Ctrl+Z lo devuelva.
+        """
+        if project is None:
+            return
+        try:
+            project_name = project.name()
+        except Exception as e:
+            debug_print(f"[BorrarTimeline] Proyecto invalido: {e}")
+            return
+        if sequence is None:
+            sequence = self._find_sequence(project, sequence_name)
+        bin_item = self._sequence_bin_item(project, sequence) if sequence is not None else None
+        debug_print(
+            f"[BorrarTimeline] {project_name} / {sequence_name} | secuencia={sequence is not None} "
+            f"| bin_item={bin_item is not None}"
+        )
+        if bin_item is None:
+            show_warning(self, "Delete timeline", f"Couldn't find {sequence_name} in the {project_name} bin.")
+            return
+
+        text = f"Delete the timeline {sequence_name} from {project_name}?\n\nYou can undo it with Ctrl+Z."
+        if not ask_question(self, "Delete timeline", text, yes_text="Delete", no_text="Cancel"):
+            debug_print("[BorrarTimeline] Cancelado")
+            return
+
+        try:
+            active = hiero.ui.activeSequence()
+            was_active = bool(active and active.name() == sequence_name and active.project() == project)
+        except Exception:
+            active, was_active = None, False
+        if was_active:
+            self._leave_sequence(project, sequence_name)
+        elif active is not None and self._has_open_tab(sequence_name):
+            debug_print(f"[BorrarTimeline] {sequence_name} tiene una tab de fondo: re-switch a '{active.name()}'")
+            switch_to_sequence(active.name(), target_project=active.project(), force_cleanup=True)
+        if self._has_open_tab(sequence_name):
+            debug_print(f"[BorrarTimeline] {sequence_name} sigue abierto: no se borra")
+            show_warning(
+                self, "Delete timeline",
+                f"{sequence_name} is still open in a timeline tab. Open another timeline and try again.",
+            )
+            return
+
+        try:
+            project.beginUndo(f"Delete Timeline {sequence_name}")
+            try:
+                bin_item.parentBin().removeItem(bin_item)
+            finally:
+                project.endUndo()
+        except Exception as e:
+            debug_print(f"[BorrarTimeline] removeItem fallo: {e}")
+            show_warning(self, "Delete timeline", f"Couldn't delete {sequence_name}:\n{e}")
+            return
+        debug_print(f"[BorrarTimeline] {sequence_name} borrado | era el activo: {was_active}")
+        self.start_scan()
+
+    def _find_sequence(self, project, sequence_name):
+        try:
+            for seq in project.sequences():
+                if seq.name() == sequence_name:
+                    return seq
+        except Exception as e:
+            debug_print(f"[BorrarTimeline] No se pudieron leer las secuencias: {e}")
+        return None
+
+    def _sequence_bin_item(self, project, sequence):
+        """BinItem que contiene la secuencia: se borra el item, no la secuencia."""
+        try:
+            item = sequence.binItem()
+            if item is not None:
+                return item
+        except Exception:
+            pass
+        # Respaldo: recorrer el bin buscando el item cuya version activa es esta
+        pending = [project.clipsBin()]
+        while pending:
+            current = pending.pop()
+            for child in current.items():
+                if isinstance(child, hiero.core.Bin):
+                    pending.append(child)
+                    continue
+                try:
+                    if child.activeItem() == sequence:
+                        return child
+                except Exception:
+                    continue
+        return None
+
+    def _has_open_tab(self, sequence_name):
+        """
+        Hay un timeline o visor con ese titulo. Por titulo y no con
+        getTimelineEditor(seq): medido, devuelve el editor activo para
+        cualquier secuencia, aunque no este abierta.
+        """
+        for widget in iter_live_widgets():
+            try:
+                class_name = widget.metaObject().className()
+                if ("TimelineEditor" in class_name or "Foundry::Storm::UI::Viewer" in class_name) \
+                        and widget.windowTitle() == sequence_name:
+                    return True
+            except Exception:
+                continue
+        return False
+
+    def _leave_sequence(self, project, sequence_name):
+        """Antes de borrar el timeline activo, va a otro para que su tab se cierre."""
+        target = timeline_memory.recall_last_sequence(project)
+        if target == sequence_name:
+            target = None
+        if not target:
+            try:
+                others = [s.name() for s in project.sequences() if s.name() != sequence_name]
+            except Exception:
+                others = []
+            target = others[0] if others else None
+        if target:
+            debug_print(f"[BorrarTimeline] Se deja el activo: vuelta a '{target}'")
+            switch_to_sequence(target, target_project=project, force_cleanup=True)
+            return
+        try:
+            path = project.path()
+        except Exception:
+            path = ""
+        self._go_to_other_open_project(path)
 
     # =========================
     #   SAVE INCREMENTAL
