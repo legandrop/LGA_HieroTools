@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Sheet v1.05 | Lega
+  LGA_NKS_ShotMarks_Sheet v1.06 | Lega
 
   Nucleo sin host de Shot Marks: lee una planilla (xlsx o csv),
   detecta la fila de encabezado y las columnas de shot y timecode,
@@ -13,6 +13,9 @@ ____________________________________________________________________
   los sharedStrings), sin openpyxl: NKS no lo trae, y asi una
   planilla de cientos de MB por las imagenes se lee en segundos.
 
+  v1.06: CSV: del Sniffer solo se toma el separador; las comillas van
+         siempre como Excel/Google (""). Un brief de varias lineas que
+         empezaba con comilla se cortaba en la primera linea.
   v1.05: follow_ends: para seguir al playhead, una marca de un cuadro
          llega hasta la siguiente (si no, solo se veia al pisar su IN).
   v1.04: Columna LGA Clip (clip de camara, SRC TC IN/OUT y evento del
@@ -303,12 +306,19 @@ def _read_rows(path, sheet, max_rows=None):
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
             sample = handle.read(4096)
             handle.seek(0)
+            # Del Sniffer solo se toma el separador. Las comillas se leen
+            # siempre como las escriben Excel y Google Sheets (comilla doble
+            # escapada como ""): si en la muestra no hay ningun "", el
+            # Sniffer adivina doublequote=False y una celda que empieza con
+            # comilla ("""-Agregado...) se corta en la primera linea y el
+            # resto se derrama en filas sueltas.
             try:
-                dialect = csv.Sniffer().sniff(sample, delimiters=",;\t")
+                delimiter = csv.Sniffer().sniff(sample, delimiters=",;\t").delimiter
             except csv.Error:
-                dialect = csv.excel
+                delimiter = ","
             rows = []
-            for number, values in enumerate(csv.reader(handle, dialect), start=1):
+            for number, values in enumerate(csv.reader(handle, csv.excel, delimiter=delimiter),
+                                            start=1):
                 cleaned = [str(v or "").strip() for v in values[:MAX_COLUMNS]]
                 if any(cleaned):
                     rows.append((number, cleaned))

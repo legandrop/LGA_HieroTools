@@ -160,6 +160,27 @@ class ShotMarksSheetTests(unittest.TestCase):
         self.assertEqual([(m.shot, m.frame_in, m.frame_out) for m in plan.marks],
                          [("PROJA_0010", 0, 23)])
 
+    def test_csv_multiline_cell_starting_with_quote(self):
+        # Exportacion de Google Sheets: celda multilinea que empieza con una
+        # comilla literal ("" escapada) y ningun otro "" en la muestra.
+        path = self.root / "PROJA - BREAKDOWN.csv"
+        brief = '"-Add the tower\n-Change the rail color\n-Replace the sign'
+        quoted = '"%s"' % brief.replace('"', '""')
+        # La celda va despues de los 4096 caracteres que mira el Sniffer:
+        # en la planilla real el primer "" aparece recien en la fila 754.
+        filler = "".join("PROJA_%04d,,,Paint out\r\n" % n for n in range(1000, 1300))
+        # Bytes y no write_text: en Windows convertiria el \n de la celda en \r\n.
+        path.write_bytes((
+            "SHOT,REC TC IN,REC TC OUT,BRIEF\r\n" + filler +
+            "PROJA_0010,01:00:00:00,01:00:01:00,%s\r\n"
+            "PROJA_0020,01:00:01:00,01:00:02:00,Cleanup\r\n" % quoted).encode("utf-8"))
+        table = sheet.load_table(path, "")
+        columns = sheet.detect_columns(table.headers)
+        plan = sheet.build_plan(table, columns, FPS, 86400, 1000)
+        self.assertEqual([(m.shot, m.note) for m in plan.marks],
+                         [("PROJA_0010", brief), ("PROJA_0020", "Cleanup")])
+        self.assertEqual(len(table.rows), 302)
+
     def test_marks_carry_sheet_info_and_round_trip_through_metadata(self):
         _table, columns, plan = self._plan(episode="101")
         self.assertIsNotNone(columns["status"])

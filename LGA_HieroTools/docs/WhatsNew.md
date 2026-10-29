@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.023
+- [fixed] Shot Marks trae el brief completo cuando la planilla es un csv: los briefs de varias líneas que empezaban con comillas quedaban cortados en la primera línea.
 - [fixed][win] Snapshot (con Shift+Click) y Review Pic abren FrameRev adelante y listo para anotar, en vez de dejarlo escondido detrás de Nuke Studio.
 - [fixed] La ventanita de Shot Marks vuelve a cambiar sola al arrastrar el playhead en los timelines donde la planilla no trae REC TC OUT (o lo trae igual al IN): antes solo cambiaba si el playhead caía justo en el primer cuadro del shot.
 

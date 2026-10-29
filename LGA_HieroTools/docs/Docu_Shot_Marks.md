@@ -242,6 +242,13 @@ agrega la barra antes de pasarla a ffmpeg. Medido en NKS 16.
 - **xlsx sin openpyxl.** NKS no lo trae. El xlsx es un zip: se leen `xl/workbook.xml`, sus rels,
   `sharedStrings.xml` y el XML de la hoja con `iterparse`, sin cargar las imagenes. `sharedStrings`
   se lee una sola vez por archivo: releerlo por hoja tardaba 14 s al sugerir la hoja.
+- **csv: del `csv.Sniffer` solo se usa el separador.** El Sniffer mira los primeros 4096
+  caracteres; si ahi no hay ningun `""`, adivina `doublequote=False`. En una exportacion de Google
+  Sheets un brief de varias lineas que empieza con comilla se escribe `"""-Agregado...`, y con esa
+  adivinanza la celda se cortaba en la primera linea y el resto se derramaba en filas sueltas (793
+  filas en vez de 788). Las comillas se leen siempre como `csv.excel`, que es como escriben Excel
+  y Google. Los saltos de linea del brief sobreviven al tag, a la metadata y a guardar el `.hrox`
+  (medido en NKS 16): si un brief sale cortado, mirar primero la lectura de la planilla.
 - **Episodio.** Excel guarda `101` como `101.0`; se normaliza. Se sugiere el episodio que aparece
   como numero suelto en el nombre del timeline.
 - **Frame rate.** Se cuentan cuadros al fps nominal de la secuencia, sin drop-frame.
