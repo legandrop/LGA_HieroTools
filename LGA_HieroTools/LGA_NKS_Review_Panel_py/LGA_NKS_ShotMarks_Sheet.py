@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Sheet v1.06 | Lega
+  LGA_NKS_ShotMarks_Sheet v1.07 | Lega
 
   Nucleo sin host de Shot Marks: lee una planilla (xlsx o csv),
   detecta la fila de encabezado y las columnas de shot y timecode,
@@ -13,6 +13,11 @@ ____________________________________________________________________
   los sharedStrings), sin openpyxl: NKS no lo trae, y asi una
   planilla de cientos de MB por las imagenes se lee en segundos.
 
+  v1.07: compare_marks / previous_mark / change_counts: diferencias por
+         shot contra la corrida anterior (sin cambios, cambio de algun
+         campo de CHANGE_FIELDS, nuevo, ya no esta o no se ubica). La
+         metadata del tag guarda el cambio y el texto anterior de lo que
+         cambio. META_FIELDS pasa a ser publico.
   v1.06: CSV: del Sniffer solo se toma el separador; las comillas van
          siempre como Excel/Google (""). Un brief de varias lineas que
          empezaba con comilla se cortaba en la primera linea.
@@ -95,6 +100,14 @@ ROLES = ("shot", "tc_in", "tc_out", "episode", "status", "note",
 # Roles que viajan como texto a cada marca, para la ventana de info.
 INFO_ROLES = ("status", "description", "scene", "vendor", "category", "episode",
               "thumb", "located", "clip")
+# Campos que, si cambian entre una corrida y la siguiente, pintan la marca de
+# amarillo. El TC no esta: un shot que se movio es un cambio de corte, no de
+# planilla. Thumb, nivel de ubicacion y clip tampoco: salen de Shot Marks.
+CHANGE_FIELDS = ("brief", "description", "status", "scene", "vendor", "category")
+CHANGE_UNCHANGED = "unchanged"
+CHANGE_CHANGED = "changed"
+CHANGE_NEW = "new"
+CHANGE_REMOVED = "removed"
 _ROLE_HEADERS = {
     "shot": SHOT_HEADERS,
     "tc_in": TC_IN_HEADERS,
@@ -140,6 +153,17 @@ class Mark(object):
         self.tc_out = tc_out
         self.note = note
         self.info = info or {}  # {rol: texto} de INFO_ROLES con valor
+        # Contra la corrida anterior (compare_marks): CHANGE_* o "" en la
+        # primera corrida, y los campos que cambiaron {campo: texto anterior}.
+        self.change = ""
+        self.changed = {}
+
+    def field_values(self):
+        """{campo: texto} de CHANGE_FIELDS, para comparar contra el tag anterior."""
+        values = {"brief": self.note}
+        for field in CHANGE_FIELDS[1:]:
+            values[field] = self.info.get(field, "")
+        return values
 
 
 class Issue(object):
@@ -443,7 +467,7 @@ def load_table(path, sheet, require_tc=True):
 # Las keys de metadata de un Tag tienen que empezar con "tag.": si no,
 # DataCollection.setValue tira RuntimeError.
 META_KEY = "tag.lga_shotmarks"
-_META_FIELDS = ("row", "source", "tc_in", "tc_out", "brief") + INFO_ROLES
+META_FIELDS = ("row", "source", "tc_in", "tc_out", "brief") + INFO_ROLES
 
 
 def meta_key(field):
@@ -462,6 +486,11 @@ def mark_metadata(mark, source):
     }
     for role, text in mark.info.items():
         values[meta_key(role)] = text
+    if mark.change:
+        values[meta_key("change")] = mark.change
+        values[meta_key("changed")] = ",".join(f for f in CHANGE_FIELDS if f in mark.changed)
+        for field, before in mark.changed.items():
+            values[meta_key("prev_" + field)] = before
     return values
 
 
@@ -470,13 +499,101 @@ def mark_info_from_metadata(get):
 
     Los tags creados por la v1.00 solo tienen fila y origen: lo que falta
     vuelve vacio y la ventana avisa que hay que volver a correr Shot Marks.
+    "change" es CHANGE_* (o "" si la marca es de la primera corrida) y
+    "changed", {campo: texto anterior} de lo que cambio.
     """
     info = {}
-    for field in _META_FIELDS:
+    for field in META_FIELDS:
         value = get(meta_key(field))
         info[field] = str(value) if value is not None else ""
     info["complete"] = get(meta_key("tc_in")) is not None
+    info["change"] = str(get(meta_key("change")) or "")
+    # Solo en las rojas cuyo shot sigue en la planilla: por que no se ubico.
+    info["change_reason"] = str(get(meta_key("change_reason")) or "")
+    info["changed"] = {}
+    for field in str(get(meta_key("changed")) or "").split(","):
+        if field:
+            before = get(meta_key("prev_" + field))
+            info["changed"][field] = str(before) if before is not None else ""
     return info
+
+
+# -- diferencias contra la corrida anterior ---------------------------------
+
+def _comparable(text):
+    """Texto para comparar: sin diferencias de fin de linea ni espacios sobrantes."""
+    text = str(text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+    return "\n".join(line.rstrip() for line in text.split("\n"))
+
+
+def previous_mark(shot, frame_in, frame_out, get, note=""):
+    """Lo que hace falta de un tag propio anterior para compararlo.
+
+    `get(key)` lee su metadata. Los tags de la v1.00 no guardaban columnas:
+    de esos solo se compara el brief (la nota del tag).
+    """
+    info = mark_info_from_metadata(get)
+    if not info["brief"]:
+        info["brief"] = note
+    fields = CHANGE_FIELDS if info["complete"] else ("brief",)
+    return {
+        "shot": shot,
+        "frame_in": int(frame_in),
+        "frame_out": int(frame_out),
+        "values": {field: info.get(field, "") for field in fields},
+        "change": info["change"],
+    }
+
+
+def compare_marks(marks, previous, issues=()):
+    """Compara las marcas nuevas contra las de la corrida anterior.
+
+    Pone en cada marca `change` (CHANGE_UNCHANGED, CHANGE_CHANGED o
+    CHANGE_NEW) y en `changed` los campos que cambiaron con su texto
+    anterior. Devuelve las anteriores que ya no estan (CHANGE_REMOVED), cada
+    una con "reason": vacio si el shot ya no esta en la planilla, o el motivo
+    si esta pero no se pudo ubicar (`issues` del plan que no se escriben, por
+    ejemplo "Outside the timeline" cuando la planilla ya es de otro corte).
+
+    Se empareja por nombre de shot; un shot repetido se empareja en orden de
+    IN. Que el shot se haya movido no es un cambio: es otro corte. Las marcas
+    que la corrida anterior ya dio por borradas no cuentan: se avisaron una
+    vez y se van; si el shot vuelve, es nuevo.
+    """
+    by_shot = {}
+    for old in sorted(previous, key=lambda p: (p["frame_in"], p["shot"])):
+        if old.get("change") != CHANGE_REMOVED:
+            by_shot.setdefault(old["shot"], []).append(old)
+    for mark in sorted(marks, key=lambda m: (m.frame_in, m.row)):
+        olds = by_shot.get(mark.shot)
+        if not olds:
+            mark.change, mark.changed = CHANGE_NEW, {}
+            continue
+        old = olds.pop(0)
+        current = mark.field_values()
+        mark.changed = {field: before for field, before in old["values"].items()
+                        if _comparable(before) != _comparable(current.get(field, ""))}
+        mark.change = CHANGE_CHANGED if mark.changed else CHANGE_UNCHANGED
+    unplaced = {}
+    for issue in issues:
+        if not issue.written and issue.shot:
+            unplaced.setdefault(issue.shot, issue.message)
+    removed = [dict(old, reason=unplaced.get(old["shot"], ""))
+               for olds in by_shot.values() for old in olds]
+    removed.sort(key=lambda p: (p["frame_in"], p["shot"]))
+    return removed
+
+
+def change_counts(marks, removed):
+    """{CHANGE_*: cantidad} para el resumen del dialogo. "unplaced" son las
+    rojas cuyo shot sigue en la planilla pero no se pudo ubicar."""
+    counts = {CHANGE_UNCHANGED: 0, CHANGE_CHANGED: 0, CHANGE_NEW: 0,
+              CHANGE_REMOVED: len(removed),
+              "unplaced": sum(1 for old in removed if old.get("reason"))}
+    for mark in marks:
+        if mark.change in counts:
+            counts[mark.change] += 1
+    return counts
 
 
 def next_mark_index(starts, current, direction):

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Nav v1.05 | Lega
+  LGA_NKS_ShotMarks_Nav v1.06 | Lega
 
   Previous / Next Mark: Shift+Click en Previous / Next Annotation del
   panel Review. Salta el playhead a la marca de Shot Marks anterior o
@@ -17,6 +17,10 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Nav.log.
 
+  v1.06: Linea con el cambio contra la corrida anterior de Shot Marks, en
+         el color del tag (que campos cambiaron, o por que una marca roja
+         no se ubico), y el texto anterior debajo de la descripcion o el
+         brief que cambiaron.
   v1.05: Seguir al playhead con marcas de un cuadro (fila con IN = OUT o
          sin OUT): llegan hasta la siguiente marca, porque al arrastrar casi
          nunca se pisaba su unico cuadro y la ventana no cambiaba. El log
@@ -68,7 +72,7 @@ DEBUG = False
 WINDOW_NAME = "LGA_ShotMarkInfo"
 # Sube cuando cambia la API de la ventana: el panel re-ejecuta este modulo en
 # cada click, y una ventana creada por una version vieja se reemplaza.
-WINDOW_API = 5
+WINDOW_API = 6
 
 # Tooltips en castellano, separados del widget para que pasar a bilingue sea
 # un cambio de datos.
@@ -241,6 +245,8 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
         # Clip de camara y SRC TC (solo marcas ubicadas con el EDL del armado).
         self.source = self._label(head)
         self.meta = self._label(head)
+        # Cambio contra la corrida anterior de Shot Marks (color del tag).
+        self.change = self._label(head)
         layout.addWidget(header)
 
         body = QtWidgets.QVBoxLayout()
@@ -255,8 +261,10 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
         self._thumb_gap = QtWidgets.QSpacerItem(0, 8)
         body.addItem(self._thumb_gap)
         self.description = self._section(body, "Description")
+        self.description_before = self._label(body)
         body.addSpacing(8)
         self.brief = self._section(body, "Brief")
+        self.brief_before = self._label(body)
         body.addSpacing(8)
         self.footer = self._label(body)
         layout.addLayout(body)
@@ -310,8 +318,18 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
         self.meta.setText(" &nbsp;&middot;&nbsp; ".join(meta))
         self.meta.setVisible(bool(meta))
         self._show_thumb(info)
+        self.change.setText(_change_html(info.get("change"), info.get("changed") or {},
+                                         info.get("change_reason")))
+        self.change.setVisible(bool(info.get("change")))
         self.description.setText(_body(info.get("description")))
         self.brief.setText(_body(info.get("brief")))
+        # El texto anterior de lo que cambio, para ver que cambio sin abrir la planilla.
+        for field, label in (("description", self.description_before),
+                             ("brief", self.brief_before)):
+            changed = info.get("changed") or {}
+            label.setText(_dim("Before: ") + _dim(_escape(changed[field]) or "&mdash;")
+                          if field in changed else "")
+            label.setVisible(field in changed)
         footer = "Mark %d of %d" % (info["index"] + 1, info["total"])
         if not info["complete"]:
             footer += ". Run Shot Marks again to see every column of the sheet here."
@@ -502,6 +520,47 @@ def _located_html(located, has_thumb):
         text += _dim(" &middot; ") + '<span style="color:%s">%s</span>' % (color, label)
         if len(parts) > 1 and level != "confirmed":
             text += _dim(" (%s)" % _escape(parts[1]))
+    return text
+
+
+# Dato, no estilo: el mismo color que el icono del tag.
+CHANGE_COLORS = {
+    "unchanged": Color.OK_TEXT,
+    "changed": Color.WARNING_TEXT,
+    "new": "#FFA24D",
+    "removed": Color.ERROR_TEXT,
+}
+CHANGE_TEXTS = {
+    "unchanged": "No changes since the previous run",
+    "changed": "Changed since the previous run",
+    "new": "New since the previous run",
+    "removed": "No longer in the sheet",
+}
+FIELD_LABELS = {"brief": "Brief", "description": "Description", "status": "Status",
+                "scene": "Scene", "vendor": "Vendor", "category": "Category"}
+
+
+def _change_html(change, changed, reason=""):
+    """'Changed since the previous run: Description, Status (was X)'."""
+    if change not in CHANGE_TEXTS:
+        return ""
+    label = CHANGE_TEXTS[change]
+    if change == "removed" and reason:
+        # El shot sigue en la planilla pero no se pudo ubicar (otro corte).
+        label = "In the sheet, but not placed: %s" % reason
+    text = '<span style="color:%s; %s">%s</span>' % (
+        CHANGE_COLORS[change], semibold_css(), _escape(label))
+    if change == "changed" and changed:
+        fields = []
+        for field in _sheet_module().CHANGE_FIELDS:
+            if field not in changed:
+                continue
+            item = FIELD_LABELS[field]
+            # Los textos largos se muestran debajo de su seccion; los cortos aca.
+            if field not in ("description", "brief"):
+                item += _dim(" (was %s)" % (_escape(changed[field]) or "empty"))
+            fields.append(item)
+        text += ": " + ", ".join(fields)
     return text
 
 

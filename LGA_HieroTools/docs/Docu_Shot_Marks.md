@@ -8,7 +8,7 @@ Llega un corte bloqueado como un solo MOV del episodio y una planilla de breakdo
 shot. Hace falta ver en el timeline donde cae cada shot con VFX, saltar de uno al siguiente y cruzar
 la planilla contra el corte. A mano son cientos de marcas, y hay que rehacerlas en cada update de
 planilla o de corte. Shot Marks las pone todas de una vez y, al volver a correrla, reemplaza solo las
-suyas.
+suyas y las pinta segun lo que cambio en la planilla desde la corrida anterior.
 
 ## Que hace
 
@@ -23,6 +23,46 @@ suyas.
 4. Al aplicar, en un solo undo: borra los tags que puso antes, opcionalmente alinea el TC de inicio
    del timeline y crea un tag de rango por shot (`Sequence.addTagToRange`), con el shot como nombre y
    el brief como nota.
+
+## Actualizar: colores contra la corrida anterior
+
+Llega una planilla nueva y lo que importa es que cambio. Si el timeline ya tiene marcas de Shot Marks,
+la corrida compara por nombre de shot (`compare_marks`, en el nucleo sin host) y cada tag toma un
+icono del bin Markers de los Tag Presets de NKS (`icons:TagGreen.png`, etc.):
+
+| Color | Cuando |
+|---|---|
+| Verde | El shot sigue y sus datos de planilla son iguales. Moverse en el corte NO es un cambio. |
+| Amarillo | Cambio el brief, la descripcion, el status, la escena, el vendor o la categoria (`CHANGE_FIELDS`). |
+| Naranja | Shot nuevo: no tenia marca en la corrida anterior. |
+| Rojo | Tenia marca y ahora no: ya no esta en la planilla, o esta pero no se ubica en este timeline. |
+
+- **Las rojas se recrean en su lugar de antes**, con su metadata, para que se vea que se fueron. Si
+  el shot sigue en la planilla y no se ubico (por ejemplo `Outside the timeline`: la planilla ya trae
+  los TC de un corte mas largo), la marca guarda el motivo y la ventanita lo dice. Medido en un
+  episodio: de 32 rojas, 24 eran eso y no shots borrados.
+- **Las rojas viven una corrida.** La siguiente no las compara y las borra; si el shot vuelve, es
+  naranja. Si no, se acumularian para siempre.
+- **La comparacion es contra la corrida anterior, no contra la primera.** Un amarillo que se vuelve a
+  correr con la misma planilla pasa a verde.
+- Sin corrida anterior no hay contra que comparar: icono comun, sin columna Change.
+- **Se compara texto normalizado**: fin de linea (`\r\n`) y espacios al borde no cuentan. Comillas si:
+  arreglar las comillas de un brief es un cambio real del texto.
+- Los tags de la v1.00 no guardaban columnas: de esos solo se compara el brief (la nota).
+- **Antes de borrar se pregunta** (`ask_question`), con la cuenta de cada color. La vista previa suma la
+  columna Change y pone arriba los rojos, amarillos y naranjas.
+- Metadata nueva del tag: `_change`, `_changed` (campos separados por coma), `_prev_<campo>` con el
+  texto anterior de cada campo que cambio y `_change_reason` en las rojas no ubicadas.
+- **`hiero.core.Tag(nombre)` nace con la metadata de un tag que ya existio con ese nombre** (medido en
+  NKS 16: un tag nuevo traia el `_prev_brief` de dos corridas antes; con otro nombre nace solo con
+  `tag.label`). `DataCollection` no tiene `removeKey`, asi que `_add_tag` vacia las keys propias que
+  esta corrida no escribe. Sin eso, un status o un vendor borrados en la planilla seguian apareciendo
+  en la ventanita. Vaciar keys no rompe el undo: medido, deshacer deja la metadata identica.
+
+Verificado en NKS 16 sobre una copia del proyecto y de la planilla, con cambios hechos a mano en la
+copia: descripcion y brief cambiados (amarillo), un TC corrido 10 cuadros (verde, en su lugar nuevo),
+un shot renombrado (rojo el viejo, naranja el nuevo) y una fila borrada (rojo). Una tercera corrida con
+la misma planilla dejo todo verde y borro las rojas.
 
 ## Previous / Next Mark
 
@@ -55,6 +95,9 @@ Previous, con el playhead adentro de un shot, vuelve al IN de ese shot.
   un OUT en el cuadro anterior a la marca siguiente; el tag no se toca y las marcas con rango real
   siguen igual. El log anota cuantas se estiraron y cada entrada del playhead a un cuadro sin
   marca (una linea por hueco, no por cuadro).
+- **Cambio contra la corrida anterior.** Una linea en el color del tag: sin cambios, nuevo, que
+  campos cambiaron (los cortos con su valor anterior: `Status (was WIP)`), o por que una roja no esta.
+  Si cambio la descripcion o el brief, el texto anterior va debajo, en gris (`Before: ...`).
 - **Vendor con color.** `LGA_NKS_Shared/LGA_NKS_Vendor_Colors_Config.py` lee de la DB de PipeSync
   del contexto activo (studio o client) la tabla `project_vendor_groups` (token, nombre, color)
   y, de respaldo, `vendor_colors` del envelope del proyecto. Compara sin mayusculas ni signos
@@ -236,7 +279,8 @@ agrega la barra antes de pasarla a ffmpeg. Medido en NKS 16.
   que muestra el timeline y lo que sale en exports y EDL; el mapeo es correcto con o sin alinear.
 - **Re-correr reemplaza solo lo propio.** Los tags propios llevan metadata `tag.lga_shotmarks`. La
   key tiene que empezar con `tag.`: si no, `setValue` tira RuntimeError. Una nota agregada a mano a
-  un tag propio se pierde al re-correr; los tags hechos a mano no se tocan.
+  un tag propio se pierde al re-correr; los tags hechos a mano no se tocan. Que se pinta de cada
+  color: seccion "Actualizar".
 - **Filas raras.** IN = OUT o sin OUT: marca de un cuadro con aviso. Sin TC IN, TC invalido o fuera
   del timeline: no se escribe y se lista en rojo. Shot repetido o solapado: se escribe con aviso.
 - **xlsx sin openpyxl.** NKS no lo trae. El xlsx es un zip: se leen `xl/workbook.xml`, sus rels,
@@ -257,9 +301,9 @@ agrega la barra antes de pasarla a ffmpeg. Medido en NKS 16.
 
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks_Sheet.py`:
   `list_sheets`, `suggest_sheet`, `load_table`, `detect_header_row`, `detect_columns`,
-  `parse_timecode`, `build_plan`. Sin host; probado por `tests/test_shot_marks_sheet.py`.
+  `parse_timecode`, `build_plan`, `compare_marks`, `previous_mark`, `change_counts`. Sin host; probado por `tests/test_shot_marks_sheet.py`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks.py`:
-  `TimelineInfo` (TC de secuencia y de media), `own_tags`, `apply_plan`, `guess_episode`,
+  `TimelineInfo` (TC de secuencia y de media), `own_tags`, `previous_marks`, `apply_plan`, `guess_episode`,
   `ShotMarksDialog`, `main`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks_Nav.py`:
   `go_to_mark`, `mark_tags`, `mark_info`, `ShotMarkInfoWindow`, `info_window`. La eleccion del

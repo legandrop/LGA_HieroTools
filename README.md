@@ -337,7 +337,10 @@ opening related Nuke scripts.
   placed. When the timeline is a single reference movie, timecodes are
   matched against the movie's own timecode, and it can also set the
   timeline's start timecode to match it. Running it again replaces only the
-  tags it added; one Undo reverts the whole run.
+  tags it added, after asking, and colors them against the previous run:
+  green unchanged, yellow when the brief, description or another sheet field
+  changed, orange for new shots, and red, where they were, for shots no
+  longer in the sheet or that can't be placed. One Undo reverts the whole run.
   Sheets without timecodes (Windows): if the sheet only has a thumbnail per
   shot, **Locate from Thumbnails...** finds each one in the timeline movie and
   marks the shot from cut to cut. Safe matches are accepted automatically; the

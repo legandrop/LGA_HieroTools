@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks v1.03 | Lega
+  LGA_NKS_ShotMarks v1.04 | Lega
 
   Shot Marks: lee una planilla de breakdown (xlsx o csv) y pone un tag
   de rango por shot en el timeline activo, en el REC TC de la planilla,
@@ -10,7 +10,8 @@ ____________________________________________________________________
 
   Existe para cruzar planilla contra corte cada vez que llega un update:
   re-correrla reemplaza solo los tags que puso ella (metadata
-  tag.lga_shotmarks) y deja intactos los tags hechos a mano.
+  tag.lga_shotmarks), los pinta segun lo que cambio en la planilla y deja
+  intactos los tags hechos a mano.
 
   Timecode: si el timeline es un solo clip de referencia (el MOV del
   episodio), el REC TC se mide contra el TC de esa media, que es el que
@@ -21,6 +22,14 @@ ____________________________________________________________________
   Nucleo sin host (lectura y plan): LGA_NKS_ShotMarks_Sheet.py.
   Log de cada corrida: logs/DebugPy_LGA_NKS_ShotMarks.log.
 
+  v1.04: Re-correr compara contra la corrida anterior: cada tag toma el
+         color de su cambio (verde igual, amarillo cambio un dato de la
+         planilla, naranja nuevo) y los shots que ya no estan o no se
+         ubican quedan en rojo en su lugar de antes, hasta la corrida
+         siguiente. Columna Change en la vista previa y confirmacion con la
+         cuenta antes de borrar. Las keys propias que la corrida no escribe
+         se vacian: hiero.core.Tag(nombre) hereda la metadata de un tag que
+         ya existio con ese nombre.
   v1.03: Modo thumbnails: campo EDL opcional (se recuerda). El motor lo
          cruza con la imagen y, si coincide, toma de ahi los cortes y el
          clip de camara y SRC TC de cada shot (columna LGA Clip, que
@@ -59,12 +68,38 @@ from LGA_NKS_Shared.LGA_UI_Style_HieroTools import (
     emphasis,
 )
 from LGA_NKS_Shared.LGA_NKS_ArrowComboBox import ArrowComboBox
-from LGA_NKS_Shared.LGA_NKS_MessageBox import show_error, show_info, show_warning
+from LGA_NKS_Shared.LGA_NKS_MessageBox import (
+    ask_question,
+    show_error,
+    show_info,
+    show_warning,
+)
 
 DEBUG = False
 
 TAG_KEY = "tag.lga_shotmarks"
 TAG_ICON = "icons:Tag.png"
+# Al re-correr, cada marca toma el color de su cambio contra la corrida
+# anterior. Son los iconos del bin Markers de los Tag Presets de NKS.
+CHANGE_ICONS = {
+    "unchanged": "icons:TagGreen.png",
+    "changed": "icons:TagYellow.png",
+    "new": "icons:TagOrange.png",
+    "removed": "icons:TagRed.png",
+}
+# Mismo color que el icono, para el resumen y la tabla: es dato, no estilo.
+CHANGE_COLORS = {
+    "unchanged": Color.OK_TEXT,
+    "changed": Color.WARNING_TEXT,
+    "new": "#FFA24D",
+    "removed": Color.ERROR_TEXT,
+}
+CHANGE_LABELS = {
+    "unchanged": "unchanged",
+    "changed": "changed",
+    "new": "new",
+    "removed": "no longer in the sheet",
+}
 UNDO_NAME = "Shot Marks from Sheet"
 NONE_LABEL = "(none)"
 ALL_EPISODES = "All"
@@ -257,32 +292,89 @@ def own_tags(sequence):
     return tags
 
 
-def apply_plan(sequence, plan, align_start=None, source_label=""):
-    """Reemplaza los tags propios por los del plan, en un solo undo."""
+def previous_marks(sequence):
+    """Los tags propios de la corrida anterior, listos para compare_marks.
+
+    Cada uno lleva ademas su metadata de Shot Marks y su nota: si el shot ya
+    no esta en la planilla, la marca se vuelve a crear igual, en rojo.
+    """
+    module = _sheet_module()
+    marks = []
+    for tag in own_tags(sequence):
+        data = tag.metadata()
+
+        def get(key, data=data):
+            return data.value(key) if data.hasKey(key) else None
+
+        mark = module.previous_mark(tag.name(), tag.inTime(), tag.outTime(), get, tag.note())
+        mark["note"] = tag.note()
+        mark["metadata"] = {}
+        for field in (None,) + module.META_FIELDS:
+            key = module.META_KEY if field is None else module.meta_key(field)
+            if data.hasKey(key):
+                mark["metadata"][key] = str(data.value(key))
+        marks.append(mark)
+    return marks
+
+
+def _add_tag(sequence, name, note, icon, metadata, frame_in, frame_out):
+    tag = hiero.core.Tag(name, icon)
+    tag.setNote(note)
+    data = tag.metadata()
+    # hiero.core.Tag(nombre) nace con la metadata de un tag que ya existio con
+    # ese nombre (medido en NKS 16: la marca recreada traia el prev_brief de
+    # dos corridas antes). DataCollection no tiene removeKey: lo propio que
+    # esta corrida no escribe se vacia, o un status borrado en la planilla
+    # seguiria apareciendo.
+    for key in data.keys():
+        if key.startswith(TAG_KEY) and key not in metadata:
+            data.setValue(key, "")
+    for key, value in metadata.items():
+        data.setValue(key, value)
+    sequence.addTagToRange(tag, int(frame_in), int(frame_out))
+
+
+def apply_plan(sequence, plan, align_start=None, source_label="", removed=()):
+    """Reemplaza los tags propios por los del plan, en un solo undo.
+
+    Cada marca va con el icono de su cambio contra la corrida anterior
+    (mark.change; sin corrida anterior, el icono comun). `removed` son las
+    marcas anteriores cuyo shot ya no esta: se vuelven a crear en rojo en su
+    lugar de antes, para que se vea que se fueron.
+    """
     log = _logger_ref()
     project = sequence.project()
-    removed = 0
+    replaced = 0
+    module = _sheet_module()
     with project.beginUndo(UNDO_NAME):
         for tag in own_tags(sequence):
             sequence.removeTag(tag)
-            removed += 1
+            replaced += 1
         if align_start is not None and align_start != sequence.timecodeStart():
             log.info("TC de inicio del timeline: %s -> %s", sequence.timecodeStart(), align_start)
             sequence.setTimecodeStart(int(align_start))
-        module = _sheet_module()
         for mark in plan.marks:
-            tag = hiero.core.Tag(mark.shot, TAG_ICON)
-            tag.setNote(mark.note)
-            data = tag.metadata()
-            for key, value in module.mark_metadata(mark, source_label).items():
-                data.setValue(key, value)
-            sequence.addTagToRange(tag, int(mark.frame_in), int(mark.frame_out))
-    log.info("Aplicado: %d tags nuevos, %d tags propios anteriores reemplazados",
-             len(plan.marks), removed)
+            _add_tag(sequence, mark.shot, mark.note, CHANGE_ICONS.get(mark.change, TAG_ICON),
+                     module.mark_metadata(mark, source_label), mark.frame_in, mark.frame_out)
+        for old in removed:
+            metadata = dict(old["metadata"])
+            metadata[module.META_KEY] = "1"
+            metadata[module.meta_key("change")] = module.CHANGE_REMOVED
+            if old.get("reason"):
+                metadata[module.meta_key("change_reason")] = old["reason"]
+            _add_tag(sequence, old["shot"], old["note"], CHANGE_ICONS["removed"], metadata,
+                     old["frame_in"], old["frame_out"])
+    log.info("Aplicado: %d tags nuevos, %d en rojo (ya no estan), %d tags propios anteriores "
+             "reemplazados", len(plan.marks), len(removed), replaced)
     for mark in plan.marks:
-        log.info("  %-28s %6d-%-6d  TC %s  fila %d", mark.shot, mark.frame_in,
-                 mark.frame_out, mark.tc_in, mark.row)
-    return removed
+        changed = ", ".join(sorted(mark.changed))
+        log.info("  %-28s %6d-%-6d  TC %s  fila %d  %s%s", mark.shot, mark.frame_in,
+                 mark.frame_out, mark.tc_in, mark.row, mark.change or "-",
+                 " (%s)" % changed if changed else "")
+    for old in removed:
+        log.info("  %-28s %6d-%-6d  removed%s", old["shot"], old["frame_in"], old["frame_out"],
+                 " (%s)" % old["reason"] if old.get("reason") else "")
+    return replaced
 
 
 def guess_episode(sequence_name, episodes):
@@ -328,6 +420,9 @@ class ShotMarksDialog(QtWidgets.QDialog):
         self.preset = preset
         self.table = None
         self.plan = None
+        # Marcas de la corrida anterior y las que ya no estan en la planilla.
+        self.previous = previous_marks(sequence)
+        self.removed = []
         # Hoja sin TC con thumbnails: el boton principal pasa a ubicarlos.
         self.thumb_mode = False
         self.thumb_rows = 0
@@ -355,7 +450,9 @@ class ShotMarksDialog(QtWidgets.QDialog):
         intro = QtWidgets.QLabel(
             "Adds a range tag for each shot of the sheet to %s. Jump between them "
             "with Viewer &gt; Next Tag (Alt+Shift+Right). Running it again replaces "
-            "only the tags it added." % emphasis(self.sequence.name()))
+            "only the tags it added and colors them against the previous run: green "
+            "unchanged, yellow changed, orange new, red no longer in the sheet."
+            % emphasis(self.sequence.name()))
         intro.setWordWrap(True)
         layout.addWidget(intro)
 
@@ -466,8 +563,8 @@ class ShotMarksDialog(QtWidgets.QDialog):
         self.summary.setTextFormat(Qt.RichText)
         layout.addWidget(self.summary)
 
-        self.preview = QtWidgets.QTableWidget(0, 5, self)
-        self.preview.setHorizontalHeaderLabels(["Row", "Shot", "TC In", "Frames", "Result"])
+        self.preview = QtWidgets.QTableWidget(0, 6, self)
+        self.preview.setHorizontalHeaderLabels(["Row", "Shot", "TC In", "Frames", "Change", "Result"])
         self.preview.verticalHeader().setVisible(False)
         self.preview.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.preview.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
@@ -725,6 +822,9 @@ class ShotMarksDialog(QtWidgets.QDialog):
             self._set_summary(str(exc), Color.WARNING_TEXT)
             self._clear_preview()
             return
+        # Sin corrida anterior no hay contra que comparar: icono comun.
+        self.removed = (module.compare_marks(self.plan.marks, self.previous, self.plan.issues)
+                        if self.previous else [])
         self._show_plan()
 
     def _show_plan(self):
@@ -742,13 +842,19 @@ class ShotMarksDialog(QtWidgets.QDialog):
                                   Color.WARNING_TEXT))
         text = " &middot; ".join(parts)
         if previous:
-            text += "<br>Replaces %d %s added before." % (previous, _plural(previous, "mark"))
+            counts = _sheet_module().change_counts(plan.marks, self.removed)
+            changes = [_colored("%d %s" % (counts[key], CHANGE_LABELS[key]), CHANGE_COLORS[key])
+                       for key in ("unchanged", "changed", "new")]
+            changes.append(_colored(_red_text(counts), CHANGE_COLORS["removed"]))
+            text += "<br>Replaces %d %s added before. Against them: %s." % (
+                previous, _plural(previous, "mark"), ", ".join(changes))
         if self.timeline.media_reason:
             text += "<br>%s." % self.timeline.media_reason
         self._set_summary(text)
         self.apply_button.setEnabled(marks > 0)
+        verb = "Update" if previous else "Add"
         self.apply_button.setText(
-            "Add %d %s" % (marks, _plural(marks, "Mark")) if marks else "Add Marks")
+            "%s %d %s" % (verb, marks, _plural(marks, "Mark")) if marks else "Add Marks")
         self._fill_preview()
         log = _logger_ref()
         log.info("Prueba en seco: columnas %s | episodio %s | omit %s | fps %d | referencia %s "
@@ -817,28 +923,49 @@ class ShotMarksDialog(QtWidgets.QDialog):
         notes = {}
         for issue in plan.issues:
             notes.setdefault((issue.row, issue.shot), []).append(issue)
+        # (orden, fila, shot, TC, cuadros, cambio, color del cambio, resultado, color)
         rows = []
         for mark in plan.marks:
             issues = notes.pop((mark.row, mark.shot), [])
             text = "; ".join(i.message for i in issues) or "Mark"
             color = Color.WARNING_TEXT if issues else Color.OK_TEXT
-            rows.append((mark.row, mark.shot, mark.tc_in,
-                         "%d-%d" % (mark.frame_in, mark.frame_out), text, color))
+            order = {"changed": 1, "new": 2}.get(mark.change, 4 if issues else 5)
+            rows.append((order, mark.row, mark.shot, mark.tc_in,
+                         "%d-%d" % (mark.frame_in, mark.frame_out),
+                         _change_text(mark.change, mark.changed),
+                         CHANGE_COLORS.get(mark.change, Color.TEXT_DIM), text, color))
+        tc_key = _sheet_module().meta_key("tc_in")
+        for old in self.removed:
+            change = "Not placed" if old.get("reason") else _change_text("removed", {})
+            result = "Red mark where it was"
+            if old.get("reason"):
+                result += ": %s" % old["reason"]
+            rows.append((0, 0, old["shot"], old["metadata"].get(tc_key, ""),
+                         "%d-%d" % (old["frame_in"], old["frame_out"]), change,
+                         CHANGE_COLORS["removed"], result, Color.TEXT_DIM))
+        # Un shot que ya figura como marca roja no se repite como error suelto.
+        red = {old["shot"] for old in self.removed}
         for (row, shot), issues in notes.items():
-            rows.append((row, shot, issues[0].tc_in, "",
+            if shot in red:
+                continue
+            rows.append((3, row, shot, issues[0].tc_in, "", "", Color.TEXT_DIM,
                          "; ".join(i.message for i in issues), Color.ERROR_TEXT))
-        # Lo que no se escribe arriba: es lo que hay que revisar.
-        rows.sort(key=lambda r: (r[5] != Color.ERROR_TEXT, r[5] != Color.WARNING_TEXT, r[0]))
+        # Arriba lo que cambio contra la corrida anterior (es la novedad), despues
+        # lo que no se escribe: es lo que hay que revisar.
+        rows.sort(key=lambda r: (r[0], r[1]))
         self.preview.setRowCount(len(rows))
-        for index, (row, shot, tc_in, frames, text, color) in enumerate(rows):
-            values = (str(row), shot, tc_in, frames, text)
+        for index, (_order, row, shot, tc_in, frames, change, change_color,
+                    text, color) in enumerate(rows):
+            values = (str(row) if row else "", shot, tc_in, frames, change, text)
             for col, value in enumerate(values):
                 item = QtWidgets.QTableWidgetItem(value)
-                if col == 4:
-                    item.setForeground(QtGui.QBrush(QtGui.QColor(color)))
+                if col in (4, 5):
+                    item.setForeground(QtGui.QBrush(QtGui.QColor(change_color if col == 4 else color)))
                 self.preview.setItem(index, col, item)
             self.preview.setRowHeight(index, Metric.ROW_HEIGHT)
         self.preview.resizeColumnsToContents()
+        # Sin corrida anterior la columna Change estaria vacia.
+        self.preview.setColumnHidden(4, not self.previous)
         visible = min(max(len(rows), 1), PREVIEW_ROWS)
         height = (self.preview.horizontalHeader().sizeHint().height()
                   + self.preview.frameWidth() * 2 + Metric.ROW_HEIGHT * visible)
@@ -871,21 +998,45 @@ class ShotMarksDialog(QtWidgets.QDialog):
                               self.sheet_combo.currentData() or "")
         if self.preset:
             source += " | located from thumbnails"
+        counts = _sheet_module().change_counts(self.plan.marks, self.removed)
+        if self.previous and not self._confirm_update(counts):
+            _logger_ref().info("Actualizacion cancelada por el usuario")
+            return
         try:
-            removed = apply_plan(self.sequence, self.plan, align, source)
+            replaced = apply_plan(self.sequence, self.plan, align, source, self.removed)
         except Exception as exc:
             _logger_ref().exception("No se pudieron escribir los tags")
             show_error(self, "Shot Marks", "Could not add the marks:\n%s" % exc)
             return
         self._save_settings()
         message = "Added %d marks to %s." % (len(self.plan.marks), self.sequence.name())
-        if removed:
-            message += "\nReplaced %d marks from a previous run." % removed
+        if replaced:
+            message += "\nReplaced %d marks from a previous run." % replaced
+            message += ("\nGreen %d unchanged, yellow %d changed, orange %d new, red %s."
+                        % (counts["unchanged"], counts["changed"], counts["new"],
+                           _red_text(counts)))
         if align is not None:
             message += "\nTimeline start timecode is now %s." % self.timeline.timecode(align)
         message += "\n\nJump between them with Viewer > Next Tag (Alt+Shift+Right).\nUndo: Edit > Undo."
         self.accept()
         show_info(hiero.ui.mainWindow(), "Shot Marks", message)
+
+    def _confirm_update(self, counts):
+        """Avisa antes de borrar las marcas de la corrida anterior."""
+        previous = len(self.previous)
+        old_red = sum(1 for old in self.previous if old.get("change") == "removed")
+        text = ("This deletes the %d %s added before to %s and adds %d from the sheet:\n\n"
+                "   Green: %d unchanged\n   Yellow: %d with changes in the sheet\n"
+                "   Orange: %d new\n   Red: %s (kept where they were)"
+                % (previous, _plural(previous, "mark"), self.sequence.name(),
+                   len(self.plan.marks), counts["unchanged"], counts["changed"], counts["new"],
+                   _red_text(counts)))
+        if old_red:
+            text += "\n\nThe %d red %s from the previous update %s deleted." % (
+                old_red, _plural(old_red, "mark"), "is" if old_red == 1 else "are")
+        text += "\n\nA shot that only moved in the cut is not a change. Undo: Edit > Undo."
+        return ask_question(self, "Update Shot Marks", text, yes_text="Update Marks",
+                            no_text="Cancel")
 
     def _save_settings(self):
         values = {
@@ -904,6 +1055,24 @@ class ShotMarksDialog(QtWidgets.QDialog):
 
 def _colored(text, color):
     return '<span style="color:%s">%s</span>' % (color, text)
+
+
+def _change_text(change, changed):
+    """Texto de la columna Change de la vista previa."""
+    if not change:
+        return ""
+    if change == "changed":
+        return "Changed: %s" % ", ".join(f for f in _sheet_module().CHANGE_FIELDS if f in changed)
+    return CHANGE_LABELS[change].capitalize()
+
+
+def _red_text(counts):
+    """'7 no longer in the sheet, 25 not placed in this timeline'."""
+    gone = counts["removed"] - counts["unplaced"]
+    text = "%d %s" % (gone, CHANGE_LABELS["removed"])
+    if counts["unplaced"]:
+        text += ", %d in the sheet but not placed in this timeline" % counts["unplaced"]
+    return text
 
 
 def _plural(count, word):

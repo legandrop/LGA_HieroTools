@@ -251,5 +251,76 @@ class ShotMarksSheetTests(unittest.TestCase):
             sheet.load_table(self.xlsx, "Notes")
 
 
+def _mark(shot, frame_in, note="", **info):
+    return sheet.Mark(1, shot, frame_in, frame_in + 10, "", "", note, info)
+
+
+def _previous(mark, change=""):
+    """Un tag anterior tal como lo lee previous_marks."""
+    mark.change, mark.changed = change, {}
+    data = sheet.mark_metadata(mark, "planilla.xlsx | Shots")
+    return sheet.previous_mark(mark.shot, mark.frame_in, mark.frame_out, data.get, mark.note)
+
+
+class ShotMarksCompareTests(unittest.TestCase):
+    def test_colors_by_change_against_previous_run(self):
+        previous = [
+            _previous(_mark("PROJA_0100", 0, "Steam", description="Old")),
+            _previous(_mark("PROJA_0200", 50, "Sky", status="WIP")),
+            _previous(_mark("PROJA_0300", 100, "Gone")),
+        ]
+        marks = [
+            # Se movio en el corte y el brief solo cambio de fin de linea: sin cambio.
+            _mark("PROJA_0200", 80, "Sky\r\n", status="WIP"),
+            _mark("PROJA_0100", 0, "Steam", description='"New"'),
+            _mark("PROJA_0400", 200, "Added"),
+        ]
+        removed = sheet.compare_marks(marks, previous)
+        by_shot = {m.shot: m for m in marks}
+        self.assertEqual(by_shot["PROJA_0200"].change, sheet.CHANGE_UNCHANGED)
+        self.assertEqual(by_shot["PROJA_0100"].change, sheet.CHANGE_CHANGED)
+        self.assertEqual(by_shot["PROJA_0100"].changed, {"description": "Old"})
+        self.assertEqual(by_shot["PROJA_0400"].change, sheet.CHANGE_NEW)
+        self.assertEqual([old["shot"] for old in removed], ["PROJA_0300"])
+        counts = sheet.change_counts(marks, removed)
+        self.assertEqual(counts, {"unchanged": 1, "changed": 1, "new": 1, "removed": 1,
+                                  "unplaced": 0})
+
+    def test_change_round_trips_through_metadata(self):
+        mark = _mark("PROJA_0100", 0, "Brief", status="Omit")
+        mark.change, mark.changed = sheet.CHANGE_CHANGED, {"status": "WIP", "brief": ""}
+        data = sheet.mark_metadata(mark, "x")
+        info = sheet.mark_info_from_metadata(data.get)
+        self.assertEqual(info["change"], "changed")
+        self.assertEqual(info["changed"], {"brief": "", "status": "WIP"})
+
+    def test_removed_shot_still_in_sheet_carries_the_reason(self):
+        previous = [_previous(_mark("PROJA_0300", 100, "Late")),
+                    _previous(_mark("PROJA_0400", 200, "Gone"))]
+        issues = [sheet.Issue(9, "PROJA_0300", "01:41:00:00", "Outside the timeline", False)]
+        removed = sheet.compare_marks([], previous, issues)
+        self.assertEqual([(old["shot"], old["reason"]) for old in removed],
+                         [("PROJA_0300", "Outside the timeline"), ("PROJA_0400", "")])
+        self.assertEqual(sheet.change_counts([], removed)["unplaced"], 1)
+
+    def test_previous_removed_marks_are_not_compared(self):
+        previous = [_previous(_mark("PROJA_0300", 100, "Gone"), change=sheet.CHANGE_REMOVED)]
+        marks = [_mark("PROJA_0300", 100, "Gone")]
+        self.assertEqual(sheet.compare_marks(marks, previous), [])
+        self.assertEqual(marks[0].change, sheet.CHANGE_NEW)
+
+    def test_repeated_shot_pairs_in_order(self):
+        previous = [_previous(_mark("PROJA_0100", 0, "A")), _previous(_mark("PROJA_0100", 90, "B"))]
+        marks = [_mark("PROJA_0100", 5, "A"), _mark("PROJA_0100", 95, "B changed")]
+        sheet.compare_marks(marks, previous)
+        self.assertEqual([m.change for m in marks], ["unchanged", "changed"])
+
+    def test_first_version_tags_only_compare_the_brief(self):
+        previous = [sheet.previous_mark("PROJA_0100", 0, 10, {}.get, note="Steam")]
+        marks = [_mark("PROJA_0100", 0, "Steam", description="Any", vendor="Vendor A")]
+        sheet.compare_marks(marks, previous)
+        self.assertEqual(marks[0].change, sheet.CHANGE_UNCHANGED)
+
+
 if __name__ == "__main__":
     unittest.main()

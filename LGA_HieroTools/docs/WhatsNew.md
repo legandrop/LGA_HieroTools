@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.023
+- [improved] Al volver a correr Shot Marks sobre un timeline que ya tenía marcas, te avisa antes de reemplazarlas y las pinta según lo que cambió en la planilla: verdes las que siguen igual, amarillas las que cambiaron de descripción, brief u otro dato, naranjas los shots nuevos y rojas los que ya no están; la ventanita de cada shot muestra qué cambió y cómo era antes.
 - [fixed] Shot Marks trae el brief completo cuando la planilla es un csv: los briefs de varias líneas que empezaban con comillas quedaban cortados en la primera línea.
 - [fixed][win] Snapshot (con Shift+Click) y Review Pic abren FrameRev adelante y listo para anotar, en vez de dejarlo escondido detrás de Nuke Studio.
 - [fixed] La ventanita de Shot Marks vuelve a cambiar sola al arrastrar el playhead en los timelines donde la planilla no trae REC TC OUT (o lo trae igual al IN): antes solo cambiaba si el playhead caía justo en el primer cuadro del shot.
