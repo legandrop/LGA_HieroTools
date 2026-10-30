@@ -1409,7 +1409,7 @@ QPushButton:disabled {{ background-color: {dis_bg}; color: {dis_text}; border: n
     normal_bg=_QUEUE_BTN_BG_NORMAL,
     hover_bg=_QUEUE_BTN_BG_HOVER,
     text=Color.TEXT,
-    text_on=Color.TEXT_ON_ACCENT,
+    text_on=Color.TEXT_ON_COLOR,
     dis_bg=Color.ACCENT_DISABLED,
     dis_text=Color.TEXT_DIM,
 )

@@ -162,7 +162,7 @@ class FlowStatusWindow(QDialog):
             initial_message = (
                 f"<div style='text-align: left;'>"
                 f"<span style='color: {Color.TEXT};'>{task_text} </span>"
-                f"<span style='color: {Color.TEXT_ON_ACCENT}; background-color: {user_color};'>{user_name}</span>"
+                f"<span style='color: {Color.TEXT_ON_COLOR}; background-color: {user_color};'>{user_name}</span>"
                 f"</div>"
             )
         else:

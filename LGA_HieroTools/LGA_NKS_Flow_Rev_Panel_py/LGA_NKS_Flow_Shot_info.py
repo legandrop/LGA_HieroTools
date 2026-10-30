@@ -1,11 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Shot_info v2.04 | Lega
+  LGA_NKS_Flow_Shot_info v2.05 | Lega
 
   Imprime informacion del shot y las versiones de la task seleccionada
   (comp, roto o cleanup) en el playhead.
 
+  v2.05: main(activate=False) muestra la ventana sin activarla
+         (WA_ShowWithoutActivating): la abre el click en una fila del Flow
+         Pull y el foco tiene que seguir en el Pull.
   v2.04: Distingue responsables de Viewers leyendo todas las asignaciones
          de la task. Conserva acceso e historial de autores y asignaciones.
   v2.03: La ventana se abre al alto de su contenido. El 900x700 de antes
@@ -310,7 +313,7 @@ COLORS = {
     "txt_principal": UIColor.TEXT,
     # Los tres siguientes viven SOLO en el header de version, que ahora es
     # ACCENT: el numero fuerte va en el blanco sobre acento.
-    "txt_principal_strong": UIColor.TEXT_ON_ACCENT,
+    "txt_principal_strong": UIColor.TEXT_ON_COLOR,
     "txt_secundario": UIColor.TEXT,
     "txt_subtle": UIColor.TEXT_STRONG,
     "txt_desc_title": UIColor.TEXT_STRONG,
@@ -2392,13 +2395,14 @@ class GUIWindow(QWidget):
         debug_print("Results displayed successfully.")
 
 
-def main(task_name=None, align_left=False, previous_placement=None):
+def main(task_name=None, align_left=False, previous_placement=None, activate=True):
     """Abre el Shot Info del shot del playhead.
 
     task_name: task a mostrar; None la resuelve en el playhead.
     align_left: abrir contra el borde izquierdo de la pantalla en vez de
         centrada. Lo usa el flujo de review (LGA_NKS_ShotInfoOnReview).
     previous_placement: (QPoint, ancho) de la ventana a la que reemplaza.
+    activate: False la muestra sin sacarle el foco a la ventana que la pidio.
     """
     global app, window
     db_path = get_pipesync_db_path("pipesync.db")
@@ -2419,6 +2423,8 @@ def main(task_name=None, align_left=False, previous_placement=None):
     results = hiero_ops.process_selected_clips(task_override=task_name)
     debug_print(f"Results: {results}")
     window.display_results(results)
+    if not activate:
+        window.setAttribute(Qt.WA_ShowWithoutActivating, True)
     window.show()
     app.exec_()
 

@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.023
+- [new] La ventana de `Flow Pull` suma el checkbox `Shot Info`: prendido, al hacer click en una fila se abre el Shot Info de ese shot sin sacarle el foco a la ventana del Pull; se recuerda entre sesiones. `Keep this window on top` pasa a llamarse `Keep on top`.
 - [new] La ventana de `Flow Pull` tiene un botón `Download Clip`: baja la última versión del clip de la fila que seleccionaste, igual que el del panel Flow S3, sin tener que buscar el clip en el timeline.
 - [improved] En el panel Review, los botones de navegación pasan a ser `Previous Mark` y `Next Mark`: el clic salta de un shot de Shot Marks al otro, y con Shift+Click navegan las anotaciones del clip, como hacían antes.
 - [new] Shift+Click en `Shot Marks` abre `Find Shot Mark`, una ventanita que queda siempre arriba: escribís un nombre de shot o cualquier texto de la planilla (descripción, brief, vendor, status) y `Find` salta a esa marca; `Next` sigue con la próxima que coincide.

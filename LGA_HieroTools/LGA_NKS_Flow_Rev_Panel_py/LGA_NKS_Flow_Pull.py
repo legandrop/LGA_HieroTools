@@ -1,12 +1,19 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.73 | Lega
+  LGA_NKS_Flow_Pull v3.74 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.74: Checkbox "Shot Info" entre los filtros y Keep on top, apagado
+         por default y persistido en FlowPull.ini: prendido, el click en
+         una fila abre el Shot Info de esa fila. Reemplaza a la lista
+         REVIEWERS_WITH_AUTO_SHOT_INFO, que ademas lo limitaba a las filas
+         del review propio. El Shot Info se abre sin activarse y el Pull
+         recupera el foco. "Keep this window on top" pasa a "Keep on
+         top" para que el header entre.
   v3.73: Boton "Download Clip" en el header, a la izquierda de los filtros:
          baja de Wasabi la ultima version del clip de la fila seleccionada,
          lo mismo que el click en Download Clip del panel Flow S3 pero sin
@@ -295,11 +302,9 @@ except ImportError:
 
 try:
     from LGA_NKS_Shared.LGA_NKS_ShotInfoOnReview import (
-        is_enabled_for as shot_info_on_review_enabled,
         open_shot_info as open_shot_info_on_review,
     )
 except ImportError:
-    shot_info_on_review_enabled = None
     open_shot_info_on_review = None
 
 
@@ -1092,6 +1097,7 @@ _FLOWPULL_DEFAULTS = {
     "keep_on_top": True,
     "only_in_review": True,
     "only_for_me": False,
+    "shot_info": False,
 }
 
 # Colores del titulo, ahora tokens del modulo de estilo: el proyecto va en el
@@ -1129,6 +1135,12 @@ _TOOLTIPS = {
         "es": (
             "No se reconoce tu usuario de Flow como reviewer, asi que no hay un "
             "review tuyo para filtrar."
+        ),
+    },
+    "shot_info": {
+        "es": (
+            "Prendido, al hacer click en una fila se abre el Shot Info de ese "
+            "shot y task, sin sacarle el foco a esta ventana. Se guarda al tocarlo."
         ),
     },
     "download_clip": {
@@ -1572,23 +1584,28 @@ class GUI_Table(QtWidgets.QDialog):
             # navigate_to_pull_result deja encolado el Zoom to Fit con un
             # singleShot(0); este va detras y lee el playhead ya movido.
             task_name = nav_data.get("task_name")
-            QtCore.QTimer.singleShot(
-                0,
-                lambda: open_shot_info_on_review(
-                    "Pull", task_name=task_name, keep_on_top=self._keep_on_top
-                ),
-            )
+            QtCore.QTimer.singleShot(0, lambda: self._open_shot_info(task_name))
 
     def _row_opens_shot_info(self, nav_data):
-        """True si la fila esta en el review del usuario y el tiene Shot Info automatico."""
-        if not self.hiero_ops or open_shot_info_on_review is None:
+        """True si el checkbox Shot Info esta prendido (vale para cualquier fila)."""
+        if open_shot_info_on_review is None:
             return False
-        if not shot_info_on_review_enabled(getattr(self.hiero_ops, "current_user_key", None)):
-            return False
-        status_code = str(nav_data.get("status_code") or "").lower()
-        opens = status_code in self.hiero_ops.current_user_review_status_codes
-        debug_print(f"Click en fila: status_code='{status_code}' abre Shot Info={opens}")
+        opens = self.shot_info_chk.isChecked()
+        debug_print(
+            f"Click en fila: status_code='{nav_data.get('status_code')}' abre Shot Info={opens}"
+        )
         return opens
+
+    def _open_shot_info(self, task_name):
+        """Abre el Shot Info de la fila sin sacarle el foco al Pull.
+
+        La ventana se muestra sin activarse; ademas el Pull se reactiva por si
+        la navegacion de la fila (cambio de secuencia, zoom) movio el foco.
+        """
+        open_shot_info_on_review(
+            "Pull", task_name=task_name, keep_on_top=self._keep_on_top, activate=False
+        )
+        self.activateWindow()
 
     def _selected_visible_row(self):
         """Fila seleccionada si se ve; None si no hay o si un filtro la oculto."""
@@ -1713,9 +1730,20 @@ class GUI_Table(QtWidgets.QDialog):
             lambda checked: self._on_filter_toggled("only_for_me", checked)
         )
         header_row.addWidget(self.only_me_chk, 0, Qt.AlignRight | Qt.AlignVCenter)
-        # Mas aire antes de Keep on top: separa los filtros de la opcion de ventana.
+        # Mas aire despues de los filtros: lo que sigue son opciones de la ventana.
         header_row.addSpacing(Metric.SPACING * 2)
-        self.keep_on_top_chk = QtWidgets.QCheckBox("Keep this window on top")
+        # Shot Info al hacer click en una fila. Persiste como los filtros, pero
+        # no refiltra: solo se guarda.
+        self.shot_info_chk = QtWidgets.QCheckBox("Shot Info")
+        self.shot_info_chk.setProperty("lgaLabeled", True)
+        self.shot_info_chk.setToolTip(_tooltip("shot_info"))
+        self.shot_info_chk.setChecked(_load_window_setting("shot_info"))
+        self.shot_info_chk.toggled.connect(
+            lambda checked: _save_window_setting("shot_info", checked)
+        )
+        header_row.addWidget(self.shot_info_chk, 0, Qt.AlignRight | Qt.AlignVCenter)
+        header_row.addSpacing(Metric.SPACING)
+        self.keep_on_top_chk = QtWidgets.QCheckBox("Keep on top")
         # Checkbox con texto: lgaLabeled le da aire entre el cuadrito y la
         # etiqueta (el default de la hoja del pack es spacing 0)
         self.keep_on_top_chk.setProperty("lgaLabeled", True)
@@ -2056,6 +2084,8 @@ class GUI_Table(QtWidgets.QDialog):
             + Metric.SPACING
             + self.only_me_chk.sizeHint().width()
             + Metric.SPACING * 2
+            + self.shot_info_chk.sizeHint().width()
+            + Metric.SPACING
             + self.keep_on_top_chk.sizeHint().width()
         )
         header_spacing = 12

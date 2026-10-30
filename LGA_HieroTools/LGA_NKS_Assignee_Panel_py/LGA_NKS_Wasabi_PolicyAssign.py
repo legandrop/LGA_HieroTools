@@ -124,7 +124,7 @@ class WasabiStatusWindow(QDialog):
         initial_message = (
             f"<div style='text-align: left;'>"
             f"<span style='color: {Color.TEXT}; '>Habilitando rutas en la policy del usuario </span>"
-            f"<span style='color: {Color.TEXT_ON_ACCENT}; background-color: {user_color}; '>{user_name}</span>"
+            f"<span style='color: {Color.TEXT_ON_COLOR}; background-color: {user_color}; '>{user_name}</span>"
             f"</div>"
         )
 

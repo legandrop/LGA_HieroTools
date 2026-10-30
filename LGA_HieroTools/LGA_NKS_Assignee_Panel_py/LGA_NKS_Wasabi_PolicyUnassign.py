@@ -115,7 +115,7 @@ class WasabiShotsWindow(QDialog):
         initial_message = (
             f"<div style='text-align: center;'>"
             f"<span style='color: {Color.TEXT}; '>Shots asignados en la policy del usuario </span>"
-            f"<span style='color: {Color.TEXT_ON_ACCENT}; background-color: {user_color}; padding: 2px 6px; '>{user_name}</span>"
+            f"<span style='color: {Color.TEXT_ON_COLOR}; background-color: {user_color}; padding: 2px 6px; '>{user_name}</span>"
             f"</div>"
         )
 
@@ -337,7 +337,7 @@ class WasabiShotsWindow(QDialog):
             remove_button.setStyleSheet(
                 "QPushButton { background-color: %s; color: %s; border: none; font-weight: bold; }"
                 "QPushButton:hover { background-color: %s; }"
-                % (Color.ERROR, Color.TEXT_ON_ACCENT, Color.DOT_ERROR)
+                % (Color.ERROR, Color.TEXT_ON_COLOR, Color.DOT_ERROR)
             )
 
     def show_success(self, message):

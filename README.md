@@ -57,16 +57,16 @@ Internal reference: [Flow Review Panel](LGA_HieroTools/docs/LGA_NKS_Flow_Rev_Pan
 - **Flow Pull**  
   Click: pull all shots from the timeline.  
   Shift+Click: pull only the selected shot.
-  Clicking a result row jumps to that shot. For Lega, if the row is in
-  Review Lega, **Shot Info** for that shot and task also opens on top of the
-  results window, against the left edge of the screen.
+  Clicking a result row jumps to that shot. With **Shot Info** ticked, it also
+  opens Shot Info for that shot and task on top of the results window, against
+  the left edge of the screen, and the results window keeps the focus.
   **Only in review** (on by default) lists only the shots whose New Status is a
   review; untick it to see every change. **Only for me** narrows it to the
   shots waiting for your own review (Lega sees Review Lega, Sebas sees Review
   Sebas). If the filters leave nothing to show, a message replaces the table.
   Both only filter the list: the pull updates all clips either way.
-  Both checkboxes are remembered between pulls and sessions, the same way as
-  **Keep this window on top**.
+  All the checkboxes, including **Shot Info** and **Keep on top**, are
+  remembered between pulls and sessions.
   **Download Clip** downloads the latest version of the selected row's clip
   from Wasabi S3, the same as **Download Clip** in the Flow S3 panel, without
   having to select the clip in the timeline.

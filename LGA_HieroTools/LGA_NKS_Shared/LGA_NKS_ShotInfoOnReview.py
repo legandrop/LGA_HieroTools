@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotInfoOnReview v1.01 | Lega
+  LGA_NKS_ShotInfoOnReview v1.02 | Lega
 
   Abre el Shot Info del Flow Review Panel cuando un reviewer llega a un
   shot que esta en SU estado de review, para revisar en cadena sin un
@@ -9,7 +9,7 @@ ____________________________________________________________________
 
   Lo usan dos puntos de entrada:
   - Prev/Next Rev del panel Viewer | TL, al terminar el salto.
-  - Click en una fila del Flow Pull cuyo estado es el review del usuario.
+  - Click en una fila del Flow Pull, con su checkbox Shot Info prendido.
 
   Los dos comparten UNA sola ventana: si sigue abierta la del shot anterior,
   se cierra y la nueva toma su lugar y su ancho, asi no se apilan ventanas.
@@ -19,10 +19,14 @@ ____________________________________________________________________
   centrada como desde el boton del panel: en una revision en cadena la
   ventana centrada tapa el viewer en cada salto.
 
-  Para habilitarlo a otro reviewer, agregar su clave a
+  Para habilitarlo en Prev/Next Rev a otro reviewer, agregar su clave a
   REVIEWERS_WITH_AUTO_SHOT_INFO. Las claves son las normalizadas que ya usan
   ViewerTL y Pull: lega, sebas, juano, javi, charly.
 
+  v1.02: open_shot_info(activate=False) abre el Shot Info sin activarlo,
+         para que el foco siga en el Flow Pull. El Pull ya no consulta
+         REVIEWERS_WITH_AUTO_SHOT_INFO: lo decide su checkbox Shot Info;
+         la lista queda para Prev/Next Rev del ViewerTL.
   v1.01: La ventana se abre alineada a la izquierda. De la anterior se
          hereda la posicion y el ancho, ya no la geometria entera: el alto
          ahora lo calcula el Shot Info (v2.03) y se le pasa todo por
@@ -106,7 +110,9 @@ def _set_topmost_native(widget, on):
             ctypes.wintypes.UINT,
         ]
         insert_after = ctypes.wintypes.HWND(-1 if on else -2)  # TOPMOST / NOTOPMOST
-        flags = 0x0002 | 0x0001  # SWP_NOMOVE | SWP_NOSIZE
+        # SWP_NOACTIVATE: sin el, SetWindowPos tambien activa la ventana y le
+        # saca el foco al Pull. Activar es decision de open_shot_info.
+        flags = 0x0002 | 0x0001 | 0x0010  # SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
         return bool(set_window_pos(int(widget.winId()), insert_after, 0, 0, 0, 0, flags))
     except Exception as e:
         debug_print("SetWindowPos fallo: {0}".format(e))
@@ -138,13 +144,14 @@ def _close_previous_window():
     return None
 
 
-def open_shot_info(source, task_name=None, keep_on_top=False):
+def open_shot_info(source, task_name=None, keep_on_top=False, activate=True):
     """Abre el Shot Info del shot del playhead, reemplazando la ventana anterior.
 
     source: quien lo pide, solo para el log ("ViewerTL", "Pull").
     task_name: task a mostrar ('comp', 'roto', ...). Si viene, el Shot Info no
         pregunta; si es None, la resuelve en el playhead como el boton normal.
     keep_on_top: dejar la ventana topmost (hace falta sobre el Pull topmost).
+    activate: False la abre sin sacarle el foco a quien la pidio (el Pull).
     """
     global _current_window
     try:
@@ -171,6 +178,7 @@ def open_shot_info(source, task_name=None, keep_on_top=False):
             task_name=task_name,
             align_left=True,
             previous_placement=previous_placement,
+            activate=activate,
         )
 
         window = getattr(module, "window", None)
@@ -189,7 +197,8 @@ def open_shot_info(source, task_name=None, keep_on_top=False):
                 window.show()
             debug_print("Topmost aplicado (nativo={0})".format(applied))
         window.raise_()
-        window.activateWindow()
+        if activate:
+            window.activateWindow()
         debug_print(
             "Shot Info abierto a la izquierda (reemplaza anterior: {0})".format(
                 previous_placement is not None

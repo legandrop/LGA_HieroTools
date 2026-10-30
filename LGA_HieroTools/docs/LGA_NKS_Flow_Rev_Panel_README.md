@@ -24,12 +24,12 @@ nueva.
 ## Botones fijos
 
 1. **Flow Pull** — click procesa todos los shots del timeline; Shift+click solo el seleccionado.
-   Click en una fila de resultados navega al shot; si la fila está en el review del usuario y
-   ese reviewer está habilitado (hoy Lega), abre además el Shot Info arriba de la ventana. Ver
-   [LGA_NKS_Flow_Shot_Info.md](LGA_NKS_Flow_Shot_Info.md#apertura-automatica-al-llegar-a-un-shot-en-review).
+   Click en una fila de resultados navega al shot; con el checkbox **Shot Info** prendido abre
+   además el Shot Info de esa fila arriba de la ventana, sin sacarle el foco. Ver
+   [LGA_NKS_Flow_Shot_Info.md](LGA_NKS_Flow_Shot_Info.md#apertura-automatica-desde-viewertl-y-flow-pull).
 
    El header de la ventana de resultados trae **Only in review**, a la izquierda de
-   **Keep this window on top**. Arranca prendido la primera vez y oculta las
+   **Keep on top**. Arranca prendido la primera vez y oculta las
    filas cuyo New Status no contiene "review" en el nombre visible (Review Lega,
    Review Hold, Pending Review...). Por qué: después de un Pull lo que se va a
    mirar son los shots en review; el resto de los cambios ya quedó aplicado en el
@@ -45,10 +45,18 @@ nueva.
    es de quién es el review y no si la palabra aparece. Si el usuario no es un
    reviewer conocido, el checkbox queda deshabilitado.
 
-   **Los tres checkboxes del header persisten igual.** Only in review, Only for
-   me y Keep this window on top se guardan al tocarlos en
+   **Shot Info** (apagado por default) decide si el click en una fila abre el
+   Shot Info. Antes lo decidía una lista de reviewers en el código y sólo para
+   las filas del review propio; ahora cada uno lo elige.
+
+   El texto de **Keep on top** se acortó (antes «Keep this window on top») para
+   que el header entre con el botón y los cuatro checkboxes.
+
+   **Los cuatro checkboxes del header persisten igual.** Only in review, Only
+   for me, Shot Info y Keep on top se guardan al tocarlos en
    `%APPDATA%/LGA/HieroTools/FlowPull.ini`, sección `[FlowPullWindow]`, claves
-   `only_in_review`, `only_for_me` y `keep_on_top`; la ventana abre como quedó.
+   `only_in_review`, `only_for_me`, `shot_info` y `keep_on_top`; la ventana abre
+   como quedó.
    Los defaults (`_FLOWPULL_DEFAULTS`) valen solo hasta el primer toque. Por qué:
    cada reviewer mira el Pull siempre igual, y volver a tildar lo mismo en cada
    Pull era el paso que sobraba. Dos cosas que no se deducen del código:

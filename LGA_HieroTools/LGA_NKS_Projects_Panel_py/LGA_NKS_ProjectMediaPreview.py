@@ -89,7 +89,7 @@ class _TimelineCell(QtWidgets.QWidget):
                 semibold(font)
             painter.setFont(font)
             luminance = 0.299 * fill.red() + 0.587 * fill.green() + 0.114 * fill.blue()
-            text_color = Color.TEXT_ON_ACCENT if luminance < 145 else Color.WINDOW
+            text_color = Color.TEXT_ON_COLOR if luminance < 145 else Color.WINDOW
             painter.setPen(QtGui.QColor(text_color))
             label = str(clip.get("name") or "Untitled media")
             if clip.get("shift_frames"):
