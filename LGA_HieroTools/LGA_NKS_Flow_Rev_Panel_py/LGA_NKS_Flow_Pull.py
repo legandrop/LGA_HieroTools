@@ -7,7 +7,7 @@ ____________________________________________________________________
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
-  v3.74: Checkbox "Shot Info" entre los filtros y Keep on top, apagado
+  v3.74: Checkbox "Shot Info", primero de los cuatro del header, apagado
          por default y persistido en FlowPull.ini: prendido, el click en
          una fila abre el Shot Info de esa fila. Reemplaza a la lista
          REVIEWERS_WITH_AUTO_SHOT_INFO, que ademas lo limitaba a las filas
@@ -1702,6 +1702,18 @@ class GUI_Table(QtWidgets.QDialog):
         self.download_clip_btn.clicked.connect(self.download_selected_clip)
         header_row.addWidget(self.download_clip_btn, 0, Qt.AlignRight | Qt.AlignVCenter)
         header_row.addSpacing(Metric.SPACING * 2)
+        # Primero de los checkboxes: Shot Info al hacer click en una fila. Persiste como los filtros, pero
+        # no refiltra: solo se guarda.
+        self.shot_info_chk = QtWidgets.QCheckBox("Shot Info")
+        self.shot_info_chk.setProperty("lgaLabeled", True)
+        self.shot_info_chk.setToolTip(_tooltip("shot_info"))
+        self.shot_info_chk.setChecked(_load_window_setting("shot_info"))
+        self.shot_info_chk.toggled.connect(
+            lambda checked: _save_window_setting("shot_info", checked)
+        )
+        header_row.addWidget(self.shot_info_chk, 0, Qt.AlignRight | Qt.AlignVCenter)
+        # Aire antes de los filtros: Shot Info es otra cosa.
+        header_row.addSpacing(Metric.SPACING * 2)
         # Filtro de vista: abre como lo dejo el usuario la ultima vez (INI).
         # El valor se pone ANTES de conectar la senal, para que cargar no guarde.
         self.only_review_chk = QtWidgets.QCheckBox("Only in review")
@@ -1730,19 +1742,8 @@ class GUI_Table(QtWidgets.QDialog):
             lambda checked: self._on_filter_toggled("only_for_me", checked)
         )
         header_row.addWidget(self.only_me_chk, 0, Qt.AlignRight | Qt.AlignVCenter)
-        # Mas aire despues de los filtros: lo que sigue son opciones de la ventana.
+        # Mas aire despues de los filtros: lo que sigue es opcion de la ventana.
         header_row.addSpacing(Metric.SPACING * 2)
-        # Shot Info al hacer click en una fila. Persiste como los filtros, pero
-        # no refiltra: solo se guarda.
-        self.shot_info_chk = QtWidgets.QCheckBox("Shot Info")
-        self.shot_info_chk.setProperty("lgaLabeled", True)
-        self.shot_info_chk.setToolTip(_tooltip("shot_info"))
-        self.shot_info_chk.setChecked(_load_window_setting("shot_info"))
-        self.shot_info_chk.toggled.connect(
-            lambda checked: _save_window_setting("shot_info", checked)
-        )
-        header_row.addWidget(self.shot_info_chk, 0, Qt.AlignRight | Qt.AlignVCenter)
-        header_row.addSpacing(Metric.SPACING)
         self.keep_on_top_chk = QtWidgets.QCheckBox("Keep on top")
         # Checkbox con texto: lgaLabeled le da aire entre el cuadrito y la
         # etiqueta (el default de la hoja del pack es spacing 0)
@@ -2080,12 +2081,12 @@ class GUI_Table(QtWidgets.QDialog):
         checkbox_w = (
             self.download_clip_btn.sizeHint().width()
             + Metric.SPACING * 2
+            + self.shot_info_chk.sizeHint().width()
+            + Metric.SPACING * 2
             + self.only_review_chk.sizeHint().width()
             + Metric.SPACING
             + self.only_me_chk.sizeHint().width()
             + Metric.SPACING * 2
-            + self.shot_info_chk.sizeHint().width()
-            + Metric.SPACING
             + self.keep_on_top_chk.sizeHint().width()
         )
         header_spacing = 12
