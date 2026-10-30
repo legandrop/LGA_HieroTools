@@ -4,6 +4,51 @@
   "name": "LGA HieroTools",
   "versions": [
     {
+      "version": "4.023",
+      "items": [
+        {
+          "kind": "new",
+          "text": "La ventana de `Flow Pull` suma el checkbox `Shot Info`: prendido, al hacer click en una fila se abre el Shot Info de ese shot sin sacarle el foco a la ventana del Pull; se recuerda entre sesiones. `Keep this window on top` pasa a llamarse `Keep on top`."
+        },
+        {
+          "kind": "new",
+          "text": "La ventana de `Flow Pull` tiene un botón `Download Clip`: baja la última versión del clip de la fila que seleccionaste, igual que el del panel Flow S3, sin tener que buscar el clip en el timeline."
+        },
+        {
+          "kind": "improved",
+          "text": "En el panel Review, los botones de navegación pasan a ser `Previous Mark` y `Next Mark`: el clic salta de un shot de Shot Marks al otro, y con Shift+Click navegan las anotaciones del clip, como hacían antes."
+        },
+        {
+          "kind": "new",
+          "text": "Shift+Click en `Shot Marks` abre `Find Shot Mark`, una ventanita que queda siempre arriba: escribís un nombre de shot o cualquier texto de la planilla (descripción, brief, vendor, status) y `Find` salta a esa marca; `Next` sigue con la próxima que coincide."
+        },
+        {
+          "kind": "new",
+          "text": "En el Projects Panel podés borrar un timeline con clic derecho sobre su nombre y `Delete Timeline`; pide confirmación y se deshace con Ctrl+Z."
+        },
+        {
+          "kind": "improved",
+          "text": "Al volver a correr Shot Marks sobre un timeline que ya tenía marcas, te avisa antes de reemplazarlas y las pinta según lo que cambió en la planilla: verdes las que siguen igual, amarillas las que cambiaron de descripción, brief u otro dato, naranjas los shots nuevos y rojas los que ya no están; la ventanita de cada shot muestra qué cambió y cómo era antes."
+        },
+        {
+          "kind": "fixed",
+          "text": "Shot Marks trae el brief completo cuando la planilla es un csv: los briefs de varias líneas que empezaban con comillas quedaban cortados en la primera línea."
+        },
+        {
+          "kind": "fixed",
+          "text": "Snapshot (con Shift+Click) y Review Pic abren FrameRev adelante y listo para anotar, en vez de dejarlo escondido detrás de Nuke Studio.",
+          "platform": [
+            "win"
+          ]
+        },
+        {
+          "kind": "fixed",
+          "text": "La ventanita de Shot Marks vuelve a cambiar sola al arrastrar el playhead en los timelines donde la planilla no trae REC TC OUT (o lo trae igual al IN): antes solo cambiaba si el playhead caía justo en el primer cuadro del shot."
+        }
+      ],
+      "date": "2026-10-30"
+    },
+    {
       "version": "4.022",
       "items": [
         {
