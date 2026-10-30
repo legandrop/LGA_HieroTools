@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_FileManagerS3_DownloadClip v1.02 | Lega
+  LGA_NKS_FileManagerS3_DownloadClip v1.03 | Lega
 
   Descarga el/los clip(s) seleccionado(s) desde Wasabi S3 usando
   FileManagerS3 CLI. A diferencia de "Download Shot", descarga solo el
@@ -15,6 +15,9 @@ ____________________________________________________________________
   cada descarga; el watcher LGA_NKS_DownloadClip_Watcher.py lo detecta y reconecta
   el clip offline automaticamente.
 
+  v1.03: main() acepta `clips`: quien llama puede pasar los clips a bajar
+         en vez de tomar la seleccion del timeline. Lo usa el boton
+         Download Clip de la ventana de Flow Pull, con el clip de la fila.
   v1.02: El .log no se escribia nunca: DEBUG estaba en False y debug_print
          pregunta por `DEBUG and DEBUG_LOG`, asi que el maestro apagado
          tapaba al DEBUG_LOG=True. Queda DEBUG=True con DEBUG_CONSOLE=False:
@@ -367,14 +370,21 @@ def build_filemanagers3_cmd(folder_paths, file_paths, notify_dir=None, download_
         return None
 
 
-def main(download_latest=False):
-    """Descarga el/los clip(s) seleccionado(s) desde Wasabi S3."""
+def main(download_latest=False, clips=None):
+    """Descarga el/los clip(s) seleccionado(s) desde Wasabi S3.
+
+    clips: lista de TrackItems a bajar. Si es None se usa la seleccion del
+    timeline (boton del panel Flow S3).
+    """
     mode_label = "LATEST" if download_latest else "NORMAL"
     debug_print(f"=== FILEMANAGER DOWNLOAD CLIP ({mode_label}) ===")
     debug_print(f"log file: {_log_file_path_resolved}")
 
     try:
-        clips = _get_selected_clips()
+        if clips is None:
+            clips = _get_selected_clips()
+        else:
+            debug_print("Clips recibidos de quien llama (no de la seleccion)")
 
         if not clips:
             debug_print(

@@ -75,6 +75,20 @@ nueva.
    (por eso el alto mínimo del mensaje se pone solo mientras se ve), y una tabla
    sin mínimo propio usa el `minimumSizeHint` del scroll area, más alto que una
    fila (por eso lleva `setMinimumHeight(1)`).
+
+   **Download Clip**, a la izquierda de los checkboxes, baja de Wasabi la última
+   versión del clip de la fila seleccionada. Por qué: el Pull sube los clips a la
+   versión de Flow, que muchas veces todavía no está en disco y queda offline;
+   antes había que buscar ese clip en el timeline, seleccionarlo e ir al panel
+   Flow S3. Hace lo mismo que el click en **Download Clip** de ese panel
+   (`--download-latest` / `--download-latest-file` con `--notify-completion`, y
+   el watcher lo reconecta al terminar): reusa
+   `LGA_NKS_FileManagerS3_DownloadClip.main(download_latest=True, clips=[clip])`,
+   que acepta clips explícitos en vez de leer la selección del timeline. El clip
+   se vuelve a buscar en la secuencia con `_find_clip_for_navigation`, como al
+   navegar, porque la fila se armó antes de que el Pull lo cambiara de versión.
+   Está deshabilitado mientras no haya una fila visible seleccionada (una fila
+   que un filtro ocultó no cuenta).
 2. **Shot Info** — muestra datos del shot y comentarios/versiones de la task; shortcut `Shift+T`.
 3. **Review Pic** — captura el viewer con número de frame y la abre en FrameRev para anotarla; Save en FrameRev deja la anotación en ese mismo JPG, que Flow Push sube con la nota (ver `Docu_FrameRev.md`).
 

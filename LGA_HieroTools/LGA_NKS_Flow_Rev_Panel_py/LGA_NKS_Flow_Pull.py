@@ -1,11 +1,18 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.72 | Lega
+  LGA_NKS_Flow_Pull v3.73 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
+
+  v3.73: Boton "Download Clip" en el header, a la izquierda de los filtros:
+         baja de Wasabi la ultima version del clip de la fila seleccionada,
+         lo mismo que el click en Download Clip del panel Flow S3 pero sin
+         tener que seleccionar el clip en el timeline. Reusa
+         LGA_NKS_FileManagerS3_DownloadClip pasandole el clip. Deshabilitado
+         mientras no haya una fila visible seleccionada.
 
   v3.72: El cartel de shots no encontrados distingue el motivo: si el proyecto
          no esta en la DB pide sincronizar PipeSync; si esta, avisa que los
@@ -1124,7 +1131,25 @@ _TOOLTIPS = {
             "review tuyo para filtrar."
         ),
     },
+    "download_clip": {
+        "es": (
+            "Descarga de Wasabi la ultima version del clip de la fila "
+            "seleccionada, igual que Download Clip del panel Flow S3. "
+            "Al terminar, el clip se reconecta solo."
+        ),
+    },
+    "download_clip_off": {
+        "es": "Selecciona una fila para descargar su clip.",
+    },
 }
+
+# Script que baja el clip; es el mismo que usa Download Clip del panel Flow S3.
+_DOWNLOAD_CLIP_SCRIPT = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "..",
+    "LGA_NKS_Flow_S3_Panel_py",
+    "LGA_NKS_FileManagerS3_DownloadClip.py",
+)
 
 # Mensaje que reemplaza a la tabla cuando los filtros no dejan ninguna fila.
 # (titulo, detalle). {n}: filas que apareceran al destildar; {s}: plural de {n}.
@@ -1565,6 +1590,71 @@ class GUI_Table(QtWidgets.QDialog):
         debug_print(f"Click en fila: status_code='{status_code}' abre Shot Info={opens}")
         return opens
 
+    def _selected_visible_row(self):
+        """Fila seleccionada si se ve; None si no hay o si un filtro la oculto."""
+        for index in self.table.selectionModel().selectedRows():
+            row = index.row()
+            if not self.table.isRowHidden(row):
+                return row
+        return None
+
+    def _update_download_button(self):
+        enabled = self._selected_visible_row() is not None
+        self.download_clip_btn.setEnabled(enabled)
+        self.download_clip_btn.setToolTip(
+            _tooltip("download_clip" if enabled else "download_clip_off")
+        )
+
+    def download_selected_clip(self):
+        """Baja la ultima version del clip de la fila seleccionada.
+
+        Hace lo mismo que el click en Download Clip del panel Flow S3, pero el
+        clip sale de la fila y no de la seleccion del timeline. El clip se
+        vuelve a buscar en la secuencia (como al navegar) porque el Pull puede
+        haberlo cambiado de version despues de armar la fila.
+        """
+        row = self._selected_visible_row()
+        if row is None or row >= len(self.row_navigation_data):
+            debug_print("Download Clip: no hay fila seleccionada")
+            return
+        nav_data = self.row_navigation_data[row]
+        try:
+            clip, _seq = _find_clip_for_navigation(nav_data)
+        except Exception as e:
+            debug_print(f"Download Clip: error buscando el clip de la fila {row}: {e}")
+            clip = nav_data.get("clip")
+        if clip is None:
+            show_warning(
+                self,
+                "Clip not found",
+                f"Couldn't find the clip for {nav_data.get('shot_code') or 'this row'} "
+                "in the timeline.",
+            )
+            return
+        debug_print(
+            f"Download Clip: fila {row} shot='{nav_data.get('shot_code')}' "
+            f"task='{nav_data.get('task_name')}' ruta='{_safe_clip_file_path(clip)}'"
+        )
+        if not os.path.exists(_DOWNLOAD_CLIP_SCRIPT):
+            show_warning(
+                self, "Script not found", f"Missing script:\n{_DOWNLOAD_CLIP_SCRIPT}"
+            )
+            return
+        try:
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(
+                "LGA_NKS_FileManagerS3_DownloadClip", _DOWNLOAD_CLIP_SCRIPT
+            )
+            if spec is None or spec.loader is None:
+                raise ImportError("No se pudo cargar LGA_NKS_FileManagerS3_DownloadClip.py")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            module.main(download_latest=True, clips=[clip])
+        except Exception as e:
+            debug_print(f"Download Clip: error al lanzar la descarga: {e}")
+            show_warning(self, "Download Clip failed", str(e))
+
     def initUI(self):
         self.setWindowTitle("Read Nodes EXR Info")
         # Hoja de ventana del pack: fondo, checkboxes y la regla lgaTitle del
@@ -1584,6 +1674,17 @@ class GUI_Table(QtWidgets.QDialog):
         self.title_label.setStyleSheet("QLabel { padding: 0 4px 4px 4px; }")
         header_row.addWidget(self.title_label, 0, Qt.AlignLeft | Qt.AlignVCenter)
         header_row.addStretch(1)
+        # Accion sobre la fila seleccionada: baja la ultima version de su clip.
+        # Arranca deshabilitado; lo habilita _update_download_button.
+        self.download_clip_btn = QtWidgets.QPushButton("Download Clip")
+        self.download_clip_btn.setStyleSheet(Style.BTN_PRIMARY)
+        self.download_clip_btn.setCursor(Qt.PointingHandCursor)
+        self.download_clip_btn.setAutoDefault(False)
+        self.download_clip_btn.setEnabled(False)
+        self.download_clip_btn.setToolTip(_tooltip("download_clip_off"))
+        self.download_clip_btn.clicked.connect(self.download_selected_clip)
+        header_row.addWidget(self.download_clip_btn, 0, Qt.AlignRight | Qt.AlignVCenter)
+        header_row.addSpacing(Metric.SPACING * 2)
         # Filtro de vista: abre como lo dejo el usuario la ultima vez (INI).
         # El valor se pone ANTES de conectar la senal, para que cargar no guarde.
         self.only_review_chk = QtWidgets.QCheckBox("Only in review")
@@ -1643,6 +1744,7 @@ class GUI_Table(QtWidgets.QDialog):
         self.table.verticalHeader().setVisible(False)
         self.table.setFocusPolicy(Qt.NoFocus)
         self.table.cellClicked.connect(self.navigate_to_table_row)
+        self.table.itemSelectionChanged.connect(self._update_download_button)
         # NO se aplica Style.TABLE: los fondos de las celdas son DATA (colores
         # de estado de Flow) y los pinta el ColorMixDelegate; una regla
         # item:selected con fondo del tema los pisaria justo al seleccionar.
@@ -1785,6 +1887,8 @@ class GUI_Table(QtWidgets.QDialog):
             self._show_results_page(self.empty_state)
         else:
             self._show_results_page(self.table)
+        # Si el filtro oculto la fila seleccionada, el boton no puede bajarla.
+        self._update_download_button()
         debug_print(
             f"Filtros Only in review={only_review} Only for me={only_me}: "
             f"{visibles}/{total} filas visibles"
@@ -1946,7 +2050,9 @@ class GUI_Table(QtWidgets.QDialog):
         # contemplarlo para que titulo y checkboxes no queden recortados.
         title_w = self.title_label.sizeHint().width()
         checkbox_w = (
-            self.only_review_chk.sizeHint().width()
+            self.download_clip_btn.sizeHint().width()
+            + Metric.SPACING * 2
+            + self.only_review_chk.sizeHint().width()
             + Metric.SPACING
             + self.only_me_chk.sizeHint().width()
             + Metric.SPACING * 2
@@ -1979,6 +2085,7 @@ class GUI_Table(QtWidgets.QDialog):
         header_h = max(
             self.title_label.sizeHint().height(),
             self.keep_on_top_chk.sizeHint().height(),
+            self.download_clip_btn.sizeHint().height(),
         )
         content_height = header_height + rows_height + frame
         if self.results_stack.currentWidget() is self.empty_state:
