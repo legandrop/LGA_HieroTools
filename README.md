@@ -314,24 +314,29 @@ opening related Nuke scripts.
   Sends the selected timeline clips to the script currently open in NukeX,
   creates an `LGA_ContactSheet` from their Reads, and connects the Viewer. The
   network request and the NukeX operation run without blocking Nuke Studio.
-- **Previous Annotation**
-  Click: jumps to the previous annotation on the selected clip and wraps to the last.
-  Shift+Click: jumps to the previous Shot Mark (see below) and shows its sheet info.
-- **Next Annotation**
-  Click: jumps to the next annotation on the selected clip and wraps to the first.
-  Shift+Click: jumps to the next Shot Mark and shows its sheet info: shot,
+- **Previous Mark**
+  Click: jumps to the previous Shot Mark (see below) and shows its sheet info.
+  Shift+Click: jumps to the previous annotation on the selected clip and wraps to the last.
+- **Next Mark**
+  Click: jumps to the next Shot Mark and shows its sheet info: shot,
   REC TC in and out, duration, status, vendor, scene, category, description
   and brief. It is a single small window that updates on every jump and does
   not take the keyboard focus. While it is open it follows the playhead:
   scrubbing or playing into another Shot Mark shows that shot. The vendor is
   shown in its PipeSync color.
+  Shift+Click: jumps to the next annotation on the selected clip and wraps to the first.
 - **Shot Marks**
   Reads a VFX breakdown sheet (`.xlsx` or `.csv`) and adds a range tag for
   each shot to the active timeline, at the sheet's REC TC, named after the
   shot and with the brief as its note. Jump from shot to shot with
-  Shift+Click on Previous / Next Annotation, which also shows the shot's
-  info, or with Viewer > Next Tag / Previous Tag (`Alt+Shift+Right` /
-  `Alt+Shift+Left`, with the viewer focused).
+  Previous / Next Mark, which also shows the shot's info, or with
+  Viewer > Next Tag / Previous Tag (`Alt+Shift+Right` / `Alt+Shift+Left`,
+  with the viewer focused).
+  Shift+Click: opens **Find Shot Mark**, a small window that stays on top.
+  Type a shot name or any text from the sheet (description, brief, status,
+  vendor, scene, category, timecode); Find jumps to the shot with that exact
+  name or to the first match, and Next (or Enter again) goes on to the next
+  match, wrapping to the first. Each jump shows the mark's info window.
   The window suggests the sheet, the columns and the episode, and shows a
   dry run before writing: marks, omitted shots, and rows that cannot be
   placed. When the timeline is a single reference movie, timecodes are
@@ -346,7 +351,7 @@ opening related Nuke scripts.
   marks the shot from cut to cut. Safe matches are accepted automatically; the
   doubtful ones are listed first for review, stepping frames on the NKS viewer
   next to the thumbnail. Confirmed frames are remembered per project. Marks
-  placed this way show their thumbnail in the Shift+Click info window.
+  placed this way show their thumbnail in the Previous / Next Mark info window.
   Optionally choose the **EDL** of the same cut: it is checked against the
   movie and, when it matches, the shots go exactly from cut to cut of the EDL
   (detecting cuts in the picture misses some between similar shots) and each

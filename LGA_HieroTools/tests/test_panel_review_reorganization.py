@@ -95,8 +95,8 @@ class PanelReviewReorganizationTests(unittest.TestCase):
             "Compare Versions",
             "Compare OFF",
             "Contact Sheet",
-            "Previous Annotation",
-            "Next Annotation",
+            "Previous Mark",
+            "Next Mark",
             "Shot Marks",
             "Reveal in &Explorer",
             "Reveal NKS Project",
@@ -112,8 +112,8 @@ class PanelReviewReorganizationTests(unittest.TestCase):
         colors = {_tuple_text(item, 0): _tuple_text(item, 2) for item in buttons}
         utility_color = colors["Contact Sheet"]
         self.assertEqual(utility_color, "#263d43")
-        self.assertEqual(colors["Previous Annotation"], utility_color)
-        self.assertEqual(colors["Next Annotation"], utility_color)
+        self.assertEqual(colors["Previous Mark"], utility_color)
+        self.assertEqual(colors["Next Mark"], utility_color)
         self.assertEqual(colors["Shot Marks"], utility_color)
         self.assertNotEqual(utility_color, colors["Difference Mode"])
         self.assertNotEqual(utility_color, colors["Compare Versions"])

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Sheet v1.07 | Lega
+  LGA_NKS_ShotMarks_Sheet v1.08 | Lega
 
   Nucleo sin host de Shot Marks: lee una planilla (xlsx o csv),
   detecta la fila de encabezado y las columnas de shot y timecode,
@@ -13,6 +13,10 @@ ____________________________________________________________________
   los sharedStrings), sin openpyxl: NKS no lo trae, y asi una
   planilla de cientos de MB por las imagenes se lee en segundos.
 
+  v1.08: search_marks / find_match / next_match: la busqueda de la
+         ventana Find Shot Mark (texto en cualquier campo de la marca,
+         sin mayusculas ni acentos; Find prefiere el shot con ese nombre
+         exacto y Next sigue desde el resultado o el playhead).
   v1.07: compare_marks / previous_mark / change_counts: diferencias por
          shot contra la corrida anterior (sin cambios, cambio de algun
          campo de CHANGE_FIELDS, nuevo, ya no esta o no se ubica). La
@@ -601,7 +605,7 @@ def next_mark_index(starts, current, direction):
 
     `starts` son los IN ordenados. Next va al primer IN despues del playhead;
     Previous, al ultimo antes (si el playhead esta adentro de un shot, vuelve
-    a su IN). En los extremos da la vuelta, como Next/Previous Annotation.
+    a su IN). En los extremos da la vuelta, como las anotaciones (Shift+Click).
     """
     if not starts:
         return None
@@ -631,6 +635,76 @@ def mark_index_at(starts, ends, frame):
         if ends[index] >= frame:
             return index
     return None
+
+
+# -- busqueda (ventana Find Shot Mark) ---------------------------------------
+
+# Campos donde busca Find Shot Mark. El orden decide que campo se informa
+# cuando el texto aparece en varios: el shot primero.
+SEARCH_FIELDS = ("shot", "description", "brief", "status", "vendor", "scene",
+                 "category", "episode", "tc_in", "tc_out", "clip")
+
+
+def search_text(text):
+    """Texto comparable: sin mayusculas ni acentos y con los espacios unidos.
+
+    Los espacios se unen porque un brief de varias lineas trae saltos donde el
+    usuario escribe un espacio.
+    """
+    text = unicodedata.normalize("NFKD", str(text or ""))
+    text = "".join(ch for ch in text if not unicodedata.combining(ch)).casefold()
+    return " ".join(text.split())
+
+
+def search_marks(entries, query):
+    """[(indice, campo)] de las marcas que contienen `query`.
+
+    `entries` son {campo: texto} de cada marca, en orden de timeline. El campo
+    es el primero de SEARCH_FIELDS donde aparece. Sin texto, no hay resultados.
+    """
+    needle = search_text(query)
+    if not needle:
+        return []
+    matches = []
+    for index, entry in enumerate(entries):
+        for field in SEARCH_FIELDS:
+            if needle in search_text(entry.get(field)):
+                matches.append((index, field))
+                break
+    return matches
+
+
+def find_match(matches, entries, query):
+    """Posicion en `matches` del resultado de Find, o None si no hay.
+
+    Gana el shot que se llama exactamente asi: buscar "PROJA_010_0100" no
+    tiene que caer en "PROJA_010_01000" ni en un brief que lo nombre. Si no
+    hay nombre exacto, el primer resultado del timeline.
+    """
+    if not matches:
+        return None
+    needle = search_text(query)
+    for position, (index, _field) in enumerate(matches):
+        if search_text(entries[index].get("shot")) == needle:
+            return position
+    return 0
+
+
+def next_match(matches, starts, frame, current=None):
+    """(posicion en `matches`, dio la vuelta) del resultado de Next.
+
+    `starts` son los IN de todas las marcas. Si el playhead sigue en el IN del
+    resultado mostrado (`current`, indice de marca), se avanza desde esa marca:
+    dos marcas pueden empezar en el mismo cuadro. Si el usuario movio el
+    playhead, desde el playhead. Despues del ultimo vuelve al primero.
+    """
+    if not matches:
+        return None, False
+    from_current = current is not None and starts[current] == frame
+    for position, (index, _field) in enumerate(matches):
+        if (index > current) if from_current else (starts[index] > frame):
+            return position, False
+    return 0, True
 
 
 def follow_ends(starts, ends, last_frame):

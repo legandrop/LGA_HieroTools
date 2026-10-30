@@ -1,12 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Nav v1.06 | Lega
+  LGA_NKS_ShotMarks_Nav v1.07 | Lega
 
-  Previous / Next Mark: Shift+Click en Previous / Next Annotation del
-  panel Review. Salta el playhead a la marca de Shot Marks anterior o
-  siguiente y muestra su info de la planilla (shot, REC TC, descripcion,
-  brief, status, vendor, escena, categoria) en una ventanita.
+  Previous / Next Mark: Click en Previous / Next Mark del panel Review
+  (con Shift esos botones navegan anotaciones). Salta el playhead a la
+  marca de Shot Marks anterior o siguiente y muestra su info de la
+  planilla (shot, REC TC, descripcion, brief, status, vendor, escena,
+  categoria) en una ventanita. Find Shot Mark salta por aca tambien.
 
   Existe porque el salto nativo (Viewer > Next Tag) no muestra la nota, y
   la del tag de Hiero sale recortada. La ventana es una sola: cada salto
@@ -17,6 +18,9 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Nav.log.
 
+  v1.07: show_mark_at: saltar a una marca dada y mostrarla, compartido
+         con la ventana Find Shot Mark. Los botones pasan a ser Previous /
+         Next Mark: el salto entre marcas es el Click normal.
   v1.06: Linea con el cambio contra la corrida anterior de Shot Marks, en
          el color del tag (que campos cambiaron, o por que una marca roja
          no se ubico), y el texto anterior debajo de la descripcion o el
@@ -606,13 +610,21 @@ def go_to_mark(direction):
     current = int(viewer.time())
     starts = [int(t.inTime()) for t in tags]
     index = _sheet_module().next_mark_index(starts, current, direction)
-    tag = tags[index]
-    info = mark_info(sequence, tag, index, len(tags))
+    info = show_mark_at(viewer, sequence, tags, index)
     log.info("%s: %s %d -> %d (%s, marca %d de %d, metadata completa %s, vendor %s)",
-             sequence.name(), direction, current, starts[index], tag.name(), index + 1,
+             sequence.name(), direction, current, starts[index], info["shot"], index + 1,
              len(tags), info["complete"],
              ", ".join("%s %s" % (name, color or "sin color")
                        for name, color in info["vendor_colors"]) or "-")
+    return True
+
+
+def show_mark_at(viewer, sequence, tags, index):
+    """Salta el playhead al IN de tags[index] y la muestra en la ventanita.
+
+    La usan Previous / Next Mark y Find Shot Mark. Devuelve la info mostrada.
+    """
+    info = mark_info(sequence, tags[index], index, len(tags))
     window = info_window()
     # El seguimiento se arma ANTES del salto: setTime dispara timeChanged y la
     # ventana ya tiene que saber que esa marca es la que esta mostrando.
@@ -620,8 +632,8 @@ def go_to_mark(direction):
     window.show_mark(info)
     if not window.isVisible():
         window.show()
-    viewer.setTime(starts[index])
-    return True
+    viewer.setTime(int(tags[index].inTime()))
+    return info
 
 
 def main(direction="next"):

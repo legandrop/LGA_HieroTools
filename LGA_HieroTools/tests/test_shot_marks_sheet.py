@@ -322,5 +322,48 @@ class ShotMarksCompareTests(unittest.TestCase):
         self.assertEqual(marks[0].change, sheet.CHANGE_UNCHANGED)
 
 
+# Marcas ficticias en orden de timeline, como las arma la ventana Find.
+SEARCH_ENTRIES = [
+    {"shot": "PROJA_010_01000", "description": "Dinner scene", "brief": "Steam"},
+    {"shot": "PROJA_010_0100", "description": "Kitchen", "brief": "Remove the rig"},
+    {"shot": "PROJA_020_0300", "description": "Exterior", "brief": "Sky\nreplacement",
+     "vendor": "Vendor A"},
+    {"shot": "PROJA_030_0100", "description": "Plano de la canción", "status": "WIP"},
+]
+SEARCH_STARTS = [0, 100, 100, 300]
+
+
+class ShotMarksSearchTests(unittest.TestCase):
+    def test_matches_any_field_without_case_or_accents(self):
+        self.assertEqual(sheet.search_marks(SEARCH_ENTRIES, "CANCION"), [(3, "description")])
+        self.assertEqual(sheet.search_marks(SEARCH_ENTRIES, "vendor a"), [(2, "vendor")])
+        # El salto de linea del brief se busca como espacio.
+        self.assertEqual(sheet.search_marks(SEARCH_ENTRIES, "sky replacement"), [(2, "brief")])
+        self.assertEqual(sheet.search_marks(SEARCH_ENTRIES, "   "), [])
+
+    def test_shot_field_wins_when_the_text_is_in_several(self):
+        matches = sheet.search_marks(SEARCH_ENTRIES, "0100")
+        self.assertEqual(matches, [(0, "shot"), (1, "shot"), (3, "shot")])
+
+    def test_find_prefers_the_exact_shot_name(self):
+        matches = sheet.search_marks(SEARCH_ENTRIES, "proja_010_0100")
+        self.assertEqual(sheet.find_match(matches, SEARCH_ENTRIES, "proja_010_0100"), 1)
+        matches = sheet.search_marks(SEARCH_ENTRIES, "e")
+        self.assertEqual(sheet.find_match(matches, SEARCH_ENTRIES, "e"), 0)
+        self.assertIsNone(sheet.find_match([], SEARCH_ENTRIES, "zzz"))
+
+    def test_next_goes_forward_from_the_shown_match_and_wraps(self):
+        matches = sheet.search_marks(SEARCH_ENTRIES, "r")  # 0, 1, 2 y 3
+        # Las marcas 1 y 2 empiezan en el mismo cuadro: desde la 1 va a la 2.
+        self.assertEqual(sheet.next_match(matches, SEARCH_STARTS, 100, current=1), (2, False))
+        self.assertEqual(sheet.next_match(matches, SEARCH_STARTS, 300, current=3), (0, True))
+
+    def test_next_follows_the_playhead_when_it_moved(self):
+        matches = sheet.search_marks(SEARCH_ENTRIES, "r")
+        self.assertEqual(sheet.next_match(matches, SEARCH_STARTS, 150, current=1), (3, False))
+        self.assertEqual(sheet.next_match(matches, SEARCH_STARTS, 50), (1, False))
+        self.assertEqual(sheet.next_match([], SEARCH_STARTS, 50), (None, False))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -66,8 +66,9 @@ la misma planilla dejo todo verde y borro las rojas.
 
 ## Previous / Next Mark
 
-Shift+Click en Previous Annotation / Next Annotation del panel Review (el Click normal sigue
-navegando anotaciones del clip). Salta el playhead al IN de la marca anterior o siguiente del
+Click en Previous Mark / Next Mark del panel Review (con Shift+Click esos botones navegan las
+anotaciones del clip: hasta la v2.89 del panel era al reves y se llamaban Previous / Next
+Annotation, pero las marcas se usan mucho mas). Salta el playhead al IN de la marca anterior o siguiente del
 timeline del visor y muestra su info en una ventanita: shot, REC TC IN y OUT de la planilla,
 duracion, status, vendor, escena, categoria, descripcion y brief. En los extremos da la vuelta.
 Previous, con el playhead adentro de un shot, vuelve al IN de ese shot.
@@ -120,6 +121,37 @@ Previous, con el playhead adentro de un shot, vuelve al IN de ese shot.
   `_scene`, `_category`, `_episode`). Releer el Excel tardaria medio segundo por salto y fallaria
   si la planilla se mueve. Los tags creados antes de esta version solo tienen nombre y nota: la
   ventana muestra eso y pide volver a correr Shot Marks.
+
+## Find Shot Mark
+
+Shift+Click en Shot Marks. Con cientos de marcas, Previous / Next no sirve para ir a un shot puntual
+ni a "el del humo de la sopa". Una ventanita con un campo: se escribe un nombre de shot o cualquier
+texto de la planilla y Find salta a esa marca, mostrandola en la ventanita de Previous / Next Mark.
+
+- **Donde busca.** En la metadata de los tags (`mark_info_from_metadata`), no en el Excel: shot,
+  descripcion, brief, status, vendor, escena, categoria, episodio, TC IN/OUT y clip
+  (`SEARCH_FIELDS`). No pide el color del vendor a la DB de PipeSync (lo hace `mark_info` del Nav
+  solo para la marca que se muestra): buscar es instantaneo aunque el timeline tenga cientos.
+- **Como compara.** Sin mayusculas ni acentos y con los espacios unidos (`search_text`): un brief
+  de varias lineas se encuentra escribiendo un espacio donde hay un salto. El estado dice en que
+  campo aparecio si no fue el nombre del shot.
+- **Find** salta al shot que se llama exactamente asi; si no hay, al primer resultado del timeline.
+  Asi `PROJA_010_0100` no cae en `PROJA_010_01000` ni en un brief que lo nombre.
+- **Next** sigue desde el ultimo resultado mientras el playhead siga en su IN (dos marcas pueden
+  empezar en el mismo cuadro); si el usuario movio el playhead, desde el playhead. Despues del
+  ultimo vuelve al primero y lo avisa. Enter con el mismo texto es Next; con texto nuevo, Find.
+- **Siempre arriba** (`Keep this window on top`, prendido por defecto, en
+  `%APPDATA%\LGA\HieroTools\ShotMarksFind.ini`), con el mismo mecanismo que el Flow Pull: en
+  Windows `SetWindowPos` con `HWND_TOPMOST`, que cambia solo el z-order. Hornear
+  `WindowStaysOnTopHint` en los flags y cambiarlo despues recrea la ventana nativa (parpadeo); se
+  usa solo fuera de Windows. Se aplica con `singleShot(0)` despues del `show`, porque Qt
+  reposiciona la ventana al mostrarla y pisa el topmost. `argtypes` declarados: sin ellos ctypes
+  trunca el HWND de 64 bits.
+- **INI propio y no `ShotMarks.ini`**: el dialogo de Shot Marks reescribe ese archivo entero con su
+  seccion y se llevaria cualquier otra.
+- Una sola ventana, buscada por `objectName` (`LGA_ShotMarkFind`) como la de info. Al abrirse si
+  toma el foco (es para escribir) y queda a la derecha de la ventanita de info, sin taparla; los
+  saltos no se lo sacan, porque la de info se muestra sin activarse. Esc la cierra.
 
 ## Planillas sin timecode: ubicar desde los thumbnails (solo Windows)
 
@@ -306,12 +338,15 @@ agrega la barra antes de pasarla a ffmpeg. Medido en NKS 16.
   `TimelineInfo` (TC de secuencia y de media), `own_tags`, `previous_marks`, `apply_plan`, `guess_episode`,
   `ShotMarksDialog`, `main`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks_Nav.py`:
-  `go_to_mark`, `mark_tags`, `mark_info`, `ShotMarkInfoWindow`, `info_window`. La eleccion del
-  salto es `next_mark_index` y la metadata `mark_metadata` / `mark_info_from_metadata`, en el
-  nucleo sin host.
+  `go_to_mark`, `show_mark_at`, `mark_tags`, `mark_info`, `ShotMarkInfoWindow`, `info_window`. La
+  eleccion del salto es `next_mark_index` y la metadata `mark_metadata` / `mark_info_from_metadata`,
+  en el nucleo sin host.
+- `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks_Find.py`:
+  `ShotMarkFindWindow`, `mark_entries`, `find_window`. La busqueda es `search_marks` /
+  `find_match` / `next_match` en el nucleo sin host, probada en `tests/test_shot_marks_sheet.py`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel.py`: boton `Shot Marks`,
-  `execute_ShotMarks`; Shift+Click de Previous/Next Annotation en `execute_PreviousMark` /
-  `execute_NextMark`.
+  `execute_ShotMarks` (Shift+Click: `execute_FindShotMark`); Previous / Next Mark en
+  `execute_PreviousMark` / `execute_NextMark` (Shift+Click: las anotaciones).
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks_Locate_Engine.py`,
   `LGA_NKS_ShotMarks_Locate.py` y `LGA_NKS_ShotMarks_Thumbs.py`: ubicar desde thumbnails. El motor
   y el lector de thumbs se prueban sin host en `tests/test_shot_marks_locate.py`.
@@ -321,4 +356,5 @@ agrega la barra antes de pasarla a ffmpeg. Medido en NKS 16.
 - Capturas: `+Building_Blocks/UI_Capture/fixtures/h11_shot_marks.py` -> `ShotMarks_Dialog.png`,
   `ShotMarks_Dialog-Thumbnails.png` y `ShotMarks_Dialog-Thumbnails-EDL.png`; `h11b_shot_mark_info.py` -> `ShotMarks_Info.png`,
   `ShotMarks_Info-OldTag.png` y `ShotMarks_Info-Located.png`; `h11c_shot_marks_locate.py` ->
-  `ShotMarks_Locate.png`.
+  `ShotMarks_Locate.png`; `h11d_shot_mark_find.py` -> `ShotMarks_Find.png`,
+  `ShotMarks_Find-Result.png` y `ShotMarks_Find-NoMatch.png`.
