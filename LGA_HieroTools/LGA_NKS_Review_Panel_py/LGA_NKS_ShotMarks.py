@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks v1.04 | Lega
+  LGA_NKS_ShotMarks v1.05 | Lega
 
   Shot Marks: lee una planilla de breakdown (xlsx o csv) y pone un tag
   de rango por shot en el timeline activo, en el REC TC de la planilla,
@@ -22,6 +22,10 @@ ____________________________________________________________________
   Nucleo sin host (lectura y plan): LGA_NKS_ShotMarks_Sheet.py.
   Log de cada corrida: logs/DebugPy_LGA_NKS_ShotMarks.log.
 
+  v1.05: Columnas Notes y Notes 2 (se sugieren "Notas" y "Alternativa"):
+         van a la ventana de la marca, resaltadas. Los encabezados con
+         salto de linea se ven en una linea en los combos. TimelineInfo
+         expone media_tc (TC del clip segun NKS) para Locate.
   v1.04: Re-correr compara contra la corrida anterior: cada tag toma el
          color de su cambio (verde igual, amarillo cambio un dato de la
          planilla, naranja nuevo) y los shots que ya no estan o no se
@@ -123,6 +127,9 @@ TOOLTIPS = {
     "scene": "Escena, para la ventana de Next Mark.",
     "vendor": "Vendor, para la ventana de Next Mark.",
     "category": "Categoria del shot, para la ventana de Next Mark.",
+    "notes": "Notas del shot: la ventana de Next Mark las resalta. Se sugiere la columna Notas.",
+    "notes2": "Segunda columna de notas, resaltada en otro color. Se sugiere la columna "
+              "Alternativa.",
     "episode_filter": "Solo los shots de este episodio. Se sugiere el que aparece en el nombre del timeline.",
     "skip_omit": "No marcar los shots con status Omit.",
     "reference": "Contra que timecode se mide el REC TC de la planilla.",
@@ -251,6 +258,8 @@ class TimelineInfo(object):
         self.start = int(sequence.timecodeStart())
         self.duration = int(sequence.duration())
         self.media_start = None
+        # TC del cuadro 0 del archivo segun NKS (no segun ffprobe).
+        self.media_tc = None
         self.media_clip = ""
         self.media_reason = ""
         self._detect_reference()
@@ -273,7 +282,8 @@ class TimelineInfo(object):
             return
         clip = item.source()
         # TC de la media en el cuadro 0 del timeline.
-        self.media_start = (int(clip.timecodeStart()) + int(round(item.sourceIn()))
+        self.media_tc = int(clip.timecodeStart())
+        self.media_start = (self.media_tc + int(round(item.sourceIn()))
                             - int(item.timelineIn()))
         self.media_clip = clip.name()
 
@@ -486,7 +496,8 @@ class ShotMarksDialog(QtWidgets.QDialog):
         labels = (("shot", "Shot"), ("tc_in", "TC In"), ("tc_out", "TC Out"),
                   ("episode", "Episode"), ("status", "Status"), ("note", "Brief"),
                   ("description", "Description"), ("scene", "Scene"),
-                  ("vendor", "Vendor"), ("category", "Category"))
+                  ("vendor", "Vendor"), ("category", "Category"),
+                  ("notes", "Notes"), ("notes2", "Notes 2"))
         for index, (role, label) in enumerate(labels):
             combo = self._combo(role)
             combo.currentIndexChanged.connect(self._columns_changed)

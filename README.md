@@ -323,7 +323,8 @@ opening related Nuke scripts.
 - **Next Mark**
   Click: jumps to the next Shot Mark and shows its sheet info: shot,
   REC TC in and out, duration, status, vendor, scene, category, description
-  and brief. It is a single small window that updates on every jump and does
+  and brief, with the Notes and Notes 2 columns highlighted on top when the
+  shot has them. It is a single small window that updates on every jump and does
   not take the keyboard focus. While it is open it follows the playhead:
   scrubbing or playing into another Shot Mark shows that shot. The vendor is
   shown in its PipeSync color.
@@ -336,7 +337,7 @@ opening related Nuke scripts.
   Viewer > Next Tag / Previous Tag (`Alt+Shift+Right` / `Alt+Shift+Left`,
   with the viewer focused).
   Shift+Click: opens **Find Shot Mark**, a small window that stays on top.
-  Type a shot name or any text from the sheet (description, brief, status,
+  Type a shot name or any text from the sheet (description, brief, notes, status,
   vendor, scene, category, timecode); Find jumps to the shot with that exact
   name or to the first match, and Next (or Enter again) goes on to the next
   match, wrapping to the first. Each jump shows the mark's info window.

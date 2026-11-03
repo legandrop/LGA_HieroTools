@@ -15,14 +15,42 @@ suyas y las pinta segun lo que cambio en la planilla desde la corrida anterior.
 1. Lee la planilla (`.xlsx` o `.csv`) fuera del hilo de UI y sugiere la hoja con columnas de shot y
    REC TC (en un archivo de 55 hojas tarda ~1,5 s).
 2. Detecta la fila de encabezado (puede no ser la primera: suele haber una tablita de resumen arriba)
-   y las columnas de shot, TC IN, TC OUT, episodio, status, brief, descripcion, escena, vendor y
-   categoria. Todo se puede corregir en la
-   ventana y queda guardado en `%APPDATA%\LGA\HieroTools\ShotMarks.ini`.
+   y las columnas de shot, TC IN, TC OUT, episodio, status, brief, descripcion, escena, vendor,
+   categoria, Notes y Notes 2. Todo se puede corregir en la
+   ventana y queda guardado en `%APPDATA%\LGA\HieroTools\ShotMarks.ini`. Un encabezado con salto
+   de linea en la celda (`STATUS` / `VFX`) se lee en una linea (`STATUS VFX`): con el salto, el
+   combo lo mostraba en dos renglones cortados.
 3. Prueba en seco en vivo: cuantas marcas, cuantas Omit salteadas, cuales no se pueden ubicar y por
    que. El log de cada corrida va a `LGA_NKS_Review_Panel_py/logs/DebugPy_LGA_NKS_ShotMarks.log`.
 4. Al aplicar, en un solo undo: borra los tags que puso antes, opcionalmente alinea el TC de inicio
    del timeline y crea un tag de rango por shot (`Sequence.addTagToRange`), con el shot como nombre y
    el brief como nota.
+
+## Notes y Notes 2
+
+Notas eventuales del shot: no son el brief (el trabajo) ni la descripcion (que pasa en el plano),
+sino lo que hay que mirar con atencion ("maybe wishlist", "no tocar los arboles", "omit vfx"). Por eso
+la ventanita de la marca las pone arriba de todo, cada una en una caja con borde de color: Notes en
+ambar y Notes 2 en celeste (`NOTE_SECTIONS` del Nav). Sin texto en esa fila, o sin columna, la caja
+no aparece: nunca hay un Notes vacio.
+
+- Se sugieren solas: Notes con `Notas` / `Notes` / `Nota` / `VFX Notes` (`NOTES_HEADERS`); Notes 2
+  con `Alternativa(s)` / `Alternative(s)` / `Notes 2` (`NOTES2_HEADERS`). `Alternativa` es una segunda
+  columna de notas que algunas planillas usan para la version alternativa de un plano.
+- Hasta la `_Sheet v1.08`, `Notas` caia en el brief si la planilla no tenia columna `Brief`. Ahora el
+  brief solo se sugiere con `Brief` / `VFX Brief`.
+- Viajan a la metadata (`_notes`, `_notes2`), cuentan como cambio (amarillo) y Find las busca.
+- Los `Vendor Notes` o `On Set sup Notes` no se toman: el nombre tiene que ser exacto.
+
+## Comentarios de Google Sheets: viajan al xlsx, Shot Marks no los lee
+
+Medido en una planilla real bajada de Google Drive como `.xlsx`: los comentarios SI vienen adentro.
+Los hilos (con autor, fecha, menciones y si estan resueltos) en `xl/threadedComments/threadedComment<N>.xml`,
+los autores en `xl/persons/person.xml`, y las notas sueltas de celda en `xl/comments<N>.xml`. Cada hoja
+apunta a los suyos desde `xl/worksheets/_rels/sheet<N>.xml.rels`; la celda va en `ref` (`E611`), asi
+que se pueden asociar a una fila y a un shot. Shot Marks hoy no los lee: en esa planilla eran
+cinco hilos (dos de una fila de shot, tres del encabezado) y 39 notas iguales en la columna de costos.
+El `.csv` no trae comentarios.
 
 ## Actualizar: colores contra la corrida anterior
 
@@ -33,7 +61,7 @@ icono del bin Markers de los Tag Presets de NKS (`icons:TagGreen.png`, etc.):
 | Color | Cuando |
 |---|---|
 | Verde | El shot sigue y sus datos de planilla son iguales. Moverse en el corte NO es un cambio. |
-| Amarillo | Cambio el brief, la descripcion, el status, la escena, el vendor o la categoria (`CHANGE_FIELDS`). |
+| Amarillo | Cambio el brief, la descripcion, Notes, Notes 2, el status, la escena, el vendor o la categoria (`CHANGE_FIELDS`). |
 | Naranja | Shot nuevo: no tenia marca en la corrida anterior. |
 | Rojo | Tenia marca y ahora no: ya no esta en la planilla, o esta pero no se ubica en este timeline. |
 
@@ -49,6 +77,10 @@ icono del bin Markers de los Tag Presets de NKS (`icons:TagGreen.png`, etc.):
 - **Se compara texto normalizado**: fin de linea (`\r\n`) y espacios al borde no cuentan. Comillas si:
   arreglar las comillas de un brief es un cambio real del texto.
 - Los tags de la v1.00 no guardaban columnas: de esos solo se compara el brief (la nota).
+- **Solo se comparan los campos que la corrida anterior guardaba.** Cada marca guarda en `_compared`
+  la lista de `CHANGE_FIELDS` de esa version. Sin eso, al sumar Notes, la primera corrida nueva
+  habria pintado de amarillo cada shot con una nota ("Notes (was empty)"). Las marcas sin `_compared`
+  (hasta la `_Sheet v1.08`) comparan `LEGACY_CHANGE_FIELDS`.
 - **Antes de borrar se pregunta** (`ask_question`), con la cuenta de cada color. La vista previa suma la
   columna Change y pone arriba los rojos, amarillos y naranjas.
 - Metadata nueva del tag: `_change`, `_changed` (campos separados por coma), `_prev_<campo>` con el
@@ -98,7 +130,10 @@ Previous, con el playhead adentro de un shot, vuelve al IN de ese shot.
   marca (una linea por hueco, no por cuadro).
 - **Cambio contra la corrida anterior.** Una linea en el color del tag: sin cambios, nuevo, que
   campos cambiaron (los cortos con su valor anterior: `Status (was WIP)`), o por que una roja no esta.
-  Si cambio la descripcion o el brief, el texto anterior va debajo, en gris (`Before: ...`).
+  Si cambio la descripcion, el brief o una nota, el texto anterior va debajo, en gris
+  (`Before: ...`). Si la nota se borro, su caja no aparece y el texto anterior va en esta linea.
+- **Notes y Notes 2 resaltadas.** Arriba de la descripcion, en cajas con borde ambar y celeste;
+  ver "Notes y Notes 2".
 - **Vendor con color.** `LGA_NKS_Shared/LGA_NKS_Vendor_Colors_Config.py` lee de la DB de PipeSync
   del contexto activo (studio o client) la tabla `project_vendor_groups` (token, nombre, color)
   y, de respaldo, `vendor_colors` del envelope del proyecto. Compara sin mayusculas ni signos
@@ -117,8 +152,8 @@ Previous, con el playhead adentro de un shot, vuelve al IN de ese shot.
 - **Letra mas grande.** 15 px el cuerpo y 19 px el titulo, por `apply_ui_font` y QFont: con el
   tamano del host (~12 px) no se leia. El titulo no usa `lgaTitle` porque esa regla fija 11 pt.
 - **Los datos salen del tag, no del Excel.** Shot Marks guarda la fila en la metadata del tag
-  (`tag.lga_shotmarks_tc_in`, `_tc_out`, `_brief`, `_description`, `_status`, `_vendor`,
-  `_scene`, `_category`, `_episode`). Releer el Excel tardaria medio segundo por salto y fallaria
+  (`tag.lga_shotmarks_tc_in`, `_tc_out`, `_brief`, `_description`, `_notes`, `_notes2`, `_status`,
+  `_vendor`, `_scene`, `_category`, `_episode`). Releer el Excel tardaria medio segundo por salto y fallaria
   si la planilla se mueve. Los tags creados antes de esta version solo tienen nombre y nota: la
   ventana muestra eso y pide volver a correr Shot Marks.
 
@@ -129,7 +164,7 @@ ni a "el del humo de la sopa". Una ventanita con un campo: se escribe un nombre 
 texto de la planilla y Find salta a esa marca, mostrandola en la ventanita de Previous / Next Mark.
 
 - **Donde busca.** En la metadata de los tags (`mark_info_from_metadata`), no en el Excel: shot,
-  descripcion, brief, status, vendor, escena, categoria, episodio, TC IN/OUT y clip
+  descripcion, brief, Notes, Notes 2, status, vendor, escena, categoria, episodio, TC IN/OUT y clip
   (`SEARCH_FIELDS`). No pide el color del vendor a la DB de PipeSync (lo hace `mark_info` del Nav
   solo para la marca que se muestra): buscar es instantaneo aunque el timeline tenga cientos.
 - **Como compara.** Sin mayusculas ni acentos y con los espacios unidos (`search_text`): un brief
@@ -214,6 +249,13 @@ correcta; cuando el cuadro de una captura de dailies si esta en el corte da >= 0
 revision y nunca se aceptan solos. El EDL no lo resuelve: la planilla no trae el clip de camara
 de cada foto (su "Shooting name" es escena_plano_toma, no el nombre del clip), asi que no hay con
 que cruzar el SRC TC.
+
+**El TC de los cuadros ubicados es el del clip segun NKS, no el del archivo.** El motor trabaja en
+cuadros del archivo; la ventana los pasa a TC con `clip.timecodeStart()` (`TimelineInfo.media_tc`),
+que es el mismo TC que resta el plan. Hasta `_Locate v1.01` usaba el que lee ffprobe del archivo, y
+no siempre coinciden: medido en NKS 17 con un MP4 de TC 00:59:50:00 que NKS mostraba en 00:00:00:00,
+todas las marcas caian 86160 cuadros mas adelante (o fuera del timeline). Con el de NKS, las 336
+marcas de esa corrida caen en su cuadro. Si difieren, el log de Locate lo avisa.
 
 ### EDL del armado (opcional)
 

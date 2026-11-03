@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Sheet v1.08 | Lega
+  LGA_NKS_ShotMarks_Sheet v1.09 | Lega
 
   Nucleo sin host de Shot Marks: lee una planilla (xlsx o csv),
   detecta la fila de encabezado y las columnas de shot y timecode,
@@ -13,6 +13,12 @@ ____________________________________________________________________
   los sharedStrings), sin openpyxl: NKS no lo trae, y asi una
   planilla de cientos de MB por las imagenes se lee en segundos.
 
+  v1.09: Columnas Notes ("Notas") y Notes 2 ("Alternativa"): viajan a
+         cada marca, cuentan como cambio y se buscan. "Notas" ya no cae en
+         el brief. Los encabezados con salto de linea ("STATUS\nVFX") se
+         leen en una linea. Cada marca guarda que campos se compararon
+         (key compared): un campo nuevo no pinta de amarillo las marcas de
+         una corrida anterior que no lo tenia.
   v1.08: search_marks / find_match / next_match: la busqueda de la
          ventana Find Shot Mark (texto en cualquier campo de la marca,
          sin mayusculas ni acentos; Find prefiere el shot con ese nombre
@@ -80,7 +86,12 @@ TC_OUT_HEADERS = (
 EPISODE_HEADERS = ("ep", "episode", "episodio", "epi", "reel")
 STATUS_HEADERS = ("status", "estado", "shotstatus", "statusvfx", "vfxstatus", "estadovfx")
 # "note" es el brief: va a la nota del tag. La descripcion es aparte.
-NOTE_HEADERS = ("brief", "vfxbrief", "notes", "notas", "vfxnotes")
+NOTE_HEADERS = ("brief", "vfxbrief")
+# Notas eventuales del shot: la ventana de la marca las resalta. "Alternativa"
+# es una segunda columna de notas (planos con una version alternativa).
+NOTES_HEADERS = ("notes", "notas", "vfxnotes", "nota", "note")
+NOTES2_HEADERS = ("notes2", "notas2", "alternativa", "alternativas", "alternative",
+                  "alternatives")
 DESCRIPTION_HEADERS = ("descripcion", "description", "desc", "shotdescription")
 SCENE_HEADERS = ("esc", "escena", "scene", "sc")
 VENDOR_HEADERS = ("vendor", "proveedor")
@@ -99,15 +110,19 @@ OMIT_TOKENS = ("omit", "omitted", "cbb", "removed")
 # "POSIBLE VFX OMIT (en corte)": todavia esta en el corte, se marca.
 MAYBE_TOKENS = ("posible", "possible", "maybe", "tentative")
 
-ROLES = ("shot", "tc_in", "tc_out", "episode", "status", "note",
+ROLES = ("shot", "tc_in", "tc_out", "episode", "status", "note", "notes", "notes2",
          "description", "scene", "vendor", "category", "thumb", "located", "clip")
 # Roles que viajan como texto a cada marca, para la ventana de info.
-INFO_ROLES = ("status", "description", "scene", "vendor", "category", "episode",
-              "thumb", "located", "clip")
+INFO_ROLES = ("status", "description", "notes", "notes2", "scene", "vendor", "category",
+              "episode", "thumb", "located", "clip")
 # Campos que, si cambian entre una corrida y la siguiente, pintan la marca de
 # amarillo. El TC no esta: un shot que se movio es un cambio de corte, no de
 # planilla. Thumb, nivel de ubicacion y clip tampoco: salen de Shot Marks.
-CHANGE_FIELDS = ("brief", "description", "status", "scene", "vendor", "category")
+CHANGE_FIELDS = ("brief", "description", "notes", "notes2", "status", "scene", "vendor",
+                 "category")
+# Lo que comparaban las marcas de antes de la v1.09, que no guardan la key
+# compared: un campo que no existia no cuenta como cambio.
+LEGACY_CHANGE_FIELDS = ("brief", "description", "status", "scene", "vendor", "category")
 CHANGE_UNCHANGED = "unchanged"
 CHANGE_CHANGED = "changed"
 CHANGE_NEW = "new"
@@ -119,6 +134,8 @@ _ROLE_HEADERS = {
     "episode": EPISODE_HEADERS,
     "status": STATUS_HEADERS,
     "note": NOTE_HEADERS,
+    "notes": NOTES_HEADERS,
+    "notes2": NOTES2_HEADERS,
     "description": DESCRIPTION_HEADERS,
     "scene": SCENE_HEADERS,
     "vendor": VENDOR_HEADERS,
@@ -221,7 +238,9 @@ def make_unique_headers(raw_headers):
     headers = []
     seen = {}
     for index, raw in enumerate(raw_headers):
-        base = str(raw or "").strip() or "Column %s" % column_letters(index)
+        # Un encabezado con salto de linea ("STATUS\nVFX") se ve en dos
+        # renglones en los combos: el salto es formato de la celda.
+        base = " ".join(str(raw or "").split()) or "Column %s" % column_letters(index)
         count = seen.get(base, 0) + 1
         seen[base] = count
         headers.append(base if count == 1 else "%s (%d)" % (base, count))
@@ -487,6 +506,7 @@ def mark_metadata(mark, source):
         meta_key("tc_in"): mark.tc_in,
         meta_key("tc_out"): mark.tc_out,
         meta_key("brief"): mark.note,
+        meta_key("compared"): ",".join(CHANGE_FIELDS),
     }
     for role, text in mark.info.items():
         values[meta_key(role)] = text
@@ -534,12 +554,19 @@ def previous_mark(shot, frame_in, frame_out, get, note=""):
     """Lo que hace falta de un tag propio anterior para compararlo.
 
     `get(key)` lee su metadata. Los tags de la v1.00 no guardaban columnas:
-    de esos solo se compara el brief (la nota del tag).
+    de esos solo se compara el brief (la nota del tag). Se comparan solo los
+    campos que esa corrida guardaba: un campo agregado despues (Notes) no
+    pinta de amarillo todas las marcas en la primera corrida que lo tiene.
     """
     info = mark_info_from_metadata(get)
     if not info["brief"]:
         info["brief"] = note
-    fields = CHANGE_FIELDS if info["complete"] else ("brief",)
+    compared = get(meta_key("compared"))
+    if compared is not None:
+        known = str(compared).split(",")
+        fields = tuple(f for f in CHANGE_FIELDS if f in known)
+    else:
+        fields = LEGACY_CHANGE_FIELDS if info["complete"] else ("brief",)
     return {
         "shot": shot,
         "frame_in": int(frame_in),
@@ -641,8 +668,8 @@ def mark_index_at(starts, ends, frame):
 
 # Campos donde busca Find Shot Mark. El orden decide que campo se informa
 # cuando el texto aparece en varios: el shot primero.
-SEARCH_FIELDS = ("shot", "description", "brief", "status", "vendor", "scene",
-                 "category", "episode", "tc_in", "tc_out", "clip")
+SEARCH_FIELDS = ("shot", "description", "brief", "notes", "notes2", "status", "vendor",
+                 "scene", "category", "episode", "tc_in", "tc_out", "clip")
 
 
 def search_text(text):

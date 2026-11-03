@@ -1,13 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Nav v1.07 | Lega
+  LGA_NKS_ShotMarks_Nav v1.08 | Lega
 
   Previous / Next Mark: Click en Previous / Next Mark del panel Review
   (con Shift esos botones navegan anotaciones). Salta el playhead a la
   marca de Shot Marks anterior o siguiente y muestra su info de la
-  planilla (shot, REC TC, descripcion, brief, status, vendor, escena,
-  categoria) en una ventanita. Find Shot Mark salta por aca tambien.
+  planilla (shot, REC TC, notas, descripcion, brief, status, vendor,
+  escena, categoria) en una ventanita. Find Shot Mark salta por aca tambien.
 
   Existe porque el salto nativo (Viewer > Next Tag) no muestra la nota, y
   la del tag de Hiero sale recortada. La ventana es una sola: cada salto
@@ -18,6 +18,9 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Nav.log.
 
+  v1.08: Notes y Notes 2 arriba de todo, cada una en una caja con borde
+         de color (ambar y celeste): son lo eventual del shot, lo que hay
+         que mirar con atencion. Sin texto (o sin columna) no aparecen.
   v1.07: show_mark_at: saltar a una marca dada y mostrarla, compartido
          con la ventana Find Shot Mark. Los botones pasan a ser Previous /
          Next Mark: el salto entre marcas es el Click normal.
@@ -76,7 +79,7 @@ DEBUG = False
 WINDOW_NAME = "LGA_ShotMarkInfo"
 # Sube cuando cambia la API de la ventana: el panel re-ejecuta este modulo en
 # cada click, y una ventana creada por una version vieja se reemplaza.
-WINDOW_API = 6
+WINDOW_API = 7
 
 # Tooltips en castellano, separados del widget para que pasar a bilingue sea
 # un cambio de datos.
@@ -91,6 +94,13 @@ INFO_FONT_PX = Metric.FORM_FONT_SIZE + 1
 TITLE_FONT_PX = INFO_FONT_PX + 4
 
 LOGGER_NAME = "LGA_NKS_ShotMarks_Nav"
+
+# Notes y Notes 2: (titulo, color del titulo, color del borde). Es dato, no
+# estilo: cada caja se reconoce por su color, como el cambio por el del tag.
+NOTE_SECTIONS = (
+    ("notes", "Notes", Color.WARNING_TEXT, Color.WARNING),
+    ("notes2", "Notes 2", Color.INFO, Color.INFO),
+)
 
 _sheet = None
 
@@ -264,6 +274,10 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
         self.thumb_caption = self._label(body)
         self._thumb_gap = QtWidgets.QSpacerItem(0, 8)
         body.addItem(self._thumb_gap)
+        # {campo: (contenedor, texto, texto anterior)}
+        self.note_boxes = {}
+        for field, title, title_color, border_color in NOTE_SECTIONS:
+            self.note_boxes[field] = self._note_box(body, title, title_color, border_color)
         self.description = self._section(body, "Description")
         self.description_before = self._label(body)
         body.addSpacing(8)
@@ -280,6 +294,30 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
         label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout.addWidget(label)
         return label
+
+    def _note_box(self, layout, title, title_color, border_color):
+        """Caja resaltada de Notes / Notes 2. Se oculta entera si no hay texto."""
+        holder = QtWidgets.QWidget()
+        outer = QtWidgets.QVBoxLayout(holder)
+        outer.setContentsMargins(0, 0, 0, 10)
+        box = QtWidgets.QWidget()
+        box.setObjectName("shotMarkNote")
+        box.setAttribute(Qt.WA_StyledBackground, True)
+        box.setStyleSheet(
+            "QWidget#shotMarkNote { background: %s; border-left: 3px solid %s; "
+            "border-radius: %dpx; }" % (Color.SURFACE, border_color, Metric.RADIUS_SMALL))
+        inner = QtWidgets.QVBoxLayout(box)
+        inner.setContentsMargins(10, 6, 10, 8)
+        inner.setSpacing(2)
+        heading = QtWidgets.QLabel(title)
+        heading.setStyleSheet("color: %s; %s" % (title_color, semibold_css()))
+        inner.addWidget(heading)
+        text = self._label(inner)
+        text.setStyleSheet("color: %s;" % Color.TEXT_STRONG)
+        before = self._label(inner)
+        outer.addWidget(box)
+        layout.addWidget(holder)
+        return holder, text, before
 
     def _section(self, layout, title):
         heading = QtWidgets.QLabel(title)
@@ -323,14 +361,20 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
         self.meta.setVisible(bool(meta))
         self._show_thumb(info)
         self.change.setText(_change_html(info.get("change"), info.get("changed") or {},
-                                         info.get("change_reason")))
+                                         info.get("change_reason"), info))
         self.change.setVisible(bool(info.get("change")))
         self.description.setText(_body(info.get("description")))
         self.brief.setText(_body(info.get("brief")))
+        changed = info.get("changed") or {}
+        befores = [("description", self.description_before), ("brief", self.brief_before)]
+        for field, (holder, text, before) in self.note_boxes.items():
+            # Sin texto no hay caja: tampoco si la nota se borro (el Before
+            # queda en la linea de cambio).
+            holder.setVisible(bool(info.get(field)))
+            text.setText(_escape(info.get(field) or ""))
+            befores.append((field, before))
         # El texto anterior de lo que cambio, para ver que cambio sin abrir la planilla.
-        for field, label in (("description", self.description_before),
-                             ("brief", self.brief_before)):
-            changed = info.get("changed") or {}
+        for field, label in befores:
             label.setText(_dim("Before: ") + _dim(_escape(changed[field]) or "&mdash;")
                           if field in changed else "")
             label.setVisible(field in changed)
@@ -540,12 +584,16 @@ CHANGE_TEXTS = {
     "new": "New since the previous run",
     "removed": "No longer in the sheet",
 }
-FIELD_LABELS = {"brief": "Brief", "description": "Description", "status": "Status",
-                "scene": "Scene", "vendor": "Vendor", "category": "Category"}
+FIELD_LABELS = {"brief": "Brief", "description": "Description", "notes": "Notes",
+                "notes2": "Notes 2", "status": "Status", "scene": "Scene",
+                "vendor": "Vendor", "category": "Category"}
+# Textos largos: el anterior va debajo de su seccion, no en la linea de cambio.
+LONG_FIELDS = ("description", "brief", "notes", "notes2")
 
 
-def _change_html(change, changed, reason=""):
+def _change_html(change, changed, reason="", current=None):
     """'Changed since the previous run: Description, Status (was X)'."""
+    current = current or {}
     if change not in CHANGE_TEXTS:
         return ""
     label = CHANGE_TEXTS[change]
@@ -561,7 +609,8 @@ def _change_html(change, changed, reason=""):
                 continue
             item = FIELD_LABELS[field]
             # Los textos largos se muestran debajo de su seccion; los cortos aca.
-            if field not in ("description", "brief"):
+            # Una nota que se borro no tiene caja: su texto anterior va aca.
+            if field not in LONG_FIELDS or (field.startswith("notes") and not current.get(field)):
                 item += _dim(" (was %s)" % (_escape(changed[field]) or "empty"))
             fields.append(item)
         text += ": " + ", ".join(fields)

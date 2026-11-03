@@ -208,6 +208,18 @@ class ShotMarksSheetTests(unittest.TestCase):
                           ("description", "note", "scene", "category", "vendor")],
                          ["DESCRIPCIÓN", "BRIEF", "ESC", "SHOT CATEGORY", "VENDOR"])
 
+    def test_notes_and_alternativa_are_their_own_columns(self):
+        headers = sheet.make_unique_headers(["SHOT NAME", "STATUS\nVFX", "VFX Brief", "Notas",
+                                             "Alternativa", "Vendor Notes"])
+        self.assertEqual(headers[1], "STATUS VFX")
+        columns = sheet.detect_columns(headers)
+        self.assertEqual([headers[columns[r]] for r in ("status", "note", "notes", "notes2")],
+                         ["STATUS VFX", "VFX Brief", "Notas", "Alternativa"])
+        # "Notas" sin brief ya no es el brief, y sin columnas de notas no hay rol.
+        self.assertIsNone(sheet.detect_columns(["SHOTNAME", "Notas"])["note"])
+        none = sheet.detect_columns(["SHOTNAME", "BRIEF"])
+        self.assertEqual((none["notes"], none["notes2"]), (None, None))
+
     def test_next_and_previous_mark_wrap_around(self):
         starts = [10, 50, 90]
         self.assertEqual(sheet.next_mark_index(starts, 0, "next"), 0)
@@ -314,6 +326,22 @@ class ShotMarksCompareTests(unittest.TestCase):
         marks = [_mark("PROJA_0100", 5, "A"), _mark("PROJA_0100", 95, "B changed")]
         sheet.compare_marks(marks, previous)
         self.assertEqual([m.change for m in marks], ["unchanged", "changed"])
+
+    def test_notes_change_is_a_change(self):
+        previous = [_previous(_mark("PROJA_0100", 0, "Steam", notes="Check rig"))]
+        marks = [_mark("PROJA_0100", 0, "Steam", notes="Check rig", notes2="Alt take")]
+        sheet.compare_marks(marks, previous)
+        self.assertEqual(marks[0].changed, {"notes2": ""})
+
+    def test_marks_before_notes_do_not_change_because_of_notes(self):
+        # Una marca de antes de que existiera Notes: no guarda la key compared.
+        old = _mark("PROJA_0100", 0, "Steam", status="WIP")
+        data = sheet.mark_metadata(old, "x")
+        del data[sheet.meta_key("compared")]
+        previous = [sheet.previous_mark(old.shot, 0, 10, data.get, old.note)]
+        marks = [_mark("PROJA_0100", 0, "Steam", status="WIP", notes="New note")]
+        sheet.compare_marks(marks, previous)
+        self.assertEqual(marks[0].change, sheet.CHANGE_UNCHANGED)
 
     def test_first_version_tags_only_compare_the_brief(self):
         previous = [sheet.previous_mark("PROJA_0100", 0, 10, {}.get, note="Steam")]

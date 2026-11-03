@@ -1,12 +1,12 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Find v1.00 | Lega
+  LGA_NKS_ShotMarks_Find v1.01 | Lega
 
   Find Shot Mark: Shift+Click en Shot Marks del panel Review. Una
   ventanita con un campo de texto que busca entre las marcas de Shot
   Marks del timeline del visor: por nombre de shot o por cualquier
-  texto de la planilla (descripcion, brief, status, vendor, escena,
+  texto de la planilla (descripcion, brief, notas, status, vendor, escena,
   categoria, episodio, TC, clip). Find salta al shot con ese nombre
   exacto o al primer resultado; Next, al siguiente desde el que se
   mostro (o desde el playhead si se movio), y al final vuelve al
@@ -23,6 +23,7 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Find.log.
 
+  v1.01: Busca tambien en Notes y Notes 2 ("found in Notes").
   v1.00: Version inicial.
 ____________________________________________________________________
 """
@@ -74,6 +75,7 @@ TOOLTIPS = {
 }
 
 FIELD_LABELS = {"shot": "Shot name", "description": "Description", "brief": "Brief",
+                "notes": "Notes", "notes2": "Notes 2",
                 "status": "Status", "vendor": "Vendor", "scene": "Scene",
                 "category": "Category", "episode": "Episode", "tc_in": "REC TC IN",
                 "tc_out": "REC TC OUT", "clip": "Camera clip"}

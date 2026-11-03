@@ -12,6 +12,11 @@ platforms: [win, mac]
 
 ## Unreleased
 
+## v4.024
+- [new] Shot Marks suma las columnas `Notes` y `Notes 2` (toma solas las columnas Notas y Alternativa de la planilla): la ventanita de cada shot las muestra arriba de todo, resaltadas en dos colores, y solo cuando ese shot tiene algo escrito.
+- [fixed][win] `Locate from Thumbnails` de Shot Marks ya no deja las marcas corridas (o fuera del timeline) cuando Nuke Studio muestra el video con un timecode distinto del que trae el archivo.
+- [fixed] En Shot Marks, los nombres de columna que en la planilla tienen un salto de línea se ven en una sola línea en los menús.
+
 ## v4.023
 - [new] La ventana de `Flow Pull` suma el checkbox `Shot Info`: prendido, al hacer click en una fila se abre el Shot Info de ese shot sin sacarle el foco a la ventana del Pull; se recuerda entre sesiones. `Keep this window on top` pasa a llamarse `Keep on top`.
 - [new] La ventana de `Flow Pull` tiene un botón `Download Clip`: baja la última versión del clip de la fila que seleccionaste, igual que el del panel Flow S3, sin tener que buscar el clip en el timeline.

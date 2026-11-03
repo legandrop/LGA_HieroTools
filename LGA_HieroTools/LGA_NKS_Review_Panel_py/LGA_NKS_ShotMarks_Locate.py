@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Locate v1.01 | Lega
+  LGA_NKS_ShotMarks_Locate v1.02 | Lega
 
   Shot Marks sin columna de timecode: ubica el thumbnail de cada fila
   de la planilla en el video del timeline y deja revisar los dudosos
@@ -30,6 +30,10 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Locate.log.
 
+  v1.02: Los TC ubicados salen del TC del clip segun NKS, no del que lee
+         ffprobe del archivo. Un MP4 con TC 00:59:50:00 que NKS muestra en
+         00:00:00:00 dejaba todas las marcas corridas 86160 cuadros: el
+         plan resta el TC de NKS.
   v1.01: EDL opcional: se pasa al motor, la ventana dice si se uso y
          cuantos cortes coinciden con la imagen, el IN/OUT de lo
          confirmado a mano sale del plano del EDL y cada fila muestra y
@@ -612,7 +616,15 @@ class LocateWindow(QtWidgets.QWidget):
         with open(self.result_path, encoding="utf-8") as handle:
             self.result = json.load(handle)
         self.fps = int(round(float(self.result["fps"])))
-        self.tc0 = _sheet_module().parse_timecode(self.result.get("timecode") or "", self.fps) or 0
+        # Los TC ubicados se miden contra el TC del clip segun NKS, que es el
+        # que resta el plan de Shot Marks. El del archivo (ffprobe) puede ser
+        # otro: un MP4 con TC 00:59:50:00 que NKS lee como 00:00:00:00.
+        file_tc = _sheet_module().parse_timecode(self.result.get("timecode") or "", self.fps) or 0
+        nks_tc = getattr(self.timeline, "media_tc", None)
+        self.tc0 = nks_tc if nks_tc is not None else file_tc
+        if nks_tc is not None and nks_tc != file_tc:
+            _logger().warning("TC del archivo %s distinto del de NKS %s: se usa el de NKS",
+                              self.result.get("timecode"), _sheet_module().format_timecode(nks_tc, self.fps))
         self.cuts = self.result.get("cuts") or []
         edl = self.result.get("edl") or {}
         if edl.get("used"):
