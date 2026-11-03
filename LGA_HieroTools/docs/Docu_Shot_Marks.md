@@ -26,6 +26,16 @@ suyas y las pinta segun lo que cambio en la planilla desde la corrida anterior.
    del timeline y crea un tag de rango por shot (`Sequence.addTagToRange`), con el shot como nombre y
    el brief como nota.
 
+## Brief numerado
+
+Un brief de varios renglones es una lista de pedidos. Al armar el plan, cada renglon con texto
+lleva su numero (`1. ...`, `2. ...`, `numbered_brief` del `_Sheet v1.15`): se lee de un vistazo y
+se puede nombrar un pedido ("el 3"). La marca que traiga el renglon (`- `, `-`, una vineta o una
+numeracion `1. ` / `1) ` previa) se reemplaza por el numero, asi numerar dos veces da lo mismo. Un
+guion en medio del renglon no se toca. Los renglones vacios separan grupos (`dudas:`, `wishlist:`)
+y quedan sin numero. Un brief de un solo renglon queda como esta: no es una lista. Va numerado a
+la nota del tag y a `_brief`; la planilla no se toca.
+
 ## Notes y Notes 2
 
 Notas eventuales del shot: no son el brief (el trabajo) ni la descripcion (que pasa en el plano),
@@ -91,8 +101,10 @@ icono del bin Markers de los Tag Presets de NKS (`icons:TagGreen.png`, etc.):
 - **La comparacion es contra la corrida anterior, no contra la primera.** Un amarillo que se vuelve a
   correr con la misma planilla pasa a verde.
 - Sin corrida anterior no hay contra que comparar: icono comun, sin columna Change.
-- **Se compara texto normalizado**: fin de linea (`\r\n`) y espacios al borde no cuentan. Comillas si:
-  arreglar las comillas de un brief es un cambio real del texto.
+- **Se compara texto normalizado**: fin de linea (`\r\n`), espacios al borde de cada renglon y
+  marcas de lista (guion, vineta o numero al principio del renglon) no cuentan: numerar el brief no
+  pinta de amarillo las marcas de una corrida anterior sin numerar. Comillas si: arreglar las
+  comillas de un brief es un cambio real del texto.
 - Los tags de la v1.00 no guardaban columnas: de esos solo se compara el brief (la nota).
 - **Solo se comparan los campos que la corrida anterior guardaba.** Cada marca guarda en `_compared`
   la lista de `CHANGE_FIELDS` de esa version. Sin eso, al sumar Notes, la primera corrida nueva

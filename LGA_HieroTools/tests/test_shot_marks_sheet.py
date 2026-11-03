@@ -178,7 +178,7 @@ class ShotMarksSheetTests(unittest.TestCase):
         columns = sheet.detect_columns(table.headers)
         plan = sheet.build_plan(table, columns, FPS, 86400, 1000)
         self.assertEqual([(m.shot, m.note) for m in plan.marks],
-                         [("PROJA_0010", brief), ("PROJA_0020", "Cleanup")])
+                         [("PROJA_0010", sheet.numbered_brief(brief)), ("PROJA_0020", "Cleanup")])
         self.assertEqual(len(table.rows), 302)
 
     def test_marks_carry_sheet_info_and_round_trip_through_metadata(self):
@@ -645,6 +645,32 @@ class ShotMarksOverlapTests(unittest.TestCase):
         self.assertEqual([m.row for m in plan.marks], [2, 4])
         self.assertTrue(any("Repeated row (same as row 2)" in i.message and not i.written
                             for i in plan.issues))
+
+
+class ShotMarksBriefTests(unittest.TestCase):
+    def test_brief_lines_are_numbered(self):
+        brief = "- borrar autos\nagregar follaje\n - cambiar hora del reloj\n\nwishlist: tren CG \n"
+        self.assertEqual(sheet.numbered_brief(brief),
+                         "1. borrar autos\n2. agregar follaje\n3. cambiar hora del reloj\n\n"
+                         "4. wishlist: tren CG")
+        # Numerar dos veces da lo mismo, y una numeracion previa se reemplaza.
+        once = sheet.numbered_brief(brief)
+        self.assertEqual(sheet.numbered_brief(once), once)
+        self.assertEqual(sheet.numbered_brief("3) uno\n7. dos"), "1. uno\n2. dos")
+        # Un guion en medio del renglon no es una marca de lista.
+        self.assertEqual(sheet.numbered_brief("camion blanco- reemplazar\nborrar grafitti"),
+                         "1. camion blanco- reemplazar\n2. borrar grafitti")
+
+    def test_single_line_brief_is_left_alone(self):
+        self.assertEqual(sheet.numbered_brief("-Cleanup de modernidad"), "-Cleanup de modernidad")
+        self.assertEqual(sheet.numbered_brief("Cleanup\n\n"), "Cleanup\n\n")
+        self.assertEqual(sheet.numbered_brief(""), "")
+
+    def test_numbering_is_not_a_sheet_change(self):
+        mark = sheet.Mark(2, "S010", 0, 10, "", "", sheet.numbered_brief("- uno\ndos"), {})
+        previous = {"brief": "- uno\ndos "}
+        self.assertEqual(sheet._comparable(mark.note), sheet._comparable(previous["brief"]))
+        self.assertNotEqual(sheet._comparable("1. uno\n2. tres"), sheet._comparable("uno\ndos"))
 
 
 class ShotMarksThumbTests(unittest.TestCase):

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Sheet v1.14 | Lega
+  LGA_NKS_ShotMarks_Sheet v1.15 | Lega
 
   Nucleo sin host de Shot Marks: lee una planilla (xlsx o csv),
   detecta la fila de encabezado y las columnas de shot y timecode,
@@ -13,6 +13,10 @@ ____________________________________________________________________
   los sharedStrings), sin openpyxl: NKS no lo trae, y asi una
   planilla de cientos de MB por las imagenes se lee en segundos.
 
+  v1.15: numbered_brief: el brief de varios renglones se numera al armar
+         el plan ("1. ...", "2. ..."), reemplazando el guion o la vineta
+         de cada renglon. _comparable ignora esas marcas: numerar no pinta
+         de amarillo las marcas de una corrida anterior.
   v1.14: Thumbs junto al proyecto: project_thumbs pasa el thumb de cada
          marca a "<planilla>/<archivo>.jpg", relativo a la carpeta del
          .hrox, y copy_thumbs los copia ahi. resolve_thumb lo busca en la
@@ -259,6 +263,34 @@ def normalize_episode(value):
     if re.fullmatch(r"\d+\.0+", text):
         return text.split(".")[0]
     return text
+
+
+# Marca de lista al principio de un renglon: guion, vineta o una numeracion
+# "1. " / "1) " que ya traiga (asi numerar dos veces da lo mismo).
+_LIST_MARK = re.compile(r"^\s*(?:[-–—•*·]+\s*|\d+[.)]\s+)")
+
+
+def numbered_brief(text):
+    """Brief con un numero por renglon: "1. ...", "2. ...".
+
+    Un brief de varios renglones es una lista de pedidos: numerados se leen
+    de un vistazo y se pueden nombrar ("el 3"). La marca que traiga cada
+    renglon (guion, vineta, numero) se reemplaza por el numero. Los renglones
+    vacios separan grupos ("dudas:", "wishlist:") y se conservan sin numero.
+    Un brief de un solo renglon queda como esta: no hay lista.
+    """
+    lines = str(text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    items = [_LIST_MARK.sub("", line).strip() for line in lines]
+    if sum(1 for item in items if item) < 2:
+        return text
+    out = []
+    number = 0
+    for item in items:
+        if item:
+            number += 1
+            item = "%d. %s" % (number, item)
+        out.append(item)
+    return "\n".join(out).strip()
 
 
 def cell_text(value):
@@ -733,9 +765,10 @@ def mark_info_from_metadata(get):
 # -- diferencias contra la corrida anterior ---------------------------------
 
 def _comparable(text):
-    """Texto para comparar: sin diferencias de fin de linea ni espacios sobrantes."""
+    """Texto para comparar: sin diferencias de fin de linea, espacios sobrantes
+    ni marcas de lista (numerar el brief no es un cambio de la planilla)."""
     text = str(text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
-    return "\n".join(line.rstrip() for line in text.split("\n"))
+    return "\n".join(_LIST_MARK.sub("", line).strip() for line in text.split("\n"))
 
 
 def previous_mark(shot, frame_in, frame_out, get, note=""):
@@ -1377,7 +1410,7 @@ def build_plan(table, columns, fps, reference_start, duration,
                 "Shot repeated (also row %d)" % seen_shots[shot], True))
         else:
             seen_shots[shot] = number
-        note = _value(row, columns.get("note"))
+        note = numbered_brief(_value(row, columns.get("note")))
         info = {}
         comments = comments_json(table.comments.get(number, ()), table.headers)
         if comments:
