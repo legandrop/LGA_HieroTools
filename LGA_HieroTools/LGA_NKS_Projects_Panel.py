@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.52 | Lega
+  LGA_NKS_Projects_Panel v2.53 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,9 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.53: Si el proyecto recien abierto no tiene timelines, la post-apertura
+         avisa con un cartel en vez de solo anotarlo en el log: el click
+         parecia no hacer nada.
   v2.52: delete_sequence() borra un timeline desde el menu contextual de su
          fila, con confirmacion y en un undo. Borrar un timeline abierto tira
          NKS 16, asi que antes se cierra su tab con el switch; si no se puede,
@@ -1432,6 +1435,16 @@ class ProjectsPanel(QtWidgets.QWidget):
                 target, origin = (sequences[0].name(), "primera secuencia") if sequences else (None, "")
             if not target:
                 debug_print(f"[Post-apertura] {project.name()} no tiene secuencias")
+                # Sin aviso el click parece no hacer nada: el proyecto abre y no se ve.
+                # Diferido para que salga con el repintado ya reactivado y sin
+                # frenar el on_done de quien abrio el proyecto.
+                name = project.name()
+                QtCore.QTimer.singleShot(
+                    0,
+                    lambda: show_warning(
+                        self, "Open project", f"{name} opened, but it has no timelines to show."
+                    ),
+                )
                 return
             switch_to_sequence(target, target_project=project, force_cleanup=True)
             # El switch reinicia el log: esta linea queda como primera traza visible.

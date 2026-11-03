@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.024
+- [improved] Si abrís desde Projects Panel un proyecto que no tiene ningún timeline, ahora te avisa con un cartel, en vez de abrirlo sin que se vea ningún cambio.
 - [improved][win] `Locate from Thumbnails` recuerda lo que revisaste en cada corte por separado: si el proyecto tiene dos armados de la misma película, revisar el nuevo no borra lo que confirmaste en el anterior.
 - [improved] Shot Marks numera cada renglón del brief (1., 2., 3.…) en lugar de los guiones, y en la ventanita separa un poco cada pedido del siguiente, así la lista de cada shot se lee de un vistazo.
 - [improved][win] Shot Marks guarda los thumbnails de la planilla en una carpeta junto al proyecto, así la ventanita de cada shot los muestra siempre, también si abrís el proyecto desde otra máquina.
