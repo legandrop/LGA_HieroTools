@@ -47,9 +47,10 @@ class FlowPullWindowSettingsTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_los_tres_checkboxes_persisten(self):
+    def test_los_cuatro_checkboxes_persisten(self):
         self.assertEqual(
-            set(self.defaults), {"keep_on_top", "only_in_review", "only_for_me"}
+            set(self.defaults),
+            {"keep_on_top", "only_in_review", "only_for_me", "shot_info"},
         )
 
     def test_sin_ini_devuelve_los_defaults(self):

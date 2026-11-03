@@ -84,8 +84,23 @@ nueva.
    sin mínimo propio usa el `minimumSizeHint` del scroll area, más alto que una
    fila (por eso lleva `setMinimumHeight(1)`).
 
-   **Download Clip**, a la izquierda de los checkboxes, baja de Wasabi la última
-   versión del clip de la fila seleccionada. Por qué: el Pull sube los clips a la
+   **Columnas:** Shot, Task, v_Flow, v_NKS, descarga, Previous Status, New
+   Status. Desde v3.75 no hay columna v_Status (el status de la versión en Flow
+   no se usaba para decidir nada) y v_SG pasó a llamarse v_Flow y a ir antes
+   que v_NKS, para leer "lo que hay en Flow / lo que tengo".
+
+   **Botón de descarga por fila** (columna sin título después de v_NKS; hasta
+   v3.74 era un botón **Download Clip** en el header que actuaba sobre la fila
+   seleccionada). Baja de Wasabi la última versión del clip de ESA fila. Es un
+   cell widget, así que se come el click: no selecciona la fila ni navega al
+   clip, y no hace falta seleccionar nada antes. Cuando v_NKS < v_Flow, la celda
+   de v_NKS y el botón van en el violeta de acción (`Color.ACCENT`, hover
+   `ACCENT_HOVER`): el color une "estás atrasado" con "esto lo arregla". Al día
+   el botón queda neutro (`Style.BTN_ICON`) y vuelve a bajar la última. El
+   glifo es el de EXR Publish de PipeSync, dibujado con `QPainterPath`. En la
+   fila seleccionada el texto sobre el violeta no se aclara, porque llegaría a
+   blanco. La fila se captura por índice: las filas nunca se borran, los
+   filtros solo las ocultan. Por qué existe la descarga: el Pull sube los clips a la
    versión de Flow, que muchas veces todavía no está en disco y queda offline;
    antes había que buscar ese clip en el timeline, seleccionarlo e ir al panel
    Flow S3. Hace lo mismo que el click en **Download Clip** de ese panel
@@ -95,8 +110,6 @@ nueva.
    que acepta clips explícitos en vez de leer la selección del timeline. El clip
    se vuelve a buscar en la secuencia con `_find_clip_for_navigation`, como al
    navegar, porque la fila se armó antes de que el Pull lo cambiara de versión.
-   Está deshabilitado mientras no haya una fila visible seleccionada (una fila
-   que un filtro ocultó no cuenta).
 2. **Shot Info** — muestra datos del shot y comentarios/versiones de la task; shortcut `Shift+T`.
 3. **Review Pic** — captura el viewer con número de frame y la abre en FrameRev para anotarla; Save en FrameRev deja la anotación en ese mismo JPG, que Flow Push sube con la nota (ver `Docu_FrameRev.md`).
 

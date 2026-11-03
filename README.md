@@ -67,9 +67,11 @@ Internal reference: [Flow Review Panel](LGA_HieroTools/docs/LGA_NKS_Flow_Rev_Pan
   Both only filter the list: the pull updates all clips either way.
   All the checkboxes, including **Shot Info** and **Keep on top**, are
   remembered between pulls and sessions.
-  **Download Clip** downloads the latest version of the selected row's clip
-  from Wasabi S3, the same as **Download Clip** in the Flow S3 panel, without
-  having to select the clip in the timeline.
+  Each row has a download button next to **v_NKS**: it downloads the latest
+  version of that row's clip from Wasabi S3, the same as **Download Clip** in
+  the Flow S3 panel, without selecting the row or the clip in the timeline.
+  When the timeline is behind Flow (**v_NKS** lower than **v_Flow**), the
+  **v_NKS** cell and the button turn violet.
 - **Shot Info**  
   Shows shot information and version comments for the task resolved from the
   active context (Comp, Roto, Cleanup, or another enabled task scope).

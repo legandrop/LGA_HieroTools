@@ -1,12 +1,19 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.74 | Lega
+  LGA_NKS_Flow_Pull v3.75 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.75: El boton "Download Clip" del header pasa a ser un boton por fila,
+         en una columna propia despues de v_NKS: baja la ultima version del
+         clip de ESA fila sin tener que seleccionarla. Se saca la columna
+         v_Status; v_SG pasa a llamarse v_Flow y va antes que v_NKS. Cuando
+         v_NKS es menor que v_Flow, la celda de v_NKS y el boton van en el
+         violeta de accion (antes se pintaba v_SG de vino); al dia, el boton
+         queda neutro y sigue bajando la ultima.
   v3.74: Checkbox "Shot Info", primero de los cuatro del header, apagado
          por default y persistido en FlowPull.ini: prendido, el click en
          una fila abre el Shot Info de esa fila. Reemplaza a la lista
@@ -1143,17 +1150,61 @@ _TOOLTIPS = {
             "shot y task, sin sacarle el foco a esta ventana. Se guarda al tocarlo."
         ),
     },
-    "download_clip": {
+    # {flow}/{nks}: numeros de version de la fila.
+    "download_outdated": {
         "es": (
-            "Descarga de Wasabi la ultima version del clip de la fila "
-            "seleccionada, igual que Download Clip del panel Flow S3. "
-            "Al terminar, el clip se reconecta solo."
+            "Descarga de Wasabi la v{flow} de este clip (en el timeline esta la "
+            "v{nks}), igual que Download Clip del panel Flow S3. Al terminar, "
+            "el clip se reconecta solo."
         ),
     },
-    "download_clip_off": {
-        "es": "Selecciona una fila para descargar su clip.",
+    "download_current": {
+        "es": (
+            "El timeline ya tiene la ultima version (v{flow}). Click la vuelve "
+            "a descargar de Wasabi y reconecta el clip."
+        ),
     },
 }
+
+# Columnas de la tabla de resultados. La 4 no tiene texto: lleva el boton de
+# descarga de la fila como cell widget.
+_COL_V_FLOW = 2
+_COL_V_NKS = 3
+_COL_DOWNLOAD = 4
+
+# Flecha de descarga, el mismo glifo que el boton de EXR Publish de PipeSync
+# (download.svg, viewBox 358). Se dibuja con QPainter para no viajar un SVG
+# mas: barra de abajo + flecha, como poligonos.
+_DOWNLOAD_GLYPH_VIEWBOX = 358.0
+_DOWNLOAD_GLYPH_BAR = (50.5, 306.5, 257.0, 36.7)  # x, y, ancho, alto
+_DOWNLOAD_GLYPH_ARROW = (
+    (307.5, 141.3), (234.1, 141.3), (234.1, 12.8), (124.0, 12.8),
+    (124.0, 141.3), (50.5, 141.3), (179.0, 269.8),
+)
+_DOWNLOAD_GLYPH_SIZE = 12
+_DOWNLOAD_BTN_SIZE = (26, 20)
+
+
+def _download_icon(color_hex, size=_DOWNLOAD_GLYPH_SIZE):
+    """QIcon con la flecha de descarga en el color pedido, nitido en HiDPI."""
+    screen = QtWidgets.QApplication.primaryScreen()
+    dpr = screen.devicePixelRatio() if screen else 1.0
+    pixmap = QtGui.QPixmap(int(round(size * dpr)), int(round(size * dpr)))
+    pixmap.setDevicePixelRatio(dpr)
+    pixmap.fill(Qt.transparent)
+    path = QtGui.QPainterPath()
+    path.addRect(QtCore.QRectF(*_DOWNLOAD_GLYPH_BAR))
+    path.addPolygon(
+        QtGui.QPolygonF([QtCore.QPointF(x, y) for x, y in _DOWNLOAD_GLYPH_ARROW])
+    )
+    path.closeSubpath()
+    painter = QtGui.QPainter(pixmap)
+    painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
+    scale = size / _DOWNLOAD_GLYPH_VIEWBOX
+    painter.scale(scale, scale)
+    painter.fillPath(path, QtGui.QColor(color_hex))
+    painter.end()
+    return QtGui.QIcon(pixmap)
 
 # Script que baja el clip; es el mismo que usa Download Clip del panel Flow S3.
 _DOWNLOAD_CLIP_SCRIPT = os.path.join(
@@ -1607,32 +1658,57 @@ class GUI_Table(QtWidgets.QDialog):
         )
         self.activateWindow()
 
-    def _selected_visible_row(self):
-        """Fila seleccionada si se ve; None si no hay o si un filtro la oculto."""
-        for index in self.table.selectionModel().selectedRows():
-            row = index.row()
-            if not self.table.isRowHidden(row):
-                return row
-        return None
+    def set_download_cell(self, row, flow_version, nks_version):
+        """Pone el boton de descarga en la columna de descarga de la fila.
 
-    def _update_download_button(self):
-        enabled = self._selected_visible_row() is not None
-        self.download_clip_btn.setEnabled(enabled)
-        self.download_clip_btn.setToolTip(
-            _tooltip("download_clip" if enabled else "download_clip_off")
-        )
+        Violeta (el de accion del pack) cuando el timeline esta atrasado
+        respecto de Flow, neutro cuando esta al dia: en los dos casos baja la
+        ultima. El boton se come el click, asi que no selecciona la fila ni
+        navega al clip: es la unica celda que hace algo distinto de eso.
+        """
+        outdated = flow_version > nks_version
+        button = QtWidgets.QPushButton()
+        button.setFixedSize(*_DOWNLOAD_BTN_SIZE)
+        button.setCursor(Qt.PointingHandCursor)
+        button.setAutoDefault(False)
+        button.setFocusPolicy(Qt.NoFocus)
+        if outdated:
+            # Mismos colores y hover que BTN_PRIMARY; el padding de 7x18 de esa
+            # hoja no deja lugar al glifo en un boton de 26x20, se anula.
+            button.setStyleSheet(Style.BTN_PRIMARY + "QPushButton { padding: 0px; }")
+            button.setIcon(_download_icon(UIColor.TEXT_ON_ACCENT))
+            tip = _tooltip("download_outdated")
+        else:
+            button.setStyleSheet(Style.BTN_ICON)
+            button.setIcon(_download_icon(UIColor.TEXT))
+            tip = _tooltip("download_current")
+        button.setIconSize(QtCore.QSize(_DOWNLOAD_GLYPH_SIZE, _DOWNLOAD_GLYPH_SIZE))
+        button.setToolTip(tip.format(flow=flow_version, nks=nks_version))
+        # La fila se captura por indice: las filas nunca se borran, solo se
+        # ocultan con los filtros, asi que el indice sigue valiendo.
+        button.clicked.connect(lambda _checked=False, r=row: self.download_row_clip(r))
 
-    def download_selected_clip(self):
-        """Baja la ultima version del clip de la fila seleccionada.
+        # Contenedor para centrar el boton en la celda. Fondo transparente
+        # explicito: el QWidget { background } de Style.FORM lo pintaria del
+        # color de la ventana encima de la celda.
+        cell = QtWidgets.QWidget()
+        cell.setObjectName("pullDownloadCell")
+        cell.setStyleSheet("QWidget#pullDownloadCell { background: transparent; }")
+        cell_layout = QtWidgets.QHBoxLayout(cell)
+        cell_layout.setContentsMargins(6, 0, 6, 0)
+        cell_layout.addWidget(button, 0, Qt.AlignCenter)
+        self.table.setCellWidget(row, _COL_DOWNLOAD, cell)
+
+    def download_row_clip(self, row):
+        """Baja la ultima version del clip de una fila.
 
         Hace lo mismo que el click en Download Clip del panel Flow S3, pero el
         clip sale de la fila y no de la seleccion del timeline. El clip se
         vuelve a buscar en la secuencia (como al navegar) porque el Pull puede
         haberlo cambiado de version despues de armar la fila.
         """
-        row = self._selected_visible_row()
-        if row is None or row >= len(self.row_navigation_data):
-            debug_print("Download Clip: no hay fila seleccionada")
+        if row is None or row < 0 or row >= len(self.row_navigation_data):
+            debug_print(f"Download Clip: fila sin datos de navegacion: {row}")
             return
         nav_data = self.row_navigation_data[row]
         try:
@@ -1691,17 +1767,6 @@ class GUI_Table(QtWidgets.QDialog):
         self.title_label.setStyleSheet("QLabel { padding: 0 4px 4px 4px; }")
         header_row.addWidget(self.title_label, 0, Qt.AlignLeft | Qt.AlignVCenter)
         header_row.addStretch(1)
-        # Accion sobre la fila seleccionada: baja la ultima version de su clip.
-        # Arranca deshabilitado; lo habilita _update_download_button.
-        self.download_clip_btn = QtWidgets.QPushButton("Download Clip")
-        self.download_clip_btn.setStyleSheet(Style.BTN_PRIMARY)
-        self.download_clip_btn.setCursor(Qt.PointingHandCursor)
-        self.download_clip_btn.setAutoDefault(False)
-        self.download_clip_btn.setEnabled(False)
-        self.download_clip_btn.setToolTip(_tooltip("download_clip_off"))
-        self.download_clip_btn.clicked.connect(self.download_selected_clip)
-        header_row.addWidget(self.download_clip_btn, 0, Qt.AlignRight | Qt.AlignVCenter)
-        header_row.addSpacing(Metric.SPACING * 2)
         # Primero de los checkboxes: Shot Info al hacer click en una fila. Persiste como los filtros, pero
         # no refiltra: solo se guarda.
         self.shot_info_chk = QtWidgets.QCheckBox("Shot Info")
@@ -1760,9 +1825,9 @@ class GUI_Table(QtWidgets.QDialog):
             [
                 "Shot",
                 " Task ",
+                " v_Flow ",
                 " v_NKS ",
-                " v_SG ",
-                " v_Status ",
+                "",
                 " Previous Status ",
                 " New Status ",
             ]
@@ -1773,7 +1838,6 @@ class GUI_Table(QtWidgets.QDialog):
         self.table.verticalHeader().setVisible(False)
         self.table.setFocusPolicy(Qt.NoFocus)
         self.table.cellClicked.connect(self.navigate_to_table_row)
-        self.table.itemSelectionChanged.connect(self._update_download_button)
         # NO se aplica Style.TABLE: los fondos de las celdas son DATA (colores
         # de estado de Flow) y los pinta el ColorMixDelegate; una regla
         # item:selected con fondo del tema los pisaria justo al seleccionar.
@@ -1916,8 +1980,6 @@ class GUI_Table(QtWidgets.QDialog):
             self._show_results_page(self.empty_state)
         else:
             self._show_results_page(self.table)
-        # Si el filtro oculto la fila seleccionada, el boton no puede bajarla.
-        self._update_download_button()
         debug_print(
             f"Filtros Only in review={only_review} Only for me={only_me}: "
             f"{visibles}/{total} filas visibles"
@@ -2079,9 +2141,7 @@ class GUI_Table(QtWidgets.QDialog):
         # contemplarlo para que titulo y checkboxes no queden recortados.
         title_w = self.title_label.sizeHint().width()
         checkbox_w = (
-            self.download_clip_btn.sizeHint().width()
-            + Metric.SPACING * 2
-            + self.shot_info_chk.sizeHint().width()
+            self.shot_info_chk.sizeHint().width()
             + Metric.SPACING * 2
             + self.only_review_chk.sizeHint().width()
             + Metric.SPACING
@@ -2116,7 +2176,6 @@ class GUI_Table(QtWidgets.QDialog):
         header_h = max(
             self.title_label.sizeHint().height(),
             self.keep_on_top_chk.sizeHint().height(),
-            self.download_clip_btn.sizeHint().height(),
         )
         content_height = header_height + rows_height + frame
         if self.results_stack.currentWidget() is self.empty_state:
@@ -2203,7 +2262,10 @@ class ColorMixDelegate(QStyledItemDelegate):
         texto = self._brush_color(index.data(Qt.ForegroundRole), UIColor.TEXT)
         # El texto claro sube de brillo; el oscuro (sobre estados claros) se
         # conserva, porque aclararlo le quitaria contraste al fondo ya aclarado.
-        if texto.valueF() >= 0.5:
+        # Sobre el violeta de accion (v_NKS atrasada) tampoco: aclarado llega a
+        # blanco, y blanco sobre violeta no va.
+        sobre_violeta = fondo.name().lower() == QColor(UIColor.ACCENT).name().lower()
+        if texto.valueF() >= 0.5 and not sobre_violeta:
             texto = self.aclarar(texto)
         # Mismo margen horizontal que usa el estilo al dibujar la celda sin
         # seleccionar, para que el texto no salte al hacer clic.
@@ -2322,31 +2384,21 @@ class HieroOperations:
         task_item = QTableWidgetItem(" " + str(task_name) + " ")
         version_item = QTableWidgetItem(str(version_num))
         sg_version_item = QTableWidgetItem(str(sg_version_num))
-        sg_status_item = QTableWidgetItem(sg_status)
+        # sg_status (el status de la version en Flow) ya no tiene columna desde
+        # v3.75; se sigue recibiendo para no cambiar la firma.
         prev_status_item = QTableWidgetItem(" " + prev_status + " ")
         new_status_item = QTableWidgetItem(new_status)
         # Centrado de algunas columnas
         task_item.setTextAlignment(Qt.AlignCenter)
         version_item.setTextAlignment(Qt.AlignCenter)
         sg_version_item.setTextAlignment(Qt.AlignCenter)
-        sg_status_item.setTextAlignment(Qt.AlignCenter)
-        # Configuracion de color de fondo y texto para el nombre del shot
-        # shot_color_bg = QColor('#323232')  # Color oscuro para el fondo
-        # shot_color_text = QColor('#c8c8c8')  # Texto blanco para mejor contraste
-        # shot_item.setBackground(QBrush(shot_color_bg))
-        # shot_item.setForeground(QBrush(shot_color_text))
-        # Configuracion del color de fondo para la columna v_SG basada en la condicion especifica
-        if sg_version_num > version_num:  # Condicion para pintar la columna v_SG
-            sg_version_item.setBackground(QBrush(QColor("#81395a")))
-            sg_version_item.setForeground(
-                QBrush(QColor("#c8c8c8"))
-            )  # Texto blanco para mejor contraste
-        # Configuracion del color de fondo para la columna v_Status basada en la condicion especifica
-        if sg_status == "rev":  # Condicion para pintar la columna v_Status
-            sg_status_item.setBackground(QBrush(QColor("#81395a")))
-            sg_status_item.setForeground(
-                QBrush(QColor("#c8c8c8"))
-            )  # Texto blanco para mejor contraste
+        # Timeline atrasado respecto de Flow: v_NKS va en el violeta de accion,
+        # el mismo del boton de descarga de al lado, que es lo que lo resuelve.
+        # Texto en el gris claro de sobre-violeta: blanco sobre el violeta no.
+        outdated = sg_version_num > version_num
+        if outdated:
+            version_item.setBackground(QBrush(QColor(UIColor.ACCENT)))
+            version_item.setForeground(QBrush(QColor(UIColor.TEXT_ON_ACCENT)))
         # Configuracion de colores para columna de estado previo y nuevo
         prev_status_bg_color = QColor(prev_color)
         prev_status_text_color = self.color_for_background(prev_color)
@@ -2361,17 +2413,16 @@ class HieroOperations:
         # Anadir los items a la fila
         table.setItem(row_count, 0, shot_item)
         table.setItem(row_count, 1, task_item)
-        table.setItem(row_count, 2, version_item)
-        table.setItem(row_count, 3, sg_version_item)
-        table.setItem(row_count, 4, sg_status_item)
+        table.setItem(row_count, _COL_V_FLOW, sg_version_item)
+        table.setItem(row_count, _COL_V_NKS, version_item)
         table.setItem(row_count, 5, prev_status_item)
         table.setItem(row_count, 6, new_status_item)
+        # La columna de descarga es un cell widget, no un item.
+        gui_table.set_download_cell(row_count, sg_version_num, version_num)
         # Configuracion de colores que se agregan a la lista para la linea de seleccion
         row_colors = ["#8a8a8a"] * 7  # Color por defecto para todas las columnas
-        if sg_version_num > version_num:  # Si la version SG es mayor que la version NKS
-            row_colors[3] = "#81395a"  # Color para la columna v_SG
-        if sg_status == "rev":  # Si el estado es "rev"
-            row_colors[4] = "#81395a"  # Color para la columna v_Status
+        if outdated:
+            row_colors[_COL_V_NKS] = UIColor.ACCENT
         row_colors[5] = prev_color  # Color para la columna de estado previo
         row_colors[6] = new_color  # Color para la columna de nuevo estado
         gui_table.add_color_to_background_list(
