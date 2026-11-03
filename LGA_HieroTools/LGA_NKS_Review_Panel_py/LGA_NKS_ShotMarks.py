@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks v1.07 | Lega
+  LGA_NKS_ShotMarks v1.08 | Lega
 
   Shot Marks: lee una planilla de breakdown (xlsx o csv) y pone un tag
   de rango por shot en el timeline activo, en el REC TC de la planilla,
@@ -22,6 +22,9 @@ ____________________________________________________________________
   Nucleo sin host (lectura y plan): LGA_NKS_ShotMarks_Sheet.py.
   Log de cada corrida: logs/DebugPy_LGA_NKS_ShotMarks.log.
 
+  v1.08: Una roja (shot que ya no esta) que caeria encima de una marca
+         nueva no se crea: con una planilla renumerada quedaban cientos de
+         tags uno arriba del otro, el nombre viejo sobre el nuevo.
   v1.07: La columna de shot se elige mirando las filas: con "SHOT NAME" y
          "VFX SHOT NAME", la que tiene mas nombres completos, y le gana a
          la columna recordada de la corrida anterior si esa tiene menos.
@@ -852,6 +855,11 @@ class ShotMarksDialog(QtWidgets.QDialog):
         # Sin corrida anterior no hay contra que comparar: icono comun.
         self.removed = (module.compare_marks(self.plan.marks, self.previous, self.plan.issues)
                         if self.previous else [])
+        self.removed, covered = module.drop_covered_removed(self.removed, self.plan.marks)
+        if covered:
+            _logger_ref().info("Rojas que no se crean (caen sobre una marca nueva): %d", len(covered))
+            for old in covered:
+                _logger_ref().info("  %-28s %6d-%-6d", old["shot"], old["frame_in"], old["frame_out"])
         self._show_plan()
 
     def _show_plan(self):

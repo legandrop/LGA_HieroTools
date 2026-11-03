@@ -551,5 +551,101 @@ class ShotMarksStripTests(unittest.TestCase):
         self.assertEqual(sheet.strip_shots(rows, STRIP_CUTS, 1000, 99)["shots"], [])
 
 
+
+class ShotMarksOverlapTests(unittest.TestCase):
+    def test_decisions_go_by_photo_and_shot(self):
+        rows = [{"sha1": "aa", "shot": "S010"}, {"sha1": "aa", "shot": "S030"},
+                {"sha1": "bb", "shot": "S020"}, {"sha1": "bb", "shot": "S020"}]
+        shared = sheet.shared_photos(rows)
+        self.assertEqual(shared, {"aa"})
+        old = {"aa": {"state": "confirmed", "frame": 5}, "bb": {"state": "confirmed", "frame": 9}}
+        # La foto compartida: la decision vieja (solo por foto) no se sabe de quien era.
+        self.assertEqual(sheet.find_decision(old, "aa", "S010", shared), {})
+        self.assertEqual(sheet.find_decision(old, "bb", "S020", shared)["frame"], 9)
+        new = dict(old)
+        new[sheet.decision_key("aa", "S030")] = {"state": "confirmed", "frame": 7}
+        self.assertEqual(sheet.find_decision(new, "aa", "S030", shared)["frame"], 7)
+        self.assertEqual(sheet.find_decision(new, "aa", "S010", shared), {})
+
+    def test_shared_range_splits_at_the_missed_cut(self):
+        scores = [0.0] * 200
+        scores[60] = 5.1   # corte que scdet no paso (umbral 6)
+        scores[120] = 4.5  # otro, sin marca de este lado
+        marks = [{"row": 1, "shot": "A", "frame": 30, "in": 10, "out": 149},
+                 {"row": 2, "shot": "B", "frame": 90, "in": 10, "out": 149}]
+        split = sheet.split_shared_ranges(marks, scores)
+        self.assertEqual(split, [])  # los recortan los picos, sin partir a mano
+        self.assertEqual((marks[0]["in"], marks[0]["out"]), (10, 59))
+        self.assertEqual((marks[1]["in"], marks[1]["out"]), (60, 119))
+
+    def test_shared_range_without_a_peak_splits_at_the_strongest(self):
+        scores = [0.0] * 200
+        scores[70] = 1.2
+        marks = [{"row": 1, "shot": "A", "frame": 30, "in": 10, "out": 149},
+                 {"row": 2, "shot": "B", "frame": 90, "in": 10, "out": 149},
+                 {"row": 3, "shot": "C", "frame": 170, "in": 150, "out": 199}]
+        self.assertEqual(sheet.split_shared_ranges(marks, scores), [(1, 2, 70)])
+        self.assertEqual((marks[0]["out"], marks[1]["in"]), (69, 70))
+        self.assertEqual((marks[2]["in"], marks[2]["out"]), (150, 199))
+        # Sin puntajes, al medio.
+        marks = [{"row": 1, "shot": "A", "frame": 30, "in": 10, "out": 149},
+                 {"row": 2, "shot": "B", "frame": 90, "in": 10, "out": 149}]
+        self.assertEqual(sheet.split_shared_ranges(marks, []), [(1, 2, 60)])
+
+    def test_same_shot_sharing_a_range_is_left_alone(self):
+        marks = [{"row": 1, "shot": "A", "frame": 30, "in": 10, "out": 149},
+                 {"row": 2, "shot": "A", "frame": 30, "in": 10, "out": 149}]
+        self.assertEqual(sheet.split_shared_ranges(marks, [0.0] * 200), [])
+        self.assertEqual(marks[1]["in"], 10)
+
+    def test_decisions_file_has_no_project_version(self):
+        self.assertEqual(sheet.decisions_base("PROJA_Spotting_v05"), "PROJA_Spotting")
+        self.assertEqual(sheet.decisions_base("PROJA Spotting v12"), "PROJA_Spotting")
+        self.assertEqual(sheet.decisions_base("PROJA_Spotting"), "PROJA_Spotting")
+        self.assertEqual(sheet.decisions_base("v03"), "v03")
+        self.assertEqual(sheet.decisions_base(""), "project")
+        self.assertTrue(sheet.is_versioned_decisions("PROJA_Spotting_v04", "PROJA_Spotting"))
+        self.assertFalse(sheet.is_versioned_decisions("PROJA_Spotting", "PROJA_Spotting"))
+        self.assertFalse(sheet.is_versioned_decisions("PROJA_Spotting_Alt_v04", "PROJA_Spotting"))
+
+    def test_long_shot_mark_goes_between_soft_cuts(self):
+        scores = [0.0] * 4000
+        scores[1000] = 26.0  # corte de scdet: empieza el "plano" largo
+        scores[1500] = 4.2   # cortes debiles (escena oscura)
+        scores[2600] = 3.4
+        scores[1800] = 2.9   # por debajo de SOFT_CUT_SCORE: no corta
+        self.assertEqual(sheet.soft_shot_range(scores, 2000, 1000, 3999), (1500, 2599))
+        self.assertEqual(sheet.soft_shot_range(scores, 1200, 1000, 3999), (1000, 1499))
+        self.assertEqual(sheet.soft_shot_range(scores, 3000, 1000, 3999), (2600, 3999))
+        self.assertEqual(sheet.soft_shot_range(scores, 1500, 1000, 3999), (1500, 2599))
+
+    def test_long_take_without_soft_cuts_is_the_whole_shot(self):
+        scores = [0.0] * 8000
+        scores[100] = 11.7
+        scores[3000] = 1.2  # plano secuencia: nada por encima de 1.2
+        self.assertEqual(sheet.soft_shot_range(scores, 4000, 100, 6949), (100, 6949))
+        # Sin puntajes, el cuadro solo, como antes.
+        self.assertEqual(sheet.soft_shot_range([], 4000, 100, 6949), (4000, 4000))
+
+    def test_red_marks_on_top_of_new_ones_are_dropped(self):
+        new = [sheet.Mark(4, "S020", 100, 200, "", "", "", {})]
+        removed = [{"shot": "S010", "frame_in": 150, "frame_out": 250},
+                   {"shot": "S005", "frame_in": 300, "frame_out": 320}]
+        kept, covered = sheet.drop_covered_removed(removed, new)
+        self.assertEqual([r["shot"] for r in kept], ["S005"])
+        self.assertEqual([r["shot"] for r in covered], ["S010"])
+
+    def test_repeated_row_is_one_mark(self):
+        table = sheet.Table("x.csv", "", 1, ["Shot", "TC In", "TC Out"], [
+            (2, ["S010", "00:00:01:00", "00:00:02:00"]),
+            (3, ["S010", "00:00:01:00", "00:00:02:00"]),
+            (4, ["S010", "00:00:05:00", "00:00:06:00"])], {})
+        columns = sheet.detect_columns(table.headers)
+        plan = sheet.build_plan(table, columns, 24, 0, 10000)
+        self.assertEqual([m.row for m in plan.marks], [2, 4])
+        self.assertTrue(any("Repeated row (same as row 2)" in i.message and not i.written
+                            for i in plan.issues))
+
+
 if __name__ == "__main__":
     unittest.main()

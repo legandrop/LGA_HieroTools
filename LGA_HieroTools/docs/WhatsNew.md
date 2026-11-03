@@ -13,6 +13,10 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.024
+- [fixed][win] `Locate from Thumbnails` de Shot Marks ya no deja marcas una encima de otra cuando la planilla repite la misma foto en varios shots, repite una fila o pone dos shots en lo que parecía un solo plano.
+- [fixed] Al volver a correr Shot Marks con una planilla que cambió los nombres de los shots, ya no quedan las marcas rojas con el nombre viejo encima de las nuevas.
+- [improved][win] En `Locate from Thumbnails`, los shots de tomas largas o de escenas muy oscuras se marcan de corte a corte y no en un solo cuadro.
+- [fixed][win] `Locate from Thumbnails` recuerda lo que confirmaste aunque guardes el proyecto con otra versión; antes, al pasar por ejemplo de v04 a v05, había que revisar todo de nuevo.
 - [fixed] Shot Marks elige sola la columna de nombres de shot que está completa cuando la planilla trae dos (por ejemplo `SHOT NAME` y `VFX SHOT NAME`); antes podía tomar la de nombres viejos y dejar muchos shots sin marcar o con el nombre anterior.
 - [new] La ventanita de cada shot de Shot Marks muestra los comentarios que dejaron en la planilla de Google Sheets o Excel, con quién lo escribió, la fecha, la columna y las respuestas; los resueltos aparecen en gris.
 - [new] Shot Marks suma las columnas `Notes` y `Notes 2` (toma solas las columnas Notas y Alternativa de la planilla): la ventanita de cada shot las muestra arriba de todo, resaltadas en dos colores, y solo cuando ese shot tiene algo escrito.

@@ -84,6 +84,10 @@ icono del bin Markers de los Tag Presets de NKS (`icons:TagGreen.png`, etc.):
   episodio: de 32 rojas, 24 eran eso y no shots borrados.
 - **Las rojas viven una corrida.** La siguiente no las compara y las borra; si el shot vuelve, es
   naranja. Si no, se acumularian para siempre.
+- **Una roja que caeria encima de una marca nueva no se crea** (`drop_covered_removed`,
+  `ShotMarks v1.08`). Casi siempre es el mismo plano con otro nombre: medido con una planilla
+  renumerada, quedaban 231 rojas con el nombre viejo encima de las marcas con el nuevo, dos tags por
+  plano. El log las lista.
 - **La comparacion es contra la corrida anterior, no contra la primera.** Un amarillo que se vuelve a
   correr con la misma planilla pasa a verde.
 - Sin corrida anterior no hay contra que comparar: icono comun, sin columna Change.
@@ -267,7 +271,8 @@ nuevas (`REC TC IN (located)` / `OUT`) y sigue igual que con una planilla con TC
 7. **IN/OUT**: el plano del EDL que contiene el cuadro (ver abajo). Sin EDL, el plano entre los
    cortes de `scdet` (picos locales con puntaje > 6; de dos detecciones a menos de 3 cuadros
    queda la mas fuerte), y un "plano" de mas de 60 s es un encadenado o un corte que no se vio:
-   la marca va solo en el cuadro del thumb.
+   el motor deja la marca en el cuadro del thumb, y al pasar los TC (Use Timecodes) se le da un
+   tramo: ver "Marcas sin superponerse".
 
 **Niveles**: `auto` (aceptado solo), `review` (puntaje >= 0,60 sin las condiciones de `auto`),
 `not_found`; y los que pone el usuario: `confirmed` y `not_in_cut`. Los seguros se aceptan solos
@@ -359,9 +364,31 @@ de un cuadro, y el clip y el origen en la metadata de cada tag.
 - `Viewer.setSequence` pide dos argumentos en NKS 16 (secuencia e indice de entrada).
 
 **Decisiones guardadas** en `%LOCALAPPDATA%\LGA\HieroTools\ShotMarks_Locate\decisions\<proyecto>.json`,
-por sha1 del thumb (no por fila ni por shot: las filas se mueven y los shots se repiten). Cada
-confirmacion guarda tambien la huella del cuadro elegido: con un corte nuevo se busca ese cuadro
-en lugar del thumb. No se escribe nada en el Excel.
+con el nombre del proyecto **sin version** (`decisions_base`: `PROJA_Spotting_v05` -> `PROJA_Spotting`).
+Hasta `_Locate v1.06` llevaba la version, y al guardar el proyecto como v05 Locate buscaba un archivo
+nuevo: se perdian todas las confirmaciones a mano. `load_decisions` suma primero los archivos viejos
+con version del mismo proyecto y el sin version manda. La clave es **la foto y el shot**
+(`decision_key`: `sha1|shot`), no la fila (las filas se mueven). Hasta `_Sheet v1.12` era solo la
+foto, y una planilla que repite la foto en shots distintos (la del plano de dos para el
+contraplano) mandaba a todos al cuadro que se confirmo para uno: medido, seis shots de una pelea en
+el mismo cuadro. Las decisiones viejas por foto valen si esa foto es de un solo shot; si la comparten
+varios se ignoran (`find_decision`). Cada confirmacion guarda tambien la huella del cuadro elegido:
+con un corte nuevo se busca ese cuadro en lugar del thumb. No se escribe nada en el Excel.
+
+**Marcas sin superponerse** (`_Sheet v1.13`, `_Locate v1.06`). Medido en un largo de 654 filas: 36
+grupos de marcas superpuestas. Ademas de la clave por foto y shot:
+
+- **Fila repetida = una marca.** La planilla repite filas enteras (mismo shot, misma foto); `build_plan`
+  no escribe la segunda si cae en el mismo rango ("Repeated row"). Un shot repetido con otra foto y
+  en otro lugar si lleva su propia marca.
+- **Plano que comparten dos shots distintos** (`split_shared_ranges`, al pasar los TC): `scdet` no vio
+  el corte entre ellos (medido: picos de 4,6-5,9 contra el umbral de 6) y los dos quedaban de corte a
+  corte del mismo "plano". Se recortan a su tramo entre los picos >= `SOFT_CUT_SCORE` (3,0) de
+  `scd.bin`, y si siguen juntos se parten en el pico mas fuerte entre sus cuadros.
+- **Marca en un "plano" de mas de 60 s** (`soft_shot_range`): antes quedaba de un cuadro. Va del pico
+  >= 3,0 anterior a su cuadro al siguiente; sin ningun pico en el plano es una toma larga y lleva el
+  plano entero. Medido en un largo: un plano secuencia de 285 s no pasa de 1,2 en todo el plano,
+  y una escena oscura de 177 s tiene 28 picos de 3,1-5,1, cortes reales entre planos de la misma luz.
 
 **En la ventanita de Previous/Next Mark** las marcas ubicadas muestran el thumb de la planilla
 (JPG de 480 px en la cache, `tag.lga_shotmarks_thumb`) y como se ubico (`_located`): aceptado

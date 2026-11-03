@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Locate v1.05 | Lega
+  LGA_NKS_ShotMarks_Locate v1.06 | Lega
 
   Shot Marks sin columna de timecode: ubica el thumbnail de cada fila
   de la planilla en el video del timeline y deja revisar los dudosos
@@ -30,6 +30,15 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Locate.log.
 
+  v1.06: Las decisiones se guardan por foto y shot (decision_key). Al
+         pasar los TC, un plano que comparten dos shots distintos se parte
+         en el corte que scdet no vio (split_shared_ranges, con scd.bin del
+         indice), y las filas repetidas quedan en una marca. Una marca en
+         un "plano" de mas de 60 s ya no queda de un cuadro: va entre los
+         cortes debiles que lo rodean, o el plano entero si no hay ninguno
+         (toma larga) (soft_shot_range). El archivo de decisiones va por
+         el nombre del proyecto sin version y suma los de versiones
+         anteriores: al subir de v04 a v05 se perdian las confirmaciones.
   v1.05: El log anota cada fila que no se ubica por no tener un nombre de
          shot completo (titulo de grupo como "PROJA_002_", o vacio) y el
          status de la fila: antes se descartaban sin dejar rastro.
@@ -227,17 +236,30 @@ def media_path(sequence):
 # -- decisiones ---------------------------------------------------------------
 
 def _decisions_path(project_name):
-    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", project_name or "project")
-    return cache_root() / "decisions" / (safe + ".json")
+    return cache_root() / "decisions" / (_sheet_module().decisions_base(project_name) + ".json")
 
 
 def load_decisions(project_name):
+    """Las decisiones del proyecto, de cualquier version.
+
+    Hasta v1.06 el archivo llevaba la version del proyecto: los de las
+    versiones anteriores se suman primero y el sin version manda.
+    """
     path = _decisions_path(project_name)
-    try:
-        with open(str(path), encoding="utf-8") as handle:
-            return json.load(handle)
-    except (OSError, ValueError):
-        return {}
+    sheet = _sheet_module()
+    files = []
+    if path.parent.is_dir():
+        files = sorted((p for p in path.parent.glob("*.json")
+                        if sheet.is_versioned_decisions(p.stem, path.stem)),
+                       key=lambda p: p.stat().st_mtime)
+    decisions = {}
+    for item in files + [path]:
+        try:
+            with open(str(item), encoding="utf-8") as handle:
+                decisions.update(json.load(handle))
+        except (OSError, ValueError):
+            continue
+    return decisions
 
 
 def save_decisions(project_name, decisions):
@@ -1217,13 +1239,13 @@ class LocateWindow(QtWidgets.QWidget):
         if r is None or not self.result:
             return
         r["level"] = "not_in_cut"
-        self.decisions[r["sha1"]] = {"state": "not_in_cut", "video": self.result["video_key"]}
+        key = _sheet_module().decision_key(r["sha1"], r["shot"])
+        self.decisions[key] = {"state": "not_in_cut", "video": self.result["video_key"]}
         save_decisions(self.project_name, self.decisions)
         _logger().info("Fila %s %s: no esta en el corte", r["row"], r["shot"])
         self._advance()
 
     def _set_row(self, r, frame, level):
-        import bisect
         edl = _edl_module()
         seg = edl.segment_at(self.segments, frame, self._seg_starts) if self.segments else None
         if seg is not None:
@@ -1231,15 +1253,14 @@ class LocateWindow(QtWidgets.QWidget):
             start, end = seg["in"], seg["out"]
             r["edl"] = edl.source_info(seg, frame, self.fps)
         else:
-            k = bisect.bisect_right(self.cuts, frame)
-            start = self.cuts[k - 1] if k > 0 else 0
-            end = (self.cuts[k] - 1) if k < len(self.cuts) else int(self.result["frames"]) - 1
+            start, end = self._cut_range(frame)
             if end - start + 1 > 60 * self.fps:
                 start = end = frame
             r.pop("edl", None)
         r.update({"frame": frame, "in": start, "out": end, "level": level})
         d8, g32 = frame_prints(self.result["index_folder"], frame)
-        self.decisions[r["sha1"]] = {"state": "confirmed", "frame": frame,
+        key = _sheet_module().decision_key(r["sha1"], r["shot"])
+        self.decisions[key] = {"state": "confirmed", "frame": frame,
                                      "video": self.result["video_key"], "d8": d8, "g32": g32}
         save_decisions(self.project_name, self.decisions)
         _logger().info("Fila %s %s: cuadro %d confirmado (plano %d-%d)", r["row"], r["shot"],
@@ -1270,15 +1291,37 @@ class LocateWindow(QtWidgets.QWidget):
     def _apply(self):
         if not self.result:
             return
-        fmt = _sheet_module().format_timecode
+        sheet = _sheet_module()
+        fmt = sheet.format_timecode
+        marks = [{"row": r["row"], "shot": r["shot"], "frame": int(r["frame"]),
+                  "in": int(r["in"]), "out": int(r["out"])}
+                 for r in self.rows
+                 if r["level"] in ("auto", "confirmed", "review") and r.get("in") is not None
+                 and r.get("frame") is not None]
+        scores = self._cut_scores()
+        with_edl = {r["row"] for r in self.rows if r.get("edl")}
+        for mark in marks:
+            # Marca de un cuadro por un "plano" de mas de 60 s (scdet no vio
+            # los cortes): se le da el tramo entre los cortes debiles.
+            if mark["in"] != mark["out"] or mark["row"] in with_edl:
+                continue
+            start, end = self._cut_range(mark["frame"])
+            if end - start + 1 > 60 * self.fps:
+                mark["in"], mark["out"] = sheet.soft_shot_range(scores, mark["frame"], start, end)
+                _logger().info("Fila %s: plano de %d cuadros sin corte claro, marca %d-%d",
+                               mark["row"], end - start + 1, mark["in"], mark["out"])
+        for row_a, row_b, cut in sheet.split_shared_ranges(marks, scores):
+            _logger().info("Plano compartido: filas %s y %s partidas en el cuadro %d", row_a, row_b, cut)
+        ranges = {m["row"]: m for m in marks}
         located = {}
         for r in self.rows:
-            if r["level"] not in ("auto", "confirmed", "review") or r.get("in") is None:
+            if r["row"] not in ranges:
                 continue
+            span = ranges[r["row"]]
             located[r["row"]] = {
-                "tc_in": fmt(self.tc0 + int(r["in"]), self.fps),
+                "tc_in": fmt(self.tc0 + span["in"], self.fps),
                 # Exclusivo, como el REC TC OUT de una planilla de montaje.
-                "tc_out": fmt(self.tc0 + int(r["out"]) + 1, self.fps),
+                "tc_out": fmt(self.tc0 + span["out"] + 1, self.fps),
                 "thumb": r.get("thumb") or "",
                 "level": "%s %.2f" % (r["level"], r.get("score") or 0.0),
                 "clip": _sheet_module().clip_text(r.get("edl")),
@@ -1289,6 +1332,27 @@ class LocateWindow(QtWidgets.QWidget):
         self.close()
         if callback is not None:
             callback(located)
+
+    def _cut_range(self, frame):
+        """(in, out) del plano de scdet que contiene `frame`."""
+        import bisect
+        k = bisect.bisect_right(self.cuts, frame)
+        start = self.cuts[k - 1] if k > 0 else 0
+        end = (self.cuts[k] - 1) if k < len(self.cuts) else int(self.result["frames"]) - 1
+        return start, end
+
+    def _cut_scores(self):
+        """Puntajes de scdet por cuadro (scd.bin del indice), o [] si no estan."""
+        import array
+        path = os.path.join(self.result.get("index_folder") or "", "scd.bin")
+        scores = array.array("f")
+        try:
+            with open(path, "rb") as handle:
+                scores.frombytes(handle.read())
+        except OSError:
+            _logger().warning("Sin puntajes de cortes (%s): los planos compartidos se parten al medio",
+                              path)
+        return scores
 
     def closeEvent(self, event):
         if self.process is not None and self.process.state() != QtCore.QProcess.NotRunning:

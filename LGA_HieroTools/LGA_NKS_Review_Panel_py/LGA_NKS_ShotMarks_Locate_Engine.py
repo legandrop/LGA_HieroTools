@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Locate_Engine v1.02 | Lega
+  LGA_NKS_ShotMarks_Locate_Engine v1.03 | Lega
 
   Motor de Shot Marks sin columna de timecode: ubica cada thumbnail de
   la planilla en el video del corte y devuelve el plano (corte a corte)
@@ -29,6 +29,9 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Locate_Engine.log.
 
+  v1.03: Las decisiones se buscan por foto y shot (find_decision): con
+         la foto sola, una planilla que repite la foto en shots distintos
+         los dejaba a todos en el cuadro confirmado de uno.
   v1.02: El orden de planilla gana. Un ancla fuera de orden se vuelve a
          buscar entre sus vecinas y, si ahi da casi lo mismo, queda ahi:
          una imagen repetida en la pelicula (flashback) empataba con su
@@ -179,6 +182,20 @@ def cut_frames(scores, threshold=CUT_SCORE, radius=CUT_PEAK_RADIUS):
 
 
 _EDL_MODULE = None
+_SHEET_MODULE = None
+
+
+def _sheet():
+    """LGA_NKS_ShotMarks_Sheet (sin host), cargado por ruta como el EDL."""
+    global _SHEET_MODULE
+    if _SHEET_MODULE is None:
+        import importlib.util
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LGA_NKS_ShotMarks_Sheet.py")
+        spec = importlib.util.spec_from_file_location("LGA_NKS_ShotMarks_Sheet", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _SHEET_MODULE = module
+    return _SHEET_MODULE
 
 
 def _edl():
@@ -722,9 +739,13 @@ def main(job_path):
     # Decisiones previas: confirmadas en este mismo video se respetan tal cual;
     # de otro video (corte nuevo) se busca con la huella del cuadro confirmado.
     decisions = job.get("decisions") or {}
+    shared = _sheet().shared_photos(rows)
 
-    def prints_for(sha1):
-        decision = decisions.get(sha1) or {}
+    def decision_for(row):
+        return _sheet().find_decision(decisions, row["sha1"], row["shot"], shared)
+
+    def prints_for(sha1, row=None):
+        decision = decision_for(row) if row is not None else {}
         if decision.get("video") != vkey and decision.get("d8") and decision.get("g32"):
             return bytes.fromhex(decision["d8"]), bytes.fromhex(decision["g32"])
         p = thumbs[sha1]["prints"]
@@ -780,7 +801,7 @@ def main(job_path):
             if hi <= lo:
                 lo, hi = 0, frames
             bounds_by_idx[idx] = (lo, hi)
-            d8, g32 = prints_for(row["sha1"])
+            d8, g32 = prints_for(row["sha1"], row)
             window_tasks.append(((row["sha1"], idx), d8, g32, lo, hi, HAMMING_MAX + 4, 15))
         windowed = {}
         for n, (key, out) in enumerate(pool.map(search, window_tasks, chunksize=4), 1):
@@ -808,7 +829,7 @@ def main(job_path):
         # En orden con un parecido de revision afuera: se revisa, no se descarta.
         if level == "not_found" and note.startswith("A similar"):
             level = "review"
-        decision = decisions.get(sha1) or {}
+        decision = decision_for(row)
         if decision.get("video") == vkey and decision.get("state") in ("confirmed", "not_in_cut"):
             level = decision["state"]
             if level == "confirmed":

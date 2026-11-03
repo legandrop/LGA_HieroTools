@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Sheet v1.12 | Lega
+  LGA_NKS_ShotMarks_Sheet v1.13 | Lega
 
   Nucleo sin host de Shot Marks: lee una planilla (xlsx o csv),
   detecta la fila de encabezado y las columnas de shot y timecode,
@@ -13,6 +13,18 @@ ____________________________________________________________________
   los sharedStrings), sin openpyxl: NKS no lo trae, y asi una
   planilla de cientos de MB por las imagenes se lee en segundos.
 
+  v1.13: Marcas sin superponerse. build_plan no escribe una fila repetida
+         (mismo shot y mismo rango que otra). decision_key / find_decision:
+         las decisiones de Locate van por foto Y shot, porque una planilla
+         repite la misma foto en shots distintos y una confirmacion por foto
+         los dejaba a todos en el mismo plano. split_shared_ranges parte un
+         plano que comparten dos shots distintos en el pico de scdet entre
+         sus cuadros (corte por debajo del umbral). drop_covered_removed: una
+         roja que cae encima de una marca nueva no se crea. soft_shot_range:
+         una marca en un "plano" de mas de 60 s va entre los cortes debiles
+         (o el plano entero si no hay ninguno: toma larga), no en un cuadro.
+         decisions_base: el archivo de decisiones va sin la version del
+         proyecto (al subir de version se perdian).
   v1.12: Con dos columnas de shot ("SHOT NAME" y "VFX SHOT NAME"),
          detect_columns(headers, rows) elige la que tiene mas nombres de
          shot completos. En una planilla renumerada, "SHOT NAME" guardaba
@@ -971,6 +983,152 @@ def strip_shots(rows, cuts, total, row_number, limit=24):
             "shots": shots, "hidden": hidden}
 
 
+# -- marcas sin superponerse (Locate) ----------------------------------------
+
+# Pico de scdet que se toma como corte al partir un plano compartido. El
+# motor corta en 6.0; medido en un largo: los cortes que se le escapaban
+# entre dos shots de la planilla daban 4.6-5.9.
+SOFT_CUT_SCORE = 3.0
+
+
+def decision_key(sha1, shot):
+    """Clave de una decision de Locate: la foto Y el shot.
+
+    Una planilla puede repetir la misma foto en shots distintos (la del plano
+    de dos para el contraplano): con la foto sola, confirmar uno los mandaba a
+    todos al mismo cuadro, uno arriba del otro.
+    """
+    return "%s|%s" % (sha1, shot)
+
+
+def decisions_base(project_name):
+    """Nombre del archivo de decisiones de Locate: el proyecto SIN version.
+
+    Iba con el nombre entero y al subir el proyecto de v04 a v05 Locate
+    buscaba un archivo nuevo: se perdian todas las confirmaciones a mano.
+    """
+    name = project_name or "project"
+    base = re.sub(r"[_ .-]*v\d+$", "", name, flags=re.IGNORECASE) or name
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", base)
+
+
+def is_versioned_decisions(stem, base):
+    """Si `stem` es un archivo de decisiones viejo (con version) de `base`."""
+    return re.fullmatch(re.escape(base) + r"[_ .-]*v\d+", stem, re.IGNORECASE) is not None
+
+
+def shared_photos(rows):
+    """Fotos (sha1) que la planilla usa en filas de shots distintos."""
+    shots = {}
+    for row in rows:
+        shots.setdefault(row["sha1"], set()).add(row["shot"])
+    return {sha1 for sha1, names in shots.items() if len(names) > 1}
+
+
+def find_decision(decisions, sha1, shot, shared=()):
+    """La decision guardada de una fila, o {}.
+
+    Las de antes de v1.13 van solo por foto: valen si esa foto es de un solo
+    shot. Si la comparten varios, no se sabe de cual era y se ignora.
+    """
+    found = decisions.get(decision_key(sha1, shot))
+    if found is None and sha1 not in shared:
+        found = decisions.get(sha1)
+    return found or {}
+
+
+def _peak(scores, lo, hi):
+    """Cuadro de (lo, hi] con el mayor puntaje de scdet, o None."""
+    best, best_score = None, 0.0
+    for i in range(max(lo + 1, 0), min(hi, len(scores) - 1) + 1):
+        if scores[i] > best_score:
+            best, best_score = i, scores[i]
+    return best
+
+
+def soft_shot_range(scores, frame, start, end):
+    """(in, out) para una marca en un "plano" de scdet de mas de 60 s.
+
+    Locate le daba un solo cuadro: sin corte claro no se sabia donde
+    empezaba el shot. Los picos >= SOFT_CUT_SCORE entre `start` y `end` se
+    toman como cortes y la marca va del pico anterior al cuadro hasta el
+    cuadro antes del siguiente. Sin ningun pico es una toma larga (medido:
+    un plano secuencia de 285 s no pasa de 1.2): el plano entero. Sin
+    puntajes, el cuadro solo, como antes.
+    """
+    if not scores:
+        return frame, frame
+    soft = [i for i in range(max(start + 1, 1), min(end, len(scores) - 2) + 1)
+            if scores[i] >= SOFT_CUT_SCORE and scores[i] >= scores[i - 1] and scores[i] >= scores[i + 1]]
+    k = bisect.bisect_right(soft, frame)
+    return (soft[k - 1] if k > 0 else start), (soft[k] - 1 if k < len(soft) else end)
+
+
+def split_shared_ranges(marks, scores):
+    """Que dos shots distintos no compartan rango.
+
+    `marks`: [{"row", "shot", "frame", "in", "out"}], se modifican in/out.
+    Pasa cuando scdet no vio un corte entre dos shots (medido: picos de
+    4.6-5.9 contra el umbral de 6.0) y los dos quedan de corte a corte del
+    mismo "plano". Cada uno se recorta a su tramo entre los picos >=
+    SOFT_CUT_SCORE del plano; si siguen juntos, se parte en el pico mas
+    fuerte entre sus cuadros (o al medio, sin puntajes). Devuelve
+    [(fila, fila, cuadro del corte)] de lo partido.
+    """
+    done = []
+    placed = sorted((m for m in marks if m.get("frame") is not None and m.get("in") is not None),
+                    key=lambda m: (m["in"], m["frame"]))
+    groups, current, end = [], [], None
+    for mark in placed:
+        if current and mark["in"] <= end:
+            current.append(mark)
+            end = max(end, mark["out"])
+        else:
+            if len(current) > 1:
+                groups.append(current)
+            current, end = [mark], mark["out"]
+    if len(current) > 1:
+        groups.append(current)
+    for group in groups:
+        if len({m["shot"] for m in group}) < 2:
+            continue
+        lo, hi = min(m["in"] for m in group), max(m["out"] for m in group)
+        soft = []
+        for i in range(lo + 1, min(hi, len(scores) - 2) + 1):
+            if scores[i] >= SOFT_CUT_SCORE and scores[i] >= scores[i - 1] and scores[i] >= scores[i + 1]:
+                soft.append(i)
+        bounds = [lo] + soft + [hi + 1]
+        group.sort(key=lambda m: m["frame"])
+        for mark in group:
+            k = min(len(bounds) - 2, max(0, bisect.bisect_right(bounds, mark["frame"]) - 1))
+            mark["in"] = max(mark["in"], bounds[k])
+            mark["out"] = min(mark["out"], bounds[k + 1] - 1)
+        for a, b in zip(group, group[1:]):
+            if a["shot"] == b["shot"] or a["out"] < b["in"] or a["frame"] >= b["frame"]:
+                continue
+            cut = _peak(scores, a["frame"], b["frame"]) if scores else None
+            if cut is None:
+                cut = (a["frame"] + b["frame"] + 1) // 2
+            a["out"], b["in"] = min(a["out"], cut - 1), max(b["in"], cut)
+            done.append((a["row"], b["row"], cut))
+    return done
+
+
+def drop_covered_removed(removed, marks):
+    """(rojas que quedan, rojas que caen encima de una marca nueva).
+
+    Una roja es un shot de la corrida anterior que ya no esta. Si cae sobre
+    una marca nueva casi siempre es el mismo plano con otro nombre (planilla
+    renumerada), y dejarla crea dos tags uno arriba del otro.
+    """
+    spans = [(m.frame_in, m.frame_out) for m in marks]
+    kept, covered = [], []
+    for old in removed:
+        hit = any(s <= old["frame_out"] and e >= old["frame_in"] for s, e in spans)
+        (covered if hit else kept).append(old)
+    return kept, covered
+
+
 def follow_ends(starts, ends, last_frame):
     """OUT para seguir al playhead: una marca de un cuadro llega hasta la siguiente.
 
@@ -1101,6 +1259,7 @@ def build_plan(table, columns, fps, reference_start, duration,
     if shot_col is None or in_col is None:
         raise ValueError("Faltan las columnas de shot o de TC IN.")
     seen_shots = {}
+    seen_ranges = {}
     for number, row in table.rows:
         shot = _value(row, shot_col)
         tc_in_text = _value(row, in_col)
@@ -1135,6 +1294,14 @@ def build_plan(table, columns, fps, reference_start, duration,
             plan.issues.append(Issue(number, shot, tc_in_text, message + ": 1-frame mark", True))
         else:
             frame_out = min(tc_out - 1 - reference_start, duration - 1)
+        # Fila repetida (mismo shot en el mismo lugar): una sola marca. Dos
+        # tags iguales uno arriba del otro no dicen nada mas que uno.
+        same = seen_ranges.get((shot, frame_in, frame_out))
+        if same is not None:
+            plan.issues.append(Issue(number, shot, tc_in_text,
+                                     "Repeated row (same as row %d)" % same, False))
+            continue
+        seen_ranges[(shot, frame_in, frame_out)] = number
         if shot in seen_shots:
             plan.issues.append(Issue(
                 number, shot, tc_in_text,
