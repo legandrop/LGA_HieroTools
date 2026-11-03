@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Locate_Engine v1.01 | Lega
+  LGA_NKS_ShotMarks_Locate_Engine v1.02 | Lega
 
   Motor de Shot Marks sin columna de timecode: ubica cada thumbnail de
   la planilla en el video del corte y devuelve el plano (corte a corte)
@@ -29,6 +29,13 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Locate_Engine.log.
 
+  v1.02: El orden de planilla gana. Un ancla fuera de orden se vuelve a
+         buscar entre sus vecinas y, si ahi da casi lo mismo, queda ahi:
+         una imagen repetida en la pelicula (flashback) empataba con su
+         gemelo a una hora y media y se iba lejos. Fuera de orden solo
+         gana un parecido fuerte (AUTO_SCORE); si no, la fila queda en
+         orden y, si el lejano era de revision, en revision. Los
+         candidatos traen las dos opciones (choose_candidates).
   v1.01: EDL del armado opcional (job["edl"]). Si sus cortes caen sobre
          la imagen (la mitad al cuadro contra scdet, probando desfasajes),
          reemplaza a scdet como unidad de busqueda y para el IN/OUT, sin
@@ -77,6 +84,9 @@ AUTO_SCORE = 0.90
 AUTO_MARGIN = 0.10
 REVIEW_SCORE = 0.60
 LOCAL_RADIUS = 2400      # cuadros: margen contra planos de la misma zona
+# Fuera de orden, el lejano tiene que ganarle a lo mejor entre las vecinas por
+# mas que esto (y ser fuerte): si no, gana el orden.
+ORDER_TOLERANCE = 0.05
 DARK_MEDIAN = 14         # mediana de fila/columna por debajo: barra o UI
 
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
@@ -579,6 +589,45 @@ def order_breaks(positions, neighbors=3):
     return moved
 
 
+def choose_candidates(global_c, local_c, anchor, lo=None, hi=None):
+    """(elegidos, extra, en orden, nota, para el margen) de una fila que no
+    es un ancla limpia.
+
+    `local_c` son los candidatos entre el ancla anterior y la siguiente
+    (cuadros `lo` a `hi`); `global_c`, los de toda la pelicula. Los globales a
+    menos de LOCAL_RADIUS de la ventana compiten de igual a igual: dentro de
+    una escena los planos a veces se reordenan unos segundos. Uno lejano
+    gana solo si es fuerte (AUTO_SCORE) y claramente mejor: una imagen que se
+    repite en la pelicula, o un parecido flojo en cualquier lado, no alcanzan
+    para mover un shot fuera de sus vecinas. `anchor`: la fila era un ancla que cayo
+    fuera de orden. `extra` es el mejor de la otra busqueda (0 o 1), que va
+    ultimo entre los candidatos para poder saltar a cualquiera de los dos.
+    El margen se mide como antes contra la ventana: un plano parecido de la
+    misma escena, justo afuera, no vuelve dudoso al que gano adentro.
+    """
+    inside = list(local_c)
+    if lo is not None and hi is not None:
+        segments = {c[2] for c in local_c}
+        near = [c for c in global_c if lo - LOCAL_RADIUS <= c[1] <= hi + LOCAL_RADIUS
+                and c[2] not in segments]
+        local_c = sorted(list(local_c) + near, reverse=True)
+        global_c = [c for c in global_c if c not in near] or global_c
+    g = global_c[0][0] if global_c else -1.0
+    l = local_c[0][0] if local_c else -1.0
+    far = bool(global_c) and (not local_c or (g >= AUTO_SCORE and l < g - ORDER_TOLERANCE))
+    chosen, other = (global_c, local_c) if far else (local_c, global_c)
+    segments = {c[2] for c in chosen[:4]}
+    extra = [c for c in other if c[2] not in segments][:1]
+    position = min(len(chosen), 5 - len(extra)) + 1
+    note = ""
+    if far:
+        note = "Out of sheet order: the scene may have moved in the cut"
+    elif extra and extra[0][0] >= REVIEW_SCORE and (anchor or extra[0][0] > l):
+        note = "A similar frame outside the sheet order is candidate %d" % position
+    for_margin = inside if (not far and inside and chosen and chosen[0] == inside[0]) else chosen
+    return list(chosen), extra, not far, note, for_margin
+
+
 def classify(score, margin_local, in_order):
     if score >= AUTO_SCORE and margin_local >= AUTO_MARGIN and in_order:
         return "auto"
@@ -718,15 +767,19 @@ def main(job_path):
         clean_pos = [cands[ordered[i]["sha1"]][0][1] for i in clean]
 
         # El resto: buscar entre el ancla anterior y la siguiente.
+        # Las anclas que cayeron fuera de orden tambien se buscan ahi: una
+        # imagen repetida en la pelicula empata con su gemelo lejano.
         window_tasks = []
+        bounds_by_idx = {}
         for idx, row in enumerate(ordered):
-            if idx in anchors:
+            if idx in anchors and idx not in moved_rows:
                 continue
             k = bisect.bisect_left(clean, idx)
             lo = clean_pos[k - 1] if k > 0 else 0
             hi = clean_pos[k] + 1 if k < len(clean) else frames
             if hi <= lo:
                 lo, hi = 0, frames
+            bounds_by_idx[idx] = (lo, hi)
             d8, g32 = prints_for(row["sha1"])
             window_tasks.append(((row["sha1"], idx), d8, g32, lo, hi, HAMMING_MAX + 4, 15))
         windowed = {}
@@ -741,22 +794,20 @@ def main(job_path):
     for idx, row in enumerate(ordered):
         sha1 = row["sha1"]
         global_c = cands[sha1]
-        if idx in anchors:
-            chosen_c, in_order = global_c, idx not in moved_rows
+        note, extra = "", []
+        if idx in anchors and idx not in moved_rows:
+            chosen_c, in_order = global_c, True
+            for_margin = chosen_c
         else:
             local_c = windowed.get((sha1, idx)) or []
-            # Si la ventana no encuentra nada y el global es fuerte, se ofrece
-            # el global (escena movida fuera de las anclas).
-            if local_c and (not global_c or local_c[0][0] >= global_c[0][0] - 0.05):
-                chosen_c, in_order = local_c, True
-            else:
-                chosen_c, in_order = global_c, False
+            chosen_c, extra, in_order, note, for_margin = choose_candidates(
+                global_c, local_c, idx in anchors, *bounds_by_idx.get(idx, (None, None)))
         best = chosen_c[0] if chosen_c else None
-        glob_m, loc_m = margins(chosen_c)
+        glob_m, loc_m = margins(for_margin)
         level = classify(best[0], loc_m, in_order) if best else "not_found"
-        note = ""
-        if best and not in_order:
-            note = "Out of sheet order: the scene may have moved in the cut"
+        # En orden con un parecido de revision afuera: se revisa, no se descarta.
+        if level == "not_found" and note.startswith("A similar"):
+            level = "review"
         decision = decisions.get(sha1) or {}
         if decision.get("video") == vkey and decision.get("state") in ("confirmed", "not_in_cut"):
             level = decision["state"]
@@ -771,7 +822,7 @@ def main(job_path):
             # Area de imagen en pixeles del thumb original: la ventana de
             # revision la usa para mezclar o restar el thumb con el visor.
             "rect": list(rects[sha1]), "size": list(thumbs[sha1]["size"]),
-            "candidates": [[c[1], c[0]] for c in chosen_c[:5]],
+            "candidates": [[c[1], c[0]] for c in chosen_c[:5 - len(extra)] + extra],
         })
 
     # Planos compartidos: dos filas de shots DISTINTOS no pueden caer en el

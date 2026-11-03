@@ -196,6 +196,45 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(engine.order_breaks(positions), {3})
         self.assertEqual(engine.order_breaks([1, 2, 3, 4, 5]), set())
 
+    def test_order_wins_a_tie_with_a_repeated_image_far_away(self):
+        # (score, cuadro, plano, hamming): la misma imagen a 00:04 y a 01:38.
+        far = [(0.904, 141549, 900, 3), (0.904, 6866, 40, 3)]
+        local = [(0.904, 6866, 40, 3), (0.68, 6931, 41, 9)]
+        chosen, extra, in_order, note, for_margin = engine.choose_candidates(
+            far, local, True, 6709, 7031)
+        self.assertEqual((chosen[0][1], in_order), (6866, True))
+        self.assertEqual(extra, [(0.904, 141549, 900, 3)])
+        self.assertIn("candidate 3", note)
+        self.assertEqual(for_margin, local)
+
+    def test_weak_far_match_does_not_beat_the_order(self):
+        far = [(0.66, 195354, 700, 10)]
+        local = [(0.47, 66200, 300, 18)]
+        chosen, extra, in_order, note, _m = engine.choose_candidates(far, local, False, 65814, 66570)
+        self.assertEqual((chosen[0][1], in_order, extra[0][1]), (66200, True, 195354))
+        self.assertTrue(note.startswith("A similar frame"))
+
+    def test_strong_far_match_is_a_moved_scene(self):
+        far = [(0.98, 195354, 700, 2)]
+        local = [(0.40, 66200, 300, 18)]
+        chosen, extra, in_order, note, _m = engine.choose_candidates(far, local, False, 65814, 66570)
+        self.assertEqual((chosen[0][1], in_order, extra[0][1]), (195354, False, 66200))
+        self.assertTrue(note.startswith("Out of sheet order"))
+
+    def test_a_match_just_outside_the_window_competes_as_in_order(self):
+        # Dentro de una escena los planos se reordenan unos segundos.
+        far = [(0.89, 141000, 500, 4)]
+        local = [(0.34, 142100, 510, 20)]
+        chosen, _extra, in_order, note, for_margin = engine.choose_candidates(
+            far, local, False, 142050, 142400)
+        self.assertEqual((chosen[0][1], in_order, note), (141000, True, ""))
+        self.assertEqual(for_margin, chosen)
+
+    def test_without_a_window_match_the_global_one_is_offered(self):
+        far = [(0.7, 5000, 10, 6)]
+        chosen, extra, in_order, _note, _m = engine.choose_candidates(far, [], False, 80000, 81000)
+        self.assertEqual((chosen[0][1], in_order, extra), (5000, False, []))
+
     def test_classify(self):
         self.assertEqual(engine.classify(0.97, 0.2, True), "auto")
         self.assertEqual(engine.classify(0.97, 0.02, True), "review")

@@ -244,6 +244,23 @@ nuevas (`REC TC IN (located)` / `OUT`) y sigue igual que con una planilla con TC
    ancla anterior y la siguiente: asi se resuelven los planos que vuelven en el montaje (A-B-A),
    que el dHash solo no distingue. El orden es por FILA y no por shot: un mismo shot puede estar
    en varias filas intercaladas.
+   **El orden gana** (`choose_candidates`, desde `_Locate_Engine v1.02`):
+   - Un ancla que cae fuera de orden se vuelve a buscar entre sus vecinas, y si ahi da casi lo
+     mismo (`ORDER_TOLERANCE` 0,05) queda ahi. Medido: una imagen repetida en la pelicula
+     (flashback) empataba exacto (0,904 y 0,904) con su gemelo una hora y media despues; el margen
+     solo mira planos cercanos, asi que el gemelo no la hacia dudosa, y quedaba lejos.
+   - Fuera de orden solo gana un parecido fuerte (>= 0,90) y claramente mejor. Un 0,66 lejano le
+     ganaba a un 0,47 entre las vecinas: si ninguno es bueno, el plano casi seguro esta en orden
+     (otra toma u otro encuadre que el de la foto), y la fila queda ahi, en revision.
+   - Lo que esta a menos de 2400 cuadros de la ventana compite como si estuviera adentro: dentro de
+     una escena los planos a veces se reordenan unos segundos. El margen se mide como antes contra
+     la ventana, para que un plano parecido de la escena, justo afuera, no vuelva dudosa a una
+     automatica.
+   - Los candidatos (botones 1-5 de la revision) traen al final el mejor de la otra busqueda, y la
+     nota de la fila dice cual es.
+   Medido sobre una corrida real de 437 filas: fuera de orden 60 -> 2; a revisar entre sus vecinas
+   75 de 105 -> 87 de 100; 5 filas pasan a automaticas (en orden, >= 0,99) y ninguna automatica
+   pasa a revision.
 5. **Dos shots distintos no pueden caer en el mismo plano**: el de menor puntaje pasa a revision.
 6. **Cuadro exacto**: a 32x18 los cuadros vecinos de un plano empatan; se decodifican +-24
    cuadros a 192x104 y se elige el mejor (~0,4 s por shot, en paralelo).
