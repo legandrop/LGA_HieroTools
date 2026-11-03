@@ -13,7 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.024
-- [improved] Shot Marks numera cada renglón del brief (1., 2., 3.…) en lugar de los guiones, así la lista de pedidos de cada shot se lee de un vistazo en la ventanita y en la nota de la marca.
+- [improved] Shot Marks numera cada renglón del brief (1., 2., 3.…) en lugar de los guiones, y en la ventanita separa un poco cada pedido del siguiente, así la lista de cada shot se lee de un vistazo.
 - [improved][win] Shot Marks guarda los thumbnails de la planilla en una carpeta junto al proyecto, así la ventanita de cada shot los muestra siempre, también si abrís el proyecto desde otra máquina.
 - [fixed][win] `Locate from Thumbnails` de Shot Marks ya no deja marcas una encima de otra cuando la planilla repite la misma foto en varios shots, repite una fila o pone dos shots en lo que parecía un solo plano.
 - [fixed] Al volver a correr Shot Marks con una planilla que cambió los nombres de los shots, ya no quedan las marcas rojas con el nombre viejo encima de las nuevas.

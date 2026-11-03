@@ -36,6 +36,11 @@ guion en medio del renglon no se toca. Los renglones vacios separan grupos (`dud
 y quedan sin numero. Un brief de un solo renglon queda como esta: no es una lista. Va numerado a
 la nota del tag y a `_brief`; la planilla no se toca.
 
+En la ventanita (`_Nav v1.11`, `_brief_html`) cada item es un parrafo con `BRIEF_ITEM_GAP` (5 px) de
+aire arriba, menos que media linea, y el numero va en `Color.TEXT_MARKER`, un escalon mas claro que
+el texto y mas oscuro que el titulo Brief. El parrafo y su margen salen del rich text del QLabel
+(`<p style="margin-top">`); con `<br>` no hay forma de separar un item del otro.
+
 ## Notes y Notes 2
 
 Notas eventuales del shot: no son el brief (el trabajo) ni la descripcion (que pasa en el plano),

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Nav v1.10 | Lega
+  LGA_NKS_ShotMarks_Nav v1.11 | Lega
 
   Previous / Next Mark: Click en Previous / Next Mark del panel Review
   (con Shift esos botones navegan anotaciones). Salta el playhead a la
@@ -18,6 +18,9 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Nav.log.
 
+  v1.11: Brief numerado: un parrafo por item con un poco de aire entre
+         uno y otro, y el numero en Color.TEXT_MARKER, un escalon mas claro
+         que el texto. Mas facil de leer item por item.
   v1.10: El thumb se busca en la carpeta del proyecto (ruta relativa al
          .hrox) y, si no esta, por nombre en la cache de Locate. Una ruta
          relativa ya no se abre tal cual: se resolvia contra el directorio
@@ -66,6 +69,7 @@ import html
 import importlib.util
 import logging
 import os
+import re
 from pathlib import Path
 
 import hiero.core
@@ -87,7 +91,7 @@ DEBUG = False
 WINDOW_NAME = "LGA_ShotMarkInfo"
 # Sube cuando cambia la API de la ventana: el panel re-ejecuta este modulo en
 # cada click, y una ventana creada por una version vieja se reemplaza.
-WINDOW_API = 9
+WINDOW_API = 10
 
 # Cache de thumbs de Locate (la misma carpeta que cache_root() de Locate):
 # donde se busca por nombre el thumb de una marca que no esta junto al proyecto.
@@ -105,6 +109,11 @@ SCREEN_MARGIN = 24
 # llegaba a leerla. Va por apply_ui_font (QFont), no por font-size en la hoja.
 INFO_FONT_PX = Metric.FORM_FONT_SIZE + 1
 TITLE_FONT_PX = INFO_FONT_PX + 4
+# Aire entre los items del brief numerado: separa un pedido del otro sin
+# llegar a media linea en blanco (Lega, 2026-11-03).
+BRIEF_ITEM_GAP = 5
+# Un renglon "1. ..." del brief numerado (numbered_brief del nucleo).
+BRIEF_ITEM = re.compile(r"^(\d+)\.\s(.*)$")
 
 LOGGER_NAME = "LGA_NKS_ShotMarks_Nav"
 
@@ -394,7 +403,7 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
                                          info.get("change_reason"), info))
         self.change.setVisible(bool(info.get("change")))
         self.description.setText(_body(info.get("description")))
-        self.brief.setText(_body(info.get("brief")))
+        self.brief.setText(_brief_html(info.get("brief")))
         changed = info.get("changed") or {}
         befores = [("description", self.description_before), ("brief", self.brief_before)]
         for field, (holder, text, before) in self.note_boxes.items():
@@ -690,6 +699,27 @@ def _comments_html(threads):
 
 def _body(text):
     return _escape(text) if text else _dim("&mdash;")
+
+
+def _brief_html(text):
+    """Brief numerado: un parrafo por item, con BRIEF_ITEM_GAP de aire arriba
+    y el numero un escalon mas claro que el texto (TEXT_MARKER). Un brief sin
+    numerar (un solo renglon, o una marca de antes) va como cualquier cuerpo."""
+    lines = str(text or "").split("\n")
+    if not any(BRIEF_ITEM.match(line) for line in lines):
+        return _body(text)
+    paragraphs = []
+    for line in lines:
+        match = BRIEF_ITEM.match(line)
+        if match:
+            content = '<span style="color:%s">%s.</span> %s' % (
+                Color.TEXT_MARKER, match.group(1), _escape(match.group(2)))
+        else:
+            # Un renglon vacio separa grupos ("wishlist:"): queda como renglon.
+            content = _escape(line) or "&nbsp;"
+        gap = BRIEF_ITEM_GAP if paragraphs else 0
+        paragraphs.append('<p style="margin-top:%dpx; margin-bottom:0px">%s</p>' % (gap, content))
+    return "".join(paragraphs)
 
 
 def info_window(create=True):
