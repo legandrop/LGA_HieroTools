@@ -91,14 +91,22 @@ nueva.
 
    **Botón de descarga por fila** (columna sin título después de v_NKS; hasta
    v3.74 era un botón **Download Clip** en el header que actuaba sobre la fila
-   seleccionada). Baja de Wasabi la última versión del clip de ESA fila. Es un
-   cell widget, así que se come el click: no selecciona la fila ni navega al
-   clip, y no hace falta seleccionar nada antes. Cuando v_NKS < v_Flow, la celda
-   de v_NKS y el botón van en el violeta de acción (`Color.ACCENT`, hover
-   `ACCENT_HOVER`): el color une "estás atrasado" con "esto lo arregla". Al día
-   el botón queda neutro (`Style.BTN_ICON`) y vuelve a bajar la última. El
-   glifo es el de EXR Publish de PipeSync, dibujado con `QPainterPath`. En la
-   fila seleccionada el texto sobre el violeta no se aclara, porque llegaría a
+   seleccionada). Baja de Wasabi la última versión del clip de ESA fila. La
+   celda entera es el botón: no hay una caja adentro, el hover ilumina la celda
+   completa. Es un cell widget, así que se come el click: no selecciona la fila
+   ni navega al clip, y no hace falta seleccionar nada antes. Cuando
+   v_NKS < v_Flow, la celda de v_NKS y la de descarga van en el violeta de
+   acción (`Color.ACCENT`, hover `ACCENT_HOVER`): el color une "estás atrasado"
+   con "esto lo arregla". Al día la celda queda neutra (hover `SURFACE_HOVER`)
+   y vuelve a bajar la última. El glifo es el de EXR Publish de PipeSync,
+   dibujado con `QPainterPath`.
+
+   **Por qué el violeta lo pinta el item y no el botón:** la celda tiene un
+   `QTableWidgetItem` vacío con el fondo, y encima un botón (`Style.BTN_ICON`
+   sin caja) transparente salvo en el hover. Si el violeta fuera del botón, al
+   seleccionar la fila v_NKS se aclararía (lo pinta el `ColorMixDelegate`) y la
+   celda de descarga no, y dejarían de leerse como un bloque. En la fila
+   seleccionada el texto sobre el violeta no se aclara, porque llegaría a
    blanco. La fila se captura por índice: las filas nunca se borran, los
    filtros solo las ocultan. Por qué existe la descarga: el Pull sube los clips a la
    versión de Flow, que muchas veces todavía no está en disco y queda offline;

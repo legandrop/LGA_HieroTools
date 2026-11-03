@@ -13,7 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.024
-- [improved] En la ventana de `Flow Pull`, cada fila tiene su propio botón de descarga al lado de `v_NKS`, sin tener que seleccionarla; cuando el timeline tiene una versión más vieja que Flow, la versión y el botón se pintan de violeta.
+- [improved] En la ventana de `Flow Pull`, cada fila tiene su propia celda de descarga al lado de `v_NKS`: un clic baja el clip sin tener que seleccionar la fila; cuando el timeline tiene una versión más vieja que Flow, la versión y esa celda se pintan de violeta.
 - [new] Con clic derecho sobre el nombre de un proyecto en Projects Panel podés abrir su carpeta (`Reveal in Explorer`) o guardar una copia para Nuke 16 (`Convert to Nuke 16...`), sin tener que arrastrar el archivo.
 - [improved] Al guardar una copia para Nuke 16 elegís si mantiene el nombre con `_NKS16` al final (`Rename`) o si sube un número de versión (`Increment version`), y ves cómo va a quedar el nombre antes de guardar.
 - [fixed] En Projects Panel, el clic derecho sobre el nombre de un proyecto ya no lo colapsa ni muestra Copy y Select All, y el menú de `Delete Timeline` ya no sale con el color del proyecto.

@@ -7,13 +7,14 @@ ____________________________________________________________________
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
-  v3.75: El boton "Download Clip" del header pasa a ser un boton por fila,
-         en una columna propia despues de v_NKS: baja la ultima version del
+  v3.75: El boton "Download Clip" del header pasa a ser una celda-boton por
+         fila, en una columna propia despues de v_NKS: la celda entera es el
+         boton (el hover la ilumina completa) y baja la ultima version del
          clip de ESA fila sin tener que seleccionarla. Se saca la columna
          v_Status; v_SG pasa a llamarse v_Flow y va antes que v_NKS. Cuando
-         v_NKS es menor que v_Flow, la celda de v_NKS y el boton van en el
-         violeta de accion (antes se pintaba v_SG de vino); al dia, el boton
-         queda neutro y sigue bajando la ultima.
+         v_NKS es menor que v_Flow, la celda de v_NKS y la de descarga van en
+         el violeta de accion (antes se pintaba v_SG de vino); al dia, la
+         celda queda neutra y sigue bajando la ultima.
   v3.74: Checkbox "Shot Info", primero de los cuatro del header, apagado
          por default y persistido en FlowPull.ini: prendido, el click en
          una fila abre el Shot Info de esa fila. Reemplaza a la lista
@@ -1182,7 +1183,8 @@ _DOWNLOAD_GLYPH_ARROW = (
     (124.0, 141.3), (50.5, 141.3), (179.0, 269.8),
 )
 _DOWNLOAD_GLYPH_SIZE = 12
-_DOWNLOAD_BTN_SIZE = (26, 20)
+# Ancho minimo de la celda-boton: la columna sin titulo se mide por esto.
+_DOWNLOAD_CELL_MIN_WIDTH = 36
 
 
 def _download_icon(color_hex, size=_DOWNLOAD_GLYPH_SIZE):
@@ -1659,27 +1661,44 @@ class GUI_Table(QtWidgets.QDialog):
         self.activateWindow()
 
     def set_download_cell(self, row, flow_version, nks_version):
-        """Pone el boton de descarga en la columna de descarga de la fila.
+        """Convierte la celda de descarga de la fila en un boton.
 
-        Violeta (el de accion del pack) cuando el timeline esta atrasado
-        respecto de Flow, neutro cuando esta al dia: en los dos casos baja la
-        ultima. El boton se come el click, asi que no selecciona la fila ni
-        navega al clip: es la unica celda que hace algo distinto de eso.
+        La celda entera es el boton: no hay caja adentro, el hover ilumina la
+        celda completa. El fondo lo pinta el ITEM de la celda (violeta de
+        accion si el timeline esta atrasado respecto de Flow, como v_NKS) y el
+        boton es transparente salvo en el hover: asi la fila seleccionada
+        aclara esta celda igual que a v_NKS, porque las dos pasan por el
+        ColorMixDelegate. En los dos casos baja la ultima. El boton se come el
+        click, asi que no selecciona la fila ni navega al clip: es la unica
+        celda que hace algo distinto de eso.
         """
         outdated = flow_version > nks_version
+        item = QTableWidgetItem("")
+        item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+        if outdated:
+            item.setBackground(QBrush(QColor(UIColor.ACCENT)))
+        self.table.setItem(row, _COL_DOWNLOAD, item)
+
         button = QtWidgets.QPushButton()
-        button.setFixedSize(*_DOWNLOAD_BTN_SIZE)
+        button.setMinimumWidth(_DOWNLOAD_CELL_MIN_WIDTH)
         button.setCursor(Qt.PointingHandCursor)
         button.setAutoDefault(False)
         button.setFocusPolicy(Qt.NoFocus)
+        # BTN_ICON sin la caja: transparente en reposo para dejar ver el fondo
+        # de la celda, y su propio hover (SURFACE_HOVER) en el neutro. En el
+        # violeta el hover es el de BTN_PRIMARY.
+        sheet = (
+            Style.BTN_ICON
+            + "QPushButton { background-color: transparent; border: none;"
+            " border-radius: 0px; padding: 0px; }"
+        )
         if outdated:
-            # Mismos colores y hover que BTN_PRIMARY; el padding de 7x18 de esa
-            # hoja no deja lugar al glifo en un boton de 26x20, se anula.
-            button.setStyleSheet(Style.BTN_PRIMARY + "QPushButton { padding: 0px; }")
+            sheet += " QPushButton:hover { background-color: %s; }" % UIColor.ACCENT_HOVER
+        button.setStyleSheet(sheet)
+        if outdated:
             button.setIcon(_download_icon(UIColor.TEXT_ON_ACCENT))
             tip = _tooltip("download_outdated")
         else:
-            button.setStyleSheet(Style.BTN_ICON)
             button.setIcon(_download_icon(UIColor.TEXT))
             tip = _tooltip("download_current")
         button.setIconSize(QtCore.QSize(_DOWNLOAD_GLYPH_SIZE, _DOWNLOAD_GLYPH_SIZE))
@@ -1687,17 +1706,7 @@ class GUI_Table(QtWidgets.QDialog):
         # La fila se captura por indice: las filas nunca se borran, solo se
         # ocultan con los filtros, asi que el indice sigue valiendo.
         button.clicked.connect(lambda _checked=False, r=row: self.download_row_clip(r))
-
-        # Contenedor para centrar el boton en la celda. Fondo transparente
-        # explicito: el QWidget { background } de Style.FORM lo pintaria del
-        # color de la ventana encima de la celda.
-        cell = QtWidgets.QWidget()
-        cell.setObjectName("pullDownloadCell")
-        cell.setStyleSheet("QWidget#pullDownloadCell { background: transparent; }")
-        cell_layout = QtWidgets.QHBoxLayout(cell)
-        cell_layout.setContentsMargins(6, 0, 6, 0)
-        cell_layout.addWidget(button, 0, Qt.AlignCenter)
-        self.table.setCellWidget(row, _COL_DOWNLOAD, cell)
+        self.table.setCellWidget(row, _COL_DOWNLOAD, button)
 
     def download_row_clip(self, row):
         """Baja la ultima version del clip de una fila.
@@ -2417,12 +2426,13 @@ class HieroOperations:
         table.setItem(row_count, _COL_V_NKS, version_item)
         table.setItem(row_count, 5, prev_status_item)
         table.setItem(row_count, 6, new_status_item)
-        # La columna de descarga es un cell widget, no un item.
+        # La columna de descarga es un item (el fondo) mas un boton encima.
         gui_table.set_download_cell(row_count, sg_version_num, version_num)
         # Configuracion de colores que se agregan a la lista para la linea de seleccion
         row_colors = ["#8a8a8a"] * 7  # Color por defecto para todas las columnas
         if outdated:
             row_colors[_COL_V_NKS] = UIColor.ACCENT
+            row_colors[_COL_DOWNLOAD] = UIColor.ACCENT
         row_colors[5] = prev_color  # Color para la columna de estado previo
         row_colors[6] = new_color  # Color para la columna de nuevo estado
         gui_table.add_color_to_background_list(
