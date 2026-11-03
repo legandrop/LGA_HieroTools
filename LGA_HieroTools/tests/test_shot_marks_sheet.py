@@ -482,5 +482,60 @@ class ShotMarksSearchTests(unittest.TestCase):
         self.assertEqual(sheet.next_match([], SEARCH_STARTS, 50), (None, False))
 
 
+
+# Planos de 100 cuadros: cortes cada 100 en una pelicula de 1000.
+STRIP_CUTS = list(range(100, 1000, 100))
+
+
+def _strip_row(row, level, frame):
+    return {"row": row, "shot": "S%d" % row, "level": level, "frame": frame}
+
+
+class ShotMarksStripTests(unittest.TestCase):
+    def test_shots_between_located_neighbours(self):
+        rows = [_strip_row(10, "auto", 150), _strip_row(11, "review", 820),
+                _strip_row(12, "auto", 480), _strip_row(13, "confirmed", 650)]
+        strip = sheet.strip_shots(rows, STRIP_CUTS, 1000, 11)
+        self.assertEqual((strip["prev"], strip["next"]), (10, 12))
+        self.assertEqual([(s["start"], s["role"]) for s in strip["shots"]],
+                         [(100, "prev"), (200, "between"), (300, "between"), (400, "next")])
+        self.assertEqual(strip["shots"][0]["rows"], [10])
+        # La fila elegida cayo lejos: ningun plano de la tira la tiene.
+        self.assertFalse(any(s["current"] for s in strip["shots"]))
+
+    def test_review_and_not_found_rows_are_not_neighbours(self):
+        rows = [_strip_row(1, "auto", 50), _strip_row(2, "review", 250),
+                _strip_row(3, "review", 350), _strip_row(4, "not_found", None),
+                _strip_row(5, "auto", 550)]
+        strip = sheet.strip_shots(rows, STRIP_CUTS, 1000, 3)
+        self.assertEqual((strip["prev"], strip["next"]), (1, 5))
+        self.assertEqual(len(strip["shots"]), 6)
+        current = [s for s in strip["shots"] if s["current"]]
+        self.assertEqual([s["start"] for s in current], [300])
+        # La otra fila a revisar se ve en su plano.
+        self.assertEqual(strip["shots"][2]["rows"], [2])
+
+    def test_long_gap_keeps_both_ends_and_counts_hidden(self):
+        cuts = list(range(10, 1000, 10))
+        rows = [_strip_row(1, "auto", 5), _strip_row(2, "review", 500), _strip_row(3, "auto", 995)]
+        strip = sheet.strip_shots(rows, cuts, 1000, 2, limit=6)
+        self.assertEqual(strip["hidden"], 98 - 6)
+        starts = [s["start"] for s in strip["shots"]]
+        self.assertEqual(starts[:4], [0, 10, 20, 30])
+        self.assertEqual(starts[-4:], [960, 970, 980, 990])
+
+    def test_without_a_neighbour_or_reversed_neighbours(self):
+        rows = [_strip_row(1, "review", 450), _strip_row(2, "auto", 750)]
+        strip = sheet.strip_shots(rows, STRIP_CUTS, 1000, 1, limit=3)
+        self.assertEqual((strip["prev"], strip["next"]), (None, 2))
+        self.assertEqual([s["start"] for s in strip["shots"]], [400, 500, 600, 700])
+        # La siguiente quedo antes que la anterior (escena movida): se ignora.
+        rows = [_strip_row(1, "auto", 650), _strip_row(2, "review", 700), _strip_row(3, "auto", 150)]
+        strip = sheet.strip_shots(rows, STRIP_CUTS, 1000, 2, limit=2)
+        self.assertEqual((strip["prev"], strip["next"]), (1, None))
+        self.assertEqual([s["start"] for s in strip["shots"]], [600, 700, 800])
+        self.assertEqual(sheet.strip_shots(rows, STRIP_CUTS, 1000, 99)["shots"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

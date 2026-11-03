@@ -15,6 +15,7 @@ platforms: [win, mac]
 ## v4.024
 - [new] La ventanita de cada shot de Shot Marks muestra los comentarios que dejaron en la planilla de Google Sheets o Excel, con quién lo escribió, la fecha, la columna y las respuestas; los resueltos aparecen en gris.
 - [new] Shot Marks suma las columnas `Notes` y `Notes 2` (toma solas las columnas Notas y Alternativa de la planilla): la ventanita de cada shot las muestra arriba de todo, resaltadas en dos colores, y solo cuando ese shot tiene algo escrito.
+- [improved][win] Al revisar en `Locate from Thumbnails` de Shot Marks, una tira muestra todos los planos que hay entre el shot anterior y el siguiente de la planilla, con los dos vecinos en color; un click lleva el visor a ese plano.
 - [fixed][win] `Locate from Thumbnails` de Shot Marks busca cada shot entre sus vecinos de la planilla y ya no lo manda a otra parte de la película por un parecido flojo o por una imagen que se repite; en la revisión, los candidatos ofrecen también la otra opción.
 - [fixed][win] `Locate from Thumbnails` de Shot Marks ya no deja las marcas corridas (o fuera del timeline) cuando Nuke Studio muestra el video con un timecode distinto del que trae el archivo.
 - [fixed] En Shot Marks, los nombres de columna que en la planilla tienen un salto de línea se ven en una sola línea en los menús.

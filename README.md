@@ -355,7 +355,8 @@ opening related Nuke scripts.
   shot, **Locate from Thumbnails...** finds each one in the timeline movie and
   marks the shot from cut to cut. Safe matches are accepted automatically; the
   doubtful ones are listed first for review, stepping frames on the NKS viewer
-  next to the thumbnail. Confirmed frames are remembered per project. Marks
+  next to the thumbnail, with a strip of every shot between the previous and
+  the next row of the sheet: click one to jump there. Confirmed frames are remembered per project. Marks
   placed this way show their thumbnail in the Previous / Next Mark info window.
   Optionally choose the **EDL** of the same cut: it is checked against the
   movie and, when it matches, the shots go exactly from cut to cut of the EDL

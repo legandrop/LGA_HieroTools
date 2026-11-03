@@ -336,6 +336,18 @@ de un cuadro, y el clip y el origen en la metadata de cada tag.
   visor todavia decodificando el cuadro nuevo, tiro abajo NKS 16.0v4 con un access violation
   (medido en una instancia aparte, MOV ProRes en una unidad de red; el volcado de faulthandler
   apunta a esa linea).
+- **Tira de planos entre vecinas** (`_Locate v1.03`, `strip_shots` en `_Sheet v1.11`): debajo de
+  la comparacion, un cuadro por plano desde la fila ubicada anterior (auto o confirmada, celeste)
+  hasta la siguiente (violeta), fijas en los extremos; los planos del medio se desplazan si no
+  entran (hasta 24, los del centro se omiten y se cuentan). El plano donde cae hoy la fila va en
+  ambar y el del visor con borde grueso; click lleva el visor a ese plano. Existe porque los
+  dudosos de verdad son fotos de otra toma o de otro encuadre: el cuadro no esta en el corte y
+  ningun puntaje sube, pero el plano casi siempre esta entre las vecinas, y verlos todos juntos es
+  mas rapido que ir cuadro a cuadro. Medido en una corrida real: entre las vecinas de una fila de
+  0,47 hay 7 planos de la misma escena, y el correcto se reconoce a ojo.
+- **Un histograma de color no ayuda a elegir entre esos planos.** Medido sobre cuatro filas: entre
+  las vecinas todos dan 0,52-0,72, y en una fila el plano correcto (las mismas actrices) dio el
+  valor mas bajo. Por eso la tira no ordena ni marca un favorito.
 - Teclas: flechas, un cuadro; Shift, un segundo; RePag/AvPag, corte anterior/siguiente; 1-5,
   candidatos; Enter, usar este cuadro; N, no esta en el corte; Arriba/Abajo, otra fila. La lista
   no toma el foco para que las flechas sean de la navegacion.

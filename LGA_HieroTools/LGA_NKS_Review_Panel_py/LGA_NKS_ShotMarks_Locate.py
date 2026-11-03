@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Locate v1.02 | Lega
+  LGA_NKS_ShotMarks_Locate v1.03 | Lega
 
   Shot Marks sin columna de timecode: ubica el thumbnail de cada fila
   de la planilla en el video del timeline y deja revisar los dudosos
@@ -30,6 +30,11 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Locate.log.
 
+  v1.03: Tira de planos entre vecinas: debajo de la comparacion, un
+         cuadro por plano desde la fila ubicada anterior hasta la
+         siguiente, con las dos vecinas en color, donde esta hoy la fila y
+         donde esta el visor. Click en un plano lo lleva al visor. Ir
+         cuadro a cuadro no servia para encontrar un plano de otra toma.
   v1.02: Los TC ubicados salen del TC del clip segun NKS, no del que lee
          ffprobe del archivo. Un MP4 con TC 00:59:50:00 que NKS muestra en
          00:00:00:00 dejaba todas las marcas corridas 86160 cuadros: el
@@ -79,6 +84,17 @@ INNER = 0.92
 THUMB_VIEW_W = 420
 # Ancho del cuadro que se decodifica para comparar con el thumb.
 FRAME_W = 960
+# Tira de planos entre vecinas: ancho de cada cuadro (se achica hasta el
+# minimo para que entren las dos vecinas; se decodifica al doble del maximo
+# para que se vea nitido) y maximo de planos del medio.
+STRIP_TILE_W = 150
+STRIP_TILE_MIN_W = 112
+STRIP_SPACING = 6
+STRIP_DECODE_W = 300
+STRIP_LIMIT = 24
+# Dato, no estilo: cada vecina y la fila elegida se reconocen por su color,
+# en el borde del cuadro y en su rotulo.
+STRIP_COLORS = {"prev": Color.INFO, "next": Color.PATH_FIELD, "current": Color.WARNING_TEXT}
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 LEVEL_LABELS = {
@@ -111,6 +127,9 @@ TOOLTIPS = {
     "not_in_cut": "Este shot no esta en el corte: no se marca (N).",
     "apply": "Pasar los timecodes ubicados a Shot Marks para revisar y agregar las marcas.",
     "cancel": "Cerrar sin usar los resultados. Lo confirmado queda guardado.",
+    "strip": "Los planos entre la fila ubicada anterior y la siguiente: si el shot esta en orden, "
+             "esta aca.",
+    "strip_tile": "Ver este plano en el visor. Despues, Enter para usar ese cuadro.",
 }
 
 _log = None
@@ -281,6 +300,74 @@ class _Job(QtCore.QRunnable):
         self.signals.done.emit(result, None)
 
 
+# -- tira de planos -------------------------------------------------------------
+
+class _StripTile(QtWidgets.QFrame):
+    """Un plano de la tira: su cuadro y un rotulo. Click lo lleva al visor."""
+
+    clicked = QtCore.Signal(int)
+
+    def __init__(self, frame, parent=None):
+        super(_StripTile, self).__init__(parent)
+        self.frame = frame
+        self.setObjectName("stripTile")
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip(TOOLTIPS["strip_tile"])
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(3, 3, 3, 4)
+        layout.setSpacing(3)
+        self.image = QtWidgets.QLabel()
+        self.image.setAlignment(Qt.AlignCenter)
+        self.image.setStyleSheet("background: %s;" % Color.SURFACE_SUNKEN)
+        layout.addWidget(self.image)
+        self.caption = QtWidgets.QLabel()
+        self.caption.setTextFormat(Qt.RichText)
+        self.caption.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.caption)
+        self.border = Color.BORDER
+        self.viewer_here = False
+
+    def set_image(self, image, width, height):
+        self.image.setFixedSize(width, height)
+        self.caption.setFixedWidth(width)
+        if image is not None and not image.isNull():
+            self.image.setPixmap(QtGui.QPixmap.fromImage(image).scaled(
+                width, height, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+    def set_state(self, border=None, viewer_here=None):
+        if border is not None:
+            self.border = border
+        if viewer_here is not None:
+            self.viewer_here = viewer_here
+        # El plano donde esta el visor lleva el borde mas grueso.
+        self.setStyleSheet("QFrame#stripTile { border: %dpx solid %s; border-radius: %dpx; "
+                           "background: %s; }" % (
+                               3 if self.viewer_here else 1,
+                               Color.TEXT_STRONG if self.viewer_here and self.border == Color.BORDER
+                               else self.border,
+                               Metric.RADIUS_SMALL, Color.SURFACE))
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit(self.frame)
+        super(_StripTile, self).mousePressEvent(event)
+
+
+class _StripRow(QtWidgets.QWidget):
+    """La tira avisa cuando cambia de ancho, para recalcular sus cuadros.
+
+    El resizeEvent de la ventana llega antes de que el layout le de el ancho
+    nuevo a la tira: medir ahi deja el ultimo cuadro cortado.
+    """
+
+    resized = QtCore.Signal()
+
+    def resizeEvent(self, event):
+        super(_StripRow, self).resizeEvent(event)
+        self.resized.emit()
+
+
 # -- ventana -------------------------------------------------------------------
 
 class LocateWindow(QtWidgets.QWidget):
@@ -327,9 +414,16 @@ class LocateWindow(QtWidgets.QWidget):
         self._frame_request = 0
         self._frame_signals = _Signals()
         self._frame_signals.done.connect(self._frame_ready)
+        # Tira de planos entre vecinas: cuadros decodificados por numero de
+        # cuadro (no se vuelven a pedir) y los cuadros de la tira mostrada.
+        self._strip_cache = {}
+        self._strip_tiles = []
+        self._strip_pending = set()
+        self._strip_signals = _Signals()
+        self._strip_signals.done.connect(self._strip_ready)
         self._build()
         apply_ui_font(self)
-        self.resize(1180, 720)
+        self.resize(1180, 880)
         self._shortcuts()
 
     # armado
@@ -408,6 +502,39 @@ class LocateWindow(QtWidgets.QWidget):
             caption.setAlignment(Qt.AlignCenter)
             captions.addWidget(caption, 1)
         right.addLayout(captions)
+
+        # Tira: la fila anterior y la siguiente ya ubicadas, y los planos del
+        # medio. Si el shot esta en orden, es uno de estos.
+        self.strip_title = QtWidgets.QLabel("")
+        self.strip_title.setTextFormat(Qt.RichText)
+        self.strip_title.setToolTip(TOOLTIPS["strip"])
+        right.addWidget(self.strip_title)
+        # Las dos vecinas quedan fijas en los extremos; solo los planos del
+        # medio se desplazan si no entran.
+        self.strip_row = _StripRow()
+        self.strip_row.resized.connect(self._relayout_strip)
+        row_layout = QtWidgets.QHBoxLayout(self.strip_row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(STRIP_SPACING)
+        self.strip_prev_box = QtWidgets.QHBoxLayout()
+        self.strip_next_box = QtWidgets.QHBoxLayout()
+        self.strip_area = QtWidgets.QScrollArea()
+        self.strip_area.setWidgetResizable(True)
+        self.strip_area.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.strip_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.strip_area.setStyleSheet(Style.SCROLLBAR)
+        strip_widget = QtWidgets.QWidget()
+        self.strip_layout = QtWidgets.QHBoxLayout(strip_widget)
+        self.strip_layout.setContentsMargins(0, 0, 0, 4)
+        self.strip_layout.setSpacing(STRIP_SPACING)
+        self.strip_layout.addStretch(1)
+        self.strip_area.setWidget(strip_widget)
+        row_layout.addLayout(self.strip_prev_box)
+        row_layout.addWidget(self.strip_area, 1)
+        row_layout.addLayout(self.strip_next_box)
+        for box in (self.strip_prev_box, self.strip_next_box):
+            box.setAlignment(Qt.AlignTop)
+        right.addWidget(self.strip_row)
 
         controls = QtWidgets.QHBoxLayout()
         self.mode_switch = QtWidgets.QWidget()
@@ -734,6 +861,7 @@ class LocateWindow(QtWidgets.QWidget):
             else:
                 button.setText(str(k + 1))
                 button.setEnabled(False)
+        self._fill_strip()
         self._show_thumb()
         if r.get("frame") is not None:
             self._go_media_frame(int(r["frame"]))
@@ -838,10 +966,159 @@ class LocateWindow(QtWidgets.QWidget):
             return
         image = QtGui.QImage(data, FRAME_W, out_h, FRAME_W * 3, QtGui.QImage.Format_RGB888).copy()
         self._frame_image = image
+        self._mark_strip(frame)
         if frame is not None:
             self.frame_caption.setText("Viewer &middot; %s" % _sheet_module().format_timecode(
                 self.tc0 + frame, self.fps))
         self._render()
+
+    # tira de planos entre vecinas
+    def _strip_aspect(self):
+        width, height = int(self.result.get("width") or 16), int(self.result.get("height") or 9)
+        return height / float(width)
+
+    def _strip_size(self):
+        """Ancho y alto de cada cuadro: los mas grandes que dejan ver toda la tira."""
+        count = max(1, len(self._strip_tiles))
+        room = self.strip_row.width()
+        # 6 px de margen interno, hasta 6 de borde y 2 de redondeo por cuadro.
+        width = (room - STRIP_SPACING * (count - 1)) // count - 14 if room > 50 else STRIP_TILE_W
+        width = max(STRIP_TILE_MIN_W, min(STRIP_TILE_W, width))
+        return width, max(2, int(round(width * self._strip_aspect())))
+
+    def _relayout_strip(self):
+        if not self._strip_tiles:
+            self.strip_row.setFixedHeight(0)
+            return
+        width, height = self._strip_size()
+        for tile in self._strip_tiles:
+            tile.set_image(self._strip_cache.get(tile.frame), width, height)
+        bar = self.strip_area.horizontalScrollBar().sizeHint().height()
+        self.strip_row.setFixedHeight(self._strip_tiles[0].sizeHint().height() + bar + 6)
+
+    def _fill_strip(self):
+        """Arma la tira de la fila elegida: vecinas, planos del medio, rotulos."""
+        for tile in self._strip_tiles:
+            tile.setParent(None)
+            tile.deleteLater()
+        self._strip_tiles = []
+        r = self.current
+        if not r or not self.result:
+            self.strip_title.setText("")
+            self._relayout_strip()
+            return
+        sheet = _sheet_module()
+        strip = sheet.strip_shots(self.rows, self.cuts, int(self.result["frames"]), r["row"],
+                                  STRIP_LIMIT)
+        if not strip["shots"]:
+            self.strip_title.setText("")
+            self._relayout_strip()
+            return
+        between = sum(1 for shot in strip["shots"] if shot["role"] == "between") + strip["hidden"]
+        if strip["prev"] and strip["next"]:
+            text = "%d %s between %s and %s" % (
+                between, "shot" if between == 1 else "shots",
+                _colored("row %d" % strip["prev"], STRIP_COLORS["prev"]),
+                _colored("row %d" % strip["next"], STRIP_COLORS["next"]))
+        elif strip["prev"]:
+            text = "Shots after %s" % _colored("row %d" % strip["prev"], STRIP_COLORS["prev"])
+        elif strip["next"]:
+            text = "Shots before %s" % _colored("row %d" % strip["next"], STRIP_COLORS["next"])
+        else:
+            text = "Shots around this row"
+        if strip["hidden"]:
+            text += _colored(" &middot; %d in the middle not shown" % strip["hidden"], Color.TEXT_DIM)
+        text += _colored(" &middot; click one to see it in the viewer", Color.TEXT_DIM)
+        self.strip_title.setText(text)
+        candidates = [int(c[0]) for c in r.get("candidates") or []]
+        viewer = self._current_media_frame()
+        insert_at = 0
+        for shot in strip["shots"]:
+            # El cuadro del plano: el candidato de la fila que cae ahi, o el medio.
+            inside = [c for c in candidates if shot["start"] <= c <= shot["end"]]
+            frame = inside[0] if inside else (shot["start"] + shot["end"]) // 2
+            tile = _StripTile(frame)
+            tile.clicked.connect(self._go_media_frame)
+            tile.shot = shot
+            tile.caption.setText(self._strip_caption(shot, r))
+            role = "current" if shot["current"] else shot["role"]
+            tile.set_state(border=STRIP_COLORS.get(role, Color.BORDER),
+                           viewer_here=viewer is not None and shot["start"] <= viewer <= shot["end"])
+            if shot["role"] == "prev":
+                self.strip_prev_box.addWidget(tile)
+            elif shot["role"] == "next":
+                self.strip_next_box.addWidget(tile)
+            else:
+                self.strip_layout.insertWidget(insert_at, tile)
+                insert_at += 1
+            self._strip_tiles.append(tile)
+        apply_ui_font(self.strip_row)
+        self._relayout_strip()
+        for tile in self._strip_tiles:
+            if tile.frame not in self._strip_cache:
+                self._decode_strip_frame(tile.frame)
+
+    def _strip_caption(self, shot, r):
+        fmt = _sheet_module().format_timecode
+        labels = []
+        if shot["role"] == "prev":
+            labels.append(_colored("row %d" % shot["rows"][0] if shot["rows"] else "before",
+                                   STRIP_COLORS["prev"]))
+        elif shot["role"] == "next":
+            labels.append(_colored("row %d" % shot["rows"][0] if shot["rows"] else "after",
+                                   STRIP_COLORS["next"]))
+        if shot["current"]:
+            labels.append(_colored("row %d now" % r["row"], STRIP_COLORS["current"]))
+        others = [n for n in shot["rows"] if shot["role"] == "between" or n != shot["rows"][0]]
+        if others:
+            labels.append(_colored("row %s" % ", ".join(str(n) for n in others[:2]), Color.TEXT_DIM))
+        seconds = (shot["end"] - shot["start"] + 1) / float(self.fps)
+        first = " &middot; ".join(labels) if labels else "&nbsp;"
+        return "%s<br>%s" % (first, _colored("%s &middot; %.1f s" % (
+            fmt(self.tc0 + shot["start"], self.fps)[:8], seconds), Color.TEXT_DIM))
+
+    def _decode_strip_frame(self, frame):
+        if frame in self._strip_pending:
+            return
+        self._strip_pending.add(frame)
+        out_h = max(2, 2 * int(round(STRIP_DECODE_W * self._strip_aspect() / 2)))
+        args = [str(FFMPEG), "-v", "error", "-ss", "%.6f" % (frame / float(self.result["fps"])),
+                "-i", self.video, "-frames:v", "1", "-an",
+                "-vf", "scale=%d:%d:flags=area,format=rgb24" % (STRIP_DECODE_W, out_h),
+                "-f", "rawvideo", "-"]
+
+        def decode():
+            data = subprocess.run(args, capture_output=True, check=True,
+                                  creationflags=CREATE_NO_WINDOW).stdout
+            return frame, data, out_h
+
+        QtCore.QThreadPool.globalInstance().start(_Job(decode, self._strip_signals))
+
+    @QtCore.Slot(object, object)
+    def _strip_ready(self, result, error):
+        if error is not None:
+            _logger().warning("No se pudo leer un cuadro de la tira: %s", error)
+            return
+        frame, data, out_h = result
+        self._strip_pending.discard(frame)
+        if len(data) < STRIP_DECODE_W * out_h * 3:
+            return
+        image = QtGui.QImage(data, STRIP_DECODE_W, out_h, STRIP_DECODE_W * 3,
+                             QtGui.QImage.Format_RGB888).copy()
+        self._strip_cache[frame] = image
+        width, height = self._strip_size()
+        for tile in self._strip_tiles:
+            if tile.frame == frame:
+                tile.set_image(image, width, height)
+
+    def _mark_strip(self, frame):
+        """Resalta el plano de la tira donde quedo el visor."""
+        for tile in self._strip_tiles:
+            here = frame is not None and tile.shot["start"] <= frame <= tile.shot["end"]
+            if here != tile.viewer_here:
+                tile.set_state(viewer_here=here)
+                if here and tile.shot["role"] == "between":
+                    self.strip_area.ensureWidgetVisible(tile)
 
     # imagenes
     def _thumb_image(self):

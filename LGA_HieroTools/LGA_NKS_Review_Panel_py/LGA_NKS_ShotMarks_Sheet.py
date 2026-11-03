@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Sheet v1.10 | Lega
+  LGA_NKS_ShotMarks_Sheet v1.11 | Lega
 
   Nucleo sin host de Shot Marks: lee una planilla (xlsx o csv),
   detecta la fila de encabezado y las columnas de shot y timecode,
@@ -13,6 +13,8 @@ ____________________________________________________________________
   los sharedStrings), sin openpyxl: NKS no lo trae, y asi una
   planilla de cientos de MB por las imagenes se lee en segundos.
 
+  v1.11: strip_shots: los planos entre la fila ubicada anterior y la
+         siguiente, para la tira de la ventana de revision de Locate.
   v1.10: Comentarios de la planilla: read_comments lee los hilos de
          Google Sheets / Excel (threadedComments, con respuestas y si estan
          resueltos) y las notas de Excel con autor, por fila. load_table los
@@ -878,6 +880,70 @@ def next_match(matches, starts, frame, current=None):
         if (index > current) if from_current else (starts[index] > frame):
             return position, False
     return 0, True
+
+
+# -- tira de planos entre vecinas (revision de Locate) ------------------------
+
+STRIP_LEVELS = ("auto", "confirmed")
+
+
+def _shot_index(bounds, frame):
+    """Plano (indice en `bounds`) que contiene `frame`."""
+    return max(0, min(len(bounds) - 2, bisect.bisect_right(bounds, frame) - 1))
+
+
+def strip_shots(rows, cuts, total, row_number, limit=24):
+    """Planos entre la fila ubicada anterior y la siguiente de una fila.
+
+    `rows`: filas del resultado de Locate ({"row", "shot", "level", "frame"}),
+    en cualquier orden: se ordenan por fila, que es el orden de la planilla.
+    Las vecinas son la fila anterior y la siguiente con nivel auto o
+    confirmed. Devuelve {"prev", "next" (filas vecinas o None), "shots":
+    [{"start", "end", "role" ("prev", "next" o "between"), "rows" (otras
+    filas ubicadas ahi), "current" (la fila elegida esta ahi)}], "hidden"
+    (planos del medio que no entran en `limit`)}. Si el plano esta en orden,
+    esta en esta tira: verla entera es mas rapido que ir cuadro a cuadro.
+    """
+    ordered = sorted(rows, key=lambda r: r["row"])
+    index = next((i for i, r in enumerate(ordered) if r["row"] == row_number), None)
+    if index is None:
+        return {"prev": None, "next": None, "shots": [], "hidden": 0}
+    me = ordered[index]
+    prev = next((r for r in reversed(ordered[:index])
+                 if r["level"] in STRIP_LEVELS and r.get("frame") is not None), None)
+    nxt = next((r for r in ordered[index + 1:]
+                if r["level"] in STRIP_LEVELS and r.get("frame") is not None), None)
+    bounds = [0] + [c for c in cuts if 0 < c < total] + [total]
+    last = len(bounds) - 2
+    if prev is not None and nxt is not None and nxt["frame"] < prev["frame"]:
+        nxt = None  # vecinas al reves: la siguiente es una escena movida
+    first_i = _shot_index(bounds, prev["frame"]) if prev else None
+    last_i = _shot_index(bounds, nxt["frame"]) if nxt else None
+    if first_i is None and last_i is None:
+        center = _shot_index(bounds, me["frame"]) if me.get("frame") is not None else 0
+        first_i, last_i = max(0, center - limit // 2), min(last, center + limit // 2)
+    elif first_i is None:
+        first_i = max(0, last_i - limit)
+    elif last_i is None:
+        last_i = min(last, first_i + limit)
+    between = list(range(first_i + 1, last_i))
+    hidden = 0
+    if len(between) > limit:
+        hidden = len(between) - limit
+        between = between[:limit // 2] + between[-(limit - limit // 2):]
+    located = {}
+    for r in ordered:
+        if r is not me and r.get("frame") is not None and r["level"] in STRIP_LEVELS + ("review",):
+            located.setdefault(_shot_index(bounds, r["frame"]), []).append(r["row"])
+    mine = _shot_index(bounds, me["frame"]) if me.get("frame") is not None else None
+    shots = []
+    indices = [first_i] + between + ([last_i] if last_i != first_i else [])
+    for i in indices:
+        role = "prev" if (prev and i == first_i) else ("next" if (nxt and i == last_i) else "between")
+        shots.append({"start": bounds[i], "end": bounds[i + 1] - 1, "role": role,
+                      "rows": located.get(i, []), "current": i == mine})
+    return {"prev": prev["row"] if prev else None, "next": nxt["row"] if nxt else None,
+            "shots": shots, "hidden": hidden}
 
 
 def follow_ends(starts, ends, last_frame):
