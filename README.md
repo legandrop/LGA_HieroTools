@@ -390,7 +390,7 @@ opening related Nuke scripts.
 Project browser and sequence switcher built around the studio's project structure and PipeSync storage.
 
 - **Drop project**
-  Drag one local HROX project saved in Nuke Studio or Hiero 16.1/17 over the panel to save a Nuke 16.0 copy. The compact dialog shows the original, suggests the next version number, lets you edit the name and browse for another folder, and asks explicitly before discarding incompatible annotations. Existing files and the original are never overwritten. Saving refreshes the project list; the active timeline stays as it was.
+  Drag one local HROX project saved in Nuke Studio or Hiero 16.1/17 over the panel to save a Nuke 16.0 copy. The compact dialog shows the original, lets you choose between Rename (same name with `_NKS16`) and Increment version (the next version number) and shows the resulting name, lets you edit it and browse for another folder, and asks explicitly before discarding incompatible annotations. Existing files and the original are never overwritten. Saving refreshes the project list; the active timeline stays as it was.
 
 - **Drop media**
   Drag one local MP4, MOV, MXF, JPG, PNG or EXR over the panel to import it into the active project's root bin. If the selected video track has a long enough gap at the playhead, it is placed immediately. Otherwise an interactive preview shows every video and audio track on one continuous time axis with each timeline clip's actual color and one unbroken playhead line. Click a video track name to set the destination, then use the Studio/Client-style placement pill, in its own darker capsule beside Cancel and Import, to see the red incoming clip and option-specific displacement before importing; unavailable choices state a concise reason on that same row. The ripple uses the same Import Shot helper: it moves complete non-BurnIn video clips and soft effects to open space, places the media at the returned effective frame, and extends BurnIn. Hiero detects JPG, PNG and EXR sequences from any dropped frame.
@@ -401,6 +401,8 @@ Project browser and sequence switcher built around the studio's project structur
   with the preferred columns and rows sorted by Clip.
 - **Collapse / expand**
   Clicking the name or the triangle of an open project collapses or expands its sequences without closing it.
+- **Project menu**
+  Right-click the name of a project: Reveal in Explorer opens its folder in your file manager, and Convert to Nuke 16... opens the same dialog as Drop project for that version, useful when the latest version was saved in Nuke 17.
 - **Delete Timeline**
   Right-click a timeline of an open project and choose Delete Timeline. It asks first and can be undone with Ctrl+Z. If that timeline is open, the panel switches to another one before deleting it; if it is the only open timeline, it asks you to open another first.
 - **Save incremental (floppy with +)**  

@@ -13,6 +13,9 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.024
+- [new] Con clic derecho sobre el nombre de un proyecto en Projects Panel podés abrir su carpeta (`Reveal in Explorer`) o guardar una copia para Nuke 16 (`Convert to Nuke 16...`), sin tener que arrastrar el archivo.
+- [improved] Al guardar una copia para Nuke 16 elegís si mantiene el nombre con `_NKS16` al final (`Rename`) o si sube un número de versión (`Increment version`), y ves cómo va a quedar el nombre antes de guardar.
+- [fixed] En Projects Panel, el clic derecho sobre el nombre de un proyecto ya no lo colapsa ni muestra Copy y Select All, y el menú de `Delete Timeline` ya no sale con el color del proyecto.
 - [improved] Si abrís desde Projects Panel un proyecto que no tiene ningún timeline, ahora te avisa con un cartel, en vez de abrirlo sin que se vea ningún cambio.
 - [improved][win] `Locate from Thumbnails` recuerda lo que revisaste en cada corte por separado: si el proyecto tiene dos armados de la misma película, revisar el nuevo no borra lo que confirmaste en el anterior.
 - [improved] Shot Marks numera cada renglón del brief (1., 2., 3.…) en lugar de los guiones, y en la ventanita separa un poco cada pedido del siguiente, así la lista de cada shot se lee de un vistazo.

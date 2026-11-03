@@ -1,11 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectDrop_Dialog v1.00 | Lega
+  LGA_NKS_ProjectDrop_Dialog v1.01 | Lega
 
   Ofrece guardar una copia compatible con Nuke 16 de un proyecto arrastrado.
   El original se conserva y las operaciones de disco van fuera del hilo UI.
 
+  v1.01: Switch Naming: Rename (mismo nombre con _NKS16) o Increment version
+         (la siguiente). El nombre elegido se ve en Save as. Tambien se abre
+         desde el menu de un proyecto del panel, no solo con el drop.
   v1.00: Dialogo compacto con nombre, carpeta y descarte explicito de annotations.
 ____________________________________________________________________
 """
@@ -21,8 +24,14 @@ from LGA_NKS_Shared.LGA_UI_Style_HieroTools import (
 )
 
 DEBUG = False
+# Rename: mismo nombre con _NKS16. Increment: la version siguiente, que en el
+# Projects Panel pasa a ser la ultima del proyecto.
+NAMING_MODES = (('rename', 'Rename'), ('increment', 'Increment version'))
+DEFAULT_NAMING = 'rename'
 TOOLTIPS = {
-    'filename': 'Nombre de la copia compatible. Se propone la siguiente version.',
+    'filename': 'Nombre de la copia compatible. Sale del modo elegido arriba y se puede editar.',
+    'naming_rename': 'Mismo nombre y version, con _NKS16 al final.',
+    'naming_increment': 'Sube un numero de version: la copia queda como la ultima version del proyecto.',
     'folder': 'Carpeta donde se guardara la copia; por defecto, la del original.',
     'browse': 'Elegir otra carpeta para la copia compatible.',
     'annotations': 'Acepta descartar solo en la copia las annotations incompatibles.',
@@ -71,11 +80,14 @@ class _ProjectTask(QtCore.QRunnable):
             logger.info('Operacion: %s; origen: %s; destino: %s; descartar annotations: %s',
                         self.operation, self.source, self.destination, self.drop_annotations)
             from LGA_NKS_Project_Downgrade import (
-                inspect_project, suggest_project_name, convert_project,
+                inspect_project, suggest_project_name, renamed_project_name, convert_project,
             )
             if self.operation == 'inspect':
                 result = inspect_project(self.source)
-                result['suggested_name'] = suggest_project_name(self.source)
+                result['names'] = {
+                    'rename': renamed_project_name(self.source),
+                    'increment': suggest_project_name(self.source),
+                }
                 logger.info('Lectura: version %s; release %s; annotations %s',
                             result['version'], result['release'], result['annotations'])
             else:
@@ -139,6 +151,7 @@ class ProjectConversionDialog(QtWidgets.QDialog):
         form.setHorizontalSpacing(Metric.DIALOG_MARGIN)
         form.setVerticalSpacing(Metric.SPACING)
         form.addRow('Original', _label(os.path.basename(self.source), strong=True))
+        form.addRow('Naming', self._build_naming_switch())
         self.filename = QtWidgets.QLineEdit()
         self.filename.setObjectName('outputName')
         self.filename.setStyleSheet(Style.LINE_EDIT)
@@ -212,6 +225,47 @@ class ProjectConversionDialog(QtWidgets.QDialog):
         self.adjustSize()
         self._start_task(_ProjectTask('inspect', self.source), self._inspected, self._inspect_failed)
 
+    def _build_naming_switch(self):
+        """Switch Rename / Increment version; el nombre elegido se ve en Save as."""
+        switch = QtWidgets.QWidget()
+        switch.setObjectName('namingToggle')
+        switch.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        switch.setStyleSheet(Style.PILL_CONTAINER_SUNKEN)
+        switch_layout = QtWidgets.QHBoxLayout(switch)
+        switch_layout.setContentsMargins(2, 2, 2, 2)
+        switch_layout.setSpacing(2)
+        self._naming_buttons = {}
+        for mode, text in NAMING_MODES:
+            button = QtWidgets.QPushButton(text)
+            button.setCheckable(True)
+            button.setFlat(True)
+            button.setAutoDefault(False)
+            button.setCursor(QtCore.Qt.PointingHandCursor)
+            button.setMinimumHeight(22)
+            button.setToolTip(TOOLTIPS['naming_' + mode])
+            button.setEnabled(False)
+            button.clicked.connect(lambda _checked=False, m=mode: self._set_naming(m))
+            self._naming_buttons[mode] = button
+            switch_layout.addWidget(button)
+        row = QtWidgets.QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(switch)
+        row.addStretch()
+        container = QtWidgets.QWidget()
+        container.setLayout(row)
+        self._set_naming(DEFAULT_NAMING, apply_name=False)
+        return container
+
+    def _set_naming(self, mode, apply_name=True):
+        """Pinta el switch y pone en Save as el nombre que corresponde al modo."""
+        self._naming = mode
+        for button_mode, button in self._naming_buttons.items():
+            selected = button_mode == mode
+            button.setChecked(selected)
+            button.setStyleSheet(Style.PILL_ACTIVE if selected else Style.PILL_INACTIVE)
+        if apply_name and self._info is not None:
+            self.filename.setText(self._info['names'][mode])
+
     def _start_task(self, task, success, failure):
         global _cleanup
         if _cleanup is None:
@@ -232,9 +286,11 @@ class ProjectConversionDialog(QtWidgets.QDialog):
             return
         self._info = info
         self.subtitle.setText('Create a compatible copy of this Nuke %s project.' % info['release'])
-        self.filename.setText(info['suggested_name'])
+        self._set_naming(self._naming)
         self.filename.setEnabled(True)
         self.browse.setEnabled(True)
+        for button in self._naming_buttons.values():
+            button.setEnabled(True)
         if info['annotations']:
             noun = 'annotation' if info['annotations'] == 1 else 'annotations'
             self.annotation_warning.setText(
@@ -290,6 +346,8 @@ class ProjectConversionDialog(QtWidgets.QDialog):
         self._busy = True
         self.filename.setEnabled(False)
         self.browse.setEnabled(False)
+        for button in self._naming_buttons.values():
+            button.setEnabled(False)
         self.discard_annotations.setEnabled(False)
         self.cancel.setEnabled(False)
         self.save_button.setEnabled(False)
@@ -309,6 +367,8 @@ class ProjectConversionDialog(QtWidgets.QDialog):
         self._busy = False
         self.filename.setEnabled(True)
         self.browse.setEnabled(True)
+        for button in self._naming_buttons.values():
+            button.setEnabled(True)
         self.discard_annotations.setEnabled(True)
         self.cancel.setEnabled(True)
         if isinstance(error, FileExistsError):

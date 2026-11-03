@@ -3,10 +3,12 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectHandler v1.08 | Lega
+  LGA_NKS_ProjectHandler v1.09 | Lega
 
   Gestor de manejo de proyectos para el panel de proyectos LGA.
 
+  v1.09: Solo el boton izquierdo abre o colapsa un proyecto: el clic derecho
+         sobre el nombre lo colapsaba ademas de abrir el menu.
   v1.08: Los iconos Save incremental y Upload to Wasabi de la fila delegan en
          save_incremental() y upload_project() del panel.
   v1.07: Click en el nombre o el triangulo de un proyecto abierto lo colapsa
@@ -161,10 +163,15 @@ class ProjectHandler:
             debug_print(f"   🔍 Proyecto {nombre_base}: has_newer_version={has_newer_version}, is_open={isinstance(proyecto_info.get('proyecto_abierto'), hiero.core.Project)}")
 
             item = ProjectItem(proyecto_info, panel, has_newer_version, newer_version_info)
-            # Nombre y triangulo: abierto -> colapsar/expandir; cerrado -> abrir
+            # Nombre y triangulo: abierto -> colapsar/expandir; cerrado -> abrir.
+            # Solo el boton izquierdo: el derecho abre el menu del proyecto.
             for clickable in (item.project_label, item.toggle_label):
                 clickable.mousePressEvent = (
-                    lambda e, it=item, p=proyecto_info: ProjectHandler.on_project_label_click(panel, it, p)
+                    lambda e, it=item, p=proyecto_info: (
+                        ProjectHandler.on_project_label_click(panel, it, p)
+                        if e.button() == QtCore.Qt.LeftButton
+                        else None
+                    )
                 )
             item.close_button.clicked.connect(
                 lambda _checked=False, it=item: ProjectHandler.on_close_project_click(panel, it)

@@ -96,6 +96,14 @@ class DowngradeTests(unittest.TestCase):
         ):
             self.assertEqual(converter.suggest_project_name(before), after)
 
+    def test_renamed_filename_keeps_version_and_adds_suffix(self):
+        for before, after in (
+            ('PROJA_v035.hrox', 'PROJA_v035_NKS16.hrox'),
+            (r'T:\VFX-PROJA\PROJA_SUP\PROJA_SUP_v105.hrox', 'PROJA_SUP_v105_NKS16.hrox'),
+            ('PROJA_SUP.hrox', 'PROJA_SUP_NKS16.hrox'),
+        ):
+            self.assertEqual(converter.renamed_project_name(before), after)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,12 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Project_Downgrade v1.01 | Lega
+  LGA_NKS_Project_Downgrade v1.02 | Lega
 
   Crea una copia de proyectos Hiero/NKS 16.1 o 17 compatible con 16.0.
   Conserva el XML original salvo la version del formato; no reconstruye
   el timeline. Las annotations nuevas requieren descarte explicito.
 
+  v1.02: renamed_project_name(): el nombre con _NKS16 para el modo Rename del
+         dialogo del Projects Panel.
   v1.01: Inspeccion y nombre con siguiente version para el Projects Panel.
   v1.00: Conversion segura de formato 12 a 11, sin sobrescrituras.
 ____________________________________________________________________
@@ -34,6 +36,11 @@ def suggest_project_name(source):
     start, end = match.span(2)
     number = match.group(2)
     return stem[:start] + str(int(number) + 1).zfill(len(number)) + stem[end:] + '.hrox'
+
+
+def renamed_project_name(source):
+    """Mismo nombre y version con _NKS16 al final: el default del CLI."""
+    return Path(source).stem + '_NKS16.hrox'
 
 
 def _read_project(source):
@@ -118,7 +125,7 @@ def convert_project(source, destination=None, *, drop_annotations=False):
     try:
         source, data, root = _read_project(source)
         destination = (Path(destination).expanduser().absolute() if destination
-                       else source.with_name(source.stem + '_NKS16.hrox'))
+                       else source.with_name(renamed_project_name(source)))
         logger.info('Origen: %s; destino: %s; descartar annotations: %s',
                     source, destination, drop_annotations)
         if destination.suffix.lower() != '.hrox':

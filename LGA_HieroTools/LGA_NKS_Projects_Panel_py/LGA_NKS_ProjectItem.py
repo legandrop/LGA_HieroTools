@@ -3,10 +3,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ProjectItem v1.06 | Lega
+  LGA_NKS_ProjectItem v1.07 | Lega
 
   Widget personalizado para mostrar proyectos y secuencias en el panel de proyectos LGA.
 
+  v1.07: Clic derecho sobre el nombre o el triangulo de un proyecto abre un
+         menu con Reveal in Explorer y Convert to Nuke 16. El nombre deja de
+         ser texto seleccionable (abria Copy / Select All). Los menus toman
+         Style.MENU: el de un timeline heredaba el color del proyecto.
   v1.06: Clic derecho sobre un timeline abre un menu con Delete Timeline, que
          delega en delete_sequence() del panel. El switch de timeline queda
          solo en el boton izquierdo.
@@ -36,7 +40,7 @@ if 'LGA_NKS_ProjectItem' in sys.modules:
     importlib.reload(sys.modules['LGA_NKS_ProjectItem'])
 
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt, horizontal_advance
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, apply_ui_font
 
 # Lado del triangulo de expandir/colapsar, en px. Se dibuja en vez de usar los
 # caracteres de texto: la fuente dibuja el que apunta a la derecha mucho mas
@@ -121,7 +125,27 @@ TOOLTIPS = {
     "upload_ok": "{name} subido a Wasabi",
     "upload_error": "No se pudo subir {name}: {message}\nClick para reintentar",
     "delete_timeline": "Borrar este timeline del proyecto. Pregunta antes y se deshace con Ctrl+Z",
+    "reveal": "Abrir la carpeta del proyecto en el explorador de archivos",
+    "convert": "Guardar una copia de este proyecto que abra en Nuke Studio / Hiero 16.0",
 }
+
+
+def _context_menu(parent):
+    """QMenu con la hoja del modulo: sin ella hereda el color del label que lo abre."""
+    menu = QtWidgets.QMenu(parent)
+    menu.setStyleSheet(Style.MENU)
+    menu.setToolTipsVisible(True)
+    apply_ui_font(menu)
+    return menu
+
+
+def _reveal_label():
+    """El texto nombra el explorador de cada sistema; abre el default del usuario."""
+    if sys.platform == "darwin":
+        return "Reveal in Finder"
+    if os.name == "nt":
+        return "Reveal in Explorer"
+    return "Reveal in File Manager"
 
 
 def _save_glyph_path():
@@ -369,7 +393,9 @@ class ProjectItem(QtWidgets.QWidget):
 
         # Nombre del proyecto (clickable)
         self.project_label = QtWidgets.QLabel()
-        self.project_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        # Sin texto seleccionable: el clic derecho abria el menu de QLabel
+        # (Copy / Select All) en vez del menu del proyecto.
+        self.project_label.setTextInteractionFlags(QtCore.Qt.NoTextInteraction)
         self.project_label.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
         self.project_label.setWordWrap(False)  # No word wrap para mantener en una línea
         self.project_label.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
@@ -377,6 +403,11 @@ class ProjectItem(QtWidgets.QWidget):
         self.project_label.setTextFormat(QtCore.Qt.PlainText)
         self.project_label.installEventFilter(self)
         project_layout.addWidget(self.project_label)
+        for title in (self.toggle_label, self.project_label):
+            title.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+            title.customContextMenuRequested.connect(
+                lambda pos, lbl=title: self._show_project_menu(lbl, pos)
+            )
 
         # Botón de update (siempre creado, inicialmente oculto)
         self.update_button = QtWidgets.QPushButton()
@@ -675,8 +706,7 @@ class ProjectItem(QtWidgets.QWidget):
         """Clic derecho sobre un timeline: menu con Delete Timeline."""
         if self.panel is None or not hasattr(self.panel, "delete_sequence"):
             return
-        menu = QtWidgets.QMenu(label)
-        menu.setToolTipsVisible(True)
+        menu = _context_menu(label)
         delete_action = menu.addAction("Delete Timeline")
         delete_action.setToolTip(TOOLTIPS["delete_timeline"])
         chosen = menu.exec_(label.mapToGlobal(pos))
@@ -689,6 +719,30 @@ class ProjectItem(QtWidgets.QWidget):
         QtCore.QTimer.singleShot(
             0, lambda: panel.delete_sequence(proyecto, sequence_name, sequence_obj)
         )
+
+    @staticmethod
+    def build_project_menu(parent):
+        """Arma el menu del proyecto sin mostrarlo (lo usa tambien el harness)."""
+        menu = _context_menu(parent)
+        reveal_action = menu.addAction(_reveal_label())
+        reveal_action.setToolTip(TOOLTIPS["reveal"])
+        convert_action = menu.addAction("Convert to Nuke 16...")
+        convert_action.setToolTip(TOOLTIPS["convert"])
+        return menu, reveal_action, convert_action
+
+    def _show_project_menu(self, label, pos):
+        """Clic derecho sobre el nombre o el triangulo: Reveal y Convert to Nuke 16."""
+        path = self.project_info.get("ruta_hrox", "")
+        if self.panel is None or not path:
+            return
+        menu, reveal_action, convert_action = self.build_project_menu(label)
+        chosen = menu.exec_(label.mapToGlobal(pos))
+        panel = self.panel
+        if chosen is reveal_action and hasattr(panel, "reveal_project_folder"):
+            panel.reveal_project_folder(path)
+        elif chosen is convert_action and hasattr(panel, "open_project_conversion"):
+            # Diferido: el dialogo no se abre desde adentro del evento del menu.
+            QtCore.QTimer.singleShot(0, lambda: panel.open_project_conversion(path))
 
     def eventFilter(self, obj, event):
         """Hover compartido: el triangulo y el nombre hacen lo mismo, se iluminan juntos."""

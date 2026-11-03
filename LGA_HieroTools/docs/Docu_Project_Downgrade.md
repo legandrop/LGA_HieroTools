@@ -6,7 +6,7 @@ introdujo el formato hrox 12 en 16.1; NKS/Hiero 16.0 admite hasta el 11 y rechaz
 el proyecto antes de cargarlo. El numero del formato es independiente de la version
 del programa. Cambiar solamente el atributo `release` no resuelve el problema.
 
-`LGA_NKS_Project_Downgrade.py` v1.01 crea otra copia con formato 11. Conserva
+`LGA_NKS_Project_Downgrade.py` v1.02 crea otra copia con formato 11. Conserva
 todos los bytes del proyecto salvo el valor de `hieroXML/@version`, sin
 reconstruir bins, versiones, cortes, media, efectos, presets ni CDATA. El destino
 por defecto es `<nombre>_NKS16.hrox`, junto al original, para conservar tambien
@@ -17,13 +17,21 @@ Nunca sobrescribe el original ni un destino existente. Tampoco abre el host.
 
 ### Desde Projects Panel
 
-Arrastrar un único `.hrox` local sobre el panel abre `Save a Nuke 16 copy`,
-el diálogo compacto de `LGA_NKS_ProjectDrop_Dialog.py` v1.00. Muestra el original,
-un nombre editable y la carpeta original con `Browse...` para elegir otra.
-Si el nombre contiene un número de versión, propone el siguiente conservando
-prefijo y padding: `PROJA_SUP_v105.hrox` pasa a `PROJA_SUP_v106.hrox`.
-Sin número propone `<nombre>_NKS16.hrox`. Un nombre ocupado exige otro nombre
-o carpeta; no se sobrescribe ni se elige una versión adicional en silencio.
+Arrastrar un único `.hrox` local sobre el panel, o elegir `Convert to Nuke 16...`
+en el clic derecho sobre el nombre de un proyecto, abre `Save a Nuke 16 copy`,
+el diálogo compacto de `LGA_NKS_ProjectDrop_Dialog.py` v1.01. Muestra el original,
+el switch `Naming`, un nombre editable y la carpeta original con `Browse...`
+para elegir otra. El switch decide el nombre que aparece en `Save as`:
+
+- `Rename` (default): mismo nombre y versión con `_NKS16` al final
+  (`renamed_project_name()`): `PROJA_SUP_v105.hrox` pasa a `PROJA_SUP_v105_NKS16.hrox`.
+- `Increment version`: la versión siguiente conservando prefijo y padding
+  (`suggest_project_name()`): `PROJA_SUP_v105.hrox` pasa a `PROJA_SUP_v106.hrox`,
+  que en el Projects Panel queda como la última versión del proyecto.
+
+Sin número de versión los dos proponen `<nombre>_NKS16.hrox`. Un nombre ocupado
+exige otro nombre o carpeta; no se sobrescribe ni se elige una versión adicional
+en silencio.
 
 Inspección y escritura corren en un worker; Save se habilita sólo al reconocer
 formato 12 de 16.1/17. Formato 11 informa que ya es compatible, y formatos

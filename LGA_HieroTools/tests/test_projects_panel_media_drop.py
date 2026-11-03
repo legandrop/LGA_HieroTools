@@ -210,7 +210,7 @@ class ProjectsPanelMediaDropTests(unittest.TestCase):
         panel = panel_type()
         panel._single_media_from_mime = self.media_from_mime
         panel._set_media_drop_overlay_visible = lambda visible: None
-        panel._convert_dropped_project = converted.append
+        panel.open_project_conversion = converted.append
         panel._import_dropped_media = imported.append
         with tempfile.TemporaryDirectory() as temp_dir:
             path = str(Path(temp_dir) / 'PROJA_SUP_v105.hrox')

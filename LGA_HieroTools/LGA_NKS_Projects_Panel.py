@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Projects_Panel v2.53 | Lega
+  LGA_NKS_Projects_Panel v2.54 | Lega
 
   Panel de Proyectos LGA integrado para Hiero con recarga inteligente.
   - Escanea proyectos en AltTPath (PipeSync) o T:\ como fallback.
@@ -10,6 +10,9 @@ ____________________________________________________________________
   - Incluye botón de reimport/redock para aplicar cambios al vuelo.
   - Toggle pill Studio/Client (arriba de la lista, a la izquierda) visible para lega@wanka.tv.
 
+  v2.54: open_project_conversion() (antes _convert_dropped_project) abre el
+         dialogo de copia Nuke 16 tambien desde el menu de un proyecto, y
+         reveal_project_folder() abre su carpeta con el explorador default.
   v2.53: Si el proyecto recien abierto no tiene timelines, la post-apertura
          avisa con un cartel en vez de solo anotarlo en el log: el click
          parecia no hacer nada.
@@ -669,11 +672,12 @@ class ProjectsPanel(QtWidgets.QWidget):
 
     def _handle_dropped_file(self, path):
         if os.path.splitext(path)[1].lower() == '.hrox':
-            self._convert_dropped_project(path)
+            self.open_project_conversion(path)
         else:
             self._import_dropped_media(path)
 
-    def _convert_dropped_project(self, path):
+    def open_project_conversion(self, path):
+        """Dialogo de copia Nuke 16: desde el drop de un .hrox o el menu de un proyecto."""
         dialog = self._project_conversion_dialog
         if dialog is not None and is_widget_alive(dialog):
             dialog.raise_()
@@ -686,8 +690,26 @@ class ProjectsPanel(QtWidgets.QWidget):
         dialog.open()
 
     def _on_project_copy_saved(self, path):
-        debug_print('[Drop project] Copia compatible guardada: %s' % path)
+        debug_print('[Conversion] Copia compatible guardada: %s' % path)
         self.start_scan()
+
+    def reveal_project_folder(self, path):
+        """Abre la carpeta del .hrox con el explorador por default del sistema."""
+        folder = os.path.dirname(path)
+        if not os.path.isdir(folder):
+            show_warning(self, "Reveal project", f"Couldn't find the folder:\n{folder}")
+            return
+        debug_print(f"[Reveal] {folder}")
+        try:
+            # La carpeta y no el archivo: os.startfile sobre el .hrox abriria NKS.
+            if sys.platform == "darwin":
+                subprocess.Popen(["open", folder])
+            elif os.name == "nt":
+                os.startfile(folder)
+            else:
+                subprocess.Popen(["xdg-open", folder])
+        except Exception as e:
+            show_warning(self, "Reveal project", f"Couldn't open the folder:\n{e}")
 
     def _on_project_conversion_finished(self, _result):
         dialog = self._project_conversion_dialog
