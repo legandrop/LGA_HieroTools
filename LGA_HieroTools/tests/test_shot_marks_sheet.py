@@ -263,6 +263,95 @@ class ShotMarksSheetTests(unittest.TestCase):
             sheet.load_table(self.xlsx, "Notes")
 
 
+THREADS_XML = (
+    '<ThreadedComments xmlns="http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments">'
+    # Respuesta antes de su hilo: el orden del archivo no esta garantizado.
+    '<threadedComment ref="F3" dT="2026-09-26T10:00:00.00" personId="{P2}" id="{R1}" parentId="{T1}">'
+    '<text>Yes, two of them</text></threadedComment>'
+    '<threadedComment ref="F3" dT="2026-09-25T02:02:36.00" personId="{P1}" id="{T1}" done="0">'
+    '<text>Is this two shots?</text></threadedComment>'
+    '<threadedComment ref="B4" dT="2026-09-20T00:00:00.00" personId="{P1}" id="{T2}" done="1">'
+    '<text>Check the cut</text></threadedComment>'
+    '<threadedComment ref="B1" dT="2026-09-19T00:00:00.00" personId="{P1}" id="{T3}">'
+    '<text>Header comment</text></threadedComment>'
+    '</ThreadedComments>')
+PERSONS_XML = (
+    '<personList xmlns="http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments">'
+    '<person displayName="Coordinator A" id="{P1}"/><person displayName="Supervisor B" id="{P2}"/>'
+    '</personList>')
+LEGACY_XML = (
+    '<comments xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    '<authors><author></author><author>tc={T1}</author><author>Editor C</author></authors>'
+    '<commentList>'
+    '<comment ref="G3" authorId="0"><text><t>BALLPARK</t></text></comment>'
+    '<comment ref="F3" authorId="1"><text><t>[Threaded comment] Is this two shots?</t></text></comment>'
+    '<comment ref="C4" authorId="2"><text><r><t>Editor C:</t></r><r><t xml:space="preserve"> new VFX</t></r></text></comment>'
+    '</commentList></comments>')
+
+
+def write_commented_xlsx(path):
+    """xlsx con hilos (uno con respuesta, uno resuelto, uno en el encabezado),
+    el espejo tc= de un hilo, una nota de Google sin autor y una de Excel."""
+    rows = [["SHOTNAME", "BRIEF", "STATUS", "REC TC IN", "REC TC OUT", "QTY", "COST"],
+            ["PROJA_0100", "Steam", "WIP", "01:00:00:00", "01:00:01:00", "1", "10"],
+            ["PROJA_0200", "Sky", "WIP", "01:00:01:00", "01:00:02:00", "1", "10"]]
+    write_xlsx(path, {"Shots": [[]] + rows})
+    with zipfile.ZipFile(str(path), "a") as archive:
+        archive.writestr("xl/worksheets/_rels/sheet1.xml.rels", (
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="r1" Target="../threadedComments/threadedComment1.xml"/>'
+            '<Relationship Id="r2" Target="../comments1.xml"/>'
+            '<Relationship Id="r3" Target="../drawings/vmlDrawing1.vml"/></Relationships>'))
+        archive.writestr("xl/threadedComments/threadedComment1.xml", THREADS_XML)
+        archive.writestr("xl/comments1.xml", LEGACY_XML)
+        archive.writestr("xl/persons/person.xml", PERSONS_XML)
+
+
+class ShotMarksCommentsTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.xlsx = Path(self.temp.name) / "PROJA_breakdown.xlsx"
+        write_commented_xlsx(self.xlsx)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_reads_threads_replies_and_authored_notes_by_row(self):
+        table = sheet.load_table(self.xlsx, "Shots")
+        self.assertEqual(table.header_row, 2)
+        row3 = table.comments[3]
+        # Hilo con su respuesta; el espejo tc= y la nota sin autor no entran.
+        self.assertEqual(len(row3), 1)
+        self.assertEqual((row3[0]["author"], row3[0]["date"], row3[0]["text"], row3[0]["resolved"]),
+                         ("Coordinator A", "2026-09-25", "Is this two shots?", False))
+        self.assertEqual(row3[0]["replies"],
+                         [{"author": "Supervisor B", "date": "2026-09-26", "text": "Yes, two of them"}])
+        self.assertEqual([(t["author"], t["resolved"]) for t in table.comments[4]],
+                         [("Editor C", False), ("Coordinator A", True)])
+        self.assertEqual(table.comments[4][0]["text"], "Editor C: new VFX")
+        self.assertIn(1, table.comments)  # el del encabezado se lee, no va a ninguna marca
+
+    def test_comments_travel_to_marks_and_are_searchable(self):
+        table = sheet.load_table(self.xlsx, "Shots")
+        columns = sheet.detect_columns(table.headers)
+        plan = sheet.build_plan(table, columns, FPS, sheet.parse_timecode("01:00:00:00", FPS), 1000)
+        first = plan.marks[0]
+        threads = sheet.parse_comments(first.info["comments"])
+        self.assertEqual(threads[0]["column"], "QTY")
+        stored = sheet.mark_info_from_metadata(sheet.mark_metadata(first, "x").get)
+        self.assertEqual(sheet.parse_comments(stored["comments"]), threads)
+        entries = [dict(stored, shot=first.shot)]
+        self.assertEqual(sheet.search_marks(entries, "two of them"), [(0, "comments")])
+        # Las keys del JSON no se buscan como texto.
+        self.assertEqual(sheet.search_marks(entries, "resolved"), [])
+        # Los comentarios no cuentan como cambio de planilla.
+        self.assertNotIn("comments", sheet.CHANGE_FIELDS)
+
+    def test_csv_and_broken_text_have_no_comments(self):
+        self.assertEqual(sheet.parse_comments("not json"), [])
+        self.assertEqual(sheet.comments_json([], ["A"]), "")
+
+
 def _mark(shot, frame_in, note="", **info):
     return sheet.Mark(1, shot, frame_in, frame_in + 10, "", "", note, info)
 

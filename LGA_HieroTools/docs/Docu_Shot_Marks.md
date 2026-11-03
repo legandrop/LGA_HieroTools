@@ -42,15 +42,28 @@ no aparece: nunca hay un Notes vacio.
 - Viajan a la metadata (`_notes`, `_notes2`), cuentan como cambio (amarillo) y Find las busca.
 - Los `Vendor Notes` o `On Set sup Notes` no se toman: el nombre tiene que ser exacto.
 
-## Comentarios de Google Sheets: viajan al xlsx, Shot Marks no los lee
+## Comentarios de la planilla
 
-Medido en una planilla real bajada de Google Drive como `.xlsx`: los comentarios SI vienen adentro.
-Los hilos (con autor, fecha, menciones y si estan resueltos) en `xl/threadedComments/threadedComment<N>.xml`,
-los autores en `xl/persons/person.xml`, y las notas sueltas de celda en `xl/comments<N>.xml`. Cada hoja
-apunta a los suyos desde `xl/worksheets/_rels/sheet<N>.xml.rels`; la celda va en `ref` (`E611`), asi
-que se pueden asociar a una fila y a un shot. Shot Marks hoy no los lee: en esa planilla eran
-cinco hilos (dos de una fila de shot, tres del encabezado) y 39 notas iguales en la columna de costos.
-El `.csv` no trae comentarios.
+Las consultas que se dejan en la planilla (comentarios de Google Sheets o de Excel) van a la ventana
+de la marca de su shot, en la seccion Comments: autor, fecha, columna donde se dejo, texto y
+respuestas. Los resueltos van enteros en gris; el titulo dice cuantos siguen abiertos. Sin
+comentarios en la fila, la seccion no aparece. Find tambien busca en ellos.
+
+- **Viajan al xlsx.** Medido en una planilla bajada de Google Drive como `.xlsx`: los hilos (autor,
+  fecha, menciones, respuestas con `parentId`, `done="1"` si esta resuelto) van en
+  `xl/threadedComments/threadedComment<N>.xml`, los autores en `xl/persons/person.xml`, y cada hoja
+  los apunta desde `xl/worksheets/_rels/sheet<N>.xml.rels`. La celda va en `ref` (`E611`): de ahi
+  sale la fila, y por la fila, el shot. El `.csv` no trae comentarios.
+- **Que se toma** (`read_comments`): los hilos, y de `xl/comments<N>.xml` solo las notas con autor
+  (las de Excel). Ahi Google deja un espejo de cada hilo con autor `tc={id}` (se descarta: ya esta en
+  el hilo) y sus "notas" de celda sin autor. Esas se descartan a proposito: en la planilla medida eran
+  39 copias de un mismo rotulo de costos y aparecian en 39 tarjetas.
+- **Comentarios fuera de las filas de shot** (el encabezado, una fila de resumen) no van a ninguna
+  marca. El resumen del dialogo los cuenta: "2 comments ... go to the mark window of their shots
+  (3 on other rows are not shown)".
+- Viajan a la metadata como JSON (`_comments`, con la columna por nombre). **No cuentan como cambio**
+  de planilla: un comentario nuevo o resuelto no pinta la marca de amarillo.
+- Se leen junto con la hoja, fuera del hilo de UI: medido 0,5 s en una planilla de 845 filas.
 
 ## Actualizar: colores contra la corrida anterior
 
@@ -133,7 +146,7 @@ Previous, con el playhead adentro de un shot, vuelve al IN de ese shot.
   Si cambio la descripcion, el brief o una nota, el texto anterior va debajo, en gris
   (`Before: ...`). Si la nota se borro, su caja no aparece y el texto anterior va en esta linea.
 - **Notes y Notes 2 resaltadas.** Arriba de la descripcion, en cajas con borde ambar y celeste;
-  ver "Notes y Notes 2".
+  ver "Notes y Notes 2". Debajo, los comentarios de la planilla (ver "Comentarios de la planilla").
 - **Vendor con color.** `LGA_NKS_Shared/LGA_NKS_Vendor_Colors_Config.py` lee de la DB de PipeSync
   del contexto activo (studio o client) la tabla `project_vendor_groups` (token, nombre, color)
   y, de respaldo, `vendor_colors` del envelope del proyecto. Compara sin mayusculas ni signos
@@ -164,7 +177,7 @@ ni a "el del humo de la sopa". Una ventanita con un campo: se escribe un nombre 
 texto de la planilla y Find salta a esa marca, mostrandola en la ventanita de Previous / Next Mark.
 
 - **Donde busca.** En la metadata de los tags (`mark_info_from_metadata`), no en el Excel: shot,
-  descripcion, brief, Notes, Notes 2, status, vendor, escena, categoria, episodio, TC IN/OUT y clip
+  descripcion, brief, Notes, Notes 2, comentarios (autor y texto), status, vendor, escena, categoria, episodio, TC IN/OUT y clip
   (`SEARCH_FIELDS`). No pide el color del vendor a la DB de PipeSync (lo hace `mark_info` del Nav
   solo para la marca que se muestra): buscar es instantaneo aunque el timeline tenga cientos.
 - **Como compara.** Sin mayusculas ni acentos y con los espacios unidos (`search_text`): un brief

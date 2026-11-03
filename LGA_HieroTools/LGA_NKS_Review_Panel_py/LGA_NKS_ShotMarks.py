@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks v1.05 | Lega
+  LGA_NKS_ShotMarks v1.06 | Lega
 
   Shot Marks: lee una planilla de breakdown (xlsx o csv) y pone un tag
   de rango por shot en el timeline activo, en el REC TC de la planilla,
@@ -22,6 +22,8 @@ ____________________________________________________________________
   Nucleo sin host (lectura y plan): LGA_NKS_ShotMarks_Sheet.py.
   Log de cada corrida: logs/DebugPy_LGA_NKS_ShotMarks.log.
 
+  v1.06: El resumen dice cuantos comentarios de la planilla van a la
+         ventana de sus shots y cuantos quedan en otras filas.
   v1.05: Columnas Notes y Notes 2 (se sugieren "Notas" y "Alternativa"):
          van a la ventana de la marca, resaltadas. Los encabezados con
          salto de linea se ven en una linea en los combos. TimelineInfo
@@ -859,6 +861,9 @@ class ShotMarksDialog(QtWidgets.QDialog):
             changes.append(_colored(_red_text(counts), CHANGE_COLORS["removed"]))
             text += "<br>Replaces %d %s added before. Against them: %s." % (
                 previous, _plural(previous, "mark"), ", ".join(changes))
+        comments = _comments_summary(self.table, plan.marks)
+        if comments:
+            text += "<br>" + comments
         if self.timeline.media_reason:
             text += "<br>%s." % self.timeline.media_reason
         self._set_summary(text)
@@ -1084,6 +1089,23 @@ def _red_text(counts):
     if counts["unplaced"]:
         text += ", %d in the sheet but not placed in this timeline" % counts["unplaced"]
     return text
+
+
+def _comments_summary(table, marks):
+    """'3 comments from the sheet go to their shots (2 on other rows are not shown).'"""
+    comments = getattr(table, "comments", None) or {}
+    total = sum(len(threads) for threads in comments.values())
+    if not total:
+        return ""
+    rows = {mark.row for mark in marks}
+    on_marks = sum(len(threads) for row, threads in comments.items() if row in rows)
+    text = "%d %s from the sheet %s to the mark window of %s" % (
+        on_marks, _plural(on_marks, "comment"), "goes" if on_marks == 1 else "go",
+        "its shot" if on_marks == 1 else "their shots")
+    if total > on_marks:
+        text += " (%d on other rows %s not shown)" % (total - on_marks,
+                                                      "is" if total - on_marks == 1 else "are")
+    return _colored(text + ".", Color.TEXT_DIM)
 
 
 def _plural(count, word):

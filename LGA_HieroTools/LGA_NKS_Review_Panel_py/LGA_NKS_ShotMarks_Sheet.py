@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Sheet v1.09 | Lega
+  LGA_NKS_ShotMarks_Sheet v1.10 | Lega
 
   Nucleo sin host de Shot Marks: lee una planilla (xlsx o csv),
   detecta la fila de encabezado y las columnas de shot y timecode,
@@ -13,6 +13,11 @@ ____________________________________________________________________
   los sharedStrings), sin openpyxl: NKS no lo trae, y asi una
   planilla de cientos de MB por las imagenes se lee en segundos.
 
+  v1.10: Comentarios de la planilla: read_comments lee los hilos de
+         Google Sheets / Excel (threadedComments, con respuestas y si estan
+         resueltos) y las notas de Excel con autor, por fila. load_table los
+         deja en Table.comments, viajan a cada marca como JSON (rol
+         comments) y Find los busca por texto.
   v1.09: Columnas Notes ("Notas") y Notes 2 ("Alternativa"): viajan a
          cada marca, cuentan como cambio y se buscan. "Notas" ya no cae en
          el brief. Los encabezados con salto de linea ("STATUS\nVFX") se
@@ -55,6 +60,8 @@ ____________________________________________________________________
 
 import bisect
 import csv
+import json
+import posixpath
 import re
 import unicodedata
 import xml.etree.ElementTree as ET
@@ -64,6 +71,7 @@ from pathlib import Path
 XLSX_MAIN_NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 XLSX_REL_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 XLSX_PKG_REL_NS = "{http://schemas.openxmlformats.org/package/2006/relationships}"
+XLSX_THREAD_NS = "{http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments}"
 CELL_REF_RE = re.compile(r"^([A-Z]+)([0-9]+)$")
 TC_RE = re.compile(r"^(\d{1,2})[:;.](\d{2})[:;.](\d{2})[:;.](\d{2})$")
 
@@ -113,8 +121,8 @@ MAYBE_TOKENS = ("posible", "possible", "maybe", "tentative")
 ROLES = ("shot", "tc_in", "tc_out", "episode", "status", "note", "notes", "notes2",
          "description", "scene", "vendor", "category", "thumb", "located", "clip")
 # Roles que viajan como texto a cada marca, para la ventana de info.
-INFO_ROLES = ("status", "description", "notes", "notes2", "scene", "vendor", "category",
-              "episode", "thumb", "located", "clip")
+INFO_ROLES = ("status", "description", "notes", "notes2", "comments", "scene", "vendor",
+              "category", "episode", "thumb", "located", "clip")
 # Campos que, si cambian entre una corrida y la siguiente, pintan la marca de
 # amarillo. El TC no esta: un shot que se movio es un cambio de corte, no de
 # planilla. Thumb, nivel de ubicacion y clip tampoco: salen de Shot Marks.
@@ -149,12 +157,14 @@ _ROLE_HEADERS = {
 class Table(object):
     """Planilla ya leida: encabezados unicos y filas de texto."""
 
-    def __init__(self, path, sheet, header_row, headers, rows):
+    def __init__(self, path, sheet, header_row, headers, rows, comments=None):
         self.path = path
         self.sheet = sheet
         self.header_row = header_row  # numero de fila (1-based) del encabezado
         self.headers = headers
         self.rows = rows  # lista de (numero_de_fila, [valores str])
+        # {fila: [hilo]} de read_comments; vacio en csv.
+        self.comments = comments or {}
 
     def column_values(self, index):
         values = []
@@ -378,6 +388,135 @@ def _read_rows(path, sheet, max_rows=None):
         return list(_iter_xlsx_rows(archive, xml_path, strings, max_rows))
 
 
+# -- comentarios -------------------------------------------------------------
+#
+# Google Sheets exporta los comentarios al xlsx como hilos de Excel 365:
+# xl/threadedComments/*.xml (texto, autor, fecha, respuestas, resuelto) con
+# los autores en xl/persons/*.xml. Ademas deja un espejo de cada hilo en
+# xl/comments*.xml con autor "tc={id}", y ahi mismo sus "notas" de celda, sin
+# autor. Se toman los hilos y las notas con autor (las de Excel); las notas
+# sin autor de Google suelen ser rotulos de costos repetidos en decenas de
+# filas, y en la ventana de cada marca serian ruido.
+
+def _sheet_rel_targets(archive, xml_path):
+    """Rutas en el zip de lo que referencia la hoja (comentarios, dibujos...)."""
+    folder, name = posixpath.split(xml_path)
+    rels_path = posixpath.join(folder, "_rels", name + ".rels")
+    if rels_path not in archive.namelist():
+        return []
+    root = ET.fromstring(archive.read(rels_path))
+    targets = []
+    for node in root.iter(XLSX_PKG_REL_NS + "Relationship"):
+        target = str(node.get("Target") or "")
+        if target.startswith("/"):
+            targets.append(target.lstrip("/"))
+        else:
+            targets.append(posixpath.normpath(posixpath.join(folder, target)))
+    return targets
+
+
+def _persons(archive):
+    names = {}
+    for name in archive.namelist():
+        if name.startswith("xl/persons/") and name.endswith(".xml"):
+            for node in ET.fromstring(archive.read(name)).iter(XLSX_THREAD_NS + "person"):
+                names[str(node.get("id") or "")] = str(node.get("displayName") or "")
+    return names
+
+
+def _cell_row(ref):
+    match = CELL_REF_RE.match((ref or "").upper().replace("$", ""))
+    return int(match.group(2)) if match else None
+
+
+def _xml_text(node, ns):
+    return "".join(t.text or "" for t in node.iter(ns + "t")).strip()
+
+
+def read_comments(archive, xml_path):
+    """{fila: [hilo]} de los comentarios de una hoja, en orden de fecha.
+
+    Cada hilo: {"col" (indice 0-based), "author", "date" (AAAA-MM-DD), "text",
+    "resolved", "replies": [{"author", "date", "text"}]}. Una respuesta trae
+    parentId y puede venir antes o despues de su hilo.
+    """
+    targets = _sheet_rel_targets(archive, xml_path)
+    names = set(archive.namelist())
+    persons = None
+    threads, replies = [], {}
+    for target in targets:
+        if "/threadedComments/" not in target or target not in names:
+            continue
+        if persons is None:
+            persons = _persons(archive)
+        for node in ET.fromstring(archive.read(target)).iter(XLSX_THREAD_NS + "threadedComment"):
+            entry = {"author": persons.get(str(node.get("personId") or ""), ""),
+                     "date": str(node.get("dT") or "")[:10],
+                     "text": "".join(t.text or "" for t in node.iter(XLSX_THREAD_NS + "text")).strip()}
+            parent = str(node.get("parentId") or "")
+            if parent:
+                replies.setdefault(parent, []).append(entry)
+                continue
+            ref = str(node.get("ref") or "")
+            entry.update(id=str(node.get("id") or ""), row=_cell_row(ref), col=_cell_column(ref),
+                         resolved=str(node.get("done") or "") == "1")
+            threads.append(entry)
+    for thread in threads:
+        thread["replies"] = sorted(replies.get(thread.pop("id"), []), key=lambda r: r["date"])
+    for target in targets:
+        if "/comments" not in target or not target.endswith(".xml") or target not in names:
+            continue
+        root = ET.fromstring(archive.read(target))
+        authors = [(a.text or "").strip() for a in root.iter(XLSX_MAIN_NS + "author")]
+        for node in root.iter(XLSX_MAIN_NS + "comment"):
+            index = int(node.get("authorId") or 0)
+            author = authors[index] if index < len(authors) else ""
+            # "tc={id}" es el espejo de un hilo; sin autor, una nota de Google.
+            if not author or author.startswith("tc="):
+                continue
+            ref = str(node.get("ref") or "")
+            text_node = node.find(XLSX_MAIN_NS + "text")
+            text = _xml_text(text_node, XLSX_MAIN_NS) if text_node is not None else ""
+            threads.append({"row": _cell_row(ref), "col": _cell_column(ref), "author": author,
+                            "date": "", "text": text, "resolved": False, "replies": []})
+    result = {}
+    for thread in sorted(threads, key=lambda t: (t["date"], t["col"] or 0)):
+        row = thread.pop("row")
+        if row is not None and thread["text"]:
+            result.setdefault(row, []).append(thread)
+    return result
+
+
+def comments_json(threads, headers):
+    """Texto que viaja a la metadata de la marca: la columna va por nombre."""
+    out = []
+    for thread in threads:
+        item = dict(thread)
+        col = item.pop("col", None)
+        item["column"] = headers[col] if col is not None and col < len(headers) else ""
+        out.append(item)
+    return json.dumps(out, ensure_ascii=False, sort_keys=True) if out else ""
+
+
+def parse_comments(text):
+    """Lo inverso de comments_json; un texto roto da lista vacia."""
+    try:
+        value = json.loads(text) if text else []
+    except ValueError:
+        return []
+    return value if isinstance(value, list) else []
+
+
+def comments_text(text):
+    """Los comentarios como texto plano, para buscarlos."""
+    parts = []
+    for thread in parse_comments(text):
+        parts.append("%s %s" % (thread.get("author", ""), thread.get("text", "")))
+        for reply in thread.get("replies") or []:
+            parts.append("%s %s" % (reply.get("author", ""), reply.get("text", "")))
+    return "\n".join(parts)
+
+
 # -- encabezado y columnas -------------------------------------------------
 
 def _header_score(values, require_tc=True):
@@ -482,7 +621,11 @@ def load_table(path, sheet, require_tc=True):
     for number, values in rows[index + 1:]:
         padded = (values + [""] * width)[:max(width, len(values))]
         data.append((number, padded))
-    return Table(str(path), sheet, header_number, headers, data)
+    comments = {}
+    if Path(path).suffix.lower() != ".csv":
+        with zipfile.ZipFile(str(path)) as archive:
+            comments = read_comments(archive, _sheet_xml_path(archive, sheet))
+    return Table(str(path), sheet, header_number, headers, data, comments)
 
 
 # -- metadata del tag ------------------------------------------------------
@@ -668,8 +811,8 @@ def mark_index_at(starts, ends, frame):
 
 # Campos donde busca Find Shot Mark. El orden decide que campo se informa
 # cuando el texto aparece en varios: el shot primero.
-SEARCH_FIELDS = ("shot", "description", "brief", "notes", "notes2", "status", "vendor",
-                 "scene", "category", "episode", "tc_in", "tc_out", "clip")
+SEARCH_FIELDS = ("shot", "description", "brief", "notes", "notes2", "comments", "status",
+                 "vendor", "scene", "category", "episode", "tc_in", "tc_out", "clip")
 
 
 def search_text(text):
@@ -695,7 +838,10 @@ def search_marks(entries, query):
     matches = []
     for index, entry in enumerate(entries):
         for field in SEARCH_FIELDS:
-            if needle in search_text(entry.get(field)):
+            value = entry.get(field)
+            if field == "comments":
+                value = comments_text(value)
+            if needle in search_text(value):
                 matches.append((index, field))
                 break
     return matches
@@ -812,7 +958,7 @@ def with_located_timecodes(table, located):
         rows.append((number, padded + [entry.get("tc_in", ""), entry.get("tc_out", ""),
                                        entry.get("thumb", ""), entry.get("level", ""),
                                        entry.get("clip", "")]))
-    return Table(table.path, table.sheet, table.header_row, headers, rows)
+    return Table(table.path, table.sheet, table.header_row, headers, rows, table.comments)
 
 
 def clip_text(info):
@@ -906,6 +1052,9 @@ def build_plan(table, columns, fps, reference_start, duration,
             seen_shots[shot] = number
         note = _value(row, columns.get("note"))
         info = {}
+        comments = comments_json(table.comments.get(number, ()), table.headers)
+        if comments:
+            info["comments"] = comments
         for role in INFO_ROLES:
             value = _value(row, columns.get(role))
             if value:

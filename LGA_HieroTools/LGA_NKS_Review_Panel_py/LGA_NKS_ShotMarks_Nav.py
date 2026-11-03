@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Nav v1.08 | Lega
+  LGA_NKS_ShotMarks_Nav v1.09 | Lega
 
   Previous / Next Mark: Click en Previous / Next Mark del panel Review
   (con Shift esos botones navegan anotaciones). Salta el playhead a la
@@ -18,6 +18,9 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Nav.log.
 
+  v1.09: Seccion Comments: los comentarios de la planilla en la fila del
+         shot (autor, fecha, columna, respuestas). Los resueltos van en
+         gris. Sin comentarios no aparece.
   v1.08: Notes y Notes 2 arriba de todo, cada una en una caja con borde
          de color (ambar y celeste): son lo eventual del shot, lo que hay
          que mirar con atencion. Sin texto (o sin columna) no aparecen.
@@ -79,7 +82,7 @@ DEBUG = False
 WINDOW_NAME = "LGA_ShotMarkInfo"
 # Sube cuando cambia la API de la ventana: el panel re-ejecuta este modulo en
 # cada click, y una ventana creada por una version vieja se reemplaza.
-WINDOW_API = 7
+WINDOW_API = 8
 
 # Tooltips en castellano, separados del widget para que pasar a bilingue sea
 # un cambio de datos.
@@ -278,6 +281,16 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
         self.note_boxes = {}
         for field, title, title_color, border_color in NOTE_SECTIONS:
             self.note_boxes[field] = self._note_box(body, title, title_color, border_color)
+        # Comentarios de la planilla (Google Sheets / Excel) en la fila del shot.
+        self.comments_holder = QtWidgets.QWidget()
+        comments_layout = QtWidgets.QVBoxLayout(self.comments_holder)
+        comments_layout.setContentsMargins(0, 0, 0, 10)
+        comments_layout.setSpacing(4)
+        self.comments_title = QtWidgets.QLabel()
+        self.comments_title.setStyleSheet("color: %s; %s" % (Color.TEXT_STRONG, semibold_css()))
+        comments_layout.addWidget(self.comments_title)
+        self.comments = self._label(comments_layout)
+        body.addWidget(self.comments_holder)
         self.description = self._section(body, "Description")
         self.description_before = self._label(body)
         body.addSpacing(8)
@@ -373,6 +386,17 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
             holder.setVisible(bool(info.get(field)))
             text.setText(_escape(info.get(field) or ""))
             befores.append((field, before))
+        threads = _sheet_module().parse_comments(info.get("comments"))
+        self.comments_holder.setVisible(bool(threads))
+        if threads:
+            open_count = sum(1 for t in threads if not t.get("resolved"))
+            title = "Comments"
+            if not open_count:
+                title += " (resolved)"
+            elif open_count != len(threads):
+                title += " (%d open)" % open_count
+            self.comments_title.setText(title)
+            self.comments.setText(_comments_html(threads))
         # El texto anterior de lo que cambio, para ver que cambio sin abrir la planilla.
         for field, label in befores:
             label.setText(_dim("Before: ") + _dim(_escape(changed[field]) or "&mdash;")
@@ -615,6 +639,35 @@ def _change_html(change, changed, reason="", current=None):
             fields.append(item)
         text += ": " + ", ".join(fields)
     return text
+
+
+def _comment_line(author, date, extra=""):
+    parts = [p for p in (author, date, extra) if p]
+    return _dim(" &middot; ".join(_escape(p) for p in parts))
+
+
+def _comments_html(threads):
+    """Un hilo por bloque: autor, fecha y columna; el texto; las respuestas.
+
+    Los resueltos van enteros en gris: siguen siendo contexto, pero ya no
+    piden nada.
+    """
+    blocks = []
+    for thread in threads:
+        column = thread.get("column")
+        extra = ("on %s" % column) if column else ""
+        if thread.get("resolved"):
+            extra = (extra + " · resolved").strip(" ·")
+        text = _escape(thread.get("text"))
+        lines = [_comment_line(thread.get("author"), thread.get("date"), extra),
+                 _dim(text) if thread.get("resolved") else text]
+        for reply in thread.get("replies") or []:
+            reply_text = _escape(reply.get("text"))
+            lines.append("&nbsp;&nbsp;&#8627; %s %s" % (
+                _comment_line(reply.get("author"), reply.get("date")),
+                _dim(reply_text) if thread.get("resolved") else reply_text))
+        blocks.append("<br>".join(lines))
+    return "<br><br>".join(blocks)
 
 
 def _body(text):
