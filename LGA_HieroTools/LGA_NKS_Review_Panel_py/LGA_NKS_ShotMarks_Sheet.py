@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Sheet v1.13 | Lega
+  LGA_NKS_ShotMarks_Sheet v1.14 | Lega
 
   Nucleo sin host de Shot Marks: lee una planilla (xlsx o csv),
   detecta la fila de encabezado y las columnas de shot y timecode,
@@ -13,6 +13,11 @@ ____________________________________________________________________
   los sharedStrings), sin openpyxl: NKS no lo trae, y asi una
   planilla de cientos de MB por las imagenes se lee en segundos.
 
+  v1.14: Thumbs junto al proyecto: project_thumbs pasa el thumb de cada
+         marca a "<planilla>/<archivo>.jpg", relativo a la carpeta del
+         .hrox, y copy_thumbs los copia ahi. resolve_thumb lo busca en la
+         carpeta del proyecto y, si no esta, por nombre en la cache de
+         Locate (marcas viejas con la ruta absoluta o solo el nombre).
   v1.13: Marcas sin superponerse. build_plan no escribe una fila repetida
          (mismo shot y mismo rango que otra). decision_key / find_decision:
          las decisiones de Locate van por foto Y shot, porque una planilla
@@ -82,6 +87,7 @@ import csv
 import json
 import posixpath
 import re
+import shutil
 import unicodedata
 import xml.etree.ElementTree as ET
 import zipfile
@@ -1015,6 +1021,69 @@ def decisions_base(project_name):
 def is_versioned_decisions(stem, base):
     """Si `stem` es un archivo de decisiones viejo (con version) de `base`."""
     return re.fullmatch(re.escape(base) + r"[_ .-]*v\d+", stem, re.IGNORECASE) is not None
+
+
+def project_thumbs(marks, folder):
+    """Pasa el thumb de cada marca a una ruta relativa al proyecto.
+
+    `folder` es la subcarpeta junto al .hrox (el nombre de la planilla): los
+    thumbs viajan con el proyecto y no dependen de la cache de Locate de una
+    maquina. Cambia mark.info["thumb"] a "carpeta/archivo.jpg" y devuelve
+    [(origen, relativa)] sin repetir, para copiarlos con copy_thumbs.
+    """
+    copies = {}
+    for mark in marks:
+        source = mark.info.get("thumb") or ""
+        if not Path(source).is_absolute():
+            continue
+        relative = "%s/%s" % (folder, Path(source).name)
+        copies[relative] = source
+        mark.info["thumb"] = relative
+    return [(source, relative) for relative, source in copies.items()]
+
+
+def copy_thumbs(copies, project_dir):
+    """Copia los thumbs de project_thumbs. Devuelve (copiados, [errores]).
+
+    Uno que ya esta con el mismo tamano no se vuelve a copiar.
+    """
+    copied, errors = 0, []
+    for source, relative in copies:
+        dest = Path(project_dir) / relative
+        try:
+            if dest.is_file() and dest.stat().st_size == Path(source).stat().st_size:
+                continue
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, str(dest))
+            copied += 1
+        except OSError as exc:
+            errors.append("%s: %s" % (source, exc))
+    return copied, errors
+
+
+def resolve_thumb(path, folders):
+    """Ruta del thumb de una marca que existe en esta maquina, o "".
+
+    El tag guarda una ruta relativa a la carpeta del proyecto (project_thumbs)
+    o, en marcas anteriores, la absoluta de la cache de Locate. `folders` es
+    [carpeta del proyecto, cache de thumbs de Locate]: una ruta relativa se
+    busca en cada una, y si no aparece, el nombre del archivo solo (una marca
+    que guardo solo el nombre). Una relativa nunca se usa como viene: se
+    resolveria contra el directorio actual de NKS, que depende de como se lo
+    abrio.
+    """
+    if not path:
+        return ""
+    path = str(path).replace("\\", "/")
+    if Path(path).is_absolute():
+        candidates = [Path(path)]
+    else:
+        candidates = [Path(folder) / path for folder in folders if folder]
+    candidates += [Path(folder) / Path(path).name for folder in folders if folder]
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    return ""
 
 
 def shared_photos(rows):

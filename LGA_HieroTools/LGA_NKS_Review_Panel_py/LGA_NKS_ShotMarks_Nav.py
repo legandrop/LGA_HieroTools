@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Nav v1.09 | Lega
+  LGA_NKS_ShotMarks_Nav v1.10 | Lega
 
   Previous / Next Mark: Click en Previous / Next Mark del panel Review
   (con Shift esos botones navegan anotaciones). Salta el playhead a la
@@ -18,6 +18,10 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Nav.log.
 
+  v1.10: El thumb se busca en la carpeta del proyecto (ruta relativa al
+         .hrox) y, si no esta, por nombre en la cache de Locate. Una ruta
+         relativa ya no se abre tal cual: se resolvia contra el directorio
+         actual de NKS y el thumb aparecia o no segun como se abrio NKS.
   v1.09: Seccion Comments: los comentarios de la planilla en la fila del
          shot (autor, fecha, columna, respuestas). Los resueltos van en
          gris. Sin comentarios no aparece.
@@ -61,6 +65,7 @@ ____________________________________________________________________
 import html
 import importlib.util
 import logging
+import os
 from pathlib import Path
 
 import hiero.core
@@ -82,7 +87,12 @@ DEBUG = False
 WINDOW_NAME = "LGA_ShotMarkInfo"
 # Sube cuando cambia la API de la ventana: el panel re-ejecuta este modulo en
 # cada click, y una ventana creada por una version vieja se reemplaza.
-WINDOW_API = 8
+WINDOW_API = 9
+
+# Cache de thumbs de Locate (la misma carpeta que cache_root() de Locate):
+# donde se busca por nombre el thumb de una marca que no esta junto al proyecto.
+LOCATE_THUMBS = (Path(os.getenv("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local"))
+                 / "LGA" / "HieroTools" / "ShotMarks_Locate" / "thumbs")
 
 # Tooltips en castellano, separados del widget para que pasar a bilingue sea
 # un cambio de datos.
@@ -183,6 +193,13 @@ def mark_info(sequence, tag, index, total):
     if not info["brief"]:
         info["brief"] = tag.note()
     info["shot"] = tag.name()
+    if info.get("thumb"):
+        # Ruta relativa al .hrox (o, en marcas viejas, la de la cache de
+        # Locate): resuelta aca a una absoluta que existe, o "" si no hay.
+        project = sequence.project()
+        hrox = project.path() if project is not None else ""
+        info["thumb_file"] = module.resolve_thumb(
+            info["thumb"], [os.path.dirname(hrox) if hrox else "", str(LOCATE_THUMBS)])
     info["frames"] = frame_out - frame_in + 1
     info["duration"] = module.format_timecode(info["frames"], fps)
     info["index"] = index
@@ -410,7 +427,8 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
 
     def _show_thumb(self, info):
         path = info.get("thumb") or ""
-        image = QtGui.QImage(path) if path else QtGui.QImage()
+        found = info.get("thumb_file", path) or ""
+        image = QtGui.QImage(found) if os.path.isabs(found) else QtGui.QImage()
         has_thumb = not image.isNull()
         self.thumb.setVisible(has_thumb)
         self.thumb_caption.setVisible(bool(path))

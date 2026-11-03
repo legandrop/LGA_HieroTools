@@ -647,5 +647,51 @@ class ShotMarksOverlapTests(unittest.TestCase):
                             for i in plan.issues))
 
 
+class ShotMarksThumbTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.cache = self.root / "cache"
+        self.project = self.root / "PROJA_SUP"
+        self.cache.mkdir()
+        self.project.mkdir()
+        (self.cache / "aa_480.jpg").write_bytes(b"jpg-a")
+        (self.cache / "bb_480.jpg").write_bytes(b"jpg-b")
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_thumbs_go_next_to_the_project(self):
+        marks = [sheet.Mark(2, "S010", 0, 10, "", "", "", {"thumb": str(self.cache / "aa_480.jpg")}),
+                 sheet.Mark(3, "S020", 11, 20, "", "", "", {"thumb": str(self.cache / "aa_480.jpg")}),
+                 sheet.Mark(4, "S030", 21, 30, "", "", "", {"thumb": str(self.cache / "bb_480.jpg")}),
+                 sheet.Mark(5, "S040", 31, 40, "", "", "", {})]
+        copies = sheet.project_thumbs(marks, "PROJA_Sheet_v02")
+        self.assertEqual(marks[0].info["thumb"], "PROJA_Sheet_v02/aa_480.jpg")
+        self.assertEqual(marks[2].info["thumb"], "PROJA_Sheet_v02/bb_480.jpg")
+        self.assertNotIn("thumb", marks[3].info)
+        self.assertEqual(len(copies), 2)  # la foto repetida se copia una vez
+        self.assertEqual(sheet.copy_thumbs(copies, str(self.project)), (2, []))
+        self.assertEqual((self.project / "PROJA_Sheet_v02" / "aa_480.jpg").read_bytes(), b"jpg-a")
+        # Una segunda corrida no vuelve a copiar lo que ya esta.
+        self.assertEqual(sheet.copy_thumbs(copies, str(self.project)), (0, []))
+
+    def test_resolve_thumb(self):
+        folders = [str(self.project), str(self.cache)]
+        (self.project / "PROJA_Sheet_v02").mkdir()
+        (self.project / "PROJA_Sheet_v02" / "aa_480.jpg").write_bytes(b"jpg-a")
+        relative = sheet.resolve_thumb("PROJA_Sheet_v02/aa_480.jpg", folders)
+        self.assertEqual(Path(relative), self.project / "PROJA_Sheet_v02" / "aa_480.jpg")
+        # Solo el nombre, o una ruta absoluta que ya no existe: por nombre en la cache.
+        self.assertEqual(Path(sheet.resolve_thumb("bb_480.jpg", folders)), self.cache / "bb_480.jpg")
+        gone = str(self.root / "otra_maquina" / "bb_480.jpg")
+        self.assertEqual(Path(sheet.resolve_thumb(gone, folders)), self.cache / "bb_480.jpg")
+        self.assertEqual(sheet.resolve_thumb("PROJA_Sheet_v02/cc_480.jpg", folders), "")
+        self.assertEqual(sheet.resolve_thumb("", folders), "")
+        # Proyecto sin guardar: sin carpeta de proyecto.
+        self.assertEqual(Path(sheet.resolve_thumb("bb_480.jpg", ["", str(self.cache)])),
+                         self.cache / "bb_480.jpg")
+
+
 if __name__ == "__main__":
     unittest.main()

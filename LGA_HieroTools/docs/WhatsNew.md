@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.024
+- [improved][win] Shot Marks guarda los thumbnails de la planilla en una carpeta junto al proyecto, así la ventanita de cada shot los muestra siempre, también si abrís el proyecto desde otra máquina.
 - [fixed][win] `Locate from Thumbnails` de Shot Marks ya no deja marcas una encima de otra cuando la planilla repite la misma foto en varios shots, repite una fila o pone dos shots en lo que parecía un solo plano.
 - [fixed] Al volver a correr Shot Marks con una planilla que cambió los nombres de los shots, ya no quedan las marcas rojas con el nombre viejo encima de las nuevas.
 - [improved][win] En `Locate from Thumbnails`, los shots de tomas largas o de escenas muy oscuras se marcan de corte a corte y no en un solo cuadro.

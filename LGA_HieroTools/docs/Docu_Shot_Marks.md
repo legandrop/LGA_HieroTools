@@ -391,10 +391,21 @@ grupos de marcas superpuestas. Ademas de la clave por foto y shot:
   y una escena oscura de 177 s tiene 28 picos de 3,1-5,1, cortes reales entre planos de la misma luz.
 
 **En la ventanita de Previous/Next Mark** las marcas ubicadas muestran el thumb de la planilla
-(JPG de 480 px en la cache, `tag.lga_shotmarks_thumb`) y como se ubico (`_located`): aceptado
+(JPG de 480 px, `tag.lga_shotmarks_thumb`) y como se ubico (`_located`): aceptado
 solo, confirmado a mano o sin confirmar. El status de omit va en rojo y el de posible omit en
 ambar. Con EDL, dos renglones con el clip y el SRC TC IN/OUT (el evento, en el tooltip): en uno
 solo, un nombre de clip real (~30 caracteres) partia el SRC TC.
+
+**Los thumbs viajan con el proyecto** (`ShotMarks v1.09`, `_Sheet v1.14`, `_Nav v1.10`). Al
+aplicar marcas ubicadas desde thumbnails, cada JPG se copia a una subcarpeta junto al `.hrox` con
+el nombre de la planilla (`T:\VFX-PROJA\PROJA_SUP\PROJA_Sheet_v02\<sha1>_480.jpg`, en un hilo:
+a una unidad de red son segundos) y el tag guarda la ruta relativa (`PROJA_Sheet_v02/<sha1>_480.jpg`).
+Antes guardaba la absoluta de la cache de Locate de esta maquina: se perdia al limpiar la cache o
+al abrir el proyecto en otra maquina. Con el proyecto sin guardar no hay carpeta y queda la de la
+cache. La ventanita resuelve el thumb con `resolve_thumb`: relativo a la carpeta del proyecto y,
+si no esta, por nombre en la cache de Locate (marcas viejas). **Una ruta relativa nunca se abre
+tal cual**: `QImage` la resuelve contra el directorio actual de NKS, que depende de como se abrio
+(con los launchers del dev-link es `DevLink_Studio`), y el thumb aparecia o no segun eso.
 
 **Columna de shot con dos candidatas** (`_Sheet v1.12`, `ShotMarks v1.07`): una planilla puede traer
 "SHOT NAME" y "VFX SHOT NAME". Se elige la que tiene mas nombres de shot completos

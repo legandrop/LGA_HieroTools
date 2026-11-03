@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks v1.08 | Lega
+  LGA_NKS_ShotMarks v1.09 | Lega
 
   Shot Marks: lee una planilla de breakdown (xlsx o csv) y pone un tag
   de rango por shot en el timeline activo, en el REC TC de la planilla,
@@ -22,6 +22,10 @@ ____________________________________________________________________
   Nucleo sin host (lectura y plan): LGA_NKS_ShotMarks_Sheet.py.
   Log de cada corrida: logs/DebugPy_LGA_NKS_ShotMarks.log.
 
+  v1.09: Las marcas ubicadas desde thumbnails guardan el thumb junto al
+         proyecto: se copia a una subcarpeta del .hrox con el nombre de la
+         planilla (en un hilo) y el tag lleva la ruta relativa. Antes
+         apuntaba a la cache de Locate de esta maquina.
   v1.08: Una roja (shot que ya no esta) que caeria encima de una marca
          nueva no se crea: con una planilla renumerada quedaban cientos de
          tags uno arriba del otro, el nombre viejo sobre el nuevo.
@@ -67,6 +71,7 @@ import logging
 import os
 import re
 import sys
+import threading
 from pathlib import Path
 
 import hiero.core
@@ -394,6 +399,22 @@ def apply_plan(sequence, plan, align_start=None, source_label="", removed=()):
         log.info("  %-28s %6d-%-6d  removed%s", old["shot"], old["frame_in"], old["frame_out"],
                  " (%s)" % old["reason"] if old.get("reason") else "")
     return replaced
+
+
+def _copy_thumbs_later(project_dir, copies):
+    """Copia los thumbs fuera del hilo de UI: a una unidad de red son segundos.
+    Mientras tanto la ventana de la marca los encuentra en la cache de Locate."""
+    module = _sheet_module()
+    log = _logger_ref()
+
+    def run():
+        copied, errors = module.copy_thumbs(copies, project_dir)
+        log.info("Thumbs en %s: %d copiados, %d ya estaban, %d errores", project_dir, copied,
+                 len(copies) - copied - len(errors), len(errors))
+        for error in errors[:20]:
+            log.warning("  No se copio %s", error)
+
+    threading.Thread(target=run, name="LGA_ShotMarks_Thumbs", daemon=True).start()
 
 
 def guess_episode(sequence_name, episodes):
@@ -1040,12 +1061,15 @@ class ShotMarksDialog(QtWidgets.QDialog):
         if self.previous and not self._confirm_update(counts):
             _logger_ref().info("Actualizacion cancelada por el usuario")
             return
+        project_dir, copies = self._thumbs_to_project() if self.preset else ("", [])
         try:
             replaced = apply_plan(self.sequence, self.plan, align, source, self.removed)
         except Exception as exc:
             _logger_ref().exception("No se pudieron escribir los tags")
             show_error(self, "Shot Marks", "Could not add the marks:\n%s" % exc)
             return
+        if copies:
+            _copy_thumbs_later(project_dir, copies)
         self._save_settings()
         message = "Added %d marks to %s." % (len(self.plan.marks), self.sequence.name())
         if replaced:
@@ -1058,6 +1082,18 @@ class ShotMarksDialog(QtWidgets.QDialog):
         message += "\n\nJump between them with Viewer > Next Tag (Alt+Shift+Right).\nUndo: Edit > Undo."
         self.accept()
         show_info(hiero.ui.mainWindow(), "Shot Marks", message)
+
+    def _thumbs_to_project(self):
+        """Thumbs de las marcas a una subcarpeta junto al .hrox, con el nombre
+        de la planilla: el tag guarda la ruta relativa y no depende de la cache
+        de Locate de esta maquina. Devuelve (carpeta del proyecto, copias)."""
+        hrox = self.sequence.project().path()
+        if not hrox:
+            _logger_ref().info("Proyecto sin guardar: los thumbs quedan en la cache de Locate")
+            return "", []
+        folder = Path(self.path_edit.text()).stem
+        copies = _sheet_module().project_thumbs(self.plan.marks, folder)
+        return os.path.dirname(hrox), copies
 
     def _confirm_update(self, counts):
         """Avisa antes de borrar las marcas de la corrida anterior."""
