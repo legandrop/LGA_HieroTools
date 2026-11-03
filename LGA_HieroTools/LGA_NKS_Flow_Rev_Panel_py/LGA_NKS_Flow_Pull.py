@@ -626,6 +626,7 @@ from LGA_NKS_Shared.LGA_UI_Style_HieroTools import (
     apply_ui_font,
     semibold_css,
 )
+from LGA_NKS_Shared.LGA_UI_CustomTooltip_HieroTools import set_custom_tooltip
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, Qt
 QApplication = QtWidgets.QApplication
 QWidget = QtWidgets.QWidget
@@ -1123,46 +1124,47 @@ _TITLE_SEQ_COLOR = UIColor.ENTITY
 _REVIEW_STATUS_WORD = "review"
 
 # Tooltips de la ventana, fuera del widget para que pasar a bilingue sea un
-# cambio de datos.
+# cambio de datos. Se muestran con el tooltip propio de los packs
+# (set_custom_tooltip), nunca con el nativo. Formato de las apps LGA: una
+# oracion por renglon (<br>), y sin rotulo "Click:" cuando hay una sola accion.
 _TOOLTIPS = {
     "only_in_review": {
         "es": (
-            "Muestra solo los shots cuyo New Status es un review (Review Lega, "
-            "Review Hold, etc.). Destildado muestra todos. Es solo la vista: "
-            "el Pull actualiza todos los clips igual."
+            "Muestra solo los shots cuyo New Status es un review<br>"
+            "(Review Lega, Review Hold, etc.).<br>"
+            "Es solo la vista: el Pull actualiza todos los clips igual."
         ),
     },
     "only_for_me": {
         "es": (
-            "Muestra solo los shots cuyo New Status es tu review (Lega ve Review "
-            "Lega, Sebas ve Review Sebas). El usuario sale del perfil de PipeSync, "
-            "igual que Prev/Next Rev del ViewerTL."
+            "Muestra solo los shots cuyo New Status es tu review<br>"
+            "(Lega ve Review Lega, Sebas ve Review Sebas).<br>"
+            "El usuario sale del perfil de PipeSync."
         ),
     },
     "only_for_me_off": {
         "es": (
-            "No se reconoce tu usuario de Flow como reviewer, asi que no hay un "
-            "review tuyo para filtrar."
+            "Tu usuario de Flow no figura como reviewer,<br>"
+            "así que no hay un review tuyo para filtrar."
         ),
     },
     "shot_info": {
         "es": (
-            "Prendido, al hacer click en una fila se abre el Shot Info de ese "
-            "shot y task, sin sacarle el foco a esta ventana. Se guarda al tocarlo."
+            "Al hacer click en una fila se abre el Shot Info de ese shot y task,<br>"
+            "sin sacarle el foco a esta ventana."
         ),
     },
     # {flow}/{nks}: numeros de version de la fila.
     "download_outdated": {
         "es": (
-            "Descarga de Wasabi la v{flow} de este clip (en el timeline esta la "
-            "v{nks}), igual que Download Clip del panel Flow S3. Al terminar, "
-            "el clip se reconecta solo."
+            "Descarga de Wasabi la v{flow} (en el timeline está la v{nks}).<br>"
+            "Al terminar, el clip se reconecta solo."
         ),
     },
     "download_current": {
         "es": (
-            "El timeline ya tiene la ultima version (v{flow}). Click la vuelve "
-            "a descargar de Wasabi y reconecta el clip."
+            "El timeline ya tiene la última versión (v{flow}).<br>"
+            "Descarga de nuevo la v{flow} de Wasabi y reconecta el clip."
         ),
     },
 }
@@ -1702,7 +1704,7 @@ class GUI_Table(QtWidgets.QDialog):
             button.setIcon(_download_icon(UIColor.TEXT))
             tip = _tooltip("download_current")
         button.setIconSize(QtCore.QSize(_DOWNLOAD_GLYPH_SIZE, _DOWNLOAD_GLYPH_SIZE))
-        button.setToolTip(tip.format(flow=flow_version, nks=nks_version))
+        set_custom_tooltip(button, tip.format(flow=flow_version, nks=nks_version))
         # La fila se captura por indice: las filas nunca se borran, solo se
         # ocultan con los filtros, asi que el indice sigue valiendo.
         button.clicked.connect(lambda _checked=False, r=row: self.download_row_clip(r))
@@ -1780,7 +1782,7 @@ class GUI_Table(QtWidgets.QDialog):
         # no refiltra: solo se guarda.
         self.shot_info_chk = QtWidgets.QCheckBox("Shot Info")
         self.shot_info_chk.setProperty("lgaLabeled", True)
-        self.shot_info_chk.setToolTip(_tooltip("shot_info"))
+        set_custom_tooltip(self.shot_info_chk, _tooltip("shot_info"))
         self.shot_info_chk.setChecked(_load_window_setting("shot_info"))
         self.shot_info_chk.toggled.connect(
             lambda checked: _save_window_setting("shot_info", checked)
@@ -1792,7 +1794,7 @@ class GUI_Table(QtWidgets.QDialog):
         # El valor se pone ANTES de conectar la senal, para que cargar no guarde.
         self.only_review_chk = QtWidgets.QCheckBox("Only in review")
         self.only_review_chk.setProperty("lgaLabeled", True)
-        self.only_review_chk.setToolTip(_tooltip("only_in_review"))
+        set_custom_tooltip(self.only_review_chk, _tooltip("only_in_review"))
         self.only_review_chk.setChecked(_load_window_setting("only_in_review"))
         self.only_review_chk.toggled.connect(
             lambda checked: self._on_filter_toggled("only_in_review", checked)
@@ -1804,14 +1806,14 @@ class GUI_Table(QtWidgets.QDialog):
         self.only_me_chk.setProperty("lgaLabeled", True)
         if self._my_review_codes:
             self.only_me_chk.setChecked(_load_window_setting("only_for_me"))
-            self.only_me_chk.setToolTip(_tooltip("only_for_me"))
+            set_custom_tooltip(self.only_me_chk, _tooltip("only_for_me"))
         else:
             # Sin reviewer reconocido queda apagado y deshabilitado, pero NO se
             # guarda: lo que el usuario eligio sigue en el INI para cuando su
             # usuario vuelva a resolverse.
             self.only_me_chk.setChecked(False)
             self.only_me_chk.setEnabled(False)
-            self.only_me_chk.setToolTip(_tooltip("only_for_me_off"))
+            set_custom_tooltip(self.only_me_chk, _tooltip("only_for_me_off"))
         self.only_me_chk.toggled.connect(
             lambda checked: self._on_filter_toggled("only_for_me", checked)
         )

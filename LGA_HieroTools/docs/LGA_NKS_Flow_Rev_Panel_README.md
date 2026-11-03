@@ -108,7 +108,9 @@ nueva.
    celda de descarga no, y dejarían de leerse como un bloque. En la fila
    seleccionada el texto sobre el violeta no se aclara, porque llegaría a
    blanco. La fila se captura por índice: las filas nunca se borran, los
-   filtros solo las ocultan. Por qué existe la descarga: el Pull sube los clips a la
+   filtros solo las ocultan. Los tooltips de la ventana (celda de descarga y
+   checkboxes) usan el tooltip propio de los packs, no el nativo: ver
+   `Docu_CustomTooltip.md`. Por qué existe la descarga: el Pull sube los clips a la
    versión de Flow, que muchas veces todavía no está en disco y queda offline;
    antes había que buscar ese clip en el timeline, seleccionarlo e ir al panel
    Flow S3. Hace lo mismo que el click en **Download Clip** de ese panel

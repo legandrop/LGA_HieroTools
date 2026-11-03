@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.024
+- [improved] Los tooltips de la ventana de `Flow Pull` son iguales a los de PipeSync: aparecen debajo del control, apuntándolo con una flechita.
 - [improved] En la ventana de `Flow Pull`, cada fila tiene su propia celda de descarga al lado de `v_NKS`: un clic baja el clip sin tener que seleccionar la fila; cuando el timeline tiene una versión más vieja que Flow, la versión y esa celda se pintan de violeta.
 - [new] Con clic derecho sobre el nombre de un proyecto en Projects Panel podés abrir su carpeta (`Reveal in Explorer`) o guardar una copia para Nuke 16 (`Convert to Nuke 16...`), sin tener que arrastrar el archivo.
 - [improved] Al guardar una copia para Nuke 16 elegís si mantiene el nombre con `_NKS16` al final (`Rename`) o si sube un número de versión (`Increment version`), y ves cómo va a quedar el nombre antes de guardar.
