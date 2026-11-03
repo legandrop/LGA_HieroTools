@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Locate v1.03 | Lega
+  LGA_NKS_ShotMarks_Locate v1.04 | Lega
 
   Shot Marks sin columna de timecode: ubica el thumbnail de cada fila
   de la planilla en el video del timeline y deja revisar los dudosos
@@ -30,6 +30,10 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Locate.log.
 
+  v1.04: Dice que el ultimo paso es Use Timecodes: en las instrucciones
+         y, cuando no queda nada por revisar, en el resumen de abajo. Sin
+         eso, terminar de revisar parecia el final y las marcas no se
+         escribian.
   v1.03: Tira de planos entre vecinas: debajo de la comparacion, un
          cuadro por plano desde la fila ubicada anterior hasta la
          siguiente, con las dos vecinas en color, donde esta hoy la fila y
@@ -765,7 +769,8 @@ class LocateWindow(QtWidgets.QWidget):
         self.progress.setValue(self.progress.maximum())
         self.progress.hide()
         self._set_status("Done in %s. Review the doubtful ones: select a row, step frames with "
-                         "the arrows, Enter to use the frame, N if it is not in the cut.%s"
+                         "the arrows, Enter to use the frame, N if it is not in the cut. Then "
+                         "Use Timecodes adds the marks.%s"
                          % (_duration(time.time() - self._t0), _edl_status(edl)))
         self._connect_viewer()
         self._refresh_filters()
@@ -1242,6 +1247,11 @@ class LocateWindow(QtWidgets.QWidget):
         if review:
             text += " &middot; " + _colored(
                 "%d to review are marked as unconfirmed" % review, Color.WARNING_TEXT)
+        else:
+            # Revisar no escribe nada en el timeline: sin este aviso, terminar
+            # la revision parecia el final.
+            text += " &middot; " + _colored(
+                "Nothing left to review: press Use Timecodes to add the marks", Color.OK_TEXT)
         self.summary.setText(text)
 
     def _apply(self):

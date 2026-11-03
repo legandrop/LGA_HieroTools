@@ -348,6 +348,11 @@ de un cuadro, y el clip y el origen en la metadata de cada tag.
 - **Un histograma de color no ayuda a elegir entre esos planos.** Medido sobre cuatro filas: entre
   las vecinas todos dan 0,52-0,72, y en una fila el plano correcto (las mismas actrices) dio el
   valor mas bajo. Por eso la tira no ordena ni marca un favorito.
+- **Revisar no escribe nada en el timeline.** Las confirmaciones se guardan al momento, pero las
+  marcas se escriben recien con Use Timecodes (que reabre Shot Marks con los TC ubicados) y el
+  Update de ese dialogo. Paso en uso real: con la revision terminada y la lista vacia parecia el
+  final, y el timeline seguia con las marcas viejas. Por eso las instrucciones nombran el ultimo
+  paso y, sin dudosos, el resumen de abajo dice que hay que apretar Use Timecodes (`_Locate v1.04`).
 - Teclas: flechas, un cuadro; Shift, un segundo; RePag/AvPag, corte anterior/siguiente; 1-5,
   candidatos; Enter, usar este cuadro; N, no esta en el corte; Arriba/Abajo, otra fila. La lista
   no toma el foco para que las flechas sean de la navegacion.
