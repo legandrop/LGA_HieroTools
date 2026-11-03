@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Sheet v1.11 | Lega
+  LGA_NKS_ShotMarks_Sheet v1.12 | Lega
 
   Nucleo sin host de Shot Marks: lee una planilla (xlsx o csv),
   detecta la fila de encabezado y las columnas de shot y timecode,
@@ -13,6 +13,11 @@ ____________________________________________________________________
   los sharedStrings), sin openpyxl: NKS no lo trae, y asi una
   planilla de cientos de MB por las imagenes se lee en segundos.
 
+  v1.12: Con dos columnas de shot ("SHOT NAME" y "VFX SHOT NAME"),
+         detect_columns(headers, rows) elige la que tiene mas nombres de
+         shot completos. En una planilla renumerada, "SHOT NAME" guardaba
+         los nombres viejos y 290 filas como "PROJA_002_", que se toman
+         por titulos de grupo: esos shots no se marcaban. shot_name_count.
   v1.11: strip_shots: los planos entre la fila ubicada anterior y la
          siguiente, para la tira de la ventana de revision de Locate.
   v1.10: Comentarios de la planilla: read_comments lee los hilos de
@@ -557,8 +562,12 @@ def detect_header_row(rows, require_tc=True):
     return best_index if best_score >= (4 if require_tc else 2) else None
 
 
-def detect_columns(headers):
-    """{rol: indice de columna o None}, por prioridad de nombres conocidos."""
+def detect_columns(headers, rows=None):
+    """{rol: indice de columna o None}, por prioridad de nombres conocidos.
+
+    Con `rows`, si hay varias columnas de shot gana la que tiene mas nombres
+    de shot completos (ver shot_name_count); a igual cuenta, la prioridad.
+    """
     norm = [normalize_header(h) for h in headers]
     result = {}
     for role in ROLES:
@@ -567,7 +576,23 @@ def detect_columns(headers):
             if candidate in norm:
                 result[role] = norm.index(candidate)
                 break
+    shots = [i for i, n in enumerate(norm) if n in SHOT_HEADERS]
+    if rows and len(shots) > 1:
+        priority = {i: SHOT_HEADERS.index(norm[i]) for i in shots}
+        result["shot"] = max(shots, key=lambda i: (shot_name_count(rows, i), -priority[i]))
     return result
+
+
+def shot_name_count(rows, column):
+    """Filas de `rows` con un nombre de shot completo en `column`.
+
+    Una columna de nombres viejos de una planilla renumerada trae muchas
+    filas como "PROJA_002_", que is_shot_name toma por titulos de grupo.
+    """
+    if column is None:
+        return 0
+    return sum(1 for _number, values in rows
+               if column < len(values) and is_shot_name(values[column]))
 
 
 def _rows_score(rows, require_tc=True):

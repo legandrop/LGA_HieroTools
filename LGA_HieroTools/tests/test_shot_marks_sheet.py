@@ -220,6 +220,20 @@ class ShotMarksSheetTests(unittest.TestCase):
         none = sheet.detect_columns(["SHOTNAME", "BRIEF"])
         self.assertEqual((none["notes"], none["notes2"]), (None, None))
 
+    def test_shot_column_with_most_full_names_wins(self):
+        headers = ["VFX SHOT NAME", "SHOT NAME", "STATUS"]
+        rows = [(4, ["PROJA_001_010", "PROJA_001_010", "WIP"]),
+                (5, ["PROJA_002_010", "PROJA_002_", "WIP"]),
+                (6, ["PROJA_002_020", "PROJA_002_010", "WIP"]),
+                (7, ["PROJA_002_030", "", "WIP"])]
+        self.assertEqual(sheet.detect_columns(headers)["shot"], 1)
+        self.assertEqual(sheet.detect_columns(headers, rows)["shot"], 0)
+        self.assertEqual(sheet.shot_name_count(rows, 1), 2)
+        self.assertEqual(sheet.shot_name_count(rows, None), 0)
+        # A igual cuenta manda la prioridad de nombres (SHOT NAME).
+        same = [(4, ["PROJA_001_010", "PROJA_001_010", "WIP"])]
+        self.assertEqual(sheet.detect_columns(headers, same)["shot"], 1)
+
     def test_next_and_previous_mark_wrap_around(self):
         starts = [10, 50, 90]
         self.assertEqual(sheet.next_mark_index(starts, 0, "next"), 0)

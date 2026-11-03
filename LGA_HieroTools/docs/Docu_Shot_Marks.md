@@ -369,6 +369,14 @@ solo, confirmado a mano o sin confirmar. El status de omit va en rojo y el de po
 ambar. Con EDL, dos renglones con el clip y el SRC TC IN/OUT (el evento, en el tooltip): en uno
 solo, un nombre de clip real (~30 caracteres) partia el SRC TC.
 
+**Columna de shot con dos candidatas** (`_Sheet v1.12`, `ShotMarks v1.07`): una planilla puede traer
+"SHOT NAME" y "VFX SHOT NAME". Se elige la que tiene mas nombres de shot completos
+(`shot_name_count`), y esa le gana tambien a la columna recordada de la corrida anterior si la
+recordada tiene menos. Medido en una planilla renumerada: "SHOT NAME" guardaba los nombres viejos
+(547 completos, 290 filas como `PROJA_002_`) y "VFX SHOT NAME" los nuevos (842). Con "SHOT NAME",
+esas 290 filas se tomaban por titulos de grupo y no se marcaban, y las demas quedaban con el
+nombre viejo. El log de Locate anota cada fila sin nombre completo y su status.
+
 **Filas que no se ubican**: los titulos de grupo (`PROJA_001_`, nombre terminado en `_`, `-` o
 `.`) aunque tengan foto. "POSIBLE VFX OMIT (en corte)" no cuenta como omit: sigue en el corte.
 

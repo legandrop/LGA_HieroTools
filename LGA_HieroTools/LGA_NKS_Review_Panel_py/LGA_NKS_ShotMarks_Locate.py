@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Locate v1.04 | Lega
+  LGA_NKS_ShotMarks_Locate v1.05 | Lega
 
   Shot Marks sin columna de timecode: ubica el thumbnail de cada fila
   de la planilla en el video del timeline y deja revisar los dudosos
@@ -30,6 +30,9 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Locate.log.
 
+  v1.05: El log anota cada fila que no se ubica por no tener un nombre de
+         shot completo (titulo de grupo como "PROJA_002_", o vacio) y el
+         status de la fila: antes se descartaban sin dejar rastro.
   v1.04: Dice que el ultimo paso es Use Timecodes: en las instrucciones
          y, cuando no queda nada por revisar, en el resumen de abajo. Sin
          eso, terminar de revisar parecia el final y las marcas no se
@@ -658,15 +661,25 @@ class LocateWindow(QtWidgets.QWidget):
         sheet = _sheet_module()
         shot_col, status_col = self.columns.get("shot"), self.columns.get("status")
         wanted = []
+        titles = []
         for number, values in self.table.rows:
             shot = values[shot_col].strip() if shot_col is not None and shot_col < len(values) else ""
-            if not sheet.is_shot_name(shot):
-                continue
             status = values[status_col].strip() if status_col is not None and status_col < len(values) else ""
+            if not sheet.is_shot_name(shot):
+                if shot or status:
+                    titles.append((number, shot, status))
+                continue
             if self.skip_omit and status and sheet.is_omit(status):
                 continue
             wanted.append((number, shot, status))
         self._wanted = wanted
+        # Una fila con status y sin nombre completo casi seguro es un shot
+        # con el nombre en otra columna: queda en el log, fila por fila.
+        _logger().info("Filas sin nombre de shot completo (no se ubican): %d, %d con status",
+                       len(titles), sum(1 for t in titles if t[2]))
+        for number, shot, status in titles:
+            _logger().info("  fila %-5s %-16s sin nombre de shot completo | status %s",
+                           number, shot or "(vacio)", status or "-")
         self._set_status("Reading the thumbnails of the sheet...")
         path, sheet_name = self.table.path, self.table.sheet
         out_dir = str(cache_root() / "thumbs_src")

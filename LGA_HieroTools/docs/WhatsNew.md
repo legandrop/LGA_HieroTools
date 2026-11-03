@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.024
+- [fixed] Shot Marks elige sola la columna de nombres de shot que está completa cuando la planilla trae dos (por ejemplo `SHOT NAME` y `VFX SHOT NAME`); antes podía tomar la de nombres viejos y dejar muchos shots sin marcar o con el nombre anterior.
 - [new] La ventanita de cada shot de Shot Marks muestra los comentarios que dejaron en la planilla de Google Sheets o Excel, con quién lo escribió, la fecha, la columna y las respuestas; los resueltos aparecen en gris.
 - [new] Shot Marks suma las columnas `Notes` y `Notes 2` (toma solas las columnas Notas y Alternativa de la planilla): la ventanita de cada shot las muestra arriba de todo, resaltadas en dos colores, y solo cuando ese shot tiene algo escrito.
 - [improved][win] Al revisar en `Locate from Thumbnails` de Shot Marks, una tira muestra todos los planos que hay entre el shot anterior y el siguiente de la planilla, con los dos vecinos en color; un click lleva el visor a ese plano. Cuando no queda nada por revisar, la ventana avisa que falta apretar `Use Timecodes` para agregar las marcas.

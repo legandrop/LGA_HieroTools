@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks v1.06 | Lega
+  LGA_NKS_ShotMarks v1.07 | Lega
 
   Shot Marks: lee una planilla de breakdown (xlsx o csv) y pone un tag
   de rango por shot en el timeline activo, en el REC TC de la planilla,
@@ -22,6 +22,10 @@ ____________________________________________________________________
   Nucleo sin host (lectura y plan): LGA_NKS_ShotMarks_Sheet.py.
   Log de cada corrida: logs/DebugPy_LGA_NKS_ShotMarks.log.
 
+  v1.07: La columna de shot se elige mirando las filas: con "SHOT NAME" y
+         "VFX SHOT NAME", la que tiene mas nombres completos, y le gana a
+         la columna recordada de la corrida anterior si esa tiene menos.
+         Una planilla renumerada dejaba 290 shots sin marcar.
   v1.06: El resumen dice cuantos comentarios de la planilla van a la
          ventana de sus shots y cuantos quedan en otras filas.
   v1.05: Columnas Notes y Notes 2 (se sugieren "Notas" y "Alternativa"):
@@ -722,7 +726,7 @@ class ShotMarksDialog(QtWidgets.QDialog):
         def read():
             # require_tc=False: una hoja de shots sin TC puede traer thumbnails.
             table = module.load_table(path, sheet, require_tc=False)
-            columns = module.detect_columns(table.headers)
+            columns = module.detect_columns(table.headers, table.rows)
             if columns.get("tc_in") is not None or not sheet:
                 return table, 0
             images = {img["row"] for img in thumbs.sheet_images(path, sheet)}
@@ -746,7 +750,7 @@ class ShotMarksDialog(QtWidgets.QDialog):
         self.table = table
         self.thumb_mode = _sheet_module().detect_columns(table.headers).get("tc_in") is None
         self.thumb_rows = images
-        self._fill_columns(table.headers)
+        self._fill_columns(table.headers, table.rows)
         for role in ("tc_in", "tc_out"):
             self.column_combos[role].setEnabled(not self.thumb_mode)
         self._show_edl_row(self.thumb_mode)
@@ -754,9 +758,9 @@ class ShotMarksDialog(QtWidgets.QDialog):
                            table.path, table.sheet, table.header_row, len(table.rows))
         self._columns_changed()
 
-    def _fill_columns(self, headers):
+    def _fill_columns(self, headers, rows=None):
         module = _sheet_module()
-        detected = module.detect_columns(headers) if headers else {}
+        detected = module.detect_columns(headers, rows) if headers else {}
         self._loading = True
         for role, combo in self.column_combos.items():
             combo.clear()
@@ -768,6 +772,16 @@ class ShotMarksDialog(QtWidgets.QDialog):
                 combo.addItem(header, index)
             saved = self.settings.get("col_" + role, "")
             pick = headers.index(saved) if saved in headers else detected.get(role)
+            if role == "shot" and rows and pick != detected.get(role):
+                # La columna recordada pierde si tiene menos nombres de shot:
+                # una planilla renumerada deja la vieja casi vacia.
+                kept, best = (module.shot_name_count(rows, pick),
+                              module.shot_name_count(rows, detected.get(role)))
+                if best > kept:
+                    _logger_ref().info("Columna de shot: %s tiene %d nombres y %s %d; se usa %s",
+                                       saved, kept, headers[detected[role]], best,
+                                       headers[detected[role]])
+                    pick = detected.get(role)
             if pick is not None:
                 combo.setCurrentIndex(combo.findData(pick))
         self._loading = False
