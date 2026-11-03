@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Sheet v1.15 | Lega
+  LGA_NKS_ShotMarks_Sheet v1.16 | Lega
 
   Nucleo sin host de Shot Marks: lee una planilla (xlsx o csv),
   detecta la fila de encabezado y las columnas de shot y timecode,
@@ -13,6 +13,10 @@ ____________________________________________________________________
   los sharedStrings), sin openpyxl: NKS no lo trae, y asi una
   planilla de cientos de MB por las imagenes se lee en segundos.
 
+  v1.16: Decisiones de Locate por corte: decision_key(sha1, shot, video) y
+         store_decision guardan la de cada video aparte, y find_decision
+         busca primero la del video pedido. Un proyecto con dos cortes
+         pisaba las confirmaciones de uno al revisar el otro.
   v1.15: numbered_brief: el brief de varios renglones se numera al armar
          el plan ("1. ...", "2. ..."), reemplazando el guion o la vineta
          de cada renglon. _comparable ignora esas marcas: numerar no pinta
@@ -1030,14 +1034,38 @@ def strip_shots(rows, cuts, total, row_number, limit=24):
 SOFT_CUT_SCORE = 3.0
 
 
-def decision_key(sha1, shot):
+def decision_key(sha1, shot, video=None):
     """Clave de una decision de Locate: la foto Y el shot.
 
     Una planilla puede repetir la misma foto en shots distintos (la del plano
     de dos para el contraplano): con la foto sola, confirmar uno los mandaba a
     todos al mismo cuadro, uno arriba del otro.
+
+    Con `video` (video_key del motor), la decision de ese corte. Sin video, la
+    ultima de cualquier corte: con un corte nuevo se re-busca por la huella
+    del cuadro que guarda.
     """
-    return "%s|%s" % (sha1, shot)
+    key = "%s|%s" % (sha1, shot)
+    return "%s@%s" % (key, video) if video else key
+
+
+def store_decision(decisions, sha1, shot, entry):
+    """Guarda la decision de un corte sin pisar la de otro.
+
+    Un proyecto puede tener dos cortes de la misma pelicula: con una sola
+    clave por foto y shot, revisar el corte nuevo borraba lo confirmado en el
+    anterior. La clave sin video queda con la ultima (la que sirve de huella
+    para un corte nuevo) y cada video tiene la suya; la de otro video que
+    estaba solo en la clave sin video se pasa a la suya antes de pisarla.
+    """
+    plain = decision_key(sha1, shot)
+    old = decisions.get(plain)
+    video = entry.get("video")
+    if old and old.get("video") and old.get("video") != video:
+        decisions.setdefault(decision_key(sha1, shot, old["video"]), old)
+    decisions[plain] = entry
+    if video:
+        decisions[decision_key(sha1, shot, video)] = entry
 
 
 def decisions_base(project_name):
@@ -1127,13 +1155,16 @@ def shared_photos(rows):
     return {sha1 for sha1, names in shots.items() if len(names) > 1}
 
 
-def find_decision(decisions, sha1, shot, shared=()):
+def find_decision(decisions, sha1, shot, shared=(), video=None):
     """La decision guardada de una fila, o {}.
 
+    Con `video`, primero la de ese corte; si no hay, la ultima de cualquiera.
     Las de antes de v1.13 van solo por foto: valen si esa foto es de un solo
     shot. Si la comparten varios, no se sabe de cual era y se ignora.
     """
-    found = decisions.get(decision_key(sha1, shot))
+    found = decisions.get(decision_key(sha1, shot, video)) if video else None
+    if found is None:
+        found = decisions.get(decision_key(sha1, shot))
     if found is None and sha1 not in shared:
         found = decisions.get(sha1)
     return found or {}

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Locate v1.06 | Lega
+  LGA_NKS_ShotMarks_Locate v1.07 | Lega
 
   Shot Marks sin columna de timecode: ubica el thumbnail de cada fila
   de la planilla en el video del timeline y deja revisar los dudosos
@@ -21,15 +21,19 @@ ____________________________________________________________________
   segundo; RePag/AvPag: corte anterior/siguiente; 1-5: candidatos;
   Enter: usar este cuadro; N: no esta en el corte.
 
-  Las confirmaciones se guardan por proyecto (clave: hash del thumb)
-  con la huella del cuadro elegido: al volver a correr se respetan, y
-  con un corte nuevo se re-ubican buscando ese cuadro.
+  Las confirmaciones se guardan por proyecto (clave: hash del thumb y
+  shot, una por corte) con la huella del cuadro elegido: al volver a
+  correr se respetan, y con un corte nuevo se re-ubican buscando ese
+  cuadro.
 
   Solo Windows por ahora: el Python embebido y ffmpeg_lga.exe viajan
   solo en el pack de Windows.
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Locate.log.
 
+  v1.07: Las decisiones se guardan por corte (store_decision): revisar
+         un corte nuevo del mismo proyecto ya no pisa las confirmaciones
+         del anterior.
   v1.06: Las decisiones se guardan por foto y shot (decision_key). Al
          pasar los TC, un plano que comparten dos shots distintos se parte
          en el corte que scdet no vio (split_shared_ranges, con scd.bin del
@@ -1239,8 +1243,8 @@ class LocateWindow(QtWidgets.QWidget):
         if r is None or not self.result:
             return
         r["level"] = "not_in_cut"
-        key = _sheet_module().decision_key(r["sha1"], r["shot"])
-        self.decisions[key] = {"state": "not_in_cut", "video": self.result["video_key"]}
+        _sheet_module().store_decision(self.decisions, r["sha1"], r["shot"],
+                                       {"state": "not_in_cut", "video": self.result["video_key"]})
         save_decisions(self.project_name, self.decisions)
         _logger().info("Fila %s %s: no esta en el corte", r["row"], r["shot"])
         self._advance()
@@ -1259,9 +1263,9 @@ class LocateWindow(QtWidgets.QWidget):
             r.pop("edl", None)
         r.update({"frame": frame, "in": start, "out": end, "level": level})
         d8, g32 = frame_prints(self.result["index_folder"], frame)
-        key = _sheet_module().decision_key(r["sha1"], r["shot"])
-        self.decisions[key] = {"state": "confirmed", "frame": frame,
-                                     "video": self.result["video_key"], "d8": d8, "g32": g32}
+        _sheet_module().store_decision(self.decisions, r["sha1"], r["shot"], {
+            "state": "confirmed", "frame": frame, "video": self.result["video_key"],
+            "d8": d8, "g32": g32})
         save_decisions(self.project_name, self.decisions)
         _logger().info("Fila %s %s: cuadro %d confirmado (plano %d-%d)", r["row"], r["shot"],
                        frame, start, end)

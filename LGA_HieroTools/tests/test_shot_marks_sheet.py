@@ -567,6 +567,19 @@ class ShotMarksOverlapTests(unittest.TestCase):
         self.assertEqual(sheet.find_decision(new, "aa", "S030", shared)["frame"], 7)
         self.assertEqual(sheet.find_decision(new, "aa", "S010", shared), {})
 
+    def test_decisions_of_two_cuts_do_not_overwrite(self):
+        decisions = {sheet.decision_key("aa", "S010"): {"state": "confirmed", "frame": 5, "video": "v13"}}
+        sheet.store_decision(decisions, "aa", "S010", {"state": "confirmed", "frame": 8, "video": "v161"})
+        # La del corte viejo pasa a su clave; la sin video queda con la ultima.
+        self.assertEqual(sheet.find_decision(decisions, "aa", "S010", (), "v13")["frame"], 5)
+        self.assertEqual(sheet.find_decision(decisions, "aa", "S010", (), "v161")["frame"], 8)
+        self.assertEqual(sheet.find_decision(decisions, "aa", "S010")["frame"], 8)
+        # Un corte sin decision propia usa la ultima (para buscar su huella).
+        self.assertEqual(sheet.find_decision(decisions, "aa", "S010", (), "v2")["frame"], 8)
+        sheet.store_decision(decisions, "aa", "S010", {"state": "not_in_cut", "video": "v13"})
+        self.assertEqual(sheet.find_decision(decisions, "aa", "S010", (), "v13")["state"], "not_in_cut")
+        self.assertEqual(sheet.find_decision(decisions, "aa", "S010", (), "v161")["frame"], 8)
+
     def test_shared_range_splits_at_the_missed_cut(self):
         scores = [0.0] * 200
         scores[60] = 5.1   # corte que scdet no paso (umbral 6)

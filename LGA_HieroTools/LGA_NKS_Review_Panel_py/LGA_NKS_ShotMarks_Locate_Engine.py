@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Locate_Engine v1.03 | Lega
+  LGA_NKS_ShotMarks_Locate_Engine v1.04 | Lega
 
   Motor de Shot Marks sin columna de timecode: ubica cada thumbnail de
   la planilla en el video del corte y devuelve el plano (corte a corte)
@@ -29,6 +29,9 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Locate_Engine.log.
 
+  v1.04: Busca primero la decision de este video (find_decision con
+         video): en un proyecto con dos cortes, la del otro corte ya no
+         tapa la de este.
   v1.03: Las decisiones se buscan por foto y shot (find_decision): con
          la foto sola, una planilla que repite la foto en shots distintos
          los dejaba a todos en el cuadro confirmado de uno.
@@ -742,7 +745,7 @@ def main(job_path):
     shared = _sheet().shared_photos(rows)
 
     def decision_for(row):
-        return _sheet().find_decision(decisions, row["sha1"], row["shot"], shared)
+        return _sheet().find_decision(decisions, row["sha1"], row["shot"], shared, vkey)
 
     def prints_for(sha1, row=None):
         decision = decision_for(row) if row is not None else {}

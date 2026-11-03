@@ -392,6 +392,15 @@ el mismo cuadro. Las decisiones viejas por foto valen si esa foto es de un solo 
 varios se ignoran (`find_decision`). Cada confirmacion guarda tambien la huella del cuadro elegido:
 con un corte nuevo se busca ese cuadro en lugar del thumb. No se escribe nada en el Excel.
 
+**Una decision por corte** (`_Sheet v1.16`, `_Locate v1.07`, `_Locate_Engine v1.04`). Un mismo proyecto
+puede tener dos cortes de la pelicula (un timeline por armado) y el archivo de decisiones es uno por
+proyecto: con una sola clave por foto y shot, revisar el corte nuevo borraba lo confirmado en el
+anterior. `store_decision` guarda cada decision dos veces: en `sha1|shot@<video_key>` (la de ese corte)
+y en `sha1|shot` (la ultima, que con un corte que todavia no tiene decision propia sirve de huella para
+re-buscar). Antes de pisar `sha1|shot`, si ahi habia una de otro video sin su clave propia, la pasa a
+`sha1|shot@<ese video>`. El motor pide primero la del video que esta ubicando (`find_decision(..., video)`).
+Los archivos viejos siguen valiendo: sin clave por video se usa la sin video, como antes.
+
 **Marcas sin superponerse** (`_Sheet v1.13`, `_Locate v1.06`). Medido en un largo de 654 filas: 36
 grupos de marcas superpuestas. Ademas de la clave por foto y shot:
 
