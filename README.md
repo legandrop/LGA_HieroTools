@@ -335,7 +335,9 @@ opening related Nuke scripts.
 - **Shot Marks**
   Reads a VFX breakdown sheet (`.xlsx` or `.csv`) and adds a range tag for
   each shot to the active timeline, at the sheet's REC TC, named after the
-  shot and with the brief as its note. Jump from shot to shot with
+  shot and with the brief as its note. Instead of a file, you can paste a
+  Google Sheets link: the sheet is downloaded with your Google account (you
+  sign in once in the browser) and only again when it changes. Jump from shot to shot with
   Previous / Next Mark, which also shows the shot's info, or with
   Viewer > Next Tag / Previous Tag (`Alt+Shift+Right` / `Alt+Shift+Left`,
   with the viewer focused).

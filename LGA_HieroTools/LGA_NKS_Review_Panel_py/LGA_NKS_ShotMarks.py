@@ -1,9 +1,10 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks v1.09 | Lega
+  LGA_NKS_ShotMarks v1.10 | Lega
 
-  Shot Marks: lee una planilla de breakdown (xlsx o csv) y pone un tag
+  Shot Marks: lee una planilla de breakdown (xlsx, csv o un link de
+  Google Sheets) y pone un tag
   de rango por shot en el timeline activo, en el REC TC de la planilla,
   con el nombre del shot. Viewer > Next Tag / Previous Tag
   (Alt+Shift+Right / Left) salta de shot en shot.
@@ -20,8 +21,14 @@ ____________________________________________________________________
   TC de inicio de la secuencia al de la media. Todo en un solo undo.
 
   Nucleo sin host (lectura y plan): LGA_NKS_ShotMarks_Sheet.py.
+  Descarga desde Google Sheets: LGA_NKS_ShotMarks_Google.py.
   Log de cada corrida: logs/DebugPy_LGA_NKS_ShotMarks.log.
 
+  v1.10: El campo de la planilla acepta un link de Google Sheets: se baja
+         como xlsx en un hilo (con login de Google la primera vez) a una
+         cache local y se lee igual que un Excel. Si no cambio desde la
+         ultima vez, no se vuelve a bajar. La marca guarda el titulo de
+         Google como origen y los thumbs van a una carpeta con ese titulo.
   v1.09: Las marcas ubicadas desde thumbnails guardan el thumb junto al
          proyecto: se copia a una subcarpeta del .hrox con el nombre de la
          planilla (en un hilo) y el tag lleva la ruta relativa. Antes
@@ -130,6 +137,9 @@ CONFIG_SECTION = "Settings"
 # un cambio de datos.
 TOOLTIPS = {
     "browse": "Elegir la planilla (.xlsx o .csv).",
+    "source": "Planilla: un .xlsx o .csv (Browse), o pegar el link de una planilla de Google "
+              "Sheets y apretar Enter. La de Google se baja con tu cuenta y solo de nuevo si "
+              "cambio.",
     "sheet": "Hoja de la planilla. Se sugiere la que tiene columnas de shot y REC TC.",
     "shot": "Columna con el nombre del shot: es el nombre del tag.",
     "tc_in": "Timecode de entrada del shot en el montaje (REC TC IN, no el TC de camara).",
@@ -158,6 +168,7 @@ TOOLTIPS = {
 _sheet = None
 _locate = None
 _thumbs = None
+_google = None
 
 
 def _module(name):
@@ -180,6 +191,24 @@ def _thumbs_module():
     if _thumbs is None:
         _thumbs = _module("LGA_NKS_ShotMarks_Thumbs")
     return _thumbs
+
+
+def _google_module():
+    global _google
+    if _google is None:
+        _google = _module("LGA_NKS_ShotMarks_Google")
+    return _google
+
+
+def _local_time(iso_utc):
+    """'2026-11-04T00:02:41.414Z' -> '2026-11-03 21:02' en la hora local."""
+    import datetime
+    try:
+        stamp = datetime.datetime.strptime(iso_utc[:19], "%Y-%m-%dT%H:%M:%S")
+        stamp = stamp.replace(tzinfo=datetime.timezone.utc).astimezone()
+        return stamp.strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return iso_utc or "?"
 
 
 def _sheet_module():
@@ -458,6 +487,11 @@ class ShotMarksDialog(QtWidgets.QDialog):
         self.settings = _read_settings()
         # preset: tabla ya ubicada desde los thumbnails {path, sheet, table}.
         self.preset = preset
+        # El campo muestra la fuente (ruta o link de Google); la lectura usa
+        # local_path, que para Google es la copia en la cache.
+        self.source = ""
+        self.local_path = ""
+        self.google = None  # {path, title, modified, downloaded, stale}
         self.table = None
         self.plan = None
         # Marcas de la corrida anterior y las que ya no estan en la planilla.
@@ -502,8 +536,9 @@ class ShotMarksDialog(QtWidgets.QDialog):
         row = 0
 
         self.path_edit = QtWidgets.QLineEdit()
-        self.path_edit.setReadOnly(True)
-        self.path_edit.setPlaceholderText("Choose a .xlsx or .csv file")
+        self.path_edit.setPlaceholderText("Choose a .xlsx or .csv file, or paste a Google Sheets link")
+        self.path_edit.setToolTip(TOOLTIPS["source"])
+        self.path_edit.editingFinished.connect(self._path_entered)
         browse = self.browse_button = QtWidgets.QPushButton("Browse")
         browse.setStyleSheet(Style.BTN_SECONDARY)
         browse.setFixedHeight(Metric.BUTTON_HEIGHT)
@@ -514,6 +549,14 @@ class ShotMarksDialog(QtWidgets.QDialog):
         file_row.addWidget(browse)
         grid.addWidget(QtWidgets.QLabel("Sheet file"), row, 0)
         grid.addLayout(file_row, row, 1, 1, 3)
+        row += 1
+
+        # Estado de la planilla de Google: titulo, cuando cambio y si se bajo.
+        self.source_note = QtWidgets.QLabel("")
+        self.source_note.setTextFormat(Qt.RichText)
+        self.source_note.setWordWrap(True)
+        self.source_note.setVisible(False)
+        grid.addWidget(self.source_note, row, 1, 1, 3)
         row += 1
 
         self.sheet_combo = self._combo("sheet")
@@ -642,7 +685,12 @@ class ShotMarksDialog(QtWidgets.QDialog):
     def _restore(self):
         if self.preset:
             self._restore_common()
-            self.path_edit.setText(self.preset["path"])
+            self.source = self.preset["path"]
+            self.local_path = self.preset.get("local") or self.preset["path"]
+            self.google = self.preset.get("google")
+            self.path_edit.setText(self.source)
+            self.path_edit.setReadOnly(True)
+            self._show_source_note()
             self.browse_button.setEnabled(False)
             self._loading = True
             self.sheet_combo.addItem(self.preset["sheet"] or "(CSV)", self.preset["sheet"])
@@ -652,10 +700,12 @@ class ShotMarksDialog(QtWidgets.QDialog):
             return
         self._restore_common()
         last = self.settings.get("last_file", "")
-        if last and os.path.isfile(last):
+        if last and _google_module().is_link(last):
+            self._open_google(last)
+        elif last and os.path.isfile(last):
             self._open_file(last)
         else:
-            self._set_summary("Choose the breakdown sheet to start.")
+            self._set_summary("Choose the breakdown sheet or paste a Google Sheets link to start.")
 
     def _restore_common(self):
         edl = self.settings.get("last_edl", "")
@@ -668,14 +718,16 @@ class ShotMarksDialog(QtWidgets.QDialog):
 
     # archivo y hoja
     def _browse(self):
-        start = os.path.dirname(self.path_edit.text()) or str(Path.home())
+        start = os.path.dirname(self.local_path) if not self.google else ""
+        start = start or str(Path.home())
         path, _filter = QtWidgets.QFileDialog.getOpenFileName(
             self, "Choose sheet", start, "Sheets (*.xlsx *.csv)")
         if path:
             self._open_file(path)
 
     def _browse_edl(self):
-        start = os.path.dirname(self.edl_edit.text() or self.path_edit.text()) or str(Path.home())
+        start = os.path.dirname(self.edl_edit.text()
+                                or ("" if self.google else self.local_path)) or str(Path.home())
         path, _filter = QtWidgets.QFileDialog.getOpenFileName(
             self, "Choose EDL", start, "EDL (*.edl)")
         if path:
@@ -709,11 +761,83 @@ class ShotMarksDialog(QtWidgets.QDialog):
         if callback is not None and token == self._token:
             callback(result, error)
 
-    def _open_file(self, path):
-        self.path_edit.setText(path)
+    def _path_entered(self):
+        """Ruta escrita o link pegado (Enter o al salir del campo)."""
+        text = self.path_edit.text().strip()
+        if not text or text == self.source:
+            return
+        if _google_module().is_link(text):
+            self._open_google(text)
+        elif os.path.isfile(text) and text.lower().endswith((".xlsx", ".csv")):
+            self._open_file(text)
+        else:
+            self._set_summary("Not a .xlsx or .csv file, or a Google Sheets link.", Color.ERROR_TEXT)
+
+    def _open_google(self, link):
+        """Baja (o toma de la cache) la planilla de Google en un hilo y sigue
+        como con un archivo. La primera vez abre el navegador para el login."""
+        self.source = link
+        self.path_edit.setText(link)
+        self.table = None
+        self.google = None
+        self._show_source_note()
+        self._clear_preview()
+        self._set_busy("Getting the sheet from Google... The first time, sign in with Google "
+                       "in the browser.")
+        module = _google_module()
+        logger = _logger_ref()
+
+        def fetch():
+            return module.fetch(link, log=logger.info)
+
+        self._run(fetch, self._google_ready)
+
+    def _google_ready(self, result, error):
+        if error is not None:
+            _logger_ref().error("Planilla de Google: %s", error)
+            message = str(error) if isinstance(error, _google_module().GoogleSheetError) else (
+                "Could not get the sheet from Google: %s" % error)
+            self._set_summary(message, Color.ERROR_TEXT)
+            return
+        self.google = result
+        _logger_ref().info("Planilla de Google '%s': %s, copia en %s", result["title"],
+                           "bajada" if result["downloaded"] else "sin cambios", result["path"])
+        self._open_file(result["path"], source=self.source)
+
+    def _show_source_note(self):
+        info = self.google
+        if not info:
+            self.source_note.setVisible(False)
+            return
+        if info.get("stale"):
+            text = _colored("No connection to Google: using the copy of %s, last changed %s."
+                            % (emphasis(info["title"]), _local_time(info["modified"])),
+                            Color.WARNING_TEXT)
+        else:
+            state = "downloaded now" if info.get("downloaded") else "unchanged since the last download"
+            text = _colored("Google Sheet %s, last changed %s, %s."
+                            % (emphasis(info["title"]), _local_time(info["modified"]), state),
+                            Color.TEXT_DIM)
+        self.source_note.setText(text)
+        self.source_note.setVisible(True)
+
+    def _source_name(self):
+        """Nombre de la planilla para el origen de la marca y la carpeta de thumbs."""
+        if self.google:
+            return self.google.get("title") or "Google Sheet"
+        return os.path.basename(self.local_path)
+
+    def _open_file(self, path, source=None):
+        self.source = source or path
+        self.local_path = path
+        if source is None:
+            self.google = None
+        self.path_edit.setText(self.source)
+        self._show_source_note()
         self.table = None
         self._set_busy("Reading sheets...")
-        saved = self.settings.get("last_sheet", "") if path == self.settings.get("last_file") else ""
+        saved = (self.settings.get("last_sheet", "")
+                 if self.source == self.settings.get("last_file") else "")
         module = _sheet_module()
 
         def read():
@@ -741,7 +865,7 @@ class ShotMarksDialog(QtWidgets.QDialog):
     def _sheet_changed(self, *_args):
         if self._loading or self.sheet_combo.count() == 0:
             return
-        path = self.path_edit.text()
+        path = self.local_path
         sheet = self.sheet_combo.currentData()
         self._set_busy("Reading %s..." % (sheet or "file"))
         module = _sheet_module()
@@ -964,13 +1088,15 @@ class ShotMarksDialog(QtWidgets.QDialog):
         poder mover el visor de NKS mientras se revisa)."""
         self._save_settings()
         sequence, timeline = self.sequence, self.timeline
-        path, sheet, table = self.path_edit.text(), self.sheet_combo.currentData(), self.table
+        path, sheet, table = self.source, self.sheet_combo.currentData(), self.table
+        local, google = self.local_path, self.google
 
         def done(located):
             located_table = _sheet_module().with_located_timecodes(table, located)
             _logger_ref().info("Ubicadas %d filas desde thumbnails", len(located))
             dialog = ShotMarksDialog(sequence, hiero.ui.mainWindow(),
-                                     preset={"path": path, "sheet": sheet, "table": located_table})
+                                     preset={"path": path, "local": local, "google": google,
+                                             "sheet": sheet, "table": located_table})
             dialog.exec_() if hasattr(dialog, "exec_") else dialog.exec()
 
         self.accept()
@@ -1053,7 +1179,7 @@ class ShotMarksDialog(QtWidgets.QDialog):
         # isHidden y no isVisible: isVisible depende tambien del dialogo.
         if not self.align_check.isHidden() and self.align_check.isChecked():
             align = self.timeline.media_start
-        source = "%s | %s" % (os.path.basename(self.path_edit.text()),
+        source = "%s | %s" % (self._source_name() + (" (Google Sheets)" if self.google else ""),
                               self.sheet_combo.currentData() or "")
         if self.preset:
             source += " | located from thumbnails"
@@ -1091,7 +1217,8 @@ class ShotMarksDialog(QtWidgets.QDialog):
         if not hrox:
             _logger_ref().info("Proyecto sin guardar: los thumbs quedan en la cache de Locate")
             return "", []
-        folder = Path(self.path_edit.text()).stem
+        folder = (_google_module().safe_name(self._source_name()) if self.google
+                  else Path(self.local_path).stem)
         copies = _sheet_module().project_thumbs(self.plan.marks, folder)
         return os.path.dirname(hrox), copies
 
@@ -1114,7 +1241,7 @@ class ShotMarksDialog(QtWidgets.QDialog):
 
     def _save_settings(self):
         values = {
-            "last_file": self.path_edit.text(),
+            "last_file": self.source,
             "last_sheet": self.sheet_combo.currentData() or "",
             "skip_omit": "true" if self.skip_omit.isChecked() else "false",
             "align": "true" if self.align_check.isChecked() else "false",

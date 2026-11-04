@@ -12,8 +12,8 @@ suyas y las pinta segun lo que cambio en la planilla desde la corrida anterior.
 
 ## Que hace
 
-1. Lee la planilla (`.xlsx` o `.csv`) fuera del hilo de UI y sugiere la hoja con columnas de shot y
-   REC TC (en un archivo de 55 hojas tarda ~1,5 s).
+1. Lee la planilla (`.xlsx`, `.csv` o un link de Google Sheets, ver abajo) fuera del hilo de UI y
+   sugiere la hoja con columnas de shot y REC TC (en un archivo de 55 hojas tarda ~1,5 s).
 2. Detecta la fila de encabezado (puede no ser la primera: suele haber una tablita de resumen arriba)
    y las columnas de shot, TC IN, TC OUT, episodio, status, brief, descripcion, escena, vendor,
    categoria, Notes y Notes 2. Todo se puede corregir en la
@@ -25,6 +25,34 @@ suyas y las pinta segun lo que cambio en la planilla desde la corrida anterior.
 4. Al aplicar, en un solo undo: borra los tags que puso antes, opcionalmente alinea el TC de inicio
    del timeline y crea un tag de rango por shot (`Sequence.addTagToRange`), con el shot como nombre y
    el brief como nota.
+
+## Planilla desde un link de Google Sheets
+
+Los breakdowns suelen vivir en Google Sheets y cambian todos los dias: bajarlos a Excel en cada update
+era un paso a mano que se olvidaba. El campo de la planilla acepta, ademas de un archivo, el link de un
+Google Sheet (pegar y Enter). `LGA_NKS_ShotMarks_Google.py` (sin host, solo libreria estandar) lo baja
+como `.xlsx` a `%LOCALAPPDATA%\LGA\HieroTools\ShotMarks_Google\<id>.xlsx` y el resto de Shot Marks lee
+esa copia como cualquier Excel: hojas, comentarios en hilo y fotos ancladas viajan en el xlsx.
+
+- **Permiso.** Cliente OAuth de escritorio de Google en `~/.lga-keys/google-oauth.env`
+  (`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`; las variables de entorno ganan). La primera
+  vez abre el navegador por defecto para el login (`drive.readonly`, PKCE, callback en `127.0.0.1`) y
+  guarda el refresh token en `~/.lga-keys/google-oauth-token.env`; despues se renueva solo (~0,2 s).
+  Por ahora es solo para la maquina de Lega: en otra maquina sin esos archivos el dialogo dice que falta
+  el cliente. Una API key no sirve: solo abre datos publicos, y los breakdowns se comparten por cuenta.
+- **No usar `files.export` de la API.** Tiene un tope de 10 MB y una planilla con fotos lo pasa: medido,
+  `403 exportSizeLimitExceeded` con una de 51 MB. Se usa el `exportLinks` de xlsx con el token, que
+  redirige a `doc-NN-NN-sheets.googleusercontent.com` y no tiene tope (51 MB en 12 s, ~10 s de esos
+  esperando a que Google arme el archivo).
+- **Cache por fecha.** Antes de bajar se pide `modifiedTime` (0,4 s); si es la misma de la copia, no se
+  baja. Sin conexion y con copia, se usa la copia y el dialogo lo avisa en ambar.
+- **Reintentos.** Ante un error de conexion cada pedido se reintenta 3 veces, con 5 s entre intentos:
+  un firewall por aplicacion sin driver (GateBouncer, en la maquina de Lega) pierde el primer intento a
+  cada IP nueva aunque ya haya regla, y Google rota las IP del servidor de descarga. Con 2 s entre
+  intentos, en NKS los 4 caian dentro del bloqueo. Los errores HTTP no se reintentan.
+- **Origen de la marca.** `tag.lga_shotmarks_source` lleva el titulo de Google con `(Google Sheets)` y
+  la hoja; la carpeta de thumbs junto al `.hrox` toma el titulo (`safe_name`), no el id de la cache.
+  `ShotMarks.ini` recuerda el link como `last_file`: al reabrir el dialogo vuelve a consultar a Google.
 
 ## Brief numerado
 
@@ -498,6 +526,9 @@ agrega la barra antes de pasarla a ffmpeg. Medido en NKS 16.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks.py`:
   `TimelineInfo` (TC de secuencia y de media), `own_tags`, `previous_marks`, `apply_plan`, `guess_episode`,
   `ShotMarksDialog`, `main`.
+- `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks_Google.py`:
+  `sheet_id`, `fetch`, `access_token`, `login`, `cached`, `needs_download`, `safe_name`. Sin host;
+  probado sin red por `tests/test_shot_marks_google.py`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks_Nav.py`:
   `go_to_mark`, `show_mark_at`, `mark_tags`, `mark_info`, `ShotMarkInfoWindow`, `info_window`. La
   eleccion del salto es `next_mark_index` y la metadata `mark_metadata` / `mark_info_from_metadata`,
