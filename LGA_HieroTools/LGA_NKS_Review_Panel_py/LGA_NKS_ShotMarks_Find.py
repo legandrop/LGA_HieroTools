@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Find v1.03 | Lega
+  LGA_NKS_ShotMarks_Find v1.04 | Lega
 
   Find Shot Mark: Shift+Click en Shot Marks del panel Review. Una
   ventanita con un campo de texto que busca entre las marcas de Shot
@@ -23,6 +23,7 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Find.log.
 
+  v1.04: Notes 2 se muestra como Budget Alternative.
   v1.03: Busca tambien en la dificultad ("found in Difficulty"). Tooltips
          propios en vez de los nativos.
   v1.02: Busca tambien en los comentarios de la planilla.
@@ -79,7 +80,7 @@ TOOLTIPS = {
 }
 
 FIELD_LABELS = {"shot": "Shot name", "description": "Description", "brief": "Brief",
-                "notes": "Notes", "notes2": "Notes 2", "comments": "Comments",
+                "notes": "Notes", "notes2": "Budget Alternative", "comments": "Comments",
                 "status": "Status", "vendor": "Vendor", "scene": "Scene",
                 "category": "Category", "difficulty": "Difficulty", "episode": "Episode",
                 "tc_in": "REC TC IN",

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks v1.11 | Lega
+  LGA_NKS_ShotMarks v1.12 | Lega
 
   Shot Marks: lee una planilla de breakdown (xlsx, csv o un link de
   Google Sheets) y pone un tag
@@ -25,6 +25,9 @@ ____________________________________________________________________
   Filas y filtro de la vista previa: LGA_NKS_ShotMarks_Preview.py.
   Log de cada corrida: logs/DebugPy_LGA_NKS_ShotMarks.log.
 
+  v1.12: La columna Notes 2 pasa a llamarse Alternative en el dialogo (Budget
+         Alternative en la ventana de la marca: el nombre entero no entra en
+         el ancho de rotulo de la columna de ajustes).
   v1.11: Dialogo rediseniado: ajustes en una columna a la izquierda y la
          vista previa a la derecha. Switch Google Sheet / File, nombre de
          la planilla (link en el tooltip) y Reload. Solo Shot, TC In y TC
@@ -168,7 +171,7 @@ ALL_EPISODES = "All"
 # Columnas a la vista (sin shot y TC In no hay plan) y las de datos, plegadas.
 REQUIRED_COLUMNS = (("shot", "Shot"), ("tc_in", "TC In"), ("tc_out", "TC Out"))
 DATA_COLUMNS = (("episode", "Episode"), ("status", "Status"), ("note", "Brief"),
-                ("notes", "Notes"), ("notes2", "Notes 2"), ("description", "Description"),
+                ("notes", "Notes"), ("notes2", "Alternative"), ("description", "Description"),
                 ("scene", "Scene"), ("vendor", "Vendor"), ("category", "Category"),
                 ("difficulty", "Difficulty"))
 SIDE_WIDTH = 340
@@ -225,8 +228,8 @@ TOOLTIPS = {
     "vendor": "Vendor, para la ventana de Next Mark.",
     "category": "Categoria del shot, para la ventana de Next Mark.",
     "notes": "Notas del shot: la ventana de Next Mark las resalta. Se sugiere la columna Notas.",
-    "notes2": "Segunda columna de notas, resaltada en otro color. Se sugiere la columna "
-              "Alternativa.",
+    "notes2": "Alternativa para bajar el presupuesto del shot (que dejar de hacer o como\n"
+              "hacerlo de otra forma). Se sugiere la columna Alternativa.",
     "episode_filter": "Solo los shots de este episodio. Se sugiere el que aparece en el nombre del timeline.",
     "skip_omit": "No marcar los shots con status Omit.",
     "reference": "Contra que timecode se mide el REC TC de la planilla.",

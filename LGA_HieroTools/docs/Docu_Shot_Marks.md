@@ -123,17 +123,25 @@ aire arriba, menos que media linea, y el numero va en `Color.TEXT_MARKER`, un es
 el texto y mas oscuro que el titulo Brief. El parrafo y su margen salen del rich text del QLabel
 (`<p style="margin-top">`); con `<br>` no hay forma de separar un item del otro.
 
-## Notes y Notes 2
+## Notes y Budget Alternative
 
 Notas eventuales del shot: no son el brief (el trabajo) ni la descripcion (que pasa en el plano),
 sino lo que hay que mirar con atencion ("maybe wishlist", "no tocar los arboles", "omit vfx"). Por eso
 la ventanita de la marca las pone arriba de todo, cada una en una caja con borde de color: Notes en
-ambar y Notes 2 en celeste (`NOTE_SECTIONS` del Nav). Sin texto en esa fila, o sin columna, la caja
-no aparece: nunca hay un Notes vacio.
+ambar y Budget Alternative en celeste (`NOTE_SECTIONS` del Nav). Sin texto, la caja se reemplaza por
+una punteada para agregarla (ver «Cambios locales desde la ventanita»).
 
-- Se sugieren solas: Notes con `Notas` / `Notes` / `Nota` / `VFX Notes` (`NOTES_HEADERS`); Notes 2
-  con `Alternativa(s)` / `Alternative(s)` / `Notes 2` (`NOTES2_HEADERS`). `Alternativa` es una segunda
-  columna de notas que algunas planillas usan para la version alternativa de un plano.
+- **Budget Alternative** se llamaba Notes 2 hasta la `_Nav v1.13` / dialogo `v1.12`. La columna
+  (`Alternativa`, «Alternativas para reduccion de presupuesto») anota que se podria dejar de hacer, o
+  como hacerlo de otra forma, para bajar el costo del plano. En el dialogo el rotulo es
+  `Alternative`: el nombre entero no entra en el ancho de rotulo de la columna de ajustes (74 px), y
+  ensancharlo le quitaba lugar a todos los combos. Por dentro el rol sigue siendo `notes2`
+  (metadata `_notes2`): renombrarlo dejaba sin dato a las marcas ya escritas.
+- Se sugieren solas: Notes con `Notas` / `Notes` / `Nota` / `VFX Notes` (`NOTES_HEADERS`); Budget
+  Alternative con `Alternativa(s)` / `Alternative(s)` / `Notes 2` / `Budget Alternative`
+  (`NOTES2_HEADERS`) y, si ningun nombre coincide entero, con la primera columna que contenga
+  `alternativ` (`PARTIAL_HEADERS`, `_Sheet v1.18`). No se busca `presupuesto` suelto: una columna
+  Presupuesto con montos no es la alternativa.
 - Hasta la `_Sheet v1.08`, `Notas` caia en el brief si la planilla no tenia columna `Brief`. Ahora el
   brief solo se sugiere con `Brief` / `VFX Brief`.
 - Viajan a la metadata (`_notes`, `_notes2`), cuentan como cambio (amarillo) y Find las busca.
@@ -155,6 +163,41 @@ va entre las columnas de «Mark window».
   va como texto comun: no se adivina.
 - Cuenta como cambio (amarillo) y Find la busca. Las marcas de antes de la v1.17 guardan en `_compared`
   la lista sin `difficulty`, asi que la primera corrida nueva no las pinta por la dificultad.
+
+## Cambios locales desde la ventanita
+
+Al revisar el corte las correcciones aparecen mirando el shot: subir la dificultad, ajustar una nota,
+proponer una alternativa mas barata, dejar una pregunta. Abrir la planilla para cada una corta la
+revision, y escribirle desde NKS podria pisar lo que otra persona esta cambiando en ese momento. Por
+eso la ventanita (`_Nav v1.13`) guarda esos cambios en un archivo local y nunca toca la planilla ni
+el tag.
+
+- **Que se cambia.** La dificultad, con cinco pildoras siempre a la vista (`DifficultyStrip`,
+  dibujadas a mano porque el color es dato): un click la cambia y la de borde punteado es la que dice
+  la planilla. Notes y Budget Alternative: click en el texto (o en la caja punteada `+ Add ...`) abre
+  un editor con Save / Cancel / Use Sheet Value; Ctrl+Enter guarda, Esc cancela. Preguntas: un campo
+  al pie, Enter la guarda y la `x` la borra.
+- **Donde.** `LGA_NKS_ShotMarks_Edits` (sin host): `<carpeta del .hrox>/<proyecto sin
+  version>_ShotMarks_Edits.json`, uno por proyecto, asi el cambio se ve en todos los timelines del
+  proyecto que tengan ese shot y sobrevive al pasar de v10 a v11. Sin `.hrox` guardado, en
+  `%LOCALAPPDATA%/LGA/HieroTools/ShotMarks_Edits`.
+- **Un cambio por shot y campo.** Guarda el valor que tenia la planilla al hacerlo (`before`); editar
+  de nuevo conserva ese valor, y volver al de la planilla borra el cambio. La ortografia de la
+  dificultad sale de las marcas del timeline (`mid`, `Very hard`), para pegarla igual en la planilla.
+- **Como se ve.** El valor cambiado reemplaza al de la marca, con la etiqueta EDITED y debajo «In the
+  sheet: ...». Si la planilla cambio despues del cambio local (la marca ya no dice el `before`), un
+  aviso ambar: hay que decidir a mano. El pie dice cuantos cambios pendientes tiene el proyecto.
+- **Export Changes...** baja los pendientes a un CSV (UTF-8 con BOM: Excel lo abre con acentos y
+  Google Sheets lo importa) con shot, fila, campo, valor de la planilla al cambiar, valor nuevo, lo
+  que dice la marca ahora, autor y fecha. Es la base para pasarlos a la planilla revisando uno por
+  uno; esa herramienta es el paso siguiente.
+- **Cierre solo.** Cuando la planilla ya tiene el valor nuevo y se vuelve a correr Shot Marks, la
+  ventanita lo detecta al mostrar el shot y lo marca `applied` (queda como historial en el archivo).
+  Las preguntas no se pueden detectar asi: se borran a mano o las cerrara la herramienta de pase.
+- **Foco.** La ventana se sigue mostrando sin activarse; toma el teclado recien con el click para
+  escribir y, al guardar o cancelar, se lo devuelve a NKS. Mientras se escribe no sigue al playhead
+  (se guardaria en otro shot); Previous / Next guardan lo escrito antes de saltar.
+- Medido en NKS 17 con 640 marcas: leer las dificultades del timeline 6 ms, dibujar la ficha 16 ms.
 
 ## Comentarios de la planilla
 
@@ -607,9 +650,13 @@ agrega la barra antes de pasarla a ffmpeg. Medido en NKS 16.
   `sheet_id`, `fetch`, `access_token`, `login`, `cached`, `needs_download`, `safe_name`. Sin host;
   probado sin red por `tests/test_shot_marks_google.py`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks_Nav.py`:
-  `go_to_mark`, `show_mark_at`, `mark_tags`, `mark_info`, `ShotMarkInfoWindow`, `info_window`. La
+  `go_to_mark`, `show_mark_at`, `mark_tags`, `mark_info`, `ShotMarkInfoWindow`, `DifficultyStrip`,
+  `info_window`. La
   eleccion del salto es `next_mark_index` y la metadata `mark_metadata` / `mark_info_from_metadata`,
   en el nucleo sin host.
+- `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks_Edits.py`:
+  `edits_path`, `load`, `save`, `set_value`, `add_question`, `overlay`, `mark_applied`, `export_csv`.
+  Sin host; probado por `tests/test_shot_marks_edits.py`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks_Find.py`:
   `ShotMarkFindWindow`, `mark_entries`, `find_window`. La busqueda es `search_marks` /
   `find_match` / `next_match` en el nucleo sin host, probada en `tests/test_shot_marks_sheet.py`.
@@ -624,6 +671,7 @@ agrega la barra antes de pasarla a ffmpeg. Medido en NKS 16.
   por ruta (corre con `-I`) en `load_edl`. Tests: `tests/test_shot_marks_edl.py`.
 - Capturas: `+Building_Blocks/UI_Capture/fixtures/h11_shot_marks.py` -> `ShotMarks_Dialog.png`,
   `ShotMarks_Dialog-Thumbnails.png` y `ShotMarks_Dialog-Thumbnails-EDL.png`; `h11b_shot_mark_info.py` -> `ShotMarks_Info.png`,
-  `ShotMarks_Info-OldTag.png` y `ShotMarks_Info-Located.png`; `h11c_shot_marks_locate.py` ->
+  `ShotMarks_Info-OldTag.png`, `ShotMarks_Info-Located.png`, `ShotMarks_Info-Edits.png` y
+  `ShotMarks_Info-Editing.png`; `h11c_shot_marks_locate.py` ->
   `ShotMarks_Locate.png`; `h11d_shot_mark_find.py` -> `ShotMarks_Find.png`,
   `ShotMarks_Find-Result.png` y `ShotMarks_Find-NoMatch.png`.

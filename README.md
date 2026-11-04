@@ -326,12 +326,19 @@ opening related Nuke scripts.
   Click: jumps to the next Shot Mark and shows its sheet info: shot,
   REC TC in and out, duration, status, difficulty (colored from green, very
   easy, to red, very hard), vendor, scene, category, description
-  and brief, with the Notes and Notes 2 columns highlighted on top when the
-  shot has them, and the comments left on the shot's row of the sheet
+  and brief, with the Notes and Budget Alternative columns highlighted on top
+  when the shot has them, and the comments left on the shot's row of the sheet
   (Google Sheets or Excel), with their replies. It is a single small window that updates on every jump and does
   not take the keyboard focus. While it is open it follows the playhead:
   scrubbing or playing into another Shot Mark shows that shot. The vendor is
   shown in its PipeSync color.
+  You can also make changes from it without leaving Nuke Studio: click a
+  difficulty to change it, click Notes or Budget Alternative to edit them (or
+  add them from the dashed box), and ask a question about the shot. Changes are
+  saved on your computer next to the project, never in the sheet, and are
+  marked EDITED with what the sheet says. **Export Changes...** saves every
+  pending change to a CSV to review and copy into the sheet; a change closes by
+  itself once the sheet has it and Shot Marks runs again.
   Shift+Click: jumps to the next annotation on the selected clip and wraps to the first.
 - **Shot Marks**
   Reads a VFX breakdown sheet (`.xlsx` or `.csv`) and adds a range tag for

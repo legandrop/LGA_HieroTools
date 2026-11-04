@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Sheet v1.17 | Lega
+  LGA_NKS_ShotMarks_Sheet v1.18 | Lega
 
   Nucleo sin host de Shot Marks: lee una planilla (xlsx o csv),
   detecta la fila de encabezado y las columnas de shot y timecode,
@@ -13,6 +13,8 @@ ____________________________________________________________________
   los sharedStrings), sin openpyxl: NKS no lo trae, y asi una
   planilla de cientos de MB por las imagenes se lee en segundos.
 
+  v1.18: La columna Budget Alternative (rol notes2) se reconoce tambien
+         por nombre parcial: "Alternativas para reduccion de presupuesto".
   v1.17: Columna de dificultad (rol difficulty, se sugiere "Dificultad"):
          viaja a cada marca, cuenta como cambio y se busca.
          difficulty_level lleva el texto a un nivel de 1 (very easy) a 5
@@ -136,7 +138,12 @@ NOTE_HEADERS = ("brief", "vfxbrief")
 # es una segunda columna de notas (planos con una version alternativa).
 NOTES_HEADERS = ("notes", "notas", "vfxnotes", "nota", "note")
 NOTES2_HEADERS = ("notes2", "notas2", "alternativa", "alternativas", "alternative",
-                  "alternatives")
+                  "alternatives", "budgetalternative", "alternativadepresupuesto")
+# Rol notes2 (Budget Alternative): si ningun nombre coincide entero, la primera
+# columna que contenga "alternativ" ("Alternativas para reduccion de
+# presupuesto"). No se busca "presupuesto" suelto: una columna Presupuesto
+# con montos no es la alternativa.
+PARTIAL_HEADERS = {"notes2": ("alternativ",)}
 DESCRIPTION_HEADERS = ("descripcion", "description", "desc", "shotdescription")
 SCENE_HEADERS = ("esc", "escena", "scene", "sc")
 VENDOR_HEADERS = ("vendor", "proveedor")
@@ -645,6 +652,14 @@ def detect_columns(headers, rows=None):
             if candidate in norm:
                 result[role] = norm.index(candidate)
                 break
+    used = set(i for i in result.values() if i is not None)
+    for role, parts in PARTIAL_HEADERS.items():
+        if result.get(role) is None:
+            for index, name in enumerate(norm):
+                if index not in used and any(part in name for part in parts):
+                    result[role] = index
+                    used.add(index)
+                    break
     shots = [i for i, n in enumerate(norm) if n in SHOT_HEADERS]
     if rows and len(shots) > 1:
         priority = {i: SHOT_HEADERS.index(norm[i]) for i in shots}

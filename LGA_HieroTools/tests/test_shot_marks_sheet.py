@@ -143,6 +143,16 @@ class ShotMarksSheetTests(unittest.TestCase):
         self.assertEqual(plan.marks[1].frame_out, 999)
         self.assertIn("Outside the timeline", [i.message for i in plan.errors()])
 
+    def test_budget_alternative_by_partial_header(self):
+        headers = ["VFX SHOT NAME", "Presupuesto", "Notas",
+                   "Alternativas para reducción de presupuesto"]
+        columns = sheet.detect_columns(headers)
+        self.assertEqual(columns["notes2"], 3)
+        self.assertEqual(columns["notes"], 2)
+        # Un nombre exacto le gana al parcial; sin "alternativ" no se toma nada.
+        self.assertEqual(sheet.detect_columns(["Shot", "Alternativas x", "Alternativa"])["notes2"], 2)
+        self.assertIsNone(sheet.detect_columns(["Shot", "Presupuesto"])["notes2"])
+
     def test_timecode_parsing(self):
         self.assertEqual(sheet.parse_timecode("01:00:00:00", 24), 86400)
         self.assertEqual(sheet.parse_timecode("00:59:50:00", 24), 86160)

@@ -13,6 +13,8 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.024
+- [new] Desde la ventanita de cada shot podés cambiar la dificultad con un clic, corregir o agregar Notes y Budget Alternative, y dejar preguntas, sin salir de Nuke Studio: los cambios quedan guardados en tu computadora (nunca en la planilla) y `Export Changes` los baja a un CSV para revisarlos y pasarlos a la planilla.
+- [improved] La columna Notes 2 de Shot Marks pasa a llamarse Alternative (Budget Alternative en la ventanita de cada shot), y se reconoce sola aunque en la planilla se llame «Alternativas para reducción de presupuesto».
 - [new] Shot Marks lee la columna de dificultad de la planilla (Dificultad o Difficulty) y la ventanita de cada shot la muestra con un color según el nivel, de verde para lo muy fácil a rojo para lo muy difícil.
 - [improved] La ventana de Shot Marks se reorganizó: a la izquierda elegís la planilla y las columnas, y a la derecha ves todas las marcas antes de escribirlas, con un filtro para ver solo lo que cambió o lo que tiene problemas. Si la planilla no tiene timecode, muestra las fotos de los shots que va a buscar.
 - [improved] Los tooltips de la ventana de `Flow Pull` son iguales a los de PipeSync: aparecen debajo del control, apuntándolo con una flechita.
