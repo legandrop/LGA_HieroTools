@@ -264,6 +264,9 @@ indicators.
 - **Import shot**  
   Imports shots into the project: plates and references into the shot bin and onto their tracks.
   The shot name preserves `SUP` and external vendor codes.
+  You can also drag one or more shot folders from the file explorer onto the Edit panel:
+  a dashed violet frame appears and dropping them opens Import shot with those folders,
+  skipping the folder browser.
 - **Set Shot Name**
   Sets the shot name based on the file path, preserving `SUP` and PipeSync vendor codes.
 - **Create EXR v000**

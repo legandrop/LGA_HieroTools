@@ -1,10 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_EditToolsPanel v3.14 | Lega
+  LGA_EditToolsPanel v3.15 | Lega
 
   Tools panel for Hiero / Nuke Studio
 
+  v3.15: Arrastrar una o varias carpetas de shot al panel abre Import Shot
+         con esas carpetas, con el mismo cartel violeta punteado que el drop
+         del Projects Panel. Los tooltips pasan al tooltip propio del pack.
   v3.14: Los tooltips de Apply AMF y Create NK dicen que un .csp tiene
          prioridad sobre todo.
   v3.13: El tooltip de Apply AMF nombra el .cube como archivo de look.
@@ -64,9 +67,15 @@ import logging
 import queue
 import time
 from logging.handlers import QueueHandler, QueueListener
-from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
+from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, is_widget_alive
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color, Style
+from LGA_NKS_Shared.LGA_UI_CustomTooltip_HieroTools import set_custom_tooltip, tooltip_label
 
 # Tooltips fuera del widget (capa intermedia para la futura migracion bilingue)
+TOOLTIP_IMPORT_SHOT = (
+    "Importa uno o varios shots desde sus carpetas.\n"
+    "También se pueden arrastrar las carpetas de shot al panel"
+)
 TOOLTIP_CREATE_NK_SCRIPT = (
     "Crea el script de comp de Nuke del shot activo desde el template del proyecto "
     "(ASSETS), con los plates y denoised reales, el look del shot (CDL/CLF/.cube, o solo el "
@@ -196,8 +205,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "LGA_NKS_Shared"))
 from LGA_NKS_Shared.LGA_NKS_StyleUtils import (
     calculate_dynamic_border,
     calculate_dynamic_hover,
-    create_tooltip_stylesheet
 )
+
+
+def _tooltip_html(text):
+    """Los textos de tooltip usan \\n entre oraciones; el globo propio es rich text."""
+    return (text or "").replace("\n", "<br>")
 
 
 # Clase de botón personalizada que maneja el Shift+Click
@@ -284,7 +297,7 @@ class ReconnectPopup(QtWidgets.QFrame):
             button.clicked.connect(make_handler(callback))
         button.setStyleSheet(btn_stylesheet)
         if tooltip:
-            button.setToolTip(tooltip)
+            set_custom_tooltip(button, _tooltip_html(tooltip))
         self.layout().addWidget(button)
         return button
 
@@ -296,9 +309,6 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
         self.setObjectName("com.lega.toolPanel")
         self.setWindowTitle("Edit")
         debug_print("=== EditToolsPanel init ===")
-        self.setStyleSheet(
-            "QToolTip { color: #ffffff; background-color: #2a2a2a; border: 1px solid white; }"
-        )
 
         self.root_layout = QtWidgets.QVBoxLayout()
         self.root_layout.setContentsMargins(0, 0, 0, 0)
@@ -341,7 +351,7 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
             # que darle otro o sacarselo a Apply AMF, no ponerle el mismo: dos
             # botones con el mismo atajo se pisan en silencio.
             # ("Toggle AMF", self.toggle_amf, "#434c41", None, "Habilita o deshabilita los soft effects de Apply AMF que esten bajo el playhead, en todos los tracks"),
-            ("Import shot", self.import_shot, "#2a4d3a", None, "Importa shots al proyecto"),
+            ("Import shot", self.import_shot, "#2a4d3a", None, TOOLTIP_IMPORT_SHOT),
             ("Set Shot Name", self.set_shot_name, "#2a4d3a", None, "Establece el nombre del shot basándose en la ruta del archivo"),
             ("Create EXR v000", self.create_v000, "#2a4d3a", None, "Abre el validador para preparar secuencias negras v000 para uno o varios shots/tasks"),
             ("Create NK v000", self.create_nk_script, "#2a4d3a", None, TOOLTIP_CREATE_NK_SCRIPT),
@@ -376,6 +386,14 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
         self.num_columns = 1  # Inicialmente una columna
         self.button_width_hint = 0
         self.create_buttons()
+
+        # Drop de carpetas de shot -> Import Shot. El overlay se crea antes del
+        # primer resize porque adjust_columns_on_resize lo reacomoda.
+        self._drop_shot_folders = []
+        self._drop_overlay = None
+        self._drop_overlay_label = None
+        self._create_shot_drop_overlay()
+        self.setAcceptDrops(True)
 
         # Conectar la senal de cambio de tamano del widget al metodo correspondiente
         self.adjust_columns_on_resize()
@@ -431,27 +449,13 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
                     background-color: {style}aa;
                 }}
             """
-
-            # Agregar estilos de tooltip din?micos si hay tooltip
-            if tooltip:
-                # Crear un selector ?nico para este bot?n usando su objectName
-                button_object_name = f"button_{index}"
-                button.setObjectName(button_object_name)
-
-                # Crear stylesheet de tooltip din?mico
-                tooltip_stylesheet = create_tooltip_stylesheet(style)
-                # Modificar el tooltip stylesheet para usar el selector del bot?n
-                tooltip_stylesheet = tooltip_stylesheet.replace("QToolTip", f"#{button_object_name} QToolTip")
-
-                # Combinar estilos del bot?n con estilos de tooltip
-                button_stylesheet += tooltip_stylesheet
-
+            button.setObjectName(f"button_{index}")
             button.setStyleSheet(button_stylesheet)
 
             if shortcut:
                 button.setShortcut(shortcut)
             if tooltip:
-                button.setToolTip(tooltip)
+                set_custom_tooltip(button, _tooltip_html(tooltip))
 
             max_button_width = max(max_button_width, button.sizeHint().width())
             row = index // self.num_columns
@@ -504,6 +508,9 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
             )
 
     def adjust_columns_on_resize(self, event=None):
+        # resizeEvent esta reemplazado por este metodo: el overlay se reacomoda aca.
+        if getattr(self, "_drop_overlay", None) is not None:
+            self._drop_overlay.setGeometry(self.rect())
         viewport_width = self.scroll_area.viewport().width() if self.scroll_area else self.width()
         scroll_width = self.scroll_area.width() if self.scroll_area else self.width()
         self_width = self.width()
@@ -534,6 +541,115 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
             f"panel_width={panel_width}px viewport={viewport_width}px "
             f"scroll={scroll_width}px self={self_width}px available={available_width}px "
             f"button_width={button_width}px spacing={min_button_spacing}px cols={self.num_columns}"
+        )
+
+    # =========================
+    #   DROP DE CARPETAS DE SHOT
+    # =========================
+    def _create_shot_drop_overlay(self):
+        """Cartel de drop, el mismo del Projects Panel; solo se ve con carpetas validas."""
+        overlay = QtWidgets.QWidget(self)
+        overlay.setObjectName("EditShotDropOverlay")
+        overlay.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        overlay.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+        overlay.setStyleSheet(
+            "\n".join(
+                (
+                    Style.WINDOW,
+                    "QWidget#EditShotDropOverlay {"
+                    " background-color: %s; border: 2px dashed %s; border-radius: 8px;"
+                    "} QLabel#EditShotDropOverlayLabel {"
+                    " background: transparent; border: none; color: %s;"
+                    "}"
+                    % (Color.ACCENT_DISABLED, Color.ACCENT, Color.TEXT_STRONG),
+                )
+            )
+        )
+
+        layout = QtWidgets.QVBoxLayout(overlay)
+        label = QtWidgets.QLabel("", overlay)
+        label.setObjectName("EditShotDropOverlayLabel")
+        label.setAlignment(QtCore.Qt.AlignCenter)
+        label.setWordWrap(True)
+        layout.addWidget(label)
+
+        overlay.setGeometry(self.rect())
+        overlay.hide()
+        self._drop_overlay = overlay
+        self._drop_overlay_label = label
+
+    def _set_shot_drop_overlay_visible(self, visible, folder_count=0):
+        if self._drop_overlay is None:
+            return
+        if visible:
+            if folder_count == 1:
+                text = "Drop folder to import the shot"
+            else:
+                text = "Drop %d folders to import the shots" % folder_count
+            self._drop_overlay_label.setText(text)
+            self._drop_overlay.setGeometry(self.rect())
+            self._drop_overlay.raise_()
+            self._drop_overlay.show()
+        else:
+            self._drop_overlay.hide()
+
+    @staticmethod
+    def _shot_folders_from_mime(mime_data):
+        """
+        Devuelve las carpetas locales arrastradas, o [] si algo del drag no es
+        una carpeta: un archivo mezclado entre las carpetas no se importa a medias.
+        """
+        if mime_data is None or not mime_data.hasUrls():
+            return []
+        folders = []
+        for url in mime_data.urls():
+            if not url.isLocalFile():
+                return []
+            path = url.toLocalFile().replace("\\", "/").rstrip("/")
+            if not path or not os.path.isdir(path):
+                return []
+            if path not in folders:
+                folders.append(path)
+        return folders
+
+    def dragEnterEvent(self, event):
+        self._drop_shot_folders = self._shot_folders_from_mime(event.mimeData())
+        if self._drop_shot_folders:
+            event.acceptProposedAction()
+            self._set_shot_drop_overlay_visible(True, len(self._drop_shot_folders))
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if self._drop_shot_folders:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        self._drop_shot_folders = []
+        self._set_shot_drop_overlay_visible(False)
+        event.accept()
+
+    def dropEvent(self, event):
+        self._drop_shot_folders = []
+        self._set_shot_drop_overlay_visible(False)
+        folders = self._shot_folders_from_mime(event.mimeData())
+        if not folders:
+            debug_print("[Drop] Se esperan una o mas carpetas locales de shot.")
+            event.ignore()
+            return
+
+        event.acceptProposedAction()
+        debug_print(f"[Drop] Carpetas de shot: {folders}")
+        # Un modal dentro de dropEvent puede dejar abierto el loop nativo de
+        # drag de Windows (igual que en el Projects Panel): Import Shot abre
+        # carteles y ventanas, asi que se corre en el siguiente ciclo de Qt.
+        QtCore.QTimer.singleShot(
+            0,
+            lambda paths=folders: (
+                self.import_shot_folders(paths) if is_widget_alive(self) else None
+            ),
         )
 
     ###### Rec 709 en clips seleccionados
@@ -712,6 +828,20 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
             import traceback
             debug_print_b(traceback.format_exc())
 
+    def import_shot_folders(self, folders):
+        """Import Shot con las carpetas arrastradas al panel, sin el selector."""
+        debug_print_b(f"\n>>> Import shot por drop: {len(folders)} carpeta(s)")
+        try:
+            result = self.execute_external_script("LGA_import_shots.py", shot_roots=folders)
+            if result:
+                debug_print_b(">>> Import shot (drop) completado")
+            else:
+                debug_print_b(">>> Error al ejecutar Import shot (drop)")
+        except Exception as e:
+            debug_print_b(f"Error durante Import shot (drop): {e}")
+            import traceback
+            debug_print_b(traceback.format_exc())
+
     def create_new_track(self):
         """Ejecuta el script LGA_NKS_CreateNewTrack.py para crear un nuevo track de video"""
         debug_print_b("\n>>> Ejecutando Create New Track script...")
@@ -880,7 +1010,8 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
         )
         self.reconnect_popup.add_button(
             "Win > Mac", self.execute_reconnect_win_to_mac, "#4a4329",
-            "Click: Reconecta todos los clips del timeline\nShift+Click: Reconecta solo los clips seleccionados",
+            tooltip_label("Click:") + " Reconecta todos los clips del timeline<sbr/>"
+            + tooltip_label("Shift+Click:") + " Reconecta solo los clips seleccionados",
             shift_callback=self.execute_reconnect_win_to_mac_selected
         )
 
@@ -1121,8 +1252,9 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
         )
         return False
 
-    # Metodo para ejecutar scripts externos
-    def execute_external_script(self, script_name):
+    # Metodo para ejecutar scripts externos. main_kwargs se le pasa a main()
+    # (lo usa el drop de carpetas para darle a Import Shot las carpetas).
+    def execute_external_script(self, script_name, **main_kwargs):
         # Intentamos varias rutas posibles para encontrar el script
         script_paths = [
             os.path.join(
@@ -1183,7 +1315,7 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
 
                         # Tratamos de llamar a la función 'main' o 'test_trim_in'/'test_trim_out' si existe
                         if hasattr(module, "main"):
-                            module.main()
+                            module.main(**main_kwargs)
                         elif (
                             hasattr(module, "test_trim_in")
                             and script_name == "LGA_NKS_Trim_In.py"

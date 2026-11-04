@@ -122,7 +122,18 @@ T:/VFX-PROYECTO/101/PROJA_1012C_010/          ← shot root (elegido por el usua
 
 ## Fase 1 — Selección de carpeta
 
-**Trigger:** usuario clickea "Import shot" desde el Edit Panel.
+**Trigger:** usuario clickea "Import shot" desde el Edit Panel, o arrastra una o varias
+carpetas de shot sobre el Edit Panel.
+
+**Drop de carpetas (Edit Panel v3.15, import_shots v1.48):** el panel acepta el drag solo si
+TODO lo arrastrado son carpetas locales; un archivo mezclado anula el drop entero para no
+importar a medias. Muestra el mismo cartel violeta punteado que el drop de media del Projects
+Panel, con la cantidad de carpetas, y al soltar llama a `main(shot_roots=[...])`, que se
+saltea el selector. Con una carpeta abre el Import individual; con varias, el Bulk Import.
+El drop no pisa `last_shot_directory`: esa ruta es la del browser y solo la actualiza el
+selector. La importacion se difiere con `QTimer.singleShot(0)` porque un modal abierto
+adentro de `dropEvent` puede dejar colgado el loop nativo de drag de Windows (la misma
+razon que en el Projects Panel). Tests en `tests/test_edit_panel_shot_drop.py`.
 
 **Acciones:**
 1. Capturar el sequence activo.

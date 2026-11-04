@@ -1,12 +1,17 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.47 | Lega
+  LGA_import_shots v1.48 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
+
+  v1.48: main(shot_roots=None) acepta las carpetas ya elegidas, para el drop
+         de carpetas sobre el Edit Panel: con shot_roots no abre el selector
+         ni pisa la ultima carpeta que recuerda el browser. Sin argumento
+         funciona igual que antes.
 
   v1.47: La tabla de Transcode Plates muestra Skipped en el plate salteado
          desde la cola y el resumen final cuenta salteadas aparte de errores.
@@ -7917,17 +7922,9 @@ def _launch_create_v000(shot_targets=None):
 #  Entry point
 # ══════════════════════════════════════════════════════════════════
 
-def main():
-    debug_print("=== LGA_import_shots start ===")
-
-    seq = hiero.ui.activeSequence()
-    if not seq:
-        show_warning(
-            None, "Import Shot", "No hay sequence activa."
-        )
-        return
-
-    # Seleccionar carpeta. Reutiliza la ultima elegida si sigue disponible.
+def _pick_and_remember_shot_folders():
+    """Abre el selector de carpetas y guarda donde quedo navegando el browser."""
+    # Reutiliza la ultima carpeta elegida si sigue disponible.
     browser_settings = settings_mod.load_all_settings()
     initial_directory = browser_settings.get("ui", {}).get(
         "last_shot_directory", ""
@@ -7937,11 +7934,9 @@ def main():
 
     shot_roots = bulk_mod.pick_shot_folders(initial_directory, parent=None)
     if not shot_roots:
-        debug_print("Cancelled — no folder selected")
-        return
+        return []
 
-    shot_roots = [root.replace("\\", "/") for root in shot_roots]
-    shot_root = shot_roots[0]
+    shot_root = shot_roots[0].replace("\\", "/")
     browser_dir = ""
     try:
         browser_dir = (bulk_mod.get_last_browser_directory() or "").replace("\\", "/").rstrip("/")
@@ -7959,6 +7954,34 @@ def main():
             "last_shot_directory": browser_dir,
         }
     })
+    return shot_roots
+
+
+def main(shot_roots=None):
+    """
+    Importa uno o varios shots. Sin shot_roots abre el selector de carpetas;
+    con shot_roots (las carpetas arrastradas al Edit Panel) usa esas y no toca
+    la ultima carpeta del selector, que es del browser.
+    """
+    debug_print("=== LGA_import_shots start ===")
+
+    seq = hiero.ui.activeSequence()
+    if not seq:
+        show_warning(
+            None, "Import Shot", "No hay sequence activa."
+        )
+        return
+
+    if shot_roots:
+        debug_print("Carpetas recibidas por drop: %s" % list(shot_roots))
+    else:
+        shot_roots = _pick_and_remember_shot_folders()
+    if not shot_roots:
+        debug_print("Cancelled — no folder selected")
+        return
+
+    shot_roots = [root.replace("\\", "/").rstrip("/") for root in shot_roots]
+    shot_root = shot_roots[0]
 
     if len(shot_roots) > 1:
         global _bulk_import_dialog_instance
