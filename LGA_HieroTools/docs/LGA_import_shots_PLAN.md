@@ -178,6 +178,12 @@ siguiente, ese mínimo caía en el inicio del anterior y el nuevo shot quedaba e
 (el anterior aparecía a la derecha, sin plate ni EditRef). Test:
 `tests/test_import_shots_placement.py`.
 
+**Soft effects en el empuje (timeline v1.03, medido en NKS 17).** Los efectos linkeados a un
+clip no se tocan: se mueven solos con el clip, y moverlos otra vez tiraba el error
+`Selected time is wrong...` que aparecía en el log de cada import. Un efecto suelto que cruza
+el punto de inserción se estira (in fijo, out + empuje) en vez de correrse. Detalle en
+`Docu_SoftEffects_Aprendizajes.md` › Mover.
+
 **Slate de los renders publicados (import_shots v1.49).** Un render de `4_publish` que
 arranca antes que el plate (1000 contra 1001) trae el slate en ese frame.
 `_trim_render_slates()` corre después de cada escaneo y lo saltea: `slate_frames` pasa a

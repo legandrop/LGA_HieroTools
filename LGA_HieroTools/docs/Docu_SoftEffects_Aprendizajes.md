@@ -295,6 +295,23 @@ La API **no permite seleccionar soft effects por codigo** (`setSelection` solo
 acepta `TrackItem`). Por eso se opera directo sobre ellos en vez de
 seleccionarlos primero.
 
+### Mover: un efecto LINKEADO no se mueve a mano (medido 04-11, NKS 17.0v4)
+
+Un efecto creado con `createEffect(trackItem=...)` (`linkedItems()` devuelve
+su clip) **se mueve solo cuando se mueve el clip**, con `setTimelineIn/Out`
+del clip. Moverlo despues a mano tira
+`Selected time is wrong. Negative times and overlapping track items are not
+supported`, y el efecto queda donde lo dejo el clip, que es el lugar correcto.
+Un efecto SUELTO (`linkedItems()` vacio) si se mueve con `setTimelineOut` y
+despues `setTimelineIn`. Por eso `push_clips_right` (Import Shot y el drop del
+Projects Panel) saltea los linkeados, y a un suelto que cruza el punto de
+insercion le estira el out en vez de correrlo: corrido dejaba de cubrir el
+tramo anterior. Sonda: `+Building_Blocks/explore_push_effects.py`.
+
+De paso, el `sourceIn` de un TrackItem es **relativo al inicio de la media**:
+con una secuencia 1001-1060, `setTimes(300, 358, 1, 59)` da `sourceIn()=1` y
+el frame 300 muestra el 1002. Asi se saltea el slate de un render.
+
 ### Habilitar / deshabilitar
 
 `EffectTrackItem.setEnabled()` **no figura en la API documentada de Nuke 16**

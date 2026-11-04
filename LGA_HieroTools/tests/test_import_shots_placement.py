@@ -100,9 +100,41 @@ class _Item:
         pass
 
 
+class _Effect(_EffectTrackItem):
+    """Soft effect falso. linked = clip al que esta linkeado (o None)."""
+
+    def __init__(self, name, tl_in, tl_out, linked=None):
+        self._name, self.tl_in, self.tl_out = name, tl_in, tl_out
+        self.linked = linked
+
+    def name(self):
+        return self._name
+
+    def timelineIn(self):
+        return self.tl_in
+
+    def timelineOut(self):
+        return self.tl_out
+
+    def linkedItems(self):
+        return [self.linked] if self.linked is not None else []
+
+    def setTimelineIn(self, value):
+        if self.linked is not None:
+            # Lo que mide NKS: un linkeado no se mueve a mano.
+            raise RuntimeError("Selected time is wrong.")
+        self.tl_in = value
+
+    def setTimelineOut(self, value):
+        if self.linked is not None:
+            raise RuntimeError("Selected time is wrong.")
+        self.tl_out = value
+
+
 class _Track:
-    def __init__(self, name, items):
+    def __init__(self, name, items, effects=()):
         self._name, self._items = name, list(items)
+        self._effects = list(effects)
 
     def name(self):
         return self._name
@@ -111,7 +143,7 @@ class _Track:
         return list(self._items)
 
     def subTrackItems(self):
-        return []
+        return [list(self._effects)] if self._effects else []
 
     def addTrackItem(self, clip, tl_in):
         item = _Item(clip, tl_in, tl_in)
@@ -191,6 +223,27 @@ class ImportShotPlacementTests(unittest.TestCase):
         _moved, min_in = self.timeline.push_clips_right(seq, 6453, 115)
         self.assertEqual(6355, min_in)
         self.assertEqual((6470, 6568), _ranges(seq)[("_comp_", PREV)])
+
+    def test_effects_linked_are_left_to_their_clip_and_crossing_loose_are_stretched(self):
+        # Lo medido en NKS 17 con +Building_Blocks/explore_push_effects.py
+        clip_b = _Item("B", 60, 119)
+        linked = _Effect("Grade1", 60, 119, linked=clip_b)
+        loose = _Effect("Grade2", 130, 170)
+        crossing = _Effect("Grade3", 10, 150)
+        seq = _Seq([_Track("_comp_", [_Item("A", 0, 59), clip_b, _Item("C", 120, 179)],
+                           effects=[linked, loose, crossing])])
+        logs = []
+        self.timeline.set_debug_print(lambda *a, **k: logs.append(" ".join(map(str, a))))
+        try:
+            self.timeline.push_clips_right(seq, 60, 30)
+        finally:
+            self.timeline.set_debug_print(None)
+        self.assertFalse([line for line in logs if "error moviendo" in line], logs)
+        # El linkeado no se toca (en NKS lo mueve su clip)
+        self.assertEqual((60, 119), (linked.tl_in, linked.tl_out))
+        self.assertEqual((160, 200), (loose.tl_in, loose.tl_out))
+        # El suelto que cruza el punto se estira: sigue cubriendo desde el 10
+        self.assertEqual((10, 180), (crossing.tl_in, crossing.tl_out))
 
     def test_place_clip_skips_slate_with_source_in(self):
         seq = _Seq([_Track("_comp_", [])])

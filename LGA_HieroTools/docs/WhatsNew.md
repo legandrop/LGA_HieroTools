@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.024
+- [fixed] Al importar un shot o soltar media en Projects Panel, un soft effect largo que pasa por el lugar donde entra lo nuevo se estira para cubrirlo, en vez de correrse y dejar sin efecto el principio de lo que tenía antes.
 - [fixed] `Import shot` ya no pone el shot nuevo encima del anterior cuando el anterior tiene un render de comp: el anterior quedaba corrido a la derecha y sin plate ni EditRef.
 - [improved] `Import shot` deja afuera el slate de los renders de comp que arrancan en el frame 1000, así el 1001 del render coincide con el 1001 del plate.
 - [new] Podés arrastrar una o varias carpetas de shot desde el explorador al Edit Panel para importarlas con `Import shot`, sin tener que buscarlas en el selector.

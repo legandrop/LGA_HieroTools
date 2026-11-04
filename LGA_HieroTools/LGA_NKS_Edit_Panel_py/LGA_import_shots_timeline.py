@@ -1,10 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_timeline v1.02 | Lega
+  LGA_import_shots_timeline v1.03 | Lega
 
   Helpers de timeline para la importacion real de LGA_import_shots.
 
+  v1.03: push_clips_right no mueve los soft effects linkeados (se mueven
+         solos con su clip; moverlos otra vez tiraba "Selected time is
+         wrong") y estira, en vez de correr, un efecto suelto que cruza el
+         punto de insercion. Medido en NKS 17 con explore_push_effects.py.
   v1.02: push_clips_right acepta keep_names: los clips de esos shots que
          cruzan from_frame no se mueven. place_clip_in_timeline acepta
          source_in para saltear el slate de cabeza de un render.
@@ -196,7 +200,15 @@ def push_clips_right(seq, from_frame: int, amount: int, keep_names=None):
                         continue
                     try:
                         tl_out = int(effect.timelineOut())
-                        if tl_out >= from_frame:
+                        linked = _linked_item_names(effect)
+                        if linked:
+                            # Medido en NKS 17 (+Building_Blocks/explore_push_effects.py):
+                            # un efecto linkeado se mueve SOLO con su clip, y moverlo
+                            # otra vez falla con "Selected time is wrong...".
+                            _log("  track='%s' efecto='%s' linkeado a %s → omitido"
+                                 " (se mueve con su clip)"
+                                 % (track_name, effect.name(), linked))
+                        elif tl_out >= from_frame:
                             effects_to_move.append(effect)
                             effect_name = (effect.name()
                                            if hasattr(effect, "name") else "<efecto>")
@@ -247,22 +259,34 @@ def push_clips_right(seq, from_frame: int, amount: int, keep_names=None):
     all_to_move.sort(key=lambda x: x.timelineIn(), reverse=True)
 
     moved = 0
+    effects_moved = 0
     for item in all_to_move:
         try:
+            is_effect = isinstance(item, hiero.core.EffectTrackItem)
             old_in  = int(item.timelineIn())
             old_out = int(item.timelineOut())
             new_out = old_out + amount
-            new_in  = old_in  + amount
+            # Un efecto suelto que CRUZA from_frame se estira y no se corre:
+            # corrido dejaba de cubrir el tramo anterior al punto de insercion
+            # (medido: 10-150 pasaba a 40-180). Estirado sigue cubriendo todo
+            # lo que cubria, mas el shot nuevo. Va ultimo en el orden (tl_in
+            # menor), asi que lo que tenia despues ya se corrio.
+            stretch = is_effect and old_in < from_frame
+            new_in  = old_in if stretch else old_in + amount
             # Mover out primero para que el clip no colapse antes de ajustar in
             item.setTimelineOut(new_out)
-            item.setTimelineIn(new_in)
+            if not stretch:
+                item.setTimelineIn(new_in)
             try:
                 item_name = item.name()
             except Exception:
                 item_name = "<item>"
-            _log("  movido: '%s' tl %d-%d -> %d-%d"
-                 % (item_name, old_in, old_out, new_in, new_out))
-            if not isinstance(item, hiero.core.EffectTrackItem):
+            _log("  %s: '%s' tl %d-%d -> %d-%d"
+                 % ("estirado" if stretch else "movido",
+                    item_name, old_in, old_out, new_in, new_out))
+            if is_effect:
+                effects_moved += 1
+            else:
                 moved += 1
         except Exception as exc:
             try:
@@ -272,10 +296,18 @@ def push_clips_right(seq, from_frame: int, amount: int, keep_names=None):
             _log("push_clips_right: error moviendo '%s' → %s" % (item_name, exc),
                  level="warning")
 
-    _log("push_clips_right: resultado: %d clips + %d soft effects movidos %d frames"
+    _log("push_clips_right: resultado: %d clips + %d/%d soft effects movidos %d frames"
          " | effective_insert_frame=%d"
-         % (moved, len(effects_to_move), amount, effective_insert_frame))
+         % (moved, effects_moved, len(effects_to_move), amount, effective_insert_frame))
     return moved, effective_insert_frame
+
+
+def _linked_item_names(effect):
+    """Nombres de los clips a los que esta linkeado el efecto ([] si es suelto)."""
+    try:
+        return [str(li.name()) for li in (effect.linkedItems() or [])]
+    except Exception:
+        return []
 
 
 def place_clip_in_timeline(seq, clip, track_ref: str,
