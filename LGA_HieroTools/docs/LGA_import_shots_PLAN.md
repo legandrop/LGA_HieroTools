@@ -164,6 +164,28 @@ La herramienta determina la posición correcta así:
    inmediatamente después del nuevo shot (el nuevo shot se inserta antes de ese).
 5. Si el nuevo shot va al final: `insert_frame` = último frame ocupado + 1.
 
+**Shot anterior que desborda (import_shots v1.49).** Si el shot anterior termina después
+del inicio del siguiente (pasaba con un comp importado con el slate del frame 1000: un
+frame más largo que su plate), el nuevo shot arranca en el frame siguiente al último del
+anterior, y el siguiente se empuja `duración + desborde`.
+
+**El empuje no mueve al shot anterior.** `push_clips_right` selecciona por `tl_out >= insert_frame`,
+así que también agarra clips que CRUZAN el punto de inserción. Import Shot le pasa
+`keep_names` con los shots que van antes del nuevo, y esos clips no se mueven. El nuevo shot
+se coloca en `insert_frame`, no en el `min(tl_in)` de lo empujado. Antes era al revés, y
+pasó en producción: el comp con slate del shot anterior cruzaba el punto, se movía con el
+siguiente, ese mínimo caía en el inicio del anterior y el nuevo shot quedaba encima de él
+(el anterior aparecía a la derecha, sin plate ni EditRef). Test:
+`tests/test_import_shots_placement.py`.
+
+**Slate de los renders publicados (import_shots v1.49).** Un render de `4_publish` que
+arranca antes que el plate (1000 contra 1001) trae el slate en ese frame.
+`_trim_render_slates()` corre después de cada escaneo y lo saltea: `slate_frames` pasa a
+`place_clip_in_timeline(source_in=...)`, y `first_frame` / `frame_count` quedan con el rango
+recortado, así que el 1001 del render se alinea con el 1001 del plate, y la tabla, el preview
+y los handles del EditRef usan ese rango. La tabla lo avisa con `· slate 1000 cut`. Los MOV
+y MXF no se recortan: no traen número de frame para saber si tienen slate.
+
 **Track BurnIn:** tiene clips muy largos que cubren todo el timeline. No se pushea.
 Al insertar el nuevo shot, el clip de BurnIn se **estira** para cubrir el nuevo largo total.
 

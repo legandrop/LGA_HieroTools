@@ -13,6 +13,8 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.024
+- [fixed] `Import shot` ya no pone el shot nuevo encima del anterior cuando el anterior tiene un render de comp: el anterior quedaba corrido a la derecha y sin plate ni EditRef.
+- [improved] `Import shot` deja afuera el slate de los renders de comp que arrancan en el frame 1000, así el 1001 del render coincide con el 1001 del plate.
 - [new] Podés arrastrar una o varias carpetas de shot desde el explorador al Edit Panel para importarlas con `Import shot`, sin tener que buscarlas en el selector.
 - [improved] Los tooltips del Edit Panel son iguales a los de PipeSync: aparecen debajo del botón, apuntándolo con una flechita.
 - [new] Desde la ventanita de cada shot podés cambiar la dificultad con un clic, corregir o agregar Notes y Budget Alternative, y dejar preguntas, sin salir de Nuke Studio: los cambios quedan guardados en tu computadora (nunca en la planilla) y `Export Changes` los baja a un CSV para revisarlos y pasarlos a la planilla.

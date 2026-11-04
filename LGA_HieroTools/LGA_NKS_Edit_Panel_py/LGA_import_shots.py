@@ -1,12 +1,24 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.48 | Lega
+  LGA_import_shots v1.49 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
+
+  v1.49: Dos correcciones de colocacion. (1) Un render publicado que
+         arranca antes que el plate (1000 contra 1001) trae el slate en ese
+         frame: _trim_render_slates() lo saltea (source_in) y el 1001 del
+         render queda alineado con el 1001 del plate; el rango recortado
+         vale para la tabla, el preview y los handles del EditRef. (2) El
+         nuevo shot se coloca en insert_frame y el empuje ya no mueve los
+         clips del shot anterior que cruzan el punto de insercion
+         (keep_names). Antes, un comp anterior con el slate entero cruzaba
+         ese punto, se movia y el nuevo shot caia encima del anterior. Si el
+         anterior desborda sobre el siguiente, el nuevo arranca despues de
+         su ultimo frame.
 
   v1.48: main(shot_roots=None) acepta las carpetas ya elegidas, para el drop
          de carpetas sobre el Edit Panel: con shot_roots no abre el selector
@@ -1184,6 +1196,53 @@ def _scan_publish_folders(shot_root):
     return results
 
 
+def _trim_render_slates(input_items, publish_items):
+    """
+    Saca de los renders publicados los frames que van antes del primer frame
+    del plate. Un render que arranca en 1000 contra un plate que arranca en
+    1001 trae el slate en el 1000: ese frame no se ve, y el 1001 del render
+    queda alineado con el 1001 del plate.
+
+    Modifica cada item en el lugar, para que la tabla, el preview, los
+    handles del EditRef y la colocacion usen el rango ya recortado:
+      slate_frames  frames salteados de cabeza (el source_in de la colocacion)
+      first_frame   pasa a ser el del plate
+      frame_count   baja en slate_frames
+    Se puede llamar mas de una vez: un item ya recortado no se toca.
+    Retorna la cantidad de items recortados.
+    """
+    plate_firsts = [
+        it.get("first_frame") for it in input_items
+        if it.get("kind") == "exr_seq" and it.get("is_latest")
+        and it.get("first_frame") is not None
+    ]
+    if not plate_firsts:
+        return 0
+    plate_first = min(plate_firsts)
+
+    trimmed = 0
+    for it in publish_items:
+        if it.get("kind") != "exr_seq" or it.get("slate_frames"):
+            continue
+        first = it.get("first_frame")
+        count = it.get("frame_count") or 0
+        if first is None or first >= plate_first:
+            continue
+        slate = plate_first - first
+        if slate >= count:
+            continue  # el render entero quedaria afuera: no es un slate
+        it["slate_frames"] = slate
+        it["first_frame"] = plate_first
+        it["frame_count"] = count - slate
+        trimmed += 1
+        debug_print(
+            "_trim_render_slates: '%s' arranca en %d y el plate en %d → se saltean"
+            " %d frame(s) de slate (%df quedan en el timeline)"
+            % (it.get("name"), first, plate_first, slate, it["frame_count"])
+        )
+    return trimmed
+
+
 # ══════════════════════════════════════════════════════════════════
 #  Helpers de timeline
 # ══════════════════════════════════════════════════════════════════
@@ -1377,9 +1436,39 @@ def _find_insert_frame(seq, shot_name, duration):
 
     # Insertar antes de insert_before: usamos su timeline_in actual
     insert_frame = insert_before["timeline_in"]
+    frames_to_push = duration
     next_shot_name = insert_before["shot_name"]
-    prev_shot_name = shots_alpha[insert_before_idx - 1]["shot_name"] if insert_before_idx > 0 else None
-    return insert_frame, duration, prev_shot_name, next_shot_name
+    prev = shots_alpha[insert_before_idx - 1] if insert_before_idx > 0 else None
+    prev_shot_name = prev["shot_name"] if prev else None
+
+    # Si el shot anterior desborda sobre el inicio del siguiente (un comp con
+    # el slate del frame 1000 importado entero termina un frame despues que su
+    # plate), el nuevo shot arranca despues de ese ultimo frame y el siguiente
+    # se empuja lo que falte. Solo si el anterior esta de verdad antes en el
+    # timeline: en un timeline desordenado no se corre nada.
+    if (prev is not None
+            and prev["timeline_in"] < insert_frame <= prev["timeline_out"]):
+        overlap = prev["timeline_out"] + 1 - insert_frame
+        debug_print(
+            "_find_insert_frame: '%s' termina en %d, %d frame(s) despues del inicio de '%s'"
+            " (%d) → el nuevo shot arranca en %d"
+            % (prev_shot_name, prev["timeline_out"], overlap, next_shot_name,
+               insert_frame, prev["timeline_out"] + 1),
+            level="warning",
+        )
+        insert_frame = prev["timeline_out"] + 1
+        frames_to_push = duration + overlap
+    return insert_frame, frames_to_push, prev_shot_name, next_shot_name
+
+
+def _shot_names_before(seq, shot_name):
+    """Nombres (minuscula) de los shots del timeline que van antes del nuevo."""
+    key = shot_name.lower()
+    return {
+        s["shot_name"].lower()
+        for s in _collect_timeline_shots(seq)
+        if s["shot_name"].lower() < key
+    }
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -2676,9 +2765,14 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
         # Resolución (col 4) — mínimo 165px para "2048×1152 (2.39:1)"
         header.setSectionResizeMode(4, QtWidgets.QHeaderView.Interactive)
         table.setColumnWidth(4, 165)
-        # Frames/Duration (col 7) — mínimo 210px para "1001–1480  (480f - 20.0s)"
+        # Frames/Duration (col 7) — mínimo 210px para "1001–1480  (480f - 20.0s)";
+        # 300 si algun render trae la marca "· slate 1000 cut", que no entra en 210.
+        has_slate = any(
+            (row.get("item") or {}).get("slate_frames")
+            for row in rows if row.get("type") != "section_header"
+        )
         header.setSectionResizeMode(7, QtWidgets.QHeaderView.Interactive)
-        table.setColumnWidth(7, 210)
+        table.setColumnWidth(7, 300 if has_slate else 210)
         # Track — ajusta al contenido
         header.setSectionResizeMode(8, QtWidgets.QHeaderView.ResizeToContents)
 
@@ -2987,6 +3081,12 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
                 "<span style='color:%s;'>%d–%d</span>"
                 "  (<span style='color:%s;'>%df%s</span>)" % (
                     _dim, ff, lf, fc_clr, fc_val, secs_txt))
+            slate = item.get("slate_frames") or 0
+            if slate:
+                # El rango ya viene recortado (_trim_render_slates): se avisa
+                # que el render trae slate y que no entra al timeline.
+                frames_html += "  <span style='color:%s;'>· slate %d cut</span>" % (
+                    _dim, ff - slate)
             table.setCellWidget(row_i, 7, _cell_html_label(frames_html))
         else:
             fi = QtWidgets.QTableWidgetItem("—")
@@ -3522,6 +3622,7 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
             self._needs_refresh.discard(tab_name)
             self.input_items   = _scan_input_folder(self.shot_root)
             self.publish_items = _scan_publish_folders(self.shot_root)
+            _trim_render_slates(self.input_items, self.publish_items)
 
         if index == self.TAB_RENAME:
             self._update_rename_page()
@@ -5892,8 +5993,11 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
             self.frames_to_push = _new_push
 
             # ── PASO 1: Hacer espacio ─────────────────────────────────────────
-            # effective_insert_frame es el min(tl_in) de los clips empujados;
-            # es donde debe comenzar el nuevo shot para quedar adyacente al siguiente.
+            # El nuevo shot va en insert_frame, que ya sale del rango completo
+            # de los shots vecinos (_find_insert_frame). El min(tl_in) de los
+            # clips empujados solo se loguea: si un clip del shot anterior
+            # cruzaba el punto de insercion, ese minimo caia en el inicio del
+            # shot anterior y el nuevo shot quedaba encima de el.
             effective_insert_frame = self.insert_frame
 
             if self.frames_to_push > 0:
@@ -5901,12 +6005,21 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
                     "_do_import → PASO 1: push tl_out>=%d por %d frames"
                     % (self.insert_frame, self.frames_to_push)
                 )
-                moved, effective_insert_frame = timeline_mod.push_clips_right(
-                    self.seq, self.insert_frame, self.frames_to_push
+                moved, pushed_min_in = timeline_mod.push_clips_right(
+                    self.seq, self.insert_frame, self.frames_to_push,
+                    keep_names=_shot_names_before(self.seq, self.shot_name),
                 )
                 debug_print("_do_import: %d clips movidos %d frames"
-                            " | effective_insert_frame=%d"
-                            % (moved, self.frames_to_push, effective_insert_frame))
+                            " | min tl_in empujado=%d | insert_frame=%d"
+                            % (moved, self.frames_to_push, pushed_min_in,
+                               effective_insert_frame))
+                if pushed_min_in != effective_insert_frame:
+                    debug_print(
+                        "_do_import: el clip empujado mas temprano empezaba en %d,"
+                        " no en insert_frame=%d; el shot se coloca en insert_frame"
+                        % (pushed_min_in, effective_insert_frame),
+                        level="warning",
+                    )
             else:
                 debug_print(
                     "_do_import: frames_to_push=0, sin necesidad de hacer espacio"
@@ -5962,12 +6075,16 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
                                 % (track_label, handle_info["handle_in"], clip_tl_in)
                             )
 
-                    debug_print("_do_import: colocando '%s' en track '%s' tl=%d dur=%d"
-                                % (clip_name, track_label, clip_tl_in, frame_count))
+                    slate_frames = int(item.get("slate_frames") or 0)
+                    debug_print("_do_import: colocando '%s' en track '%s' tl=%d dur=%d%s"
+                                % (clip_name, track_label, clip_tl_in, frame_count,
+                                   (" (sin %d frame(s) de slate)" % slate_frames)
+                                   if slate_frames else ""))
 
                     ti, err2 = timeline_mod.place_clip_in_timeline(
                         self.seq, clip, track_key,
                         clip_tl_in, frame_count, self.shot_name,
+                        source_in=slate_frames,
                     )
                     if err2:
                         errors.append("Timeline: %s — %s" % (clip_name, err2))
@@ -7764,10 +7881,13 @@ class BulkImportDialog(QtWidgets.QDialog):
                 insert_frame, frames_to_push, _prev, _next = _find_insert_frame(
                     self.seq, panel.shot_name, duration
                 )
+                # Se coloca en insert_frame y no en el min(tl_in) empujado: ver
+                # PASO 1 de ImportShotDialog._do_import.
                 effective_frame = insert_frame
                 if frames_to_push > 0:
-                    _moved, effective_frame = timeline_mod.push_clips_right(
-                        self.seq, insert_frame, frames_to_push
+                    timeline_mod.push_clips_right(
+                        self.seq, insert_frame, frames_to_push,
+                        keep_names=_shot_names_before(self.seq, panel.shot_name),
                     )
                 target_bin = bin_mod.find_or_create_shot_bin(self.seq, panel.shot_name)
                 for track_key, item, color, _preview_task_color in selected_items:
@@ -7793,7 +7913,8 @@ class BulkImportDialog(QtWidgets.QDialog):
                         track_name, item, selected_master
                     )
                     timeline_item, error = timeline_mod.place_clip_in_timeline(
-                        self.seq, clip, track_key, clip_in, frame_count, panel.shot_name
+                        self.seq, clip, track_key, clip_in, frame_count, panel.shot_name,
+                        source_in=int(item.get("slate_frames") or 0),
                     )
                     if error:
                         errors.append("%s / %s (%s): %s" %
@@ -8001,6 +8122,7 @@ def main(shot_roots=None):
             debug_print("Bulk scan: %s" % root)
             input_items = _scan_input_folder(root)
             publish_items = _scan_publish_folders(root)
+            _trim_render_slates(input_items, publish_items)
             max_frames = max(
                 (item.get("frame_count") or 0 for item in input_items
                  if item.get("kind") == "exr_seq" and item.get("is_latest")),
@@ -8071,6 +8193,7 @@ def main(shot_roots=None):
     debug_print("Scanning publish folders...")
     publish_items = _scan_publish_folders(shot_root)
     debug_print("Found %d publish entries" % len(publish_items))
+    _trim_render_slates(input_items, publish_items)
 
     # Calcular duracion del plate mas largo para posicionamiento
     max_frames = max(

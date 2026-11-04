@@ -1,9 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots_timeline v1.01 | Lega
+  LGA_import_shots_timeline v1.02 | Lega
 
   Helpers de timeline para la importacion real de LGA_import_shots.
+
+  v1.02: push_clips_right acepta keep_names: los clips de esos shots que
+         cruzan from_frame no se mueven. place_clip_in_timeline acepta
+         source_in para saltear el slate de cabeza de un render.
 
   v1.01: place_clip_in_timeline acepta track_ref con clave unica
          "track_name||bt_index" para resolver la instancia exacta del track
@@ -103,7 +107,7 @@ def _find_video_track(seq, track_ref):
 
 # ── funciones públicas ────────────────────────────────────────────────────────
 
-def push_clips_right(seq, from_frame: int, amount: int):
+def push_clips_right(seq, from_frame: int, amount: int, keep_names=None):
     """
     Empuja hacia la derecha todos los clips y soft effects que tienen contenido
     en from_frame o en cualquier frame posterior. Excluye tracks BurnIn.
@@ -112,6 +116,13 @@ def push_clips_right(seq, from_frame: int, amount: int):
     Captura clips que EMPIEZAN en from_frame o despues (tl_in >= from_frame)
     Y clips que CRUZAN from_frame (tl_in < from_frame, tl_out >= from_frame),
     que son los del shot siguiente con inicio desalineado entre tracks.
+
+    keep_names (set de nombres en minuscula): un clip que CRUZA from_frame y
+    se llama como uno de esos shots NO se mueve. Import Shot pasa los shots
+    que van antes del nuevo: un comp del shot anterior que desborda un frame
+    (el slate del frame 1000) cruzaba el punto de insercion, se movia junto
+    con el shot siguiente y arrastraba el effective_insert_frame hasta el
+    inicio del shot anterior, asi que el nuevo shot caia encima de el.
 
     Patron basado en LGA_H-SelectFromPlayhead.py:
     - Recolecta TrackItems via track.items() y EffectTrackItems via subTrackItems().
@@ -132,6 +143,7 @@ def push_clips_right(seq, from_frame: int, amount: int):
 
     _log("push_clips_right: buscando clips con tl_out >= %d para mover %d frames"
          % (from_frame, amount))
+    keep_names = {str(n).lower() for n in (keep_names or ())}
 
     items_to_move   = []   # TrackItems (clips normales)
     effects_to_move = []   # EffectTrackItems (soft effects) en tracks no-BurnIn
@@ -154,7 +166,13 @@ def push_clips_right(seq, from_frame: int, amount: int):
                 tl_in  = int(item.timelineIn())
                 tl_out = int(item.timelineOut())
 
-                if tl_out >= from_frame:
+                if (tl_in < from_frame <= tl_out
+                        and str(item.name()).lower() in keep_names):
+                    _log("  track='%s' clip='%s' tl=%d-%d → omitido"
+                         " (shot anterior que cruza from_frame=%d)"
+                         % (track_name, item.name(), tl_in, tl_out, from_frame),
+                         level="warning")
+                elif tl_out >= from_frame:
                     items_to_move.append(item)
                     track_selected += 1
                     _log("  track='%s' clip='%s' tl=%d-%d → INCLUIDO"
@@ -262,7 +280,7 @@ def push_clips_right(seq, from_frame: int, amount: int):
 
 def place_clip_in_timeline(seq, clip, track_ref: str,
                             tl_in: int, frame_count: int,
-                            shot_name: str):
+                            shot_name: str, source_in: int = 0):
     """
     Coloca clip en el track indicado dentro de seq.
 
@@ -270,7 +288,9 @@ def place_clip_in_timeline(seq, clip, track_ref: str,
 
     Politicas:
     - El track debe existir; si no existe, retorna error (no crea tracks).
-    - Source in/out: 0 .. frame_count-1 (el primer frame EXR mapea a source 0).
+    - Source in/out: source_in .. source_in+frame_count-1 (el primer frame
+      EXR mapea a source 0). source_in > 0 saltea frames de cabeza: es el
+      slate del frame 1000 de un render, que no tiene que verse.
     - setVersionLinkedToBin(True) se llama al final, cuando el item ya esta insertado.
     """
     target_track = _find_video_track(seq, track_ref)
@@ -284,10 +304,13 @@ def place_clip_in_timeline(seq, clip, track_ref: str,
     try:
         track_item = target_track.addTrackItem(clip, tl_in)
         track_item.setName(shot_name)
-        track_item.setTimes(tl_in, tl_out, 0, frame_count - 1)
+        source_in = max(0, int(source_in or 0))
+        track_item.setTimes(tl_in, tl_out, source_in, source_in + frame_count - 1)
         track_item.setVersionLinkedToBin(True)
         _log("place_clip_in_timeline: '%s' → track='%s' (ref='%s') tl=%d-%d (%df)"
-             % (shot_name, target_track_name, track_ref, tl_in, tl_out, frame_count))
+             " src=%d-%d"
+             % (shot_name, target_track_name, track_ref, tl_in, tl_out, frame_count,
+                source_in, source_in + frame_count - 1))
         return track_item, None
     except Exception as exc:
         _log("place_clip_in_timeline: excepcion → %s" % exc, level="error")
