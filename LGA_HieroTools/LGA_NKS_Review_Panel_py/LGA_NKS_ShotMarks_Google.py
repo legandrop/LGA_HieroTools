@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Google v1.00 | Lega
+  LGA_NKS_ShotMarks_Google v1.01 | Lega
 
   Shot Marks desde un link de Google Sheets: baja la planilla como
   xlsx con la cuenta de Google del usuario y la deja en una cache
@@ -25,6 +25,9 @@ ____________________________________________________________________
     aplicacion sin driver pierde el primer intento a cada IP nueva, y
     Google rota las IP de su servidor de descarga.
 
+  v1.01: available(): si hay cliente de Google en esta maquina, para que
+         la UI no ofrezca Google Sheets donde no puede andar. Reintentos
+         con 5 s de espera (con 2 s caian todos en el bloqueo del firewall).
   v1.00: Version inicial.
 ____________________________________________________________________
 """
@@ -105,6 +108,12 @@ def read_key(file_name, variable):
             if name.strip() == variable and val.strip():
                 return val.strip().strip('"').strip("'")
     return None
+
+
+def available():
+    """Hay cliente de Google en esta maquina. Sin el, la UI no ofrece Google
+    Sheets: por ahora el cliente solo esta en la maquina de Lega."""
+    return bool(read_key(CLIENT_FILE, CLIENT_ID_VAR) and read_key(CLIENT_FILE, CLIENT_SECRET_VAR))
 
 
 def client_credentials():

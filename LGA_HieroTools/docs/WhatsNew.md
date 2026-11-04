@@ -13,6 +13,8 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.024
+- [new] Shot Marks lee la columna de dificultad de la planilla (Dificultad o Difficulty) y la ventanita de cada shot la muestra con un color según el nivel, de verde para lo muy fácil a rojo para lo muy difícil.
+- [improved] La ventana de Shot Marks se reorganizó: a la izquierda elegís la planilla y las columnas, y a la derecha ves todas las marcas antes de escribirlas, con un filtro para ver solo lo que cambió o lo que tiene problemas. Si la planilla no tiene timecode, muestra las fotos de los shots que va a buscar.
 - [improved] Los tooltips de la ventana de `Flow Pull` son iguales a los de PipeSync: aparecen debajo del control, apuntándolo con una flechita.
 - [improved] En la ventana de `Flow Pull`, cada fila tiene su propia celda de descarga al lado de `v_NKS`: un clic baja el clip sin tener que seleccionar la fila; cuando el timeline tiene una versión más vieja que Flow, la versión y esa celda se pintan de violeta.
 - [new] Con clic derecho sobre el nombre de un proyecto en Projects Panel podés abrir su carpeta (`Reveal in Explorer`) o guardar una copia para Nuke 16 (`Convert to Nuke 16...`), sin tener que arrastrar el archivo.

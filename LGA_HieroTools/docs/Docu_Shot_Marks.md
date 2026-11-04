@@ -16,7 +16,7 @@ suyas y las pinta segun lo que cambio en la planilla desde la corrida anterior.
    sugiere la hoja con columnas de shot y REC TC (en un archivo de 55 hojas tarda ~1,5 s).
 2. Detecta la fila de encabezado (puede no ser la primera: suele haber una tablita de resumen arriba)
    y las columnas de shot, TC IN, TC OUT, episodio, status, brief, descripcion, escena, vendor,
-   categoria, Notes y Notes 2. Todo se puede corregir en la
+   categoria, dificultad, Notes y Notes 2. Todo se puede corregir en la
    ventana y queda guardado en `%APPDATA%\LGA\HieroTools\ShotMarks.ini`. Un encabezado con salto
    de linea en la celda (`STATUS` / `VFX`) se lee en una linea (`STATUS VFX`): con el salto, el
    combo lo mostraba en dos renglones cortados.
@@ -25,6 +25,60 @@ suyas y las pinta segun lo que cambio en la planilla desde la corrida anterior.
 4. Al aplicar, en un solo undo: borra los tags que puso antes, opcionalmente alinea el TC de inicio
    del timeline y crea un tag de rango por shot (`Sequence.addTagToRange`), con el shot como nombre y
    el brief como nota.
+
+## El dialogo: ajustes a la izquierda, vista previa a la derecha
+
+**Por que tiene esta forma.** Hasta la `v1.10` era una grilla de doce combos con el mismo peso, un
+parrafo de instrucciones arriba, otro de estado abajo y una tabla que en el modo thumbnails quedaba
+vacia. Lo que se mira al correrla es la vista previa (que marcas se escriben, que cambio, que no se
+puede ubicar); las columnas casi siempre se detectan bien solas. Por eso la vista previa ocupa la
+ventana y los ajustes van en una columna angosta (`SIDE_WIDTH`, con scroll si se despliega todo).
+La ventana se puede agrandar y la tabla se estira. Se eligio entre tres prototipos renderizados.
+
+**Izquierda.**
+- *Source*: switch **Google Sheet / File** (cambia el campo de entrada, no la planilla cargada). En
+  Google se pega el link y Enter; en File, Browse o una ruta y Enter. Despues de cargar, el campo
+  queda libre para pegar otra y arriba, en una **tarjeta**, se ve el **nombre** de la planilla (titulo
+  de Google o archivo), con el link o la ruta completa en su tooltip: en esa columna un link no entra.
+  Debajo, una linea de estado (`source_note`) con un punto de color: verde al dia, ambar si se uso la
+  copia sin conexion, gris bajando o archivo local, rojo si fallo; la fecha va corta (`Nov 3, 10:40`,
+  meses escritos en el codigo y no con `%b`, que sale en el idioma del sistema). El boton de la
+  flecha circular recarga: vuelve a consultar Google (`fetch`, que baja solo si cambio) o relee el
+  archivo, conservando la hoja elegida.
+- *Columns*: solo **Shot, TC In y TC Out** a la vista. Las diez de datos (episodio, status, brief,
+  Notes, Notes 2, descripcion, escena, vendor, categoria, dificultad) se despliegan dentro de la misma
+  ventana con la fila plegable **Mark window columns** (a la derecha, cuantas hay asignadas: `6 of
+  10`), sin dialogos nuevos ni popups. Si falta una
+  imprescindible, su rotulo va en rojo con el aviso abajo; si el combo cayo en la primera columna
+  porque ninguna se llamaba como se esperaba, en amarillo hasta que se elija a mano.
+- *Timeline*: **Measure** dice solo Media / Timeline timecode; el inicio y el clip van en una linea
+  gris debajo, cortada con `...` si no entra (el nombre del clip tiene ~60 caracteres y dentro del
+  combo quedaba cortado a la mitad). Abajo, alinear el inicio del timeline, episodio y Skip omitted.
+- **Forma de la columna**: cada seccion es una grilla de rotulo gris + campo con el mismo ancho de
+  rotulo (`COLUMN_LABEL_WIDTH`) y el mismo aire (`ROW_GAP`, `SECTION_GAP`), separada de la
+  siguiente por una linea. Antes la fila de Sheet y la grilla de columnas usaban espaciados distintos
+  y sus campos no arrancaban en la misma vertical. Los combos sin datos quedan apagados hasta que
+  hay planilla. Con la ventana en 1120 x 740 la columna entra sin scroll; con las columnas de datos
+  desplegadas aparece el scroll del pack.
+
+**Derecha**, en tres paginas (`QStackedWidget`):
+- *Mensaje*: sin planilla ("Nothing to preview yet" y que va a aparecer), leyendo, bajando de Google
+  (con los segundos que lleva) o un error en rojo, como el de sin conexion.
+- *Plan*: el numero de marcas en grande, la leyenda con la cuenta de cada color (solo si hay corrida
+  anterior), una linea con lo demas (omitidas, otros episodios, no escritas, avisos, comentarios) y la
+  tabla de siempre. El filtro **All / Changes / Problems** filtra la tabla de verdad: Changes son
+  amarillas, naranjas y rojas; Problems, las filas que no se escriben, las que se escriben con aviso y
+  las rojas que siguen en la planilla pero no se ubicaron. Las filas, su orden y el filtro salen de
+  `LGA_NKS_ShotMarks_Preview.py`, sin host y con tests; el dialogo solo pone los colores.
+- *Thumbnails*: cuantos shots hay para ubicar, una grilla con las primeras fotos de la planilla (shot
+  y fila; la ultima celda dice cuantas quedan afuera), el EDL y el boton **Locate N Shots...**. Las
+  fotos se extraen en un hilo con `extract_thumbs` a la misma cache que usa Locate
+  (`ShotMarks_Locate\thumbs_src`, por sha1) y se escalan como `QImage` fuera del hilo de UI; el
+  `QPixmap` se arma recien en el hilo de UI.
+
+Volviendo de Locate (preset), la fuente queda fija: sin campo de entrada ni Reload, y el boton pasa a
+Add / Update Marks con los TC ubicados. Los tooltips son los propios del pack (`set_custom_tooltip`),
+en castellano, desde el dict `TOOLTIPS`.
 
 ## Planilla desde un link de Google Sheets
 
@@ -38,8 +92,8 @@ esa copia como cualquier Excel: hojas, comentarios en hilo y fotos ancladas viaj
   (`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`; las variables de entorno ganan). La primera
   vez abre el navegador por defecto para el login (`drive.readonly`, PKCE, callback en `127.0.0.1`) y
   guarda el refresh token en `~/.lga-keys/google-oauth-token.env`; despues se renueva solo (~0,2 s).
-  Por ahora es solo para la maquina de Lega: en otra maquina sin esos archivos el dialogo dice que falta
-  el cliente. Una API key no sirve: solo abre datos publicos, y los breakdowns se comparten por cuenta.
+  Por ahora es solo para la maquina de Lega: en otra maquina sin esos archivos el switch Google Sheet
+  no aparece (`available()`), la fuente es un archivo, y un link pegado igual dice que falta el cliente. Una API key no sirve: solo abre datos publicos, y los breakdowns se comparten por cuenta.
 - **No usar `files.export` de la API.** Tiene un tope de 10 MB y una planilla con fotos lo pasa: medido,
   `403 exportSizeLimitExceeded` con una de 51 MB. Se usa el `exportLinks` de xlsx con el token, que
   redirige a `doc-NN-NN-sheets.googleusercontent.com` y no tiene tope (51 MB en 12 s, ~10 s de esos
@@ -85,6 +139,23 @@ no aparece: nunca hay un Notes vacio.
 - Viajan a la metadata (`_notes`, `_notes2`), cuentan como cambio (amarillo) y Find las busca.
 - Los `Vendor Notes` o `On Set sup Notes` no se toman: el nombre tiene que ser exacto.
 
+## Dificultad
+
+Cuanto cuesta cada shot es lo primero que se mira al repartir trabajo, y en la planilla esta en una
+columna que la ventana de la marca no mostraba. Rol `difficulty` (`_Sheet v1.17`): se sugiere con
+`Dificultad` / `Difficulty` / `Complejidad` / `Complexity` (`DIFFICULTY_HEADERS`) y en el dialogo
+va entre las columnas de «Mark window».
+
+- `difficulty_level` lleva el texto a un nivel de 1 a 5 (`DIFFICULTY_LEVELS`), sin mayusculas ni
+  acentos: very easy / muy facil, easy / facil, mid / medium / media, hard / dificil, very hard / muy
+  dificil, o un numero suelto de 1 a 5. Medido en una planilla real: Very Easy 22, Easy 255, mid 365,
+  hard 157, Very hard 15, con mayusculas mezcladas.
+- La ventana de la marca (`_Nav v1.12`, `DIFFICULTY_COLORS`) la pone despues del status, con un punto
+  y el texto en el color del nivel, de verde agua (1) a rojo (5). Un valor que no es un nivel conocido
+  va como texto comun: no se adivina.
+- Cuenta como cambio (amarillo) y Find la busca. Las marcas de antes de la v1.17 guardan en `_compared`
+  la lista sin `difficulty`, asi que la primera corrida nueva no las pinta por la dificultad.
+
 ## Comentarios de la planilla
 
 Las consultas que se dejan en la planilla (comentarios de Google Sheets o de Excel) van a la ventana
@@ -117,7 +188,7 @@ icono del bin Markers de los Tag Presets de NKS (`icons:TagGreen.png`, etc.):
 | Color | Cuando |
 |---|---|
 | Verde | El shot sigue y sus datos de planilla son iguales. Moverse en el corte NO es un cambio. |
-| Amarillo | Cambio el brief, la descripcion, Notes, Notes 2, el status, la escena, el vendor o la categoria (`CHANGE_FIELDS`). |
+| Amarillo | Cambio el brief, la descripcion, Notes, Notes 2, el status, la escena, el vendor, la categoria o la dificultad (`CHANGE_FIELDS`). |
 | Naranja | Shot nuevo: no tenia marca en la corrida anterior. |
 | Rojo | Tenia marca y ahora no: ya no esta en la planilla, o esta pero no se ubica en este timeline. |
 
@@ -253,8 +324,9 @@ texto de la planilla y Find salta a esa marca, mostrandola en la ventanita de Pr
 ## Planillas sin timecode: ubicar desde los thumbnails (solo Windows)
 
 Hay breakdowns que no traen REC TC: solo una foto por shot, pegada en la hoja. Si la hoja elegida
-no tiene columna de TC pero sus filas de shot tienen imagen, el boton del dialogo pasa a
-**Locate from Thumbnails...**: busca cada foto en el MOV del timeline y marca el plano que la
+no tiene columna de TC pero sus filas de shot tienen imagen, la vista previa muestra sus fotos y el
+boton del dialogo pasa a **Locate N Shots...**, que abre **Locate from Thumbnails**: busca cada
+foto en el MOV del timeline y marca el plano que la
 contiene, de corte a corte. Al terminar, el dialogo se reabre con los TC ubicados como columnas
 nuevas (`REC TC IN (located)` / `OUT`) y sigue igual que con una planilla con TC.
 
@@ -526,6 +598,11 @@ agrega la barra antes de pasarla a ffmpeg. Medido en NKS 16.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks.py`:
   `TimelineInfo` (TC de secuencia y de media), `own_tags`, `previous_marks`, `apply_plan`, `guess_episode`,
   `ShotMarksDialog`, `main`.
+- `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks_Preview.py`:
+  `preview_entries`, `filter_entries`, `filter_counts`, `missing_required`, `data_column_count`,
+  `grid_rows`. Sin host; probado por `tests/test_shot_marks_preview.py`.
+- Capturas del dialogo: fixture `+Building_Blocks/UI_Capture/fixtures/h11_shot_marks.py`, PNG
+  `ShotMarks_Dialog*.png` en `_LGA_Release/UI_Captures`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks_Google.py`:
   `sheet_id`, `fetch`, `access_token`, `login`, `cached`, `needs_download`, `safe_name`. Sin host;
   probado sin red por `tests/test_shot_marks_google.py`.

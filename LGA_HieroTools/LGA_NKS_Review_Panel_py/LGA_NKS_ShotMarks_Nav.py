@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Nav v1.11 | Lega
+  LGA_NKS_ShotMarks_Nav v1.12 | Lega
 
   Previous / Next Mark: Click en Previous / Next Mark del panel Review
   (con Shift esos botones navegan anotaciones). Salta el playhead a la
@@ -18,6 +18,10 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Nav.log.
 
+  v1.12: Tooltip propio en vez del nativo (EDL del clip).
+         Dificultad del shot en la linea de datos, despues del status: un
+         punto y el texto en el color de su nivel, de verde (very easy) a
+         rojo (very hard). Un valor desconocido va como texto comun.
   v1.11: Brief numerado: un parrafo por item con un poco de aire entre
          uno y otro, y el numero en Color.TEXT_MARKER, un escalon mas claro
          que el texto. Mas facil de leer item por item.
@@ -76,6 +80,7 @@ import hiero.core
 import hiero.ui
 
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtCore, QtGui, QtWidgets, Qt
+from LGA_NKS_Shared.LGA_UI_CustomTooltip_HieroTools import set_custom_tooltip
 from LGA_NKS_Shared.LGA_UI_Style_HieroTools import (
     Color,
     Metric,
@@ -380,14 +385,16 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
             self.source.setText("%s %s<br>%s %s &ndash; %s" % (
                 _dim("Clip"), _strong(source["clip"]), _dim("SRC"), _strong(source["src_in"]),
                 _strong(source["src_out"])))
-            self.source.setToolTip(TOOLTIPS["edl_event"] % source["event"])
+            set_custom_tooltip(self.source, TOOLTIPS["edl_event"] % source["event"])
         self.source.setVisible(bool(source))
         meta = []
-        for field, label in (("status", "Status"), ("vendor", "Vendor"),
-                             ("scene", "Scene"), ("category", "Category")):
+        for field, label in (("status", "Status"), ("difficulty", "Difficulty"),
+                             ("vendor", "Vendor"), ("scene", "Scene"), ("category", "Category")):
             if not info.get(field):
                 continue
             value = esc(info[field])
+            if field == "difficulty":
+                value = _difficulty_html(info[field])
             if field == "status":
                 color = STATUS_COLORS.get(_sheet_module().status_kind(info[field]))
                 if color:
@@ -602,6 +609,18 @@ def _vendor_html(name, color):
 
 # Dato, no estilo: un omit en rojo y un posible omit en ambar.
 STATUS_COLORS = {"omit": Color.ERROR_TEXT, "maybe_omit": Color.WARNING_TEXT}
+# Dato, no estilo: la dificultad de 1 (very easy) a 5 (very hard), de verde a rojo.
+DIFFICULTY_COLORS = {1: "#4FC3A1", 2: "#8CC85A", 3: "#E8C547", 4: "#F2913D", 5: "#E5534B"}
+
+
+def _difficulty_html(text):
+    """La dificultad con un punto y el texto en el color de su nivel. Un valor
+    que no es un nivel conocido va como texto comun."""
+    level = _sheet_module().difficulty_level(text)
+    if level is None:
+        return _escape(text)
+    return '<span style="color:%s; %s">&#9679; %s</span>' % (
+        DIFFICULTY_COLORS[level], semibold_css(), _escape(text))
 LOCATED_LABELS = {
     "auto": ("accepted automatically", Color.TEXT_DIM),
     "confirmed": ("confirmed by hand", Color.OK_TEXT),
@@ -637,7 +656,7 @@ CHANGE_TEXTS = {
 }
 FIELD_LABELS = {"brief": "Brief", "description": "Description", "notes": "Notes",
                 "notes2": "Notes 2", "status": "Status", "scene": "Scene",
-                "vendor": "Vendor", "category": "Category"}
+                "vendor": "Vendor", "category": "Category", "difficulty": "Difficulty"}
 # Textos largos: el anterior va debajo de su seccion, no en la linea de cambio.
 LONG_FIELDS = ("description", "brief", "notes", "notes2")
 

@@ -220,6 +220,19 @@ class ShotMarksSheetTests(unittest.TestCase):
         none = sheet.detect_columns(["SHOTNAME", "BRIEF"])
         self.assertEqual((none["notes"], none["notes2"]), (None, None))
 
+    def test_difficulty_column_and_levels(self):
+        columns = sheet.detect_columns(["VFX SHOT NAME", "Prioridad", "Dificultad", "STATUS VFX"])
+        self.assertEqual(columns["difficulty"], 2)
+        self.assertEqual(sheet.detect_columns(["SHOTNAME", "Difficulty"])["difficulty"], 1)
+        self.assertIsNone(sheet.detect_columns(["SHOTNAME", "BRIEF"])["difficulty"])
+        # Los valores medidos en una planilla real, con mayusculas mezcladas.
+        self.assertEqual([sheet.difficulty_level(t) for t in
+                          ("Very Easy", "Easy", "mid", "hard", "Very hard")], [1, 2, 3, 4, 5])
+        self.assertEqual([sheet.difficulty_level(t) for t in ("Muy difícil", "Media", " 4 ")],
+                         [5, 3, 4])
+        for text in ("", "?", "9", "TBD"):
+            self.assertIsNone(sheet.difficulty_level(text))
+
     def test_shot_column_with_most_full_names_wins(self):
         headers = ["VFX SHOT NAME", "SHOT NAME", "STATUS"]
         rows = [(4, ["PROJA_001_010", "PROJA_001_010", "WIP"]),
@@ -443,6 +456,23 @@ class ShotMarksCompareTests(unittest.TestCase):
         del data[sheet.meta_key("compared")]
         previous = [sheet.previous_mark(old.shot, 0, 10, data.get, old.note)]
         marks = [_mark("PROJA_0100", 0, "Steam", status="WIP", notes="New note")]
+        sheet.compare_marks(marks, previous)
+        self.assertEqual(marks[0].change, sheet.CHANGE_UNCHANGED)
+
+    def test_difficulty_change_is_a_change(self):
+        previous = [_previous(_mark("PROJA_0100", 0, "Steam", difficulty="mid"))]
+        marks = [_mark("PROJA_0100", 0, "Steam", difficulty="hard")]
+        sheet.compare_marks(marks, previous)
+        self.assertEqual(marks[0].changed, {"difficulty": "mid"})
+
+    def test_marks_before_difficulty_do_not_change_because_of_it(self):
+        # Una marca de la v1.16: guarda compared, pero sin difficulty.
+        old = _mark("PROJA_0100", 0, "Steam", status="WIP")
+        data = sheet.mark_metadata(old, "x")
+        data[sheet.meta_key("compared")] = ",".join(
+            f for f in sheet.CHANGE_FIELDS if f != "difficulty")
+        previous = [sheet.previous_mark(old.shot, 0, 10, data.get, old.note)]
+        marks = [_mark("PROJA_0100", 0, "Steam", status="WIP", difficulty="Easy")]
         sheet.compare_marks(marks, previous)
         self.assertEqual(marks[0].change, sheet.CHANGE_UNCHANGED)
 

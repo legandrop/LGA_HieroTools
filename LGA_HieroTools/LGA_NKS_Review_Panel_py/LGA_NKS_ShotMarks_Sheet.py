@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Sheet v1.16 | Lega
+  LGA_NKS_ShotMarks_Sheet v1.17 | Lega
 
   Nucleo sin host de Shot Marks: lee una planilla (xlsx o csv),
   detecta la fila de encabezado y las columnas de shot y timecode,
@@ -13,6 +13,10 @@ ____________________________________________________________________
   los sharedStrings), sin openpyxl: NKS no lo trae, y asi una
   planilla de cientos de MB por las imagenes se lee en segundos.
 
+  v1.17: Columna de dificultad (rol difficulty, se sugiere "Dificultad"):
+         viaja a cada marca, cuenta como cambio y se busca.
+         difficulty_level lleva el texto a un nivel de 1 (very easy) a 5
+         (very hard) para pintarlo en la ventana de la marca.
   v1.16: Decisiones de Locate por corte: decision_key(sha1, shot, video) y
          store_decision guardan la de cada video aparte, y find_decision
          busca primero la del video pedido. Un proyecto con dos cortes
@@ -137,6 +141,16 @@ DESCRIPTION_HEADERS = ("descripcion", "description", "desc", "shotdescription")
 SCENE_HEADERS = ("esc", "escena", "scene", "sc")
 VENDOR_HEADERS = ("vendor", "proveedor")
 CATEGORY_HEADERS = ("shotcategory", "category", "categoria", "type")
+DIFFICULTY_HEADERS = ("dificultad", "difficulty", "shotdifficulty", "complejidad", "complexity")
+# Texto normalizado (sin espacios ni simbolos) -> nivel de 1 a 5. Medido en una
+# planilla real: Very Easy, Easy, mid, hard y Very hard, con mayusculas mezcladas.
+DIFFICULTY_LEVELS = {
+    "veryeasy": 1, "muyfacil": 1, "trivial": 1,
+    "easy": 2, "facil": 2, "low": 2, "baja": 2, "bajo": 2,
+    "mid": 3, "medium": 3, "media": 3, "medio": 3, "normal": 3, "moderate": 3,
+    "hard": 4, "dificil": 4, "high": 4, "alta": 4, "alto": 4,
+    "veryhard": 5, "muydificil": 5, "extreme": 5, "veryhigh": 5, "muyalta": 5,
+}
 # Columnas que agrega Shot Marks cuando ubica los TC desde los thumbnails.
 LOCATED_TC_IN = "REC TC IN (located)"
 LOCATED_TC_OUT = "REC TC OUT (located)"
@@ -152,15 +166,15 @@ OMIT_TOKENS = ("omit", "omitted", "cbb", "removed")
 MAYBE_TOKENS = ("posible", "possible", "maybe", "tentative")
 
 ROLES = ("shot", "tc_in", "tc_out", "episode", "status", "note", "notes", "notes2",
-         "description", "scene", "vendor", "category", "thumb", "located", "clip")
+         "description", "scene", "vendor", "category", "difficulty", "thumb", "located", "clip")
 # Roles que viajan como texto a cada marca, para la ventana de info.
 INFO_ROLES = ("status", "description", "notes", "notes2", "comments", "scene", "vendor",
-              "category", "episode", "thumb", "located", "clip")
+              "category", "difficulty", "episode", "thumb", "located", "clip")
 # Campos que, si cambian entre una corrida y la siguiente, pintan la marca de
 # amarillo. El TC no esta: un shot que se movio es un cambio de corte, no de
 # planilla. Thumb, nivel de ubicacion y clip tampoco: salen de Shot Marks.
 CHANGE_FIELDS = ("brief", "description", "notes", "notes2", "status", "scene", "vendor",
-                 "category")
+                 "category", "difficulty")
 # Lo que comparaban las marcas de antes de la v1.09, que no guardan la key
 # compared: un campo que no existia no cuenta como cambio.
 LEGACY_CHANGE_FIELDS = ("brief", "description", "status", "scene", "vendor", "category")
@@ -181,6 +195,7 @@ _ROLE_HEADERS = {
     "scene": SCENE_HEADERS,
     "vendor": VENDOR_HEADERS,
     "category": CATEGORY_HEADERS,
+    "difficulty": DIFFICULTY_HEADERS,
     "thumb": THUMB_HEADERS,
     "located": LOCATED_HEADERS,
     "clip": CLIP_HEADERS,
@@ -894,7 +909,7 @@ def mark_index_at(starts, ends, frame):
 # Campos donde busca Find Shot Mark. El orden decide que campo se informa
 # cuando el texto aparece en varios: el shot primero.
 SEARCH_FIELDS = ("shot", "description", "brief", "notes", "notes2", "comments", "status",
-                 "vendor", "scene", "category", "episode", "tc_in", "tc_out", "clip")
+                 "vendor", "scene", "category", "difficulty", "episode", "tc_in", "tc_out", "clip")
 
 
 def search_text(text):
@@ -1309,6 +1324,19 @@ def status_kind(status):
     if not any(token in norm for token in OMIT_TOKENS):
         return ""
     return "maybe_omit" if any(token in norm for token in MAYBE_TOKENS) else "omit"
+
+
+def difficulty_level(text):
+    """Nivel de 1 (very easy) a 5 (very hard) de una celda de dificultad, o None.
+
+    Acepta las palabras de DIFFICULTY_LEVELS en ingles o castellano, con
+    cualquier mayuscula, y un numero suelto de 1 a 5."""
+    norm = normalize_header(text)
+    if norm in DIFFICULTY_LEVELS:
+        return DIFFICULTY_LEVELS[norm]
+    if norm.isdigit() and 1 <= int(norm) <= 5:
+        return int(norm)
+    return None
 
 
 def is_shot_name(text):

@@ -324,7 +324,8 @@ opening related Nuke scripts.
   Shift+Click: jumps to the previous annotation on the selected clip and wraps to the last.
 - **Next Mark**
   Click: jumps to the next Shot Mark and shows its sheet info: shot,
-  REC TC in and out, duration, status, vendor, scene, category, description
+  REC TC in and out, duration, status, difficulty (colored from green, very
+  easy, to red, very hard), vendor, scene, category, description
   and brief, with the Notes and Notes 2 columns highlighted on top when the
   shot has them, and the comments left on the shot's row of the sheet
   (Google Sheets or Excel), with their replies. It is a single small window that updates on every jump and does
@@ -346,9 +347,12 @@ opening related Nuke scripts.
   vendor, scene, category, timecode); Find jumps to the shot with that exact
   name or to the first match, and Next (or Enter again) goes on to the next
   match, wrapping to the first. Each jump shows the mark's info window.
-  The window suggests the sheet, the columns and the episode, and shows a
-  dry run before writing: marks, omitted shots, and rows that cannot be
-  placed. When the timeline is a single reference movie, timecodes are
+  The window has the settings on the left (the sheet, as a Google Sheet or a
+  file, with Reload; the shot and timecode columns, with the columns for the
+  mark window folded behind a button; the timeline options) and, on the right,
+  a dry run of every mark before writing: how many, what changed, omitted
+  shots and rows that cannot be placed, with an All / Changes / Problems
+  filter. When the timeline is a single reference movie, timecodes are
   matched against the movie's own timecode, and it can also set the
   timeline's start timecode to match it. Running it again replaces only the
   tags it added, after asking, and colors them against the previous run:
@@ -356,7 +360,8 @@ opening related Nuke scripts.
   changed, orange for new shots, and red, where they were, for shots no
   longer in the sheet or that can't be placed. One Undo reverts the whole run.
   Sheets without timecodes (Windows): if the sheet only has a thumbnail per
-  shot, **Locate from Thumbnails...** finds each one in the timeline movie and
+  shot, the window shows the first photos of the sheet and **Locate N
+  Shots...** finds each one in the timeline movie and
   marks the shot from cut to cut. Safe matches are accepted automatically; the
   doubtful ones are listed first for review, stepping frames on the NKS viewer
   next to the thumbnail, with a strip of every shot between the previous and

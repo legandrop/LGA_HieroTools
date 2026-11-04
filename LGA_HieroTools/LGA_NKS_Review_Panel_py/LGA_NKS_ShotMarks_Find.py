@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Find v1.02 | Lega
+  LGA_NKS_ShotMarks_Find v1.03 | Lega
 
   Find Shot Mark: Shift+Click en Shot Marks del panel Review. Una
   ventanita con un campo de texto que busca entre las marcas de Shot
@@ -23,6 +23,8 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Find.log.
 
+  v1.03: Busca tambien en la dificultad ("found in Difficulty"). Tooltips
+         propios en vez de los nativos.
   v1.02: Busca tambien en los comentarios de la planilla.
   v1.01: Busca tambien en Notes y Notes 2 ("found in Notes").
   v1.00: Version inicial.
@@ -39,6 +41,7 @@ from pathlib import Path
 import hiero.ui
 
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtCore, QtGui, QtWidgets, Qt
+from LGA_NKS_Shared.LGA_UI_CustomTooltip_HieroTools import set_custom_tooltip
 from LGA_NKS_Shared.LGA_UI_Style_HieroTools import (
     Color,
     Metric,
@@ -78,7 +81,8 @@ TOOLTIPS = {
 FIELD_LABELS = {"shot": "Shot name", "description": "Description", "brief": "Brief",
                 "notes": "Notes", "notes2": "Notes 2", "comments": "Comments",
                 "status": "Status", "vendor": "Vendor", "scene": "Scene",
-                "category": "Category", "episode": "Episode", "tc_in": "REC TC IN",
+                "category": "Category", "difficulty": "Difficulty", "episode": "Episode",
+                "tc_in": "REC TC IN",
                 "tc_out": "REC TC OUT", "clip": "Camera clip"}
 
 _modules = {}
@@ -225,7 +229,7 @@ class ShotMarkFindWindow(QtWidgets.QWidget):
         self.query.setStyleSheet(Style.LINE_EDIT)
         self.query.setPlaceholderText("Shot name or any text from the sheet")
         self.query.setClearButtonEnabled(True)
-        self.query.setToolTip(TOOLTIPS["query"])
+        set_custom_tooltip(self.query, TOOLTIPS["query"])
         self.query.returnPressed.connect(self._on_return)
         self.query.textChanged.connect(self._on_text_changed)
         layout.addWidget(self.query)
@@ -241,21 +245,21 @@ class ShotMarkFindWindow(QtWidgets.QWidget):
         self.keep_on_top_chk = QtWidgets.QCheckBox("Keep this window on top")
         self.keep_on_top_chk.setProperty("lgaLabeled", True)
         self.keep_on_top_chk.setChecked(self._keep_on_top)
-        self.keep_on_top_chk.setToolTip(TOOLTIPS["keep_on_top"])
+        set_custom_tooltip(self.keep_on_top_chk, TOOLTIPS["keep_on_top"])
         self.keep_on_top_chk.toggled.connect(self._set_keep_on_top)
         row.addWidget(self.keep_on_top_chk)
         row.addStretch(1)
         self.next_btn = QtWidgets.QPushButton("Next")
         self.next_btn.setStyleSheet(Style.BTN_SECONDARY)
         self.next_btn.setFixedHeight(Metric.BUTTON_HEIGHT)
-        self.next_btn.setToolTip(TOOLTIPS["next"])
+        set_custom_tooltip(self.next_btn, TOOLTIPS["next"])
         self.next_btn.clicked.connect(lambda: self.search("next"))
         row.addWidget(self.next_btn)
         # La accion va ultima, a la derecha, y es la unica violeta.
         self.find_btn = QtWidgets.QPushButton("Find")
         self.find_btn.setStyleSheet(Style.BTN_PRIMARY)
         self.find_btn.setFixedHeight(Metric.BUTTON_HEIGHT)
-        self.find_btn.setToolTip(TOOLTIPS["find"])
+        set_custom_tooltip(self.find_btn, TOOLTIPS["find"])
         self.find_btn.clicked.connect(lambda: self.search("find"))
         row.addWidget(self.find_btn)
         layout.addLayout(row)
