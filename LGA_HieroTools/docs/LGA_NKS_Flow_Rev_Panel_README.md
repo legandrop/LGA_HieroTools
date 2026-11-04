@@ -89,6 +89,14 @@ nueva.
    no se usaba para decidir nada) y v_SG pasó a llamarse v_Flow y a ir antes
    que v_NKS, para leer "lo que hay en Flow / lo que tengo".
 
+   **v_NKS es la versión DESPUÉS del Pull** (v3.76). La fila se agrega recién
+   cuando terminó el escaneo de versiones (`change_to_highest_version`) o el
+   reemplazo de CG: si el clip ya subió a la última que había en disco, v_NKS
+   muestra esa y la fila queda neutra. Hasta v3.75 se agregaba antes del
+   escaneo, con la versión vieja, y un clip ya actualizado aparecía en violeta
+   pidiendo una descarga que no hacía falta. El violeta queda solo cuando el
+   escaneo no encontró la versión de Flow en disco: ahí sí falta bajarla.
+
    **Botón de descarga por fila** (columna sin título después de v_NKS; hasta
    v3.74 era un botón **Download Clip** en el header que actuaba sobre la fila
    seleccionada). Baja de Wasabi la última versión del clip de ESA fila. La

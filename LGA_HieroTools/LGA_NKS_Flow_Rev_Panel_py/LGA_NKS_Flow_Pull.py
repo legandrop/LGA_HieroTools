@@ -1,11 +1,17 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.75 | Lega
+  LGA_NKS_Flow_Pull v3.76 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
+
+  v3.76: v_NKS muestra la version con la que queda el clip despues del Pull.
+         La fila se agregaba antes del escaneo de versiones, con la version
+         vieja: un clip que ya habia subido a la ultima en disco quedaba en
+         violeta con la descarga como si faltara bajarlo. Ahora la fila se
+         agrega despues del escaneo (o del reemplazo de CG).
 
   v3.75: El boton "Download Clip" del header pasa a ser una celda-boton por
          fila, en una columna propia despues de v_NKS: la celda entera es el
@@ -2906,24 +2912,9 @@ class HieroOperations:
                                     if current_color_hex
                                     else "#000000"
                                 )
-                                self.add_row_to_table(
-                                    table,
-                                    self.gui_table,
-                                    shot_code,
-                                    task_name,
-                                    version_str,
-                                    current_status,
-                                    prev_color_hex,
-                                    task_status_name,
-                                    new_color_hex,
-                                    sg_version_str,
-                                    sg_status,
-                                    clip=clip,
-                                    sequence=seq,
-                                    file_path=file_path,
-                                    status_code=task_status_code,
-                                )
                                 changes_made = True
+                                # Si no hay cambio de version, v_NKS es la de hoy.
+                                new_version_number = version_number
                                 # Recordar si el clip estaba offline antes del cambio de versión
                                 was_offline_before_version_change = not clip.source().mediaSource().isMediaPresent()
 
@@ -2981,6 +2972,35 @@ class HieroOperations:
                                             "icons:TagRed.png",
                                             assignee,
                                         )
+
+                                # La fila va DESPUES del cambio de version: v_NKS
+                                # muestra la version que el timeline tiene al
+                                # terminar el Pull. Antes se agregaba con la de
+                                # antes del escaneo, y un clip que ya habia subido
+                                # a la ultima quedaba en violeta con el boton de
+                                # descarga como si faltara bajarla.
+                                version_mostrada = (
+                                    version_str
+                                    if new_version_number == version_number
+                                    else f"_v{new_version_number:03d}"
+                                )
+                                self.add_row_to_table(
+                                    table,
+                                    self.gui_table,
+                                    shot_code,
+                                    task_name,
+                                    version_mostrada,
+                                    current_status,
+                                    prev_color_hex,
+                                    task_status_name,
+                                    new_color_hex,
+                                    sg_version_str,
+                                    sg_status,
+                                    clip=clip,
+                                    sequence=seq,
+                                    file_path=file_path,
+                                    status_code=task_status_code,
+                                )
                         else:
                             debug_print(
                                 f"No se encontro task '{task_name}' para el shot '{shot_code}'"

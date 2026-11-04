@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.024
+- [fixed] En la ventana de `Flow Pull`, `v_NKS` muestra la versión con la que quedó el clip después de actualizarlo; antes mostraba la anterior y parecía que faltaba bajar un clip que ya estaba al día.
 - [fixed] `Import shot` hace lugar para todo el render de comp cuando es más largo que el plate, como en un plano realentado, y el preview te avisa que es un retime: antes el comp y el EditRef quedaban encima del shot siguiente.
 - [fixed] Al importar un shot o soltar media en Projects Panel, un soft effect largo que pasa por el lugar donde entra lo nuevo se estira para cubrirlo, en vez de correrse y dejar sin efecto el principio de lo que tenía antes.
 - [fixed] `Import shot` ya no pone el shot nuevo encima del anterior cuando el anterior tiene un render de comp: el anterior quedaba corrido a la derecha y sin plate ni EditRef.
