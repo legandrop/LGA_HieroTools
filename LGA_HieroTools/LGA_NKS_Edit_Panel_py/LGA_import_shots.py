@@ -1,12 +1,18 @@
 """
 ____________________________________________________________________
 
-  LGA_import_shots v1.49 | Lega
+  LGA_import_shots v1.50 | Lega
 
   Importa shots al proyecto de Nuke Studio.
   Analiza la carpeta _input del shot, detecta plates/editrefs/seqrefs
   y versiones en publish, y los coloca en el timeline en la posicion
   alfabeticamente correcta.
+
+  v1.50: Planos realentados: el largo del shot (lo que se empuja y lo que
+         dibuja el preview del bulk) sale de _shot_frames(), el plate o el
+         item a importar mas largo si lo supera. Antes era solo el plate, y
+         un comp retimeado (plate 74, comp 92) y su EditRef quedaban encima
+         del shot siguiente. El pie del preview avisa el retime.
 
   v1.49: Dos correcciones de colocacion. (1) Un render publicado que
          arranca antes que el plate (1000 contra 1001) trae el slate en ese
@@ -1241,6 +1247,36 @@ def _trim_render_slates(input_items, publish_items):
             % (it.get("name"), first, plate_first, slate, it["frame_count"])
         )
     return trimmed
+
+
+def _plate_frames(input_items):
+    """Frames del plate mas largo (ultima version de cada EXR de _input)."""
+    return max(
+        (it.get("frame_count") or 0 for it in input_items
+         if it.get("kind") == "exr_seq" and it.get("is_latest")),
+        default=0,
+    )
+
+
+def _shot_frames(input_items, items):
+    """
+    Largo del shot en el timeline: el plate, o el item a importar mas largo si
+    lo supera. Un render de comp de un plano realentado (retime) tiene mas
+    frames que su plate -medido: plate 74, comp 92 sin el slate, EditRef 76
+    centrado con 8 de handle sobre el comp-, y si el shot reservaba solo el
+    plate, el comp y el EditRef quedaban encima del shot siguiente.
+    `items` son los dicts que se van a importar (frame_count ya sin slate).
+    """
+    longest = max((it.get("frame_count") or 0 for it in items), default=0)
+    return max(_plate_frames(input_items), longest)
+
+
+def _default_import_items(input_items, publish_items):
+    """Los items que el dialogo propone de entrada: ultima version de cada EXR."""
+    return [
+        it for it in list(input_items) + list(publish_items)
+        if it.get("kind") == "exr_seq" and it.get("is_latest")
+    ]
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -4519,12 +4555,22 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
         if not hasattr(self, "_import_handle_lbl"):
             return
         info = getattr(self, "_handle_info", {})
-        if not info:
+        retime = getattr(self, "_retime_info", None)
+        if not info and not retime:
             self._import_handle_lbl.setText("")
             self._import_handle_lbl.setVisible(False)
             return
 
         parts = []
+        if retime:
+            parts.append(
+                '<span style="color:#e08033">⚠ retime</span>'
+                '<span style="color:#888888"> &nbsp;%s: </span>'
+                '<span style="color:#aa9e54">%d f</span>'
+                '<span style="color:#888888"> &nbsp;vs plate %d f — the shot takes %d f</span>'
+                % (retime["name"], retime["frames"], retime["plate_frames"],
+                   retime["frames"])
+            )
         for tname in sorted(info.keys()):
             h = info[tname]
             h_in  = h["handle_in"]
@@ -5646,6 +5692,25 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
              for items in items_by_track.values() for item in items),
             default=0,
         )
+        # Retime: un item a importar mas largo que el plate (un comp de un plano
+        # realentado). El shot reserva ese largo (_shot_frames) y el EditRef se
+        # centra sobre el; aca solo se guarda para avisarlo en el pie.
+        plate_dur = _plate_frames(self.input_items)
+        self._retime_info = None
+        if master_dur > plate_dur > 0:
+            longest = max(
+                (item for items in items_by_track.values() for item in items),
+                key=lambda it: it.get("frame_count") or 0,
+            )
+            self._retime_info = {
+                "name": longest.get("name") or longest.get("version_name") or "?",
+                "frames": master_dur,
+                "plate_frames": plate_dur,
+            }
+            debug_print(
+                "_update_import_page: retime → '%s' %df contra plate %df"
+                % (self._retime_info["name"], master_dur, plate_dur)
+            )
         self._handle_info = {}   # {track_key: {handle_in, handle_out, half_frame, ...}}
         for tkey, items in items_by_track.items():
             tname = self._track_name_from_key(tkey)
@@ -5968,11 +6033,20 @@ QWidget#LGA_ImportShotHeader { background: %(field)s; }
             # Cuando varias ventanas están abiertas simultáneamente, el timeline
             # puede haber cambiado desde que se calculó insert_frame al abrir
             # esta ventana. Recalcular aquí garantiza la posición correcta.
-            _shot_dur = max(
-                (it["frame_count"] for it in self.input_items
-                 if it["kind"] == "exr_seq" and it.get("is_latest")),
-                default=0,
-            )
+            # El largo sale de lo que se importa, no solo del plate: un comp
+            # retimeado es mas largo que su plate (ver _shot_frames).
+            _items_to_import = [
+                item for entries in items_by_track.values() for item, _c in entries
+            ]
+            _shot_dur = _shot_frames(self.input_items, _items_to_import)
+            _plate_dur = _plate_frames(self.input_items)
+            if _shot_dur > _plate_dur > 0:
+                debug_print(
+                    "_do_import: un item a importar dura %df y el plate %df"
+                    " (retime) → el shot reserva %df"
+                    % (_shot_dur, _plate_dur, _shot_dur),
+                    level="warning",
+                )
             if _shot_dur == 0:
                 _shot_dur = max(
                     (it["frame_count"] for it in self.input_items
@@ -7337,12 +7411,13 @@ class _BulkShotPanel(ImportShotDialog):
         return result
 
     def master_duration(self):
-        duration = max(
-            (it.get("frame_count") or 0 for it in self.input_items
-             if it.get("kind") == "exr_seq" and it.get("is_latest")),
-            default=0,
-        )
-        return duration or 100
+        """Largo del shot: el plate o lo seleccionado si es mas largo (retime)."""
+        try:
+            items = [item for _track, item, _c, _pc in self.selected_items()]
+        except Exception:
+            # La tabla todavia no existe: lo que el dialogo propone de entrada.
+            items = _default_import_items(self.input_items, self.publish_items)
+        return _shot_frames(self.input_items, items) or 100
 
 
 class BulkImportDialog(QtWidgets.QDialog):
@@ -8123,10 +8198,8 @@ def main(shot_roots=None):
             input_items = _scan_input_folder(root)
             publish_items = _scan_publish_folders(root)
             _trim_render_slates(input_items, publish_items)
-            max_frames = max(
-                (item.get("frame_count") or 0 for item in input_items
-                 if item.get("kind") == "exr_seq" and item.get("is_latest")),
-                default=0,
+            max_frames = _shot_frames(
+                input_items, _default_import_items(input_items, publish_items)
             ) or 100
             entries.append({
                 "shot_root": root,
@@ -8196,10 +8269,10 @@ def main(shot_roots=None):
     _trim_render_slates(input_items, publish_items)
 
     # Calcular duracion del plate mas largo para posicionamiento
-    max_frames = max(
-        (it["frame_count"] for it in input_items
-         if it["kind"] == "exr_seq" and it.get("is_latest")),
-        default=0
+    # Largo del shot: el plate, o el render mas largo si lo supera (retime).
+    # Al importar se recalcula con lo que quedo seleccionado.
+    max_frames = _shot_frames(
+        input_items, _default_import_items(input_items, publish_items)
     )
     if max_frames == 0:
         max_frames = 100  # fallback si no hay EXR todavia

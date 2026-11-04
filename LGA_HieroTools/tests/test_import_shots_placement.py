@@ -302,5 +302,54 @@ class RenderSlateTrimTests(unittest.TestCase):
         self.assertEqual(116, mov["frame_count"])
 
 
+class RetimeShotLengthTests(unittest.TestCase):
+    """Comp de un plano realentado: mas largo que su plate."""
+
+    def setUp(self):
+        ns = _load_functions(
+            {"_trim_render_slates", "_plate_frames", "_shot_frames",
+             "_default_import_items"},
+            {"debug_print": lambda *a, **k: None},
+        )
+        self.ns = ns
+
+    def _shot(self):
+        # Medido en un plano real: plate 1001-1074, comp 1000-1092 con slate,
+        # EditRef de 76 (60 de corte + 8 de handle por lado sobre el comp).
+        plate = {"kind": "exr_seq", "is_latest": True, "first_frame": 1001,
+                 "frame_count": 74, "name": "PROJA_1052_0200_aPlate_v001"}
+        old_plate = {"kind": "exr_seq", "is_latest": False, "first_frame": 1001,
+                     "frame_count": 200, "name": "PROJA_1052_0200_aPlate_v000"}
+        editref = {"kind": "mov", "frame_count": 76,
+                   "name": "PROJA_1052_0200_EditRef_v001"}
+        comp = {"kind": "exr_seq", "is_latest": True, "first_frame": 1000,
+                "frame_count": 93, "name": "PROJA_1052_0200_comp_v009"}
+        return [plate, old_plate, editref], [comp]
+
+    def test_retimed_comp_sets_the_shot_length(self):
+        inputs, publish = self._shot()
+        self.ns["_trim_render_slates"](inputs, publish)
+        self.assertEqual(74, self.ns["_plate_frames"](inputs))
+        items = self.ns["_default_import_items"](inputs, publish)
+        self.assertEqual({"PROJA_1052_0200_aPlate_v001", "PROJA_1052_0200_comp_v009"},
+                         {it["name"] for it in items})
+        # 92 = comp sin el slate; el plate viejo de 200 no cuenta
+        self.assertEqual(92, self.ns["_shot_frames"](inputs, items))
+        # Con el EditRef centrado sobre el comp: (92 - 76) / 2 = 8 de handle
+        self.assertEqual(8, (92 - 76) // 2)
+
+    def test_unselected_comp_falls_back_to_plate(self):
+        inputs, _publish = self._shot()
+        plate = inputs[0]
+        self.assertEqual(74, self.ns["_shot_frames"](inputs, [plate]))
+        self.assertEqual(74, self.ns["_shot_frames"](inputs, []))
+
+    def test_short_comp_does_not_shrink_the_shot(self):
+        # El otro plano del mismo import: comp de 2 frames contra plate de 150
+        inputs = [{"kind": "exr_seq", "is_latest": True, "frame_count": 150}]
+        comp = {"kind": "exr_seq", "is_latest": True, "frame_count": 2}
+        self.assertEqual(150, self.ns["_shot_frames"](inputs, [comp]))
+
+
 if __name__ == "__main__":
     unittest.main()

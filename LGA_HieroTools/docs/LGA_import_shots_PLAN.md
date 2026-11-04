@@ -178,6 +178,17 @@ siguiente, ese mínimo caía en el inicio del anterior y el nuevo shot quedaba e
 (el anterior aparecía a la derecha, sin plate ni EditRef). Test:
 `tests/test_import_shots_placement.py`.
 
+**Largo del shot y planos realentados (import_shots v1.50).** El shot reserva
+`_shot_frames()`: el plate más largo (última versión de cada EXR de `_input`) o, si lo
+supera, el ítem a importar más largo. Un comp de un plano realentado tiene más frames que su
+plate. Caso real: plate 1001-1074 (74f), comp 1000-1092 (92f sin el slate) y EditRef de 76f,
+que es el corte de 60 más 8 de handle por lado **sobre el comp**. Cuando el shot reservaba
+solo el plate, el comp y el EditRef quedaban 18 y 10 frames encima del shot siguiente. Ahora
+el empuje, el preview del bulk y el `_find_insert_frame` inicial usan ese largo; en el import
+individual se recalcula con lo que quedó seleccionado. El EditRef ya se centraba sobre el
+ítem más largo, así que cae con sus handles de 8. El pie del PREVIEW avisa
+`⚠ retime <render>: N f vs plate M f — the shot takes N f`.
+
 **Soft effects en el empuje (timeline v1.03, medido en NKS 17).** Los efectos linkeados a un
 clip no se tocan: se mueven solos con el clip, y moverlos otra vez tiraba el error
 `Selected time is wrong...` que aparecía en el log de cada import. Un efecto suelto que cruza

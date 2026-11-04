@@ -266,6 +266,8 @@ indicators.
   The shot name preserves `SUP` and external vendor codes.
   A published render that starts before the plate (frame 1000 against 1001) carries a slate
   on that frame: it is left out, so frame 1001 of the render lines up with frame 1001 of the plate.
+  If a render is longer than the plate (a retimed shot), the shot takes the render's length,
+  the EditRef is centered on it, and the preview flags the retime.
   You can also drag one or more shot folders from the file explorer onto the Edit panel:
   a dashed violet frame appears and dropping them opens Import shot with those folders,
   skipping the folder browser.
