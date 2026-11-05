@@ -28,7 +28,7 @@ Este método utiliza los clips que están actualmente seleccionados en el timeli
 ### Scripts que usan este método:
 
 #### Scripts de Flow:
-- **`LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py`** - **Método Híbrido:** La función `push_from_selected_clips()` usa el módulo centralizado `LGA_NKS_GetClip` (permite selecciones múltiples). La función legacy `Push_Task_Status()` recibe `base_name` como parámetro (compatible con paneles que usan Método 1).
+- **`LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py`** - **Manda el playhead (umbral del Método 3, scopeado al track de la task):** `push_from_selected_clips()` usa el clip bajo el playhead con 0 o 1 clip seleccionado en el track de la task; con 2 o más usa los seleccionados solo si uno está bajo el playhead, y si no, cartel y no pushea. La función legacy `Push_Task_Status()` recibe `base_name` como parámetro (compatible con paneles que usan Método 1).
 - **`LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py`** - Usa la selección del timeline y filtra los tracks del contexto.
 - **`LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_Thumbs.py`** - Usa `timeline_editor.selection()`.
 - **`LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py`** - Usa la selección del timeline.
@@ -86,7 +86,7 @@ Este método obtiene la posición actual del playhead (`viewer.time()`) y busca 
 ### Scripts que usan este método:
 
 - [x] **`LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py`** - Usa módulo centralizado `LGA_NKS_GetClip` con `track_name=None` (NO permite selecciones múltiples)
-- [x] **`LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py`** - Usa módulo centralizado `LGA_NKS_GetClip` con `track_name=None` en función `push_from_selected_clips()` (permite selecciones múltiples, con límite de 4 clips requiere confirmación)
+- [x] **`LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py`** - Usa `find_clip_at_playhead_in_track()` e `is_clip_at_playhead()` de `LGA_NKS_GetClip` en `push_from_selected_clips()`: manda el playhead; 2 o más seleccionados solo si uno está bajo el playhead (más de 4 pide confirmación)
 - [x] **`LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py`** - Usa módulo centralizado `LGA_NKS_GetClip` con `track_name=None` (permite selecciones múltiples)
 - [x] **`LGA_NKS_Assignee_Panel.py`** - Usa `get_clips_to_process()` del módulo `LGA_NKS_GetClip` con `prioritize_multiple_selection=True` (método híbrido: selección múltiple prioritaria, playhead para selección simple)
 - [x] **`LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_ReviewPic.py`** - Usa módulo centralizado `LGA_NKS_GetClip` con `track_name=None` (NO permite selecciones múltiples)
@@ -454,7 +454,6 @@ for clip in clips:
 
 - **`LGA_NKS_Assignee_Panel.py`** - `track_name=None`, `prioritize_multiple_selection=True` (método híbrido prioritario)
 - **`LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py`** - `track_name=None`, `prioritize_multiple_selection=True`
-- **`LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py`** - `push_from_selected_clips()` usa `track_name=None`, `prioritize_multiple_selection=True`
 - **`LGA_NKS_Review_Panel_py/LGA_NKS_CompareEXR_to_aPlate.py`** - `track_name=None`, permite selecciones múltiples
 
 ### Scripts que importan TRACK_comp_EXR directamente:

@@ -1,3 +1,6 @@
+v4.025:
+Flow Push pusheaba el shot equivocado cuando habia un clip seleccionado que no era el del playhead: la seleccion explicita ganaba siempre. Ahora manda el playhead: con 0 o 1 clip seleccionado en el track de la task se pushea el clip bajo el playhead (Hiero autoselecciona, asi que uno solo no prueba una eleccion); con 2 o mas se pushean los seleccionados solo si uno esta bajo el playhead, y si no, cartel y no se pushea nada. `LGA_NKS_Flow_Push v4.22`. [ Flow Push - Manda el playhead sobre la seleccion ]
+
 v4.024:
 En Flow Pull, v_NKS mostraba la version del clip de ANTES del Pull: la fila se agregaba a la tabla antes de `change_to_highest_version`, asi que un clip que el escaneo ya habia subido a la ultima en disco quedaba en violeta, con la descarga como si faltara bajarlo. Ahora la fila se agrega despues del escaneo (o del reemplazo de CG) con la version resultante; el violeta queda solo si la version de Flow no estaba en disco. `LGA_NKS_Flow_Pull v3.76`. [ Flow Pull - v_NKS con la version despues del Pull ]
 

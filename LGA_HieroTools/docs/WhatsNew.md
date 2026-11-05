@@ -12,6 +12,9 @@ platforms: [win, mac]
 
 ## Unreleased
 
+## v4.025
+- [fixed] Los botones de estado de Flow Push actúan siempre sobre el clip donde está el playhead: antes, con otro clip seleccionado, se cambiaba el estado del shot equivocado. Para enviar varios clips a la vez, seleccionalos y dejá el playhead sobre uno de ellos; si no, un cartel te avisa y no se envía nada.
+
 ## v4.024
 - [fixed] En la ventana de `Flow Pull`, `v_NKS` muestra la versión con la que quedó el clip después de actualizarlo; antes mostraba la anterior y parecía que faltaba bajar un clip que ya estaba al día.
 - [fixed] `Import shot` hace lugar para todo el render de comp cuando es más largo que el plate, como en un plano realentado, y el preview te avisa que es un retime: antes el comp y el EditRef quedaban encima del shot siguiente.

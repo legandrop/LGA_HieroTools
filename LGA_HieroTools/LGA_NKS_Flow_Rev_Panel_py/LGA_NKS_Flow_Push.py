@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push v4.21 | Lega
+  LGA_NKS_Flow_Push v4.22 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -12,6 +12,11 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v4.22: Manda el playhead. Con 0 o 1 clip seleccionado en el track de la
+         task se pushea el clip bajo el playhead, aunque el seleccionado sea
+         otro (antes ganaba el seleccionado y se pusheaba el shot
+         equivocado). Con 2 o mas se pushean los seleccionados solo si uno
+         esta bajo el playhead; si no, cartel y no se pushea nada.
   v4.21: Una Submission Note vacia se confirma antes de guardar ("Save
          empty" / "Write it"): un OK sin texto dejaba el slate sin nota, o
          borraba la que habia, sin avisar.
@@ -174,6 +179,8 @@ if utils_path.exists():
     from LGA_NKS_Shared.LGA_NKS_GetClip import (
         get_clips_to_process,
         get_selected_clips,
+        find_clip_at_playhead_in_track,
+        is_clip_at_playhead,
         TASK_EXR_TRACKS,
         TRACK_cg_EXR,
         CG_TASK_NAME,
@@ -3607,40 +3614,54 @@ def push_from_selected_clips(
     task_track = track_for_task(resolved_task)
     debug_print(f"Task resuelta para push: '{resolved_task}' → track '{task_track}'")
 
-    # Regla de prioridad:
-    # 1. Si hay selección explícita del usuario, filtrar al track de la task resuelta.
-    # 2. Solo si no hay selección explícita, usar la lógica por playhead / método híbrido.
+    # Regla de prioridad (v4.22): manda el PLAYHEAD.
+    # - 0 o 1 clip seleccionado en el track de la task: se usa el clip del
+    #   playhead, aunque el seleccionado sea otro. Hiero autoselecciona el clip
+    #   bajo el playhead, asi que "uno seleccionado" no prueba una eleccion.
+    # - 2 o mas: se usan esos clips SOLO si uno de ellos esta bajo el
+    #   playhead. Si ninguno lo esta, se avisa y no se pushea nada.
     explicitly_selected_clips = get_selected_clips()
-    debug_print(f"Selección explícita detectada: {len(explicitly_selected_clips)} clip(s)")
+    debug_print(f"Selección detectada: {len(explicitly_selected_clips)} clip(s)")
     for idx, clip in enumerate(explicitly_selected_clips, start=1):
         debug_print(f"  [selección {idx}] {_describe_clip_for_log(clip)}")
 
+    selected_in_track = []
+    for clip in explicitly_selected_clips:
+        clip_track_name = clip.parentTrack().name() if clip.parentTrack() else ""
+        if clip_track_name.upper() == task_track.upper():
+            selected_in_track.append(clip)
+        else:
+            debug_print(
+                f"Clip seleccionado fuera del track task (track '{clip_track_name}' ≠ '{task_track}'): {_describe_clip_for_log(clip)}"
+            )
+
     all_clips = []
-    if explicitly_selected_clips:
-        for clip in explicitly_selected_clips:
-            clip_track_name = clip.parentTrack().name() if clip.parentTrack() else ""
-            if clip_track_name == task_track:
-                all_clips.append(clip)
-                debug_print(
-                    f"Clip seleccionado aceptado por track task: {_describe_clip_for_log(clip)}"
-                )
-            else:
-                debug_print(
-                    f"Clip seleccionado descartado (track '{clip_track_name}' ≠ '{task_track}'): {_describe_clip_for_log(clip)}"
-                )
+    if len(selected_in_track) >= 2:
+        if not any(is_clip_at_playhead(c) for c in selected_in_track):
+            debug_print(
+                f"Push cancelado: {len(selected_in_track)} clips seleccionados en '{task_track}' y ninguno bajo el playhead"
+            )
+            show_warning(
+                None,
+                "Push to Flow - Selection",
+                f"{len(selected_in_track)} clips are selected, but none of them is "
+                "under the playhead.\n\n"
+                "Move the playhead onto one of the selected clips, or select a "
+                "single clip, and push again.",
+            )
+            return False
+        debug_print(
+            f"Selección múltiple con un clip bajo el playhead: se usan los {len(selected_in_track)} clips seleccionados"
+        )
+        all_clips.extend(selected_in_track)
     else:
+        playhead_clip = find_clip_at_playhead_in_track(seq, track_name=task_track)
         debug_print(
-            f"No hay selección explícita. Se busca clip(s) por playhead/método híbrido en '{task_track}'."
+            f"0/1 clip seleccionado en '{task_track}': se usa el playhead -> "
+            f"{_describe_clip_for_log(playhead_clip) if playhead_clip else 'nada'}"
         )
-        track_clips = get_clips_to_process(
-            track_name=task_track, prioritize_multiple_selection=True
-        )
-        debug_print(
-            f"Track '{task_track}': método híbrido devolvió {len(track_clips)} clip(s)"
-        )
-        for idx, clip in enumerate(track_clips, start=1):
-            debug_print(f"  [híbrido {task_track} #{idx}] {_describe_clip_for_log(clip)}")
-        all_clips.extend(track_clips)
+        if playhead_clip:
+            all_clips.append(playhead_clip)
 
     # Deduplicar por id (por si algún clip aparece en múltiples llamadas)
     seen_ids = set()
@@ -3750,8 +3771,9 @@ def push_from_selected_clips(
             show_warning(
                 None,
                 "Submission Note - Invalid selection",
-                "The submission note is written one clip at a time. Select a single "
-                "clip (or leave only one under the playhead) and Ctrl+Alt+Click again.",
+                "The submission note is written one clip at a time. Deselect the "
+                "other clips (the clip under the playhead is used) and "
+                "Ctrl+Alt+Click again.",
             )
             return False
 
