@@ -1,5 +1,39 @@
 # What's new in LGA HieroTools
 
+## v4.024 (2026-11-05)
+
+- **New:** Podés arrastrar una o varias carpetas de shot desde el explorador al Edit Panel para importarlas con `Import shot`, sin tener que buscarlas en el selector.
+- **New:** Desde la ventanita de cada shot podés cambiar la dificultad con un clic, corregir o agregar Notes y Budget Alternative, y dejar preguntas, sin salir de Nuke Studio: los cambios quedan guardados en tu computadora (nunca en la planilla) y `Export Changes` los baja a un CSV para revisarlos y pasarlos a la planilla.
+- **New:** Shot Marks lee la columna de dificultad de la planilla (Dificultad o Difficulty) y la ventanita de cada shot la muestra con un color según el nivel, de verde para lo muy fácil a rojo para lo muy difícil.
+- **New:** Con clic derecho sobre el nombre de un proyecto en Projects Panel podés abrir su carpeta (`Reveal in Explorer`) o guardar una copia para Nuke 16 (`Convert to Nuke 16...`), sin tener que arrastrar el archivo.
+- **New:** La ventanita de cada shot de Shot Marks muestra los comentarios que dejaron en la planilla de Google Sheets o Excel, con quién lo escribió, la fecha, la columna y las respuestas; los resueltos aparecen en gris.
+- **New:** Shot Marks suma las columnas `Notes` y `Notes 2` (toma solas las columnas Notas y Alternativa de la planilla): la ventanita de cada shot las muestra arriba de todo, resaltadas en dos colores, y solo cuando ese shot tiene algo escrito.
+- **Improved:** `Import shot` deja afuera el slate de los renders de comp que arrancan en el frame 1000, así el 1001 del render coincide con el 1001 del plate.
+- **Improved:** Los tooltips del Edit Panel son iguales a los de PipeSync: aparecen debajo del botón, apuntándolo con una flechita.
+- **Improved:** La columna Notes 2 de Shot Marks pasa a llamarse Alternative (Budget Alternative en la ventanita de cada shot), y se reconoce sola aunque en la planilla se llame «Alternativas para reducción de presupuesto».
+- **Improved:** La ventana de Shot Marks se reorganizó: a la izquierda elegís la planilla y las columnas, y a la derecha ves todas las marcas antes de escribirlas, con un filtro para ver solo lo que cambió o lo que tiene problemas. Si la planilla no tiene timecode, muestra las fotos de los shots que va a buscar.
+- **Improved:** Los tooltips de la ventana de `Flow Pull` son iguales a los de PipeSync: aparecen debajo del control, apuntándolo con una flechita.
+- **Improved:** En la ventana de `Flow Pull`, cada fila tiene su propia celda de descarga al lado de `v_NKS`: un clic baja el clip sin tener que seleccionar la fila; cuando el timeline tiene una versión más vieja que Flow, la versión y esa celda se pintan de violeta.
+- **Improved:** Al guardar una copia para Nuke 16 elegís si mantiene el nombre con `_NKS16` al final (`Rename`) o si sube un número de versión (`Increment version`), y ves cómo va a quedar el nombre antes de guardar.
+- **Improved:** Si abrís desde Projects Panel un proyecto que no tiene ningún timeline, ahora te avisa con un cartel, en vez de abrirlo sin que se vea ningún cambio.
+- **Improved:** `Locate from Thumbnails` recuerda lo que revisaste en cada corte por separado: si el proyecto tiene dos armados de la misma película, revisar el nuevo no borra lo que confirmaste en el anterior. (Windows only)
+- **Improved:** Shot Marks numera cada renglón del brief (1., 2., 3.…) en lugar de los guiones, y en la ventanita separa un poco cada pedido del siguiente, así la lista de cada shot se lee de un vistazo.
+- **Improved:** Shot Marks guarda los thumbnails de la planilla en una carpeta junto al proyecto, así la ventanita de cada shot los muestra siempre, también si abrís el proyecto desde otra máquina. (Windows only)
+- **Improved:** En `Locate from Thumbnails`, los shots de tomas largas o de escenas muy oscuras se marcan de corte a corte y no en un solo cuadro. (Windows only)
+- **Improved:** Al revisar en `Locate from Thumbnails` de Shot Marks, una tira muestra todos los planos que hay entre el shot anterior y el siguiente de la planilla, con los dos vecinos en color; un click lleva el visor a ese plano. Cuando no queda nada por revisar, la ventana avisa que falta apretar `Use Timecodes` para agregar las marcas. (Windows only)
+- **Fixed:** En la ventana de `Flow Pull`, `v_NKS` muestra la versión con la que quedó el clip después de actualizarlo; antes mostraba la anterior y parecía que faltaba bajar un clip que ya estaba al día.
+- **Fixed:** `Import shot` hace lugar para todo el render de comp cuando es más largo que el plate, como en un plano realentado, y el preview te avisa que es un retime: antes el comp y el EditRef quedaban encima del shot siguiente.
+- **Fixed:** Al importar un shot o soltar media en Projects Panel, un soft effect largo que pasa por el lugar donde entra lo nuevo se estira para cubrirlo, en vez de correrse y dejar sin efecto el principio de lo que tenía antes.
+- **Fixed:** `Import shot` ya no pone el shot nuevo encima del anterior cuando el anterior tiene un render de comp: el anterior quedaba corrido a la derecha y sin plate ni EditRef.
+- **Fixed:** En Projects Panel, el clic derecho sobre el nombre de un proyecto ya no lo colapsa ni muestra Copy y Select All, y el menú de `Delete Timeline` ya no sale con el color del proyecto.
+- **Fixed:** `Locate from Thumbnails` de Shot Marks ya no deja marcas una encima de otra cuando la planilla repite la misma foto en varios shots, repite una fila o pone dos shots en lo que parecía un solo plano. (Windows only)
+- **Fixed:** Al volver a correr Shot Marks con una planilla que cambió los nombres de los shots, ya no quedan las marcas rojas con el nombre viejo encima de las nuevas.
+- **Fixed:** `Locate from Thumbnails` recuerda lo que confirmaste aunque guardes el proyecto con otra versión; antes, al pasar por ejemplo de v04 a v05, había que revisar todo de nuevo. (Windows only)
+- **Fixed:** Shot Marks elige sola la columna de nombres de shot que está completa cuando la planilla trae dos (por ejemplo `SHOT NAME` y `VFX SHOT NAME`); antes podía tomar la de nombres viejos y dejar muchos shots sin marcar o con el nombre anterior.
+- **Fixed:** `Locate from Thumbnails` de Shot Marks busca cada shot entre sus vecinos de la planilla y ya no lo manda a otra parte de la película por un parecido flojo o por una imagen que se repite; en la revisión, los candidatos ofrecen también la otra opción. (Windows only)
+- **Fixed:** `Locate from Thumbnails` de Shot Marks ya no deja las marcas corridas (o fuera del timeline) cuando Nuke Studio muestra el video con un timecode distinto del que trae el archivo. (Windows only)
+- **Fixed:** En Shot Marks, los nombres de columna que en la planilla tienen un salto de línea se ven en una sola línea en los menús.
+
 ## v4.023 (2026-10-30)
 
 - **New:** La ventana de `Flow Pull` suma el checkbox `Shot Info`: prendido, al hacer click en una fila se abre el Shot Info de ese shot sin sacarle el foco a la ventana del Pull; se recuerda entre sesiones. `Keep this window on top` pasa a llamarse `Keep on top`.
