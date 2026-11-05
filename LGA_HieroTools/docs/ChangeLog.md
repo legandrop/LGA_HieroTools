@@ -1,4 +1,6 @@
 v4.025:
+Flow Push escribia el estado en Flow y en `pipesync.db`, pero PipeSync abierto no se enteraba y lo mostraba recien con el proximo sync. Ahora, despues de escribir la base, Push le manda una linea JSON por el canal local de eventos de PipeSync (`PipeSync_Events`, `_Client` en client) con la task y el estado, y PipeSync repinta Shots, Review, Prod y Gantt sin volver a escribir Flow. Si PipeSync no esta abierto o es una version sin el canal, no pasa nada. Modulo nuevo `LGA_NKS_PipeSyncEvents v1.00`, `LGA_NKS_Flow_Push v4.23`. [ Flow Push - Avisa a PipeSync abierto del cambio de estado ]
+
 Flow Push pusheaba el shot equivocado cuando habia un clip seleccionado que no era el del playhead: la seleccion explicita ganaba siempre. Ahora manda el playhead: con 0 o 1 clip seleccionado en el track de la task se pushea el clip bajo el playhead (Hiero autoselecciona, asi que uno solo no prueba una eleccion); con 2 o mas se pushean los seleccionados solo si uno esta bajo el playhead, y si no, cartel y no se pushea nada. `LGA_NKS_Flow_Push v4.22`. [ Flow Push - Manda el playhead sobre la seleccion ]
 
 v4.024:

@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.025
+- [improved] cuando cambiás un estado con los botones de Flow Push, PipeSync abierto lo muestra al instante en todos sus tabs, sin esperar al próximo sync (hace falta PipeSync actualizado).
 - [fixed] Los botones de estado de Flow Push actúan siempre sobre el clip donde está el playhead: antes, con otro clip seleccionado, se cambiaba el estado del shot equivocado. Para enviar varios clips a la vez, seleccionalos y dejá el playhead sobre uno de ellos; si no, un cartel te avisa y no se envía nada.
 
 ## v4.024

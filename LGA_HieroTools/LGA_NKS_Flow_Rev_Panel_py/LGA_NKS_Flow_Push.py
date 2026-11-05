@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push v4.22 | Lega
+  LGA_NKS_Flow_Push v4.23 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -12,6 +12,9 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v4.23: Despues de escribir el estado de la task en pipesync.db, avisa a
+         PipeSync abierto (LGA_NKS_PipeSyncEvents) para que el cambio se vea
+         al instante en todos sus tabs.
   v4.22: Manda el playhead. Con 0 o 1 clip seleccionado en el track de la
          task se pushea el clip bajo el playhead, aunque el seleccionado sea
          otro (antes ganaba el seleccionado y se pusheaba el shot
@@ -2645,6 +2648,23 @@ class Worker(QRunnable):
                     f"Worker: Actualizando estado de tarea local (ID: {db_task['id']}) a: {sg_status}"
                 )
                 db_manager.update_task_status(db_task["id"], sg_status)
+                # PipeSync abierto no se entera de una escritura externa a la base:
+                # se le avisa para que repinte Shots, Review, Prod y Gantt ya.
+                # Corre en el hilo del worker; si PipeSync no esta abierto, no pasa nada.
+                try:
+                    from LGA_NKS_Shared.LGA_NKS_PipeSyncEvents import (
+                        notify_task_status_changed,
+                    )
+
+                    task_keys = db_task.keys()
+                    notify_task_status_changed(
+                        db_task["task_id"] if "task_id" in task_keys else None,
+                        sg_status,
+                        task_local_id=db_task["id"],
+                        log=debug_print,
+                    )
+                except Exception as e:
+                    debug_print(f"Worker: no se pudo avisar a PipeSync: {e}")
             else:
                 debug_print(
                     "Worker: Flow no aplicó el estado de la task; no se actualiza en la DB local"
