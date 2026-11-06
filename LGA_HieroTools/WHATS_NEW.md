@@ -1,5 +1,11 @@
 # What's new in LGA HieroTools
 
+## v4.025 (2026-11-06)
+
+- **New:** En el panel Flow | S3, `Download Clip` con Ctrl+Alt+Click te deja elegir la carpeta donde se baja la última versión del clip, y con Ctrl+Alt+Shift+Click baja a la última carpeta que elegiste, sin preguntar (hace falta FileManager S3 actualizado).
+- **Improved:** cuando cambiás un estado con los botones de Flow Push, PipeSync abierto lo muestra al instante en todos sus tabs, sin esperar al próximo sync (hace falta PipeSync actualizado).
+- **Fixed:** Los botones de estado de Flow Push actúan siempre sobre el clip donde está el playhead: antes, con otro clip seleccionado, se cambiaba el estado del shot equivocado. Para enviar varios clips a la vez, seleccionalos y dejá el playhead sobre uno de ellos; si no, un cartel te avisa y no se envía nada.
+
 ## v4.024 (2026-11-05)
 
 - **New:** Podés arrastrar una o varias carpetas de shot desde el explorador al Edit Panel para importarlas con `Import shot`, sin tener que buscarlas en el selector.
