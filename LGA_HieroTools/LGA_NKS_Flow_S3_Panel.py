@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_S3_Panel v1.35 | Lega
+  LGA_NKS_Flow_S3_Panel v1.36 | Lega
   Panel Flow | S3 para operaciones de produccion con Flow y almacenamiento S3:
   - Revelar clips en Flow
   - Crear shots automáticamente
@@ -9,6 +9,10 @@ ________________________________________________________________________________
   - Cambiar prioridad de shots
   - Integración con FileManagerS3 (Open, Download, Upload)
 
+  v1.36: Download Clip suma Ctrl+Alt+Click (abre el selector de carpetas del
+         sistema y baja la ultima version a la carpeta elegida, que queda
+         guardada) y Ctrl+Alt+Shift+Click (baja a la ultima carpeta elegida
+         sin preguntar). Usa --dest-dir de FileManagerS3.
   v1.35: El tooltip de "Download AMF" avisa que con dos o mas clips
          seleccionados baja la Look_Files de todos esos shots a la vez
          (LGA_NKS_FileManagerS3_DownloadAmf v1.10).
@@ -92,6 +96,8 @@ class CustomButton(QtWidgets.QPushButton):
         super(CustomButton, self).__init__(text)
         self._custom_click_handler = None
         self._shift_click_handler = None
+        self._ctrl_alt_click_handler = None
+        self._ctrl_alt_shift_click_handler = None
         # Conectar la señal clicked para manejar tanto clicks normales como shortcuts
         self.clicked.connect(self._handle_click)
 
@@ -101,10 +107,25 @@ class CustomButton(QtWidgets.QPushButton):
     def setShiftClickHandler(self, handler):
         self._shift_click_handler = handler
 
+    def setCtrlAltClickHandler(self, handler):
+        self._ctrl_alt_click_handler = handler
+
+    def setCtrlAltShiftClickHandler(self, handler):
+        self._ctrl_alt_shift_click_handler = handler
+
     def _handle_click(self):
-        """Maneja los clicks del botón, verificando si es Shift+Click"""
+        """Maneja los clicks del botón, verificando Shift y Ctrl+Alt(+Shift)"""
+        modifiers = QtWidgets.QApplication.keyboardModifiers()
+        ctrl_alt = QtCore.Qt.ControlModifier | QtCore.Qt.AltModifier
+        if (modifiers & ctrl_alt) == ctrl_alt:
+            if modifiers & QtCore.Qt.ShiftModifier:
+                if self._ctrl_alt_shift_click_handler:
+                    self._ctrl_alt_shift_click_handler()
+                    return
+            elif self._ctrl_alt_click_handler:
+                self._ctrl_alt_click_handler()
+                return
         if self._custom_click_handler and self._shift_click_handler:
-            modifiers = QtWidgets.QApplication.keyboardModifiers()
             if modifiers & QtCore.Qt.ShiftModifier:
                 self._shift_click_handler()
             else:
@@ -343,7 +364,7 @@ class FlowProdPanel(QtWidgets.QWidget):
                 self.download_latest_clip_from_filemanagers3,
                 "gradient_magenta_violet",
                 None,
-                "Click: Descargar ultima version del clip\nShift+Click: Descargar clip seleccionado",
+                "Click: Descargar ultima version del clip\nShift+Click: Descargar clip seleccionado\nCtrl+Alt+Click: Elegir carpeta destino y descargar la ultima version\nCtrl+Alt+Shift+Click: Descargar la ultima version a la ultima carpeta elegida",
             ),
             (
                 "Download AMF",
@@ -434,6 +455,8 @@ class FlowProdPanel(QtWidgets.QWidget):
                 button = CustomButton(name)
                 button.setCustomClickHandler(self.download_latest_clip_from_filemanagers3)
                 button.setShiftClickHandler(self.download_clip_from_filemanagers3)
+                button.setCtrlAltClickHandler(self.download_latest_clip_to_chosen_folder)
+                button.setCtrlAltShiftClickHandler(self.download_latest_clip_to_last_folder)
             else:
                 button = QtWidgets.QPushButton(name)
                 button.clicked.connect(handler)
@@ -998,6 +1021,52 @@ class FlowProdPanel(QtWidgets.QWidget):
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             module.main(download_latest=download_latest)
+        except Exception as e:
+            show_warning(self, "Error al ejecutar", str(e))
+
+    def _load_download_clip_module(self):
+        """Carga el modulo de Download Clip (para sus helpers de carpeta)."""
+        import importlib.util
+
+        script_path = os.path.join(
+            os.path.dirname(__file__), "LGA_NKS_Flow_S3_Panel_py", "LGA_NKS_FileManagerS3_DownloadClip.py"
+        )
+        spec = importlib.util.spec_from_file_location(
+            "LGA_NKS_FileManagerS3_DownloadClip", script_path
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def download_latest_clip_to_chosen_folder(self):
+        """Ctrl+Alt+Click: elige carpeta (dialogo del sistema), la guarda y baja ahi."""
+        try:
+            module = self._load_download_clip_module()
+            start_dir = module.load_last_dest_dir() or os.path.expanduser("~")
+            folder = QtWidgets.QFileDialog.getExistingDirectory(
+                self, "Select destination folder for the clip", start_dir
+            )
+            if not folder:
+                return
+            folder = os.path.normpath(folder)
+            module.save_last_dest_dir(folder)
+            module.main(download_latest=True, dest_dir=folder)
+        except Exception as e:
+            show_warning(self, "Error al ejecutar", str(e))
+
+    def download_latest_clip_to_last_folder(self):
+        """Ctrl+Alt+Shift+Click: baja a la ultima carpeta elegida, sin preguntar."""
+        try:
+            module = self._load_download_clip_module()
+            folder = module.load_last_dest_dir()
+            if not folder:
+                show_warning(
+                    self,
+                    "No destination folder",
+                    "No destination folder saved yet. Use Ctrl+Alt+Click on Download Clip to choose one.",
+                )
+                return
+            module.main(download_latest=True, dest_dir=folder)
         except Exception as e:
             show_warning(self, "Error al ejecutar", str(e))
 

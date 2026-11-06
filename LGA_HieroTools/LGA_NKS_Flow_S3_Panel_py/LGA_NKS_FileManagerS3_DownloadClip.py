@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_FileManagerS3_DownloadClip v1.03 | Lega
+  LGA_NKS_FileManagerS3_DownloadClip v1.04 | Lega
 
   Descarga el/los clip(s) seleccionado(s) desde Wasabi S3 usando
   FileManagerS3 CLI. A diferencia de "Download Shot", descarga solo el
@@ -15,6 +15,12 @@ ____________________________________________________________________
   cada descarga; el watcher LGA_NKS_DownloadClip_Watcher.py lo detecta y reconecta
   el clip offline automaticamente.
 
+  v1.04: main() acepta `dest_dir`: carpeta destino elegida por el usuario
+         (Ctrl+Alt+Click en el panel Flow S3). Se pasa al CLI con --dest-dir
+         y NO se manda --notify-completion, porque el archivo ya no cae en
+         la ruta del clip y reconectar apuntaria a un media inexistente.
+         Helpers load_last_dest_dir/save_last_dest_dir: la ultima carpeta
+         elegida se guarda en %APPDATA%/LGA/HieroTools/DownloadClip.ini.
   v1.03: main() acepta `clips`: quien llama puede pasar los clips a bajar
          en vez de tomar la seleccion del timeline. Lo usa el boton
          Download Clip de la ventana de Flow Pull, con el clip de la fila.
@@ -53,6 +59,7 @@ from logging.handlers import QueueHandler, QueueListener
 import datetime
 import time
 import traceback
+import configparser
 
 # Agregar ruta de shared modules
 utils_path = Path(__file__).parent.parent / "LGA_NKS_Shared"
@@ -79,6 +86,54 @@ _log_file_path_resolved = None
 
 # Variable de desarrollo para cambiar la ruta del ejecutable
 Desarrollo = True
+
+
+_DEST_CONFIG_SECTION = "DownloadClip"
+_DEST_CONFIG_KEY = "last_dest_dir"
+
+
+def _dest_config_path():
+    """INI de usuario donde se recuerda la ultima carpeta destino elegida."""
+    if sys.platform.startswith("win") and os.getenv("APPDATA"):
+        root = os.getenv("APPDATA")
+    elif sys.platform == "darwin":
+        root = os.path.expanduser("~/Library/Application Support")
+    else:
+        root = os.path.expanduser("~/.config")
+    return Path(root) / "LGA" / "HieroTools" / "DownloadClip.ini"
+
+
+def load_last_dest_dir():
+    """Ultima carpeta destino elegida, o "" si no hay o ya no existe."""
+    try:
+        p = _dest_config_path()
+        if not p.exists():
+            return ""
+        cfg = configparser.ConfigParser()
+        cfg.read(str(p), encoding="utf-8")
+        value = cfg.get(_DEST_CONFIG_SECTION, _DEST_CONFIG_KEY, fallback="").strip()
+        return value if value and os.path.isdir(value) else ""
+    except Exception as e:
+        debug_print(f"No se pudo leer la ultima carpeta destino: {e}", level="warning")
+        return ""
+
+
+def save_last_dest_dir(folder):
+    """Guarda la carpeta destino elegida sin pisar otras claves del INI."""
+    try:
+        p = _dest_config_path()
+        cfg = configparser.ConfigParser()
+        if p.exists():
+            cfg.read(str(p), encoding="utf-8")
+        if not cfg.has_section(_DEST_CONFIG_SECTION):
+            cfg.add_section(_DEST_CONFIG_SECTION)
+        cfg.set(_DEST_CONFIG_SECTION, _DEST_CONFIG_KEY, str(folder))
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with open(str(p), "w", encoding="utf-8", newline="\n") as fh:
+            cfg.write(fh)
+        debug_print(f"Ultima carpeta destino guardada: {folder}")
+    except Exception as e:
+        debug_print(f"No se pudo guardar la carpeta destino: {e}", level="warning")
 
 
 def get_notify_dir():
@@ -319,7 +374,9 @@ def _dedupe_preserve_order(paths):
     return out
 
 
-def build_filemanagers3_cmd(folder_paths, file_paths, notify_dir=None, download_latest=False):
+def build_filemanagers3_cmd(
+    folder_paths, file_paths, notify_dir=None, download_latest=False, dest_dir=None
+):
     """Construye el comando del CLI para modo normal o latest.
 
     - Modo normal:
@@ -348,6 +405,10 @@ def build_filemanagers3_cmd(folder_paths, file_paths, notify_dir=None, download_
     if not cli_args:
         return None
 
+    if dest_dir:
+        cli_args.append("--dest-dir")
+        cli_args.append(str(dest_dir))
+
     if notify_dir:
         cli_args.append("--notify-completion")
         cli_args.append(notify_dir)
@@ -370,15 +431,19 @@ def build_filemanagers3_cmd(folder_paths, file_paths, notify_dir=None, download_
         return None
 
 
-def main(download_latest=False, clips=None):
+def main(download_latest=False, clips=None, dest_dir=None):
     """Descarga el/los clip(s) seleccionado(s) desde Wasabi S3.
 
     clips: lista de TrackItems a bajar. Si es None se usa la seleccion del
     timeline (boton del panel Flow S3).
+    dest_dir: carpeta local donde dejar la descarga (en vez de la ruta espejo
+    del bucket). Con dest_dir no se reconecta el clip.
     """
     mode_label = "LATEST" if download_latest else "NORMAL"
     debug_print(f"=== FILEMANAGER DOWNLOAD CLIP ({mode_label}) ===")
     debug_print(f"log file: {_log_file_path_resolved}")
+    if dest_dir:
+        debug_print(f"Carpeta destino elegida: {dest_dir}")
 
     try:
         if clips is None:
@@ -447,15 +512,24 @@ def main(download_latest=False, clips=None):
             debug_print("No hay nada para descargar", level="warning")
             return
 
-        notify_dir = get_notify_dir()
-        try:
-            os.makedirs(notify_dir, exist_ok=True)
-        except Exception as e:
-            debug_print(f"No se pudo crear la carpeta de notificacion: {e}", level="warning")
-        debug_print(f"Notify dir: {notify_dir}")
+        if dest_dir:
+            # El archivo no cae en la ruta del clip: no hay nada que reconectar.
+            notify_dir = None
+            debug_print("Con carpeta destino no se usa --notify-completion")
+        else:
+            notify_dir = get_notify_dir()
+            try:
+                os.makedirs(notify_dir, exist_ok=True)
+            except Exception as e:
+                debug_print(f"No se pudo crear la carpeta de notificacion: {e}", level="warning")
+            debug_print(f"Notify dir: {notify_dir}")
 
         cmd = build_filemanagers3_cmd(
-            folder_paths, file_paths, notify_dir, download_latest=download_latest
+            folder_paths,
+            file_paths,
+            notify_dir,
+            download_latest=download_latest,
+            dest_dir=dest_dir,
         )
         if not cmd:
             debug_print("No se pudo construir el comando de FileManagerS3", level="error")

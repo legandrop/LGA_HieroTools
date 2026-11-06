@@ -86,6 +86,9 @@ La carpeta privada del panel es `LGA_NKS_Flow_S3_Panel_py/`, igual que el módul
 ### 11. Download Clip
 - **Click normal**: Descarga la última versión disponible del clip
 - **Shift+Click**: Descarga exactamente la versión seleccionada
+- **Ctrl+Alt+Click**: abre el selector de carpetas del sistema y baja la última versión a la carpeta elegida (se recuerda en `%APPDATA%/LGA/HieroTools/DownloadClip.ini`)
+- **Ctrl+Alt+Shift+Click**: baja la última versión a la última carpeta elegida, sin preguntar; si todavía no hay ninguna, avisa
+- **Por qué**: FileManagerS3 baja por defecto a la ruta local que replica la del bucket; con carpeta destino se pasa `--dest-dir` al CLI. Sin `--notify-completion`: el archivo ya no cae en la ruta del clip, así que el watcher no reconecta nada
 - **Script utilizado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_DownloadClip.py`
 
 ### 12. Download AMF
