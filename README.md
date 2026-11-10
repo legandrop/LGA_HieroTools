@@ -358,7 +358,7 @@ opening related Nuke scripts.
   with the viewer focused).
   Shift+Click: opens **Find Shot Mark**, a small window that stays on top.
   Type a shot name or any text from the sheet (description, brief, notes, comments, status,
-  vendor, scene, category, timecode); Find jumps to the shot with that exact
+  vendor, scene, category, group, timecode); Find jumps to the shot with that exact
   name or to the first match, and Next (or Enter again) goes on to the next
   match, wrapping to the first. Each jump shows the mark's info window.
   The window has the settings on the left (the sheet, as a Google Sheet or a
@@ -385,6 +385,14 @@ opening related Nuke scripts.
   movie and, when it matches, the shots go exactly from cut to cut of the EDL
   (detecting cuts in the picture misses some between similar shots) and each
   mark shows its camera clip and source timecode.
+  Timelines with one clip per shot (a package of edit refs): **One per clip**
+  in the Marks section gives each shot the length of its clip, so the sheet
+  needs no timecode. A clip belongs to a shot when its name (or its file name)
+  starts with the shot, as in `PROJA_010_0100_EditRef`. It is suggested by
+  itself when most clips are named after a shot, and the dry run lists the
+  shots without a clip and the clips without a row. The **Group** column
+  (Grupo) also goes to the mark window, and a sheet with the brief in two
+  languages uses the English one.
 - **Reveal in Explorer**  
   Opens the selected clips' folders in the default file manager; without a
   selection it opens the first open project's folder.

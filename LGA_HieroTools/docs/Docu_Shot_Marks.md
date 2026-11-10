@@ -108,6 +108,47 @@ esa copia como cualquier Excel: hojas, comentarios en hilo y fotos ancladas viaj
   la hoja; la carpeta de thumbs junto al `.hrox` toma el titulo (`safe_name`), no el id de la cache.
   `ShotMarks.ini` recuerda el link como `last_file`: al reabrir el dialogo vuelve a consultar a Google.
 
+## Una marca por clip (timeline de edit refs)
+
+Shot Marks nacio para un corte entero en un solo MOV y una planilla con REC TC. Otro caso comun es un
+paquete de edit refs: un MOV por shot (`PROJA_001_020_EditRef.mov`), importados uno detras de otro en
+un timeline, y una planilla sin ningun TC. Ahi no hay que ubicar nada: cada clip ya es el shot, y lo
+que falta es ver su brief mientras se recorre el timeline.
+
+- **Seccion Marks del dialogo** (solo si el timeline tiene dos clips o mas, y nunca de vuelta de
+  Locate): switch **One per clip / From timecode**. Por clip, las filas TC In / TC Out y Measure /
+  Align desaparecen (no se usan) y la planilla solo necesita la columna de shot. Una linea debajo
+  dice cuantos clips cruzaron: `238 of 239 clips have their shot in the sheet · 1 is not`.
+- **Se sugiere solo** (`CLIP_MATCH_SHARE`): por clip si al menos la mitad de los clips tiene su shot
+  en la planilla; si no, por timecode. Con el switch en timecode y los clips con nombre de shot, la
+  linea lo avisa en amarillo. Una vez que el usuario toca el switch, la sugerencia no lo pisa.
+- **Que clip es de que shot** (`clip_shot`): el nombre del item o el de su archivo sin extension es
+  el shot, o empieza con el shot y sigue algo que no es letra ni numero. Sin mayusculas. Gana el
+  shot mas largo, y `PROJA_010_01000` nunca cae en `PROJA_010_0100`. El nombre del item va primero
+  porque es el que el usuario ve y renombra en el timeline.
+- **Como se arma** (`with_clip_ranges`, sin host): igual que Locate, agrega columnas a una copia de
+  la tabla (`REC TC IN (clip)`, `REC TC OUT (clip)` y `LGA Clip`) y el resto es el `build_plan` de
+  siempre, medido contra el TC del timeline. El OUT va exclusivo como en una planilla de montaje, asi
+  que la marca termina en el ultimo cuadro del clip. Asi el color contra la corrida anterior, el
+  filtro de la vista previa y la metadata del tag no cambian.
+- **Casos raros** (`finish_clip_plan`): un shot con dos clips lleva dos marcas ("Shot repeated"); una
+  fila sin clip dice "No clip of this shot in the timeline" en vez de "No TC IN", que haria buscar
+  una columna; un clip sin fila va a Problems ("Clip with no row in the sheet"), para que se vea el
+  edit ref que quedo sin brief. Una fila sin clip cuyo "shot" no tiene ningun numero ("VENDOR NAME",
+  "EJEMPLO", la leyenda al pie de la planilla) no se lista.
+- **En la ventana de la marca** el clip del timeline y su SRC TC van en los dos renglones de Clip /
+  SRC, con su propio tooltip: el evento de `LGA Clip` empieza con `timeline` (`is_clip_event`), y
+  asi se distingue de un plano del EDL.
+- **Group.** Las planillas de paquete traen una columna Grupo (bloque, set o personaje: TRAIN,
+  STATION). Rol `group` (`_Sheet v1.19`): se sugiere con `Grupo` / `Group`, va en la linea de status
+  de la ventana, cuenta como cambio y Find lo busca. `VFX Type` se sugiere como categoria.
+- **Brief en dos idiomas.** Con `BRIEF Espanol` y `BRIEF English` se sugiere el ingles (`NOTE_HEADERS`):
+  es el que va a los vendors. El castellano queda de respaldo si es el unico.
+
+Medido en NKS 17.0v4 con un paquete real de 239 edit refs y una planilla de 258 filas: 238 clips con
+su shot, 238 marcas, el IN y el OUT de cada tag igual al del clip; 8 shots sin edit ref, 1 edit ref
+sin fila (el nombre no coincidia con el de la planilla) y una fila repetida, todos en Problems.
+
 ## Brief numerado
 
 Un brief de varios renglones es una lista de pedidos. Al armar el plan, cada renglon con texto
@@ -637,7 +678,8 @@ agrega la barra antes de pasarla a ffmpeg. Medido en NKS 16.
 
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks_Sheet.py`:
   `list_sheets`, `suggest_sheet`, `load_table`, `detect_header_row`, `detect_columns`,
-  `parse_timecode`, `build_plan`, `compare_marks`, `previous_mark`, `change_counts`. Sin host; probado por `tests/test_shot_marks_sheet.py`.
+  `parse_timecode`, `build_plan`, `compare_marks`, `previous_mark`, `change_counts`, `clip_shot`,
+  `with_clip_ranges`, `finish_clip_plan`. Sin host; probado por `tests/test_shot_marks_sheet.py`.
 - `C:\Users\leg4-pc\.nuke\Python\Startup\LGA_HieroTools\LGA_NKS_Review_Panel_py\LGA_NKS_ShotMarks.py`:
   `TimelineInfo` (TC de secuencia y de media), `own_tags`, `previous_marks`, `apply_plan`, `guess_episode`,
   `ShotMarksDialog`, `main`.
@@ -670,7 +712,8 @@ agrega la barra antes de pasarla a ffmpeg. Medido en NKS 16.
   `parse_edl`, `align`, `cut_frames`, `segments`, `segment_at`, `source_info`. El motor lo carga
   por ruta (corre con `-I`) en `load_edl`. Tests: `tests/test_shot_marks_edl.py`.
 - Capturas: `+Building_Blocks/UI_Capture/fixtures/h11_shot_marks.py` -> `ShotMarks_Dialog.png`,
-  `ShotMarks_Dialog-Thumbnails.png` y `ShotMarks_Dialog-Thumbnails-EDL.png`; `h11b_shot_mark_info.py` -> `ShotMarks_Info.png`,
+  `ShotMarks_Dialog-Thumbnails.png`, `ShotMarks_Dialog-Thumbnails-EDL.png` y las de una marca por
+  clip (`ShotMarks_Dialog-Clips*.png`); `h11b_shot_mark_info.py` -> `ShotMarks_Info.png`, `ShotMarks_Info-Clip.png`,
   `ShotMarks_Info-OldTag.png`, `ShotMarks_Info-Located.png`, `ShotMarks_Info-Edits.png` y
   `ShotMarks_Info-Editing.png`; `h11c_shot_marks_locate.py` ->
   `ShotMarks_Locate.png`; `h11d_shot_mark_find.py` -> `ShotMarks_Find.png`,

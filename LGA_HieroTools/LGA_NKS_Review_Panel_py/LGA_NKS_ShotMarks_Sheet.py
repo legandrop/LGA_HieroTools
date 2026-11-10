@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Sheet v1.18 | Lega
+  LGA_NKS_ShotMarks_Sheet v1.19 | Lega
 
   Nucleo sin host de Shot Marks: lee una planilla (xlsx o csv),
   detecta la fila de encabezado y las columnas de shot y timecode,
@@ -13,6 +13,14 @@ ____________________________________________________________________
   los sharedStrings), sin openpyxl: NKS no lo trae, y asi una
   planilla de cientos de MB por las imagenes se lee en segundos.
 
+  v1.19: Una marca por clip: with_clip_ranges toma el rango de cada clip
+         del timeline cuyo nombre (o archivo) es el shot o empieza con el
+         shot ("PROJA_010_0100_EditRef"), como columnas de TC nuevas, y
+         finish_clip_plan reporta las filas sin clip y los clips sin fila.
+         Para un timeline de edit refs, un clip por shot, que no trae TC.
+         Rol group ("Grupo"): viaja a la marca, cuenta como cambio y se
+         busca. Se sugieren "BRIEF English" para el brief (antes que el
+         castellano) y "VFX Type" para la categoria.
   v1.18: La columna Budget Alternative (rol notes2) se reconoce tambien
          por nombre parcial: "Alternativas para reduccion de presupuesto".
   v1.17: Columna de dificultad (rol difficulty, se sugiere "Dificultad"):
@@ -124,16 +132,19 @@ MAX_COLUMNS = 400
 SHOT_HEADERS = ("shotname", "shot", "shotcode", "vfxshot", "vfxshotname", "tcn")
 TC_IN_HEADERS = (
     "rectcin", "recordtcin", "recin", "recordin", "rectc", "tcin",
-    "timecodein", "mastertc", "start", "rectcinlocated",
+    "timecodein", "mastertc", "start", "rectcinlocated", "rectcinclip",
 )
 TC_OUT_HEADERS = (
     "rectcout", "recordtcout", "recout", "recordout", "tcout",
-    "timecodeout", "end", "rectcoutlocated",
+    "timecodeout", "end", "rectcoutlocated", "rectcoutclip",
 )
 EPISODE_HEADERS = ("ep", "episode", "episodio", "epi", "reel")
 STATUS_HEADERS = ("status", "estado", "shotstatus", "statusvfx", "vfxstatus", "estadovfx")
 # "note" es el brief: va a la nota del tag. La descripcion es aparte.
-NOTE_HEADERS = ("brief", "vfxbrief")
+# Planillas bilingues ("BRIEF Espanol" / "BRIEF English"): se sugiere el ingles,
+# que es el que se manda a los vendors; el castellano queda de respaldo.
+NOTE_HEADERS = ("brief", "vfxbrief", "briefenglish", "briefingles", "briefen", "briefespanol",
+                "briefes")
 # Notas eventuales del shot: la ventana de la marca las resalta. "Alternativa"
 # es una segunda columna de notas (planos con una version alternativa).
 NOTES_HEADERS = ("notes", "notas", "vfxnotes", "nota", "note")
@@ -147,7 +158,9 @@ PARTIAL_HEADERS = {"notes2": ("alternativ",)}
 DESCRIPTION_HEADERS = ("descripcion", "description", "desc", "shotdescription")
 SCENE_HEADERS = ("esc", "escena", "scene", "sc")
 VENDOR_HEADERS = ("vendor", "proveedor")
-CATEGORY_HEADERS = ("shotcategory", "category", "categoria", "type")
+CATEGORY_HEADERS = ("shotcategory", "category", "categoria", "type", "vfxtype", "tipovfx")
+# Grupo de shots de la planilla (bloque, set o personaje: "TRAIN", "STATION").
+GROUP_HEADERS = ("grupo", "group", "shotgroup", "vfxgroup")
 DIFFICULTY_HEADERS = ("dificultad", "difficulty", "shotdifficulty", "complejidad", "complexity")
 # Texto normalizado (sin espacios ni simbolos) -> nivel de 1 a 5. Medido en una
 # planilla real: Very Easy, Easy, mid, hard y Very hard, con mayusculas mezcladas.
@@ -173,15 +186,16 @@ OMIT_TOKENS = ("omit", "omitted", "cbb", "removed")
 MAYBE_TOKENS = ("posible", "possible", "maybe", "tentative")
 
 ROLES = ("shot", "tc_in", "tc_out", "episode", "status", "note", "notes", "notes2",
-         "description", "scene", "vendor", "category", "difficulty", "thumb", "located", "clip")
+         "description", "scene", "vendor", "category", "group", "difficulty", "thumb", "located",
+         "clip")
 # Roles que viajan como texto a cada marca, para la ventana de info.
 INFO_ROLES = ("status", "description", "notes", "notes2", "comments", "scene", "vendor",
-              "category", "difficulty", "episode", "thumb", "located", "clip")
+              "category", "group", "difficulty", "episode", "thumb", "located", "clip")
 # Campos que, si cambian entre una corrida y la siguiente, pintan la marca de
 # amarillo. El TC no esta: un shot que se movio es un cambio de corte, no de
 # planilla. Thumb, nivel de ubicacion y clip tampoco: salen de Shot Marks.
 CHANGE_FIELDS = ("brief", "description", "notes", "notes2", "status", "scene", "vendor",
-                 "category", "difficulty")
+                 "category", "group", "difficulty")
 # Lo que comparaban las marcas de antes de la v1.09, que no guardan la key
 # compared: un campo que no existia no cuenta como cambio.
 LEGACY_CHANGE_FIELDS = ("brief", "description", "status", "scene", "vendor", "category")
@@ -202,6 +216,7 @@ _ROLE_HEADERS = {
     "scene": SCENE_HEADERS,
     "vendor": VENDOR_HEADERS,
     "category": CATEGORY_HEADERS,
+    "group": GROUP_HEADERS,
     "difficulty": DIFFICULTY_HEADERS,
     "thumb": THUMB_HEADERS,
     "located": LOCATED_HEADERS,
@@ -267,6 +282,8 @@ class Plan(object):
         self.issues = []
         self.skipped_omit = 0
         self.skipped_episode = 0
+        # Solo por clip: filas sin clip que no son shots (finish_clip_plan).
+        self.skipped_not_shot = 0
 
     def errors(self):
         return [i for i in self.issues if not i.written]
@@ -924,7 +941,8 @@ def mark_index_at(starts, ends, frame):
 # Campos donde busca Find Shot Mark. El orden decide que campo se informa
 # cuando el texto aparece en varios: el shot primero.
 SEARCH_FIELDS = ("shot", "description", "brief", "notes", "notes2", "comments", "status",
-                 "vendor", "scene", "category", "difficulty", "episode", "tc_in", "tc_out", "clip")
+                 "vendor", "scene", "category", "group", "difficulty", "episode", "tc_in",
+                 "tc_out", "clip")
 
 
 def search_text(text):
@@ -1401,6 +1419,139 @@ def parse_clip(text):
     if len(parts) != 4 or not parts[0]:
         return {}
     return {"clip": parts[0], "src_in": parts[1], "src_out": parts[2], "event": parts[3]}
+
+
+# -- una marca por clip ----------------------------------------------------
+
+# Columnas que agrega Shot Marks cuando la marca toma el rango de un clip.
+CLIP_TC_IN = "REC TC IN (clip)"
+CLIP_TC_OUT = "REC TC OUT (clip)"
+# Prefijo del evento en la columna LGA Clip: la ventana de la marca distingue
+# un clip del timeline de un plano del EDL por esto.
+CLIP_EVENT_PREFIX = "timeline"
+# Con al menos esta parte de los clips con su shot en la planilla, el dialogo
+# sugiere marcar por clip.
+CLIP_MATCH_SHARE = 0.5
+NO_CLIP_MESSAGE = "No clip of this shot in the timeline"
+CLIP_WITHOUT_ROW = "Clip with no row in the sheet: not marked"
+
+
+def _clip_key(text):
+    return str(text or "").strip().lower()
+
+
+def clip_shot(names, shots):
+    """Shot de la planilla que corresponde a un clip, o None.
+
+    `names` son el nombre del clip y el de su archivo sin extension, en ese
+    orden; `shots` es {shot en minusculas: shot}. Un nombre es del shot si es
+    igual o si empieza con el shot y sigue algo que no es letra ni numero
+    ("PROJA_010_0100_EditRef"). Gana el shot mas largo, y una letra o un numero
+    despues no cuentan: PROJA_010_01000 no cae en PROJA_010_0100.
+    """
+    for name in names:
+        key = _clip_key(name)
+        best = None
+        for shot_key, shot in shots.items():
+            if not shot_key or not key.startswith(shot_key):
+                continue
+            if len(key) > len(shot_key) and key[len(shot_key)].isalnum():
+                continue
+            if best is None or len(shot_key) > len(best[0]):
+                best = (shot_key, shot)
+        if best is not None:
+            return best[1]
+    return None
+
+
+def with_clip_ranges(table, shot_col, clips, fps, start):
+    """Copia de la tabla con el rango de cada clip como columnas de TC.
+
+    Es la planilla de un timeline de clips sueltos (un edit ref por shot) que
+    no trae REC TC: cada marca toma el rango de su clip. `clips` va en orden de
+    timeline: [{"name", "file", "frame_in", "frame_out" (inclusivo), "src_in",
+    "src_out", "event"}]. `start` es el TC (en cuadros) del cuadro 0 del
+    timeline. El TC OUT va exclusivo, como en una planilla de montaje, y la
+    columna LGA Clip lleva el clip y su SRC TC para la ventana de la marca.
+
+    Una fila cuyo shot tiene dos clips se repite, una vez por clip: build_plan
+    escribe las dos marcas y avisa "Shot repeated". Una fila sin clip queda sin
+    TC. Devuelve (tabla, {"tc_in", "tc_out", "clip": indice de columna},
+    reporte), con el reporte de clip_report.
+    """
+    shots = {}
+    for _number, values in table.rows:
+        shot = _value(values, shot_col)
+        if is_shot_name(shot):
+            shots.setdefault(_clip_key(shot), shot)
+    by_shot, unmatched = {}, []
+    for clip in clips:
+        stem = Path(str(clip.get("file") or "").replace("\\", "/")).stem
+        shot = clip_shot([clip.get("name"), stem], shots)
+        if shot is None:
+            unmatched.append(clip)
+        else:
+            by_shot.setdefault(shot, []).append(clip)
+    width = len(table.headers)
+    headers = list(table.headers) + [CLIP_TC_IN, CLIP_TC_OUT, LOCATED_CLIP]
+    rows = []
+    for number, values in table.rows:
+        padded = (list(values) + [""] * width)[:width]
+        found = by_shot.get(_value(values, shot_col)) or [None]
+        for clip in found:
+            if clip is None:
+                rows.append((number, padded + ["", "", ""]))
+                continue
+            rows.append((number, padded + [
+                format_timecode(start + int(clip["frame_in"]), fps),
+                format_timecode(start + int(clip["frame_out"]) + 1, fps),
+                clip_text({"clip": clip.get("name", ""), "src_in": clip.get("src_in", ""),
+                           "src_out": clip.get("src_out", ""),
+                           "event": clip.get("event", CLIP_EVENT_PREFIX)})]))
+    columns = {"tc_in": width, "tc_out": width + 1, "clip": width + 2}
+    report = {"clips": len(clips), "matched": len(clips) - len(unmatched),
+              "unmatched": unmatched, "shots": len(by_shot),
+              "multi": {shot: len(found) for shot, found in by_shot.items() if len(found) > 1}}
+    return (Table(table.path, table.sheet, table.header_row, headers, rows, table.comments),
+            columns, report)
+
+
+def clip_match_share(report):
+    """Parte de los clips del timeline que tienen su shot en la planilla."""
+    return float(report["matched"]) / report["clips"] if report["clips"] else 0.0
+
+
+def finish_clip_plan(plan, report, fps, start):
+    """Ajusta el plan de una corrida por clip: una fila sin TC es una fila sin
+    clip (no "No TC IN", que haria buscar una columna), y cada clip que no
+    corresponde a ninguna fila va a la lista como problema, para que se vea que
+    ese edit ref quedo sin brief.
+
+    Una fila sin clip cuyo "shot" no tiene ningun numero no es un shot: es la
+    leyenda al pie de la planilla ("VENDOR NAME", "EJEMPLO"). No se lista, se
+    cuenta en plan.skipped_not_shot. Con TC esas filas ya se salteaban solas.
+    """
+    kept = []
+    plan.skipped_not_shot = 0
+    for issue in plan.issues:
+        if issue.message == "No TC IN":
+            if not any(ch.isdigit() for ch in issue.shot):
+                plan.skipped_not_shot += 1
+                continue
+            issue.message = NO_CLIP_MESSAGE
+        kept.append(issue)
+    plan.issues = kept
+    for clip in report["unmatched"]:
+        plan.issues.append(Issue(0, clip.get("name", ""),
+                                 format_timecode(start + int(clip["frame_in"]), fps),
+                                 CLIP_WITHOUT_ROW, False))
+    return plan
+
+
+def is_clip_event(event):
+    """True si el evento de la columna LGA Clip es un clip del timeline (marca por
+    clip) y no un plano del EDL."""
+    return str(event or "").startswith(CLIP_EVENT_PREFIX)
 
 
 def episode_values(table, column):

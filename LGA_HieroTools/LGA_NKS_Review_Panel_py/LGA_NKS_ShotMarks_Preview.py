@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Preview v1.00 | Lega
+  LGA_NKS_ShotMarks_Preview v1.01 | Lega
 
   Vista previa del dialogo de Shot Marks, sin host ni Qt: arma las
   filas de la tabla a partir del plan, las filtra (All / Changes /
@@ -18,6 +18,7 @@ ____________________________________________________________________
     change_kind: "unchanged" | "changed" | "new" | "removed" | ""
     result_kind: "ok" | "warning" | "error" | "dim"
 
+  v1.01: Group (rol group) cuenta entre las columnas de datos.
   v1.00: Version inicial (rediseno del dialogo en panel + vista previa).
 ____________________________________________________________________
 """
@@ -31,7 +32,7 @@ FILTERS = (FILTER_ALL, FILTER_CHANGES, FILTER_PROBLEMS)
 REQUIRED_ROLES = ("shot", "tc_in")
 # Columnas de datos que van a la ventana de la marca, en el orden del dialogo.
 DATA_ROLES = ("episode", "status", "note", "notes", "notes2", "description", "scene",
-              "vendor", "category", "difficulty")
+              "vendor", "category", "group", "difficulty")
 
 CHANGE_LABELS = {
     "unchanged": "unchanged",

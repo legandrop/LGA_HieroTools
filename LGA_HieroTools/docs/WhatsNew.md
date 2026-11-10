@@ -12,6 +12,10 @@ platforms: [win, mac]
 
 ## Unreleased
 
+## v4.026
+- [new] Shot Marks pone una marca por clip en un timeline de edit refs (un clip por shot), sin necesitar timecodes en la planilla: cada marca dura lo que su clip, y la vista previa te muestra los shots sin clip y los clips sin fila en la planilla.
+- [improved] La ventana de la marca muestra también el grupo del shot (columna Grupo), y con el brief en dos idiomas usa el inglés.
+
 ## v4.025
 - [new] En el panel Flow | S3, `Download Clip` con Ctrl+Alt+Click te deja elegir la carpeta donde se baja la última versión del clip, y con Ctrl+Alt+Shift+Click baja a la última carpeta que elegiste, sin preguntar (hace falta FileManager S3 actualizado).
 - [improved] cuando cambiás un estado con los botones de Flow Push, PipeSync abierto lo muestra al instante en todos sus tabs, sin esperar al próximo sync (hace falta PipeSync actualizado).

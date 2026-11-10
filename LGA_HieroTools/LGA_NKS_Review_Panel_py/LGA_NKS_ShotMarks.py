@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks v1.12 | Lega
+  LGA_NKS_ShotMarks v1.13 | Lega
 
   Shot Marks: lee una planilla de breakdown (xlsx, csv o un link de
   Google Sheets) y pone un tag
@@ -25,6 +25,14 @@ ____________________________________________________________________
   Filas y filtro de la vista previa: LGA_NKS_ShotMarks_Preview.py.
   Log de cada corrida: logs/DebugPy_LGA_NKS_ShotMarks.log.
 
+  v1.13: Una marca por clip. Con un timeline de clips sueltos (edit refs,
+         un clip por shot) la seccion Marks ofrece One per clip / From
+         timecode: por clip, cada marca toma el largo del clip cuyo nombre
+         empieza con el shot, y la planilla no necesita TC. Se sugiere sola
+         si la mitad de los clips tiene su shot en la planilla; la linea de
+         abajo dice cuantos cruzaron. Las filas sin clip y los clips sin fila
+         van a Problems. Columna Group (Grupo) en Mark window columns. El
+         mensaje final explica que la ventana de la marca sigue al playhead.
   v1.12: La columna Notes 2 pasa a llamarse Alternative en el dialogo (Budget
          Alternative en la ventana de la marca: el nombre entero no entra en
          el ancho de rotulo de la columna de ajustes).
@@ -173,7 +181,10 @@ REQUIRED_COLUMNS = (("shot", "Shot"), ("tc_in", "TC In"), ("tc_out", "TC Out"))
 DATA_COLUMNS = (("episode", "Episode"), ("status", "Status"), ("note", "Brief"),
                 ("notes", "Notes"), ("notes2", "Alternative"), ("description", "Description"),
                 ("scene", "Scene"), ("vendor", "Vendor"), ("category", "Category"),
-                ("difficulty", "Difficulty"))
+                ("group", "Group"), ("difficulty", "Difficulty"))
+# Donde va cada marca: en el rango de su clip (timeline de edit refs, un clip
+# por shot) o en el REC TC de la planilla (un MOV del corte entero).
+PLACE_CLIP, PLACE_TIMECODE = "clip", "timecode"
 SIDE_WIDTH = 340
 # Columna de ajustes: un solo ancho de rotulo y un solo ritmo vertical para
 # todas las secciones, asi los campos arrancan en la misma vertical.
@@ -194,7 +205,8 @@ CONFIG_SECTION = "Settings"
 # Tooltips en castellano, separados del widget para que pasar a bilingue sea
 # un cambio de datos.
 TOOLTIPS = {
-    "help": "Pone un tag de rango por cada shot de la planilla en el timeline.<br>"
+    "help": "Pone un tag de rango por cada shot de la planilla en el timeline: en el REC TC "
+            "de la planilla, o en el rango de su clip si el timeline tiene un clip por shot.<br>"
             "Viewer &gt; Next Tag (Alt+Shift+Right) salta de shot en shot.<br>"
             "Al volver a correrla reemplaza solo sus tags y los pinta contra la corrida "
             "anterior: verde igual, amarillo cambio, naranja nuevo, rojo ya no esta.",
@@ -226,7 +238,14 @@ TOOLTIPS = {
     "description": "Descripcion del shot, para la ventana de Next Mark.",
     "scene": "Escena, para la ventana de Next Mark.",
     "vendor": "Vendor, para la ventana de Next Mark.",
-    "category": "Categoria del shot, para la ventana de Next Mark.",
+    "category": "Categoria del shot, para la ventana de Next Mark. Se sugiere Category o VFX Type.",
+    "group": "Grupo del shot (bloque, set o personaje), para la ventana de Next Mark.<br>"
+             "Se sugiere la columna Grupo.",
+    "place_clip": "Una marca por clip, con el largo del clip.<br>"
+                  "El clip es del shot si su nombre (o el de su archivo) empieza con el shot: "
+                  "PROJA_010_0100_EditRef.",
+    "place_timecode": "Las marcas van en el REC TC de la planilla, como con el MOV del corte "
+                      "entero.",
     "notes": "Notas del shot: la ventana de Next Mark las resalta. Se sugiere la columna Notas.",
     "notes2": "Alternativa para bajar el presupuesto del shot (que dejar de hacer o como\n"
               "hacerlo de otra forma). Se sugiere la columna Alternativa.",
@@ -416,7 +435,41 @@ class TimelineInfo(object):
         self.media_tc = None
         self.media_clip = ""
         self.media_reason = ""
+        # Clips habilitados del timeline, para marcar uno por clip.
+        self.clips = []
         self._detect_reference()
+        self._collect_clips()
+
+    def _collect_clips(self):
+        """[{name, file, frame_in, frame_out, src_in, src_out, event}] en orden de
+        timeline. frame_out es inclusivo (timelineOut de Hiero); el SRC TC OUT va
+        exclusivo, como en un EDL."""
+        fmt = _sheet_module().format_timecode
+        clips = []
+        for track in self.sequence.videoTracks():
+            if not track.isEnabled():
+                continue
+            for item in track.items():
+                try:
+                    if not item.isEnabled():
+                        continue
+                    clip = item.source()
+                    try:
+                        path = clip.mediaSource().fileinfos()[0].filename()
+                    except Exception:
+                        path = ""
+                    tc = int(clip.timecodeStart())
+                    clips.append({
+                        "name": item.name(), "file": path,
+                        "frame_in": int(item.timelineIn()), "frame_out": int(item.timelineOut()),
+                        "src_in": fmt(tc + int(round(item.sourceIn())), self.fps),
+                        "src_out": fmt(tc + int(round(item.sourceOut())) + 1, self.fps),
+                        "event": "%s %s" % (_sheet_module().CLIP_EVENT_PREFIX, track.name()),
+                    })
+                except Exception as exc:
+                    _logger_ref().warning("Clip del timeline ilegible: %s", exc)
+        clips.sort(key=lambda c: (c["frame_in"], c["frame_out"]))
+        self.clips = clips
 
     def _detect_reference(self):
         items = []
@@ -817,6 +870,13 @@ class ShotMarksDialog(QtWidgets.QDialog):
         # Marcas de la corrida anterior y las que ya no estan en la planilla.
         self.previous = previous_marks(sequence)
         self.removed = []
+        # Donde van las marcas: por clip o por timecode. Se sugiere al leer la
+        # hoja (por clip si la mitad de los clips tiene su shot en la planilla)
+        # hasta que el usuario elige con el switch.
+        self.place_mode = PLACE_TIMECODE
+        self._place_picked = False
+        self.clip_report = None
+        self.no_timecode = False
         # Hoja sin TC con thumbnails: el boton principal pasa a ubicarlos.
         self.thumb_mode = False
         self.thumb_rows = 0
@@ -991,6 +1051,24 @@ class ShotMarksDialog(QtWidgets.QDialog):
         grid.addWidget(_field_label("Sheet"), 0, 0)
         grid.addWidget(self.sheet_combo, 0, 1)
         lay.addLayout(grid)
+
+        # --- donde van las marcas (solo con dos clips o mas) --------------------
+        self.place_box = QtWidgets.QWidget()
+        place_lay = QtWidgets.QVBoxLayout(self.place_box)
+        place_lay.setContentsMargins(0, 0, 0, 0)
+        place_lay.setSpacing(0)
+        self._section(place_lay, "Marks")
+        self.place_switch = _PillSwitch(
+            ((PLACE_CLIP, "One per clip", TOOLTIPS["place_clip"]),
+             (PLACE_TIMECODE, "From timecode", TOOLTIPS["place_timecode"])), self._pick_place)
+        self._section_head.addWidget(self.place_switch)
+        self.place_note = QtWidgets.QLabel("")
+        self.place_note.setTextFormat(Qt.RichText)
+        self.place_note.setWordWrap(True)
+        place_lay.addWidget(self.place_note)
+        self.place_switch.select(self.place_mode)
+        self.place_box.setVisible(len(self.timeline.clips) > 1 and not self.preset)
+        lay.addWidget(self.place_box)
         self._section(lay, "Columns")
 
         # --- columnas ---------------------------------------------------------
@@ -1034,7 +1112,8 @@ class ShotMarksDialog(QtWidgets.QDialog):
             self.reference_combo.addItem("Media timecode", "media")
         self.reference_combo.addItem("Timeline timecode", "timeline")
         self.reference_combo.currentIndexChanged.connect(self._reference_changed)
-        grid.addWidget(_field_label("Measure"), 0, 0)
+        self.measure_label = _field_label("Measure")
+        grid.addWidget(self.measure_label, 0, 0)
         grid.addWidget(self.reference_combo, 0, 1)
         # TC de inicio y clip del timecode elegido: el nombre del clip no
         # entra en el combo.
@@ -1501,20 +1580,101 @@ class ShotMarksDialog(QtWidgets.QDialog):
             return
         self.table = table
         self.sheet_combo.setEnabled(self.sheet_combo.count() > 0 and not self.preset)
-        self.thumb_mode = _sheet_module().detect_columns(table.headers).get("tc_in") is None
+        self.no_timecode = _sheet_module().detect_columns(table.headers).get("tc_in") is None
         # Filas con foto: la lista (para la grilla) o solo la cuenta (preset).
         self.thumb_row_list = list(images) if isinstance(images, (list, tuple)) else []
         self.thumb_rows = len(images) if isinstance(images, (list, tuple)) else int(images or 0)
         self._fill_columns(table.headers, table.rows)
-        for role in ("tc_in", "tc_out"):
-            self.column_combos[role].setEnabled(not self.thumb_mode)
-        self._show_edl_row(self.thumb_mode)
         _logger_ref().info("Planilla: %s | hoja %s | encabezado en fila %d | %d filas",
                            table.path, table.sheet, table.header_row, len(table.rows))
+        self._suggest_place()
+        self._apply_place()
+        self._columns_changed()
+
+    # donde van las marcas
+    def _clip_report(self):
+        """Reporte de with_clip_ranges con la columna de shot elegida, o None si el
+        timeline no tiene clips sueltos para cruzar."""
+        if self.table is None or len(self.timeline.clips) < 2:
+            return None
+        module = _sheet_module()
+        _table, _cols, report = module.with_clip_ranges(
+            self.table, self._columns().get("shot"), self.timeline.clips, self.timeline.fps,
+            self.timeline.start)
+        return report
+
+    def _suggest_place(self):
+        """Por clip si al menos la mitad de los clips del timeline tiene su shot en
+        la planilla (un timeline de edit refs); si no, por timecode. Una vez que
+        el usuario eligio con el switch, se respeta su eleccion."""
+        if self._place_picked:
+            return
+        report = None if self.preset else self._clip_report()
+        share = _sheet_module().clip_match_share(report) if report else 0.0
+        self.place_mode = (PLACE_CLIP if share >= _sheet_module().CLIP_MATCH_SHARE
+                           else PLACE_TIMECODE)
+        if report:
+            _logger_ref().info("Clips del timeline con su shot en la planilla: %d de %d (%.0f%%): "
+                               "se sugiere marcar %s", report["matched"], report["clips"],
+                               share * 100, "por clip" if self.place_mode == PLACE_CLIP
+                               else "por timecode")
+
+    def _pick_place(self, mode):
+        if mode == self.place_mode and self._place_picked:
+            return
+        self._place_picked = True
+        self.place_mode = mode
+        _logger_ref().info("Marcas elegidas %s", "por clip" if mode == PLACE_CLIP else "por timecode")
+        if self.table is None:
+            self.place_switch.select(mode)
+            return
+        self._apply_place()
+        self._refresh_plan()
+
+    def _apply_place(self):
+        """Muestra solo lo que usa el modo: por clip no hay columnas de TC ni
+        timecode de referencia, y una hoja sin TC no pasa a ubicar thumbnails."""
+        clip = self.place_mode == PLACE_CLIP
+        self.place_switch.select(self.place_mode)
+        self.thumb_mode = bool(self.table is not None and self.no_timecode and not clip)
+        for role in ("tc_in", "tc_out"):
+            self.column_combos[role].setEnabled(self.table is not None and not self.thumb_mode)
+            self.column_combos[role].setVisible(not clip)
+            self.column_labels[role].setVisible(not clip)
+        for widget in (self.measure_label, self.reference_combo, self.reference_detail):
+            widget.setVisible(not clip)
+        self._reference_changed(refresh=False)
+        self._show_edl_row(self.thumb_mode)
         self._clear_grid()
         if self.thumb_mode and self.thumb_row_list:
             self._start_thumb_grid()
-        self._columns_changed()
+
+    def _show_place_note(self):
+        """Linea debajo del switch: que hace el modo y como cruzaron los clips."""
+        report = self.clip_report
+        if self.place_mode == PLACE_CLIP:
+            if not report:
+                self.place_note.setText("")
+                return
+            text = _colored("Each mark takes the length of its clip.", Color.TEXT_DIM)
+            text += "<br>%s of %d clips have their shot in the sheet" % (
+                emphasis(str(report["matched"])), report["clips"])
+            missing = len(report["unmatched"])
+            if missing:
+                text += _colored(" &middot; %d %s not" % (missing, "is" if missing == 1 else "are"),
+                                 Color.WARNING_TEXT)
+            if report["multi"]:
+                text += _colored(" &middot; %d %s with two clips or more"
+                                 % (len(report["multi"]), _plural(len(report["multi"]), "shot")),
+                                 Color.WARNING_TEXT)
+            self.place_note.setText(text)
+            return
+        text = _colored("Each mark goes at the REC TC of its row.", Color.TEXT_DIM)
+        if report and _sheet_module().clip_match_share(report) >= _sheet_module().CLIP_MATCH_SHARE:
+            text += "<br>" + _colored("%d of %d clips are named after a shot: One per clip fits "
+                                      "this timeline." % (report["matched"], report["clips"]),
+                                      Color.WARNING_TEXT)
+        self.place_note.setText(text)
 
     def _fill_columns(self, headers, rows=None):
         module = _sheet_module()
@@ -1588,9 +1748,11 @@ class ShotMarksDialog(QtWidgets.QDialog):
         que se tomaron sin encontrarlas por nombre (amarillo)."""
         preview = _preview_module()
         columns = self._columns() if self.table is not None else {}
-        missing = preview.missing_required(columns, self.thumb_mode) if self.table is not None else []
+        # Por clip, como con thumbnails, el TC no sale de la planilla.
+        no_tc = self.thumb_mode or self.place_mode == PLACE_CLIP
+        missing = preview.missing_required(columns, no_tc) if self.table is not None else []
         guessed = [r for r in sorted(self._undetected)
-                   if r not in missing and not (self.thumb_mode and r == "tc_in")]
+                   if r not in missing and not (no_tc and r == "tc_in")]
         for role, label in self.column_labels.items():
             color = (Color.ERROR_TEXT if role in missing
                      else Color.WARNING_TEXT if role in guessed else Color.TEXT_DIM)
@@ -1615,10 +1777,11 @@ class ShotMarksDialog(QtWidgets.QDialog):
         self.data_box.setVisible(self.data_toggle.isChecked())
         self._update_columns_note()
 
-    def _reference_changed(self, *_args):
+    def _reference_changed(self, *_args, refresh=True):
         media = self.reference_combo.currentData() == "media"
         start = self.timeline.media_start
-        show = media and start is not None and start != self.timeline.start
+        show = (media and start is not None and start != self.timeline.start
+                and self.place_mode != PLACE_CLIP)
         self.align_check.setVisible(show)
         if media and start is not None:
             detail = "Starts %s &middot; %s" % (self.timeline.timecode(start), self.timeline.media_clip)
@@ -1629,9 +1792,13 @@ class ShotMarksDialog(QtWidgets.QDialog):
             self.align_check.setText("Align timeline start to it")
             set_custom_tooltip(self.align_check, TOOLTIPS["align"] % self.timeline.timecode(
                 self.timeline.start))
-        self._refresh_plan()
+        if refresh:
+            self._refresh_plan()
 
     def _reference_start(self):
+        # Por clip el TC de cada marca sale del timeline mismo.
+        if self.place_mode == PLACE_CLIP:
+            return self.timeline.start
         if self.reference_combo.currentData() == "media" and self.timeline.media_start is not None:
             return self.timeline.media_start
         return self.timeline.start
@@ -1641,19 +1808,34 @@ class ShotMarksDialog(QtWidgets.QDialog):
         if self._loading or self.table is None:
             return
         self._update_columns_note()
+        module = _sheet_module()
+        columns = self._columns()
+        clip = self.place_mode == PLACE_CLIP
+        table = self.table
+        self.clip_report = None
+        if len(self.timeline.clips) > 1 and not self.preset:
+            # Tambien por timecode: la linea del switch avisa si por clip encaja mejor.
+            clip_table, extra, self.clip_report = module.with_clip_ranges(
+                self.table, columns.get("shot"), self.timeline.clips, self.timeline.fps,
+                self.timeline.start)
+            if clip:
+                table = clip_table
+                columns.update(extra)
+        self._show_place_note()
         if self.thumb_mode:
             self._show_thumb_mode()
             return
-        module = _sheet_module()
-        columns = self._columns()
         try:
             self.plan = module.build_plan(
-                self.table, columns, self.timeline.fps, self._reference_start(),
+                table, columns, self.timeline.fps, self._reference_start(),
                 self.timeline.duration, episode=self.episode_combo.currentData(),
                 skip_omit=self.skip_omit.isChecked())
+            if clip and self.clip_report:
+                module.finish_clip_plan(self.plan, self.clip_report, self.timeline.fps,
+                                        self.timeline.start)
         except ValueError as exc:
             self.plan = None
-            missing = _preview_module().missing_required(columns, False)
+            missing = _preview_module().missing_required(columns, clip)
             names = dict(REQUIRED_COLUMNS)
             text = ("Pick the %s column on the left." % " and ".join(names[r] for r in missing)
                     if missing else _escape(str(exc)))
@@ -1700,7 +1882,8 @@ class ShotMarksDialog(QtWidgets.QDialog):
         comments = _comments_summary(self.table, plan.marks)
         if comments:
             text += "<br>" + comments
-        if self.timeline.media_reason:
+        clip = self.place_mode == PLACE_CLIP
+        if self.timeline.media_reason and not clip:
             text += "<br>" + _colored("%s." % self.timeline.media_reason, Color.TEXT_DIM)
         self.summary.setText(text)
         self._stop_busy()
@@ -1717,6 +1900,12 @@ class ShotMarksDialog(QtWidgets.QDialog):
                  self._columns(), self.episode_combo.currentData(), self.skip_omit.isChecked(),
                  self.timeline.fps, self.reference_combo.currentData(), self._reference_start(),
                  self.timeline.duration, marks, errors, warnings)
+        if clip and self.clip_report:
+            report = self.clip_report
+            log.info("Por clip: %d clips, %d con su shot, %d shots con clip, %d shots con mas de un "
+                     "clip, %d filas que no son shots salteadas", report["clips"],
+                     report["matched"], report["shots"], len(report["multi"]),
+                     plan.skipped_not_shot)
         for issue in plan.issues:
             log.info("  fila %d %s (%s): %s%s", issue.row, issue.shot, issue.tc_in,
                      issue.message, "" if issue.written else " [no se escribe]")
@@ -1963,6 +2152,8 @@ class ShotMarksDialog(QtWidgets.QDialog):
                               self.sheet_combo.currentData() or "")
         if self.preset:
             source += " | located from thumbnails"
+        elif self.place_mode == PLACE_CLIP:
+            source += " | one mark per clip"
         counts = _sheet_module().change_counts(self.plan.marks, self.removed)
         if self.previous and not self._confirm_update(counts):
             _logger_ref().info("Actualizacion cancelada por el usuario")
@@ -1985,7 +2176,9 @@ class ShotMarksDialog(QtWidgets.QDialog):
                            _red_text(counts)))
         if align is not None:
             message += "\nTimeline start timecode is now %s." % self.timeline.timecode(align)
-        message += "\n\nJump between them with Viewer > Next Tag (Alt+Shift+Right).\nUndo: Edit > Undo."
+        message += ("\n\nPrevious / Next Mark in the Review panel open the mark window with the "
+                    "brief; while it is open it follows the playhead.\n"
+                    "Viewer > Next Tag (Alt+Shift+Right) also jumps between them.\nUndo: Edit > Undo.")
         self.accept()
         show_info(hiero.ui.mainWindow(), "Shot Marks", message)
 

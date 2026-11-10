@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Find v1.04 | Lega
+  LGA_NKS_ShotMarks_Find v1.05 | Lega
 
   Find Shot Mark: Shift+Click en Shot Marks del panel Review. Una
   ventanita con un campo de texto que busca entre las marcas de Shot
@@ -23,6 +23,8 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Find.log.
 
+  v1.05: Busca tambien en Group ("found in Group"). El clip se informa como
+         "Clip": en una marca por clip es el del timeline, no uno de camara.
   v1.04: Notes 2 se muestra como Budget Alternative.
   v1.03: Busca tambien en la dificultad ("found in Difficulty"). Tooltips
          propios en vez de los nativos.
@@ -82,9 +84,10 @@ TOOLTIPS = {
 FIELD_LABELS = {"shot": "Shot name", "description": "Description", "brief": "Brief",
                 "notes": "Notes", "notes2": "Budget Alternative", "comments": "Comments",
                 "status": "Status", "vendor": "Vendor", "scene": "Scene",
-                "category": "Category", "difficulty": "Difficulty", "episode": "Episode",
+                "category": "Category", "group": "Group", "difficulty": "Difficulty",
+                "episode": "Episode",
                 "tc_in": "REC TC IN",
-                "tc_out": "REC TC OUT", "clip": "Camera clip"}
+                "tc_out": "REC TC OUT", "clip": "Clip"}
 
 _modules = {}
 

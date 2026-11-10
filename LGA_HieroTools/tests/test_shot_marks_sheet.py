@@ -772,5 +772,80 @@ class ShotMarksThumbTests(unittest.TestCase):
                          self.cache / "bb_480.jpg")
 
 
+class ClipMarksTest(unittest.TestCase):
+    """Una marca por clip: timeline de edit refs, planilla sin TC."""
+
+    HEADERS = ["VFX SHOT NAME", "VFX Type", "Grupo", "STATUS\nVFX", "BRIEF Español",
+               "BRIEF English"]
+
+    def _table(self):
+        return sheet.Table("x.xlsx", "s", 3, sheet.make_unique_headers(self.HEADERS), [
+            (4, ["PROJA_001_", "", "", "", "", ""]),  # titulo de grupo
+            (5, ["PROJA_001_020", "SET EXT", "TRAIN", "En corte", "1. Borrar", "1. Remove"]),
+            (6, ["PROJA_001_0200", "EPOCA", "TRAIN", "En corte", "Otro", "Other"]),
+            (7, ["PROJA_002_010", "EPOCA", "STREET", "En corte", "", "Sky"]),
+            (8, ["PROJA_003_010", "EPOCA", "STREET", "Omit", "", "Gone"]),
+            (9, ["PROJA_004_010", "EPOCA", "STREET", "En corte", "", "Not delivered"]),
+            (10, ["VENDOR NAME", "", "", "", "", ""]),  # leyenda al pie
+        ])
+
+    @staticmethod
+    def _clip(name, frame_in, frame_out, file=""):
+        return {"name": name, "file": file, "frame_in": frame_in, "frame_out": frame_out,
+                "src_in": "01:00:00:00", "src_out": "01:00:04:00", "event": "timeline Video 1"}
+
+    def _clips(self):
+        return [self._clip("PROJA_001_020_EditRef", 0, 99),
+                self._clip("PROJA_001_0200_EditRef", 100, 149),
+                # El nombre del item no dice nada; el archivo si.
+                self._clip("clip 3", 150, 199, "N:/refs/PROJA_002_010_EditRef.mov"),
+                self._clip("PROJA_002_010_EditRef_v2", 200, 219),
+                self._clip("Slate", 220, 229)]
+
+    def test_clip_shot_prefers_longest_and_separator(self):
+        shots = {"proja_001_020": "PROJA_001_020", "proja_001_0200": "PROJA_001_0200"}
+        self.assertEqual(sheet.clip_shot(["PROJA_001_0200_EditRef"], shots), "PROJA_001_0200")
+        self.assertEqual(sheet.clip_shot(["proja_001_020"], shots), "PROJA_001_020")
+        # Un numero pegado no es separador: no cae en el shot mas corto.
+        self.assertIsNone(sheet.clip_shot(["PROJA_001_0201"], shots))
+        self.assertEqual(sheet.clip_shot(["Clip 3", "PROJA_001_020.v2"], shots), "PROJA_001_020")
+
+    def test_one_mark_per_clip(self):
+        table = self._table()
+        columns = sheet.detect_columns(table.headers, table.rows)
+        self.assertIsNone(columns["tc_in"])
+        self.assertEqual(table.headers[columns["note"]], "BRIEF English")
+        self.assertEqual(table.headers[columns["category"]], "VFX Type")
+        self.assertEqual(table.headers[columns["group"]], "Grupo")
+        start = sheet.parse_timecode("01:00:00:00", FPS)
+        clip_table, extra, report = sheet.with_clip_ranges(
+            table, columns["shot"], self._clips(), FPS, start)
+        self.assertEqual((report["clips"], report["matched"], report["shots"]), (5, 4, 3))
+        self.assertEqual([c["name"] for c in report["unmatched"]], ["Slate"])
+        self.assertEqual(report["multi"], {"PROJA_002_010": 2})
+        self.assertAlmostEqual(sheet.clip_match_share(report), 0.8)
+        columns.update(extra)
+        plan = sheet.build_plan(clip_table, columns, FPS, start, 230)
+        sheet.finish_clip_plan(plan, report, FPS, start)
+        ranges = [(m.shot, m.frame_in, m.frame_out) for m in plan.marks]
+        self.assertEqual(ranges, [("PROJA_001_020", 0, 99), ("PROJA_001_0200", 100, 149),
+                                  ("PROJA_002_010", 150, 199), ("PROJA_002_010", 200, 219)])
+        first = plan.marks[0]
+        self.assertEqual((first.tc_in, first.tc_out), ("01:00:00:00", "01:00:04:04"))
+        self.assertEqual(first.note, "1. Remove")
+        self.assertEqual(first.info["group"], "TRAIN")
+        self.assertEqual(sheet.parse_clip(first.info["clip"])["clip"], "PROJA_001_020_EditRef")
+        self.assertTrue(sheet.is_clip_event(sheet.parse_clip(first.info["clip"])["event"]))
+        self.assertEqual(plan.skipped_omit, 1)
+        messages = {(i.row, i.shot): i.message for i in plan.issues}
+        self.assertEqual(messages[(9, "PROJA_004_010")], sheet.NO_CLIP_MESSAGE)
+        self.assertEqual(messages[(0, "Slate")], sheet.CLIP_WITHOUT_ROW)
+        self.assertIn("Shot repeated", messages[(7, "PROJA_002_010")])
+        self.assertNotIn((10, "VENDOR NAME"), messages)
+        self.assertEqual(plan.skipped_not_shot, 1)
+        # El grupo cuenta como cambio contra la corrida anterior.
+        self.assertIn("group", sheet.CHANGE_FIELDS)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotMarks_Nav v1.12 | Lega
+  LGA_NKS_ShotMarks_Nav v1.14 | Lega
 
   Previous / Next Mark: Click en Previous / Next Mark del panel Review
   (con Shift esos botones navegan anotaciones). Salta el playhead a la
@@ -18,6 +18,9 @@ ____________________________________________________________________
 
   Log: logs/DebugPy_LGA_NKS_ShotMarks_Nav.log.
 
+  v1.14: Group (columna Grupo) en la linea de status. Una marca por clip
+         muestra el clip del timeline (el edit ref) y su SRC TC, con su
+         propio tooltip en vez del de evento del EDL.
   v1.13: Cambios locales desde la ventanita, sin salir de NKS: la
          dificultad en cinco pildoras siempre a la vista (un click la
          cambia), Notes y Budget Alternative (ex Notes 2) se editan con un
@@ -119,6 +122,7 @@ EDITS_FALLBACK = _LOCAL / "ShotMarks_Edits"
 # un cambio de datos.
 TOOLTIPS = {
     "edl_event": "Clip de camara y SRC TC del plano, del EDL del armado (evento %s).",
+    "timeline_clip": "Clip del timeline que lleva esta marca y su SRC TC.",
     "edit_note": "Click para editar. El cambio queda guardado en tu PC,\n"
                  "no en la planilla: se pasa despues con Export Changes.",
     "add_note": "Agregar %s a este shot. Queda guardado en tu PC,\nno en la planilla.",
@@ -757,11 +761,16 @@ class ShotMarkInfoWindow(QtWidgets.QWidget):
             self.source.setText("%s %s<br>%s %s &ndash; %s" % (
                 _dim("Clip"), _strong(source["clip"]), _dim("SRC"), _strong(source["src_in"]),
                 _strong(source["src_out"])))
-            set_custom_tooltip(self.source, TOOLTIPS["edl_event"] % source["event"])
+            # Marca por clip: el clip es el del timeline (el edit ref), no un
+            # plano del EDL.
+            if _sheet_module().is_clip_event(source["event"]):
+                set_custom_tooltip(self.source, TOOLTIPS["timeline_clip"])
+            else:
+                set_custom_tooltip(self.source, TOOLTIPS["edl_event"] % source["event"])
         self.source.setVisible(bool(source))
         meta = []
         for field, label in (("status", "Status"), ("vendor", "Vendor"), ("scene", "Scene"),
-                             ("category", "Category")):
+                             ("category", "Category"), ("group", "Group")):
             if not info.get(field):
                 continue
             value = esc(info[field])
@@ -1318,7 +1327,8 @@ CHANGE_TEXTS = {
 }
 FIELD_LABELS = {"brief": "Brief", "description": "Description", "notes": "Notes",
                 "notes2": "Budget Alternative", "status": "Status", "scene": "Scene",
-                "vendor": "Vendor", "category": "Category", "difficulty": "Difficulty"}
+                "vendor": "Vendor", "category": "Category", "group": "Group",
+                "difficulty": "Difficulty"}
 # Textos largos: el anterior va debajo de su seccion, no en la linea de cambio.
 LONG_FIELDS = ("description", "brief", "notes", "notes2")
 
