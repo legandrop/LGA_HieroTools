@@ -5,8 +5,9 @@ ____________________________________________________________________
 
   Shot Marks: lee una planilla de breakdown (xlsx, csv o un link de
   Google Sheets) y pone un tag
-  de rango por shot en el timeline activo, en el REC TC de la planilla,
-  con el nombre del shot. Viewer > Next Tag / Previous Tag
+  de rango por shot en el timeline activo, en el REC TC de la planilla
+  o, en un timeline con un clip por shot (edit refs), en el rango de su
+  clip, con el nombre del shot. Viewer > Next Tag / Previous Tag
   (Alt+Shift+Right / Left) salta de shot en shot.
 
   Existe para cruzar planilla contra corte cada vez que llega un update:

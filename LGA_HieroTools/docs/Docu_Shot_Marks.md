@@ -8,7 +8,9 @@ Llega un corte bloqueado como un solo MOV del episodio y una planilla de breakdo
 shot. Hace falta ver en el timeline donde cae cada shot con VFX, saltar de uno al siguiente y cruzar
 la planilla contra el corte. A mano son cientos de marcas, y hay que rehacerlas en cada update de
 planilla o de corte. Shot Marks las pone todas de una vez y, al volver a correrla, reemplaza solo las
-suyas y las pinta segun lo que cambio en la planilla desde la corrida anterior.
+suyas y las pinta segun lo que cambio en la planilla desde la corrida anterior. Tambien sirve con un
+paquete de edit refs (un clip por shot y una planilla sin TC): ahi cada marca toma el rango de su
+clip (ver "Una marca por clip").
 
 ## Que hace
 
@@ -16,7 +18,7 @@ suyas y las pinta segun lo que cambio en la planilla desde la corrida anterior.
    sugiere la hoja con columnas de shot y REC TC (en un archivo de 55 hojas tarda ~1,5 s).
 2. Detecta la fila de encabezado (puede no ser la primera: suele haber una tablita de resumen arriba)
    y las columnas de shot, TC IN, TC OUT, episodio, status, brief, descripcion, escena, vendor,
-   categoria, dificultad, Notes y Notes 2. Todo se puede corregir en la
+   categoria, grupo, dificultad, Notes y Notes 2. Todo se puede corregir en la
    ventana y queda guardado en `%APPDATA%\LGA\HieroTools\ShotMarks.ini`. Un encabezado con salto
    de linea en la celda (`STATUS` / `VFX`) se lee en una linea (`STATUS VFX`): con el salto, el
    combo lo mostraba en dos renglones cortados.
@@ -24,7 +26,7 @@ suyas y las pinta segun lo que cambio en la planilla desde la corrida anterior.
    que. El log de cada corrida va a `LGA_NKS_Review_Panel_py/logs/DebugPy_LGA_NKS_ShotMarks.log`.
 4. Al aplicar, en un solo undo: borra los tags que puso antes, opcionalmente alinea el TC de inicio
    del timeline y crea un tag de rango por shot (`Sequence.addTagToRange`), con el shot como nombre y
-   el brief como nota.
+   el brief como nota. El rango sale del REC TC de la planilla o, por clip, del clip del shot.
 
 ## El dialogo: ajustes a la izquierda, vista previa a la derecha
 
@@ -45,10 +47,13 @@ La ventana se puede agrandar y la tabla se estira. Se eligio entre tres prototip
   meses escritos en el codigo y no con `%b`, que sale en el idioma del sistema). El boton de la
   flecha circular recarga: vuelve a consultar Google (`fetch`, que baja solo si cambio) o relee el
   archivo, conservando la hoja elegida.
-- *Columns*: solo **Shot, TC In y TC Out** a la vista. Las diez de datos (episodio, status, brief,
-  Notes, Notes 2, descripcion, escena, vendor, categoria, dificultad) se despliegan dentro de la misma
-  ventana con la fila plegable **Mark window columns** (a la derecha, cuantas hay asignadas: `6 of
-  10`), sin dialogos nuevos ni popups. Si falta una
+- *Marks* (solo con dos clips o mas en el timeline): switch **One per clip / From timecode** y una
+  linea con cuantos clips tienen su shot en la planilla. Por clip se ocultan TC In / TC Out y
+  Measure / Align. Detalle en "Una marca por clip".
+- *Columns*: solo **Shot, TC In y TC Out** a la vista. Las once de datos (episodio, status, brief,
+  Notes, Notes 2, descripcion, escena, vendor, categoria, grupo, dificultad) se despliegan dentro de
+  la misma ventana con la fila plegable **Mark window columns** (a la derecha, cuantas hay asignadas:
+  `6 of 11`), sin dialogos nuevos ni popups. Si falta una
   imprescindible, su rotulo va en rojo con el aviso abajo; si el combo cayo en la primera columna
   porque ninguna se llamaba como se esperaba, en amarillo hasta que se elija a mano.
 - *Timeline*: **Measure** dice solo Media / Timeline timecode; el inicio y el clip van en una linea
@@ -272,7 +277,7 @@ icono del bin Markers de los Tag Presets de NKS (`icons:TagGreen.png`, etc.):
 | Color | Cuando |
 |---|---|
 | Verde | El shot sigue y sus datos de planilla son iguales. Moverse en el corte NO es un cambio. |
-| Amarillo | Cambio el brief, la descripcion, Notes, Notes 2, el status, la escena, el vendor, la categoria o la dificultad (`CHANGE_FIELDS`). |
+| Amarillo | Cambio el brief, la descripcion, Notes, Notes 2, el status, la escena, el vendor, la categoria, el grupo o la dificultad (`CHANGE_FIELDS`). |
 | Naranja | Shot nuevo: no tenia marca en la corrida anterior. |
 | Rojo | Tenia marca y ahora no: ya no esta en la planilla, o esta pero no se ubica en este timeline. |
 
@@ -319,7 +324,7 @@ Click en Previous Mark / Next Mark del panel Review (con Shift+Click esos botone
 anotaciones del clip: hasta la v2.89 del panel era al reves y se llamaban Previous / Next
 Annotation, pero las marcas se usan mucho mas). Salta el playhead al IN de la marca anterior o siguiente del
 timeline del visor y muestra su info en una ventanita: shot, REC TC IN y OUT de la planilla,
-duracion, status, vendor, escena, categoria, descripcion y brief. En los extremos da la vuelta.
+duracion, status, vendor, escena, categoria, grupo, descripcion y brief. En los extremos da la vuelta.
 Previous, con el playhead adentro de un shot, vuelve al IN de ese shot.
 
 - **Por que no alcanza el salto nativo.** Viewer > Next Tag salta, pero no muestra la nota, y la
@@ -370,7 +375,7 @@ Previous, con el playhead adentro de un shot, vuelve al IN de ese shot.
   tamano del host (~12 px) no se leia. El titulo no usa `lgaTitle` porque esa regla fija 11 pt.
 - **Los datos salen del tag, no del Excel.** Shot Marks guarda la fila en la metadata del tag
   (`tag.lga_shotmarks_tc_in`, `_tc_out`, `_brief`, `_description`, `_notes`, `_notes2`, `_status`,
-  `_vendor`, `_scene`, `_category`, `_episode`). Releer el Excel tardaria medio segundo por salto y fallaria
+  `_vendor`, `_scene`, `_category`, `_group`, `_episode`, `_clip`). Releer el Excel tardaria medio segundo por salto y fallaria
   si la planilla se mueve. Los tags creados antes de esta version solo tienen nombre y nota: la
   ventana muestra eso y pide volver a correr Shot Marks.
 
@@ -381,7 +386,7 @@ ni a "el del humo de la sopa". Una ventanita con un campo: se escribe un nombre 
 texto de la planilla y Find salta a esa marca, mostrandola en la ventanita de Previous / Next Mark.
 
 - **Donde busca.** En la metadata de los tags (`mark_info_from_metadata`), no en el Excel: shot,
-  descripcion, brief, Notes, Notes 2, comentarios (autor y texto), status, vendor, escena, categoria, episodio, TC IN/OUT y clip
+  descripcion, brief, Notes, Notes 2, comentarios (autor y texto), status, vendor, escena, categoria, grupo, episodio, TC IN/OUT y clip
   (`SEARCH_FIELDS`). No pide el color del vendor a la DB de PipeSync (lo hace `mark_info` del Nav
   solo para la marca que se muestra): buscar es instantaneo aunque el timeline tenga cientos.
 - **Como compara.** Sin mayusculas ni acentos y con los espacios unidos (`search_text`): un brief

@@ -7,7 +7,7 @@ ____________________________________________________________________
   (con Shift esos botones navegan anotaciones). Salta el playhead a la
   marca de Shot Marks anterior o siguiente y muestra su info de la
   planilla (shot, REC TC, notas, descripcion, brief, status, vendor,
-  escena, categoria) en una ventanita. Find Shot Mark salta por aca tambien.
+  escena, categoria, grupo, clip) en una ventanita. Find Shot Mark salta por aca tambien.
 
   Existe porque el salto nativo (Viewer > Next Tag) no muestra la nota, y
   la del tag de Hiero sale recortada. La ventana es una sola: cada salto

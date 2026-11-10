@@ -349,8 +349,8 @@ opening related Nuke scripts.
   Shift+Click: jumps to the next annotation on the selected clip and wraps to the first.
 - **Shot Marks**
   Reads a VFX breakdown sheet (`.xlsx` or `.csv`) and adds a range tag for
-  each shot to the active timeline, at the sheet's REC TC, named after the
-  shot and with the brief as its note. Instead of a file, you can paste a
+  each shot to the active timeline, at the sheet's REC TC (or over its clip,
+  see One per clip below), named after the shot and with the brief as its note. Instead of a file, you can paste a
   Google Sheets link: the sheet is downloaded with your Google account (you
   sign in once in the browser) and only again when it changes. Jump from shot to shot with
   Previous / Next Mark, which also shows the shot's info, or with
@@ -362,7 +362,8 @@ opening related Nuke scripts.
   name or to the first match, and Next (or Enter again) goes on to the next
   match, wrapping to the first. Each jump shows the mark's info window.
   The window has the settings on the left (the sheet, as a Google Sheet or a
-  file, with Reload; the shot and timecode columns, with the columns for the
+  file, with Reload; One per clip / From timecode when the timeline has
+  several clips; the shot and timecode columns, with the columns for the
   mark window folded behind a button; the timeline options) and, on the right,
   a dry run of every mark before writing: how many, what changed, omitted
   shots and rows that cannot be placed, with an All / Changes / Problems

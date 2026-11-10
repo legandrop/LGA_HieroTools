@@ -7,7 +7,7 @@ ____________________________________________________________________
   ventanita con un campo de texto que busca entre las marcas de Shot
   Marks del timeline del visor: por nombre de shot o por cualquier
   texto de la planilla (descripcion, brief, notas, status, vendor, escena,
-  categoria, episodio, TC, clip). Find salta al shot con ese nombre
+  categoria, grupo, episodio, TC, clip). Find salta al shot con ese nombre
   exacto o al primer resultado; Next, al siguiente desde el que se
   mostro (o desde el playhead si se movio), y al final vuelve al
   primero. Cada salto muestra la marca en la ventanita de Previous /
