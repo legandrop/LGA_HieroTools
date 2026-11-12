@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Blink v1.05 | Lega
+  LGA_NKS_BurnIn_Blink v1.06 | Lega
 
   Setup del nodo BlinkScript interno del gizmo LGA_BurnIn. Lo llama el
   onCreate del nodo al instanciarse el efecto en el timeline (y al
@@ -16,6 +16,18 @@ ____________________________________________________________________
      de compilar, con el nombre del kernel como prefijo, asi que no se
      pueden escribir en el archivo del gizmo).
 
+  v1.06: Panel con mapa. Once campos (FIELDS sale del modulo de layout).
+         x/y/w/h de cada panel se atan a field_geo() de la logica (la
+         misma geometria que las cajas de los Text2), las franjas del
+         modo Band (band_t/b/l/r) y el formato (fmt_w/fmt_h = width /
+         height del nodo). apply_layout() traduce el mapa (bi_layout) y
+         el modo de fondo a los knobs on/bg/rot de cada campo. La
+         rotacion ya no mide nada: los campos de un costado girado rotan
+         alrededor de un pivote FIJO por costado (Layout.compute), que
+         solo depende del formato, del tamano y del padding.
+         _timeline_format() busca la secuencia que contiene el efecto y
+         descarta formatos 0x0 (una secuencia vacia activa dejaba el
+         pivote en 9.6, 9.6 y los costados fuera del cuadro).
   v1.05: Auditoria de la rotacion. (a) apply_rotation NO pisa el pivote
          de un campo rotado cuando no puede medirlo: en el onCreate el
          Input todavia no tiene stream y bi_text() devuelve '' (medido
@@ -54,7 +66,9 @@ KERNEL_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "LGA_RoundedPanels.blink"
 )
 
-FIELDS = ("clip", "cspace", "res", "frame", "tc", "fps", "custom1", "custom2")
+import LGA_NKS_BurnIn_Layout as bi_layout
+
+FIELDS = bi_layout.FIELDS
 
 # Grados -> radianes para el knob de rotacion por campo (bi_<f>_rot en grados).
 _DEG2RAD = 0.017453292519943295
@@ -69,35 +83,24 @@ def _log(message):
         pass
 
 
-# Alto del panel y de la caja de texto: MISMA formula en el kernel y en los
-# box de los Text2 (generador gen_LGA_BurnIn_gizmo.h_expr), asi el centrado
-# vertical es exacto. Base 100 px del Text2 x escala x size del campo x 1.3 de
-# interlinea, mas el padding.
-def _h_expr(field):
-    return (
-        "100*parent.bi_scale*parent.bi_%s_size/100*1.3+parent.bi_text_pad" % field
-    )
-
-
 def _py_geo(field, comp):
+    """Misma llamada que las cajas de los Text2 (generador, geo_expr)."""
     return (
         "[python {__import__('LGA_NKS_BurnIn_Logic')"
-        ".panel_geo('%s', '%s', nuke.thisParent(), nuke.frame())}]" % (field, comp)
+        ".field_geo('%s', '%s', nuke.thisParent(), nuke.frame())}]" % (field, comp)
     )
 
 
 def _bindings():
     """Sufijo del knob del kernel -> expresion sobre los knobs del padre.
 
-    x y w se MIDEN del texto real (python, cacheado); y y h salen de
-    expresiones simples compartidas con los box de los Text2.
+    x/y/w/h salen del mapa via field_geo (python, cacheado por frame): el
+    mismo calculo que ubica las cajas de los Text2.
     """
     binds = {}
     for f in FIELDS:
-        binds["%s_x" % f] = _py_geo(f, "x")
-        binds["%s_y" % f] = "parent.bi_%s_y*height" % f
-        binds["%s_w" % f] = _py_geo(f, "w")
-        binds["%s_h" % f] = _h_expr(f)
+        for comp in ("x", "y", "w", "h"):
+            binds["%s_%s" % (f, comp)] = _py_geo(f, comp)
         binds["%s_on" % f] = "parent.bi_%s_on*parent.bi_%s_bg" % (f, f)
         # Pivote de rotacion (ax, ay): knobs literales del gizmo, escritos por
         # apply_rotation() — LA MISMA fuente que usa el blob del Text2. Si el
@@ -112,13 +115,19 @@ def _bindings():
     binds["color_g"] = "parent.bi_bg_color.g"
     binds["color_b"] = "parent.bi_bg_color.b"
     binds["bg_opacity"] = "parent.bi_bg_opacity"
+    for edge in ("t", "b", "l", "r"):
+        binds["band_%s" % edge] = _py_geo("_band", edge)
+    binds["fmt_w"] = "width"
+    binds["fmt_h"] = "height"
+    # Sin uso en el calculo: hace que el hash del kernel cambie con nudge().
+    binds["rev"] = "parent.bi_rev"
     return binds
 
 
-# Param que solo existe en el kernel con rotacion (v0.04): si el nodo tiene el
-# nombre del kernel pero no este knob, es una instancia compilada con un kernel
-# viejo y hay que recompilar (antes el nombre solo bastaba y el fondo no rotaba).
-_KERNEL_SENTINEL = "custom2_rot"
+# Param que solo existe en el kernel de la version actual (v0.06, con Band y
+# rev): si el nodo tiene el nombre del kernel pero no este knob, es una
+# instancia compilada con un kernel viejo y hay que recompilar.
+_KERNEL_SENTINEL = "rev"
 
 
 def _find_param(node, suffix):
@@ -265,64 +274,125 @@ def apply_font(gizmo):
 # vivir solo en el .gizmo: la escribe apply_rotation() leyendo bi_<f>_rot, en
 # el onCreate (setup) y en el knobChanged (LGA_NKS_BurnIn.py).
 #
-# El pivote (cx, cy) es el CENTRO del panel del campo (medido por panel_geo),
-# el mismo que se bindea a ax/ay del kernel: texto y fondo giran juntos.
+# El pivote (cx, cy) se escribe en bi_<f>_ax/ay, que tambien lee el kernel:
+# texto y fondo giran juntos alrededor del mismo punto. Desde v1.06 el pivote
+# es fijo por costado (ver _side_pivot) y solo los costados girados rotan.
 
 
-def _owner_sequence(gizmo):
-    """Secuencia que contiene el efecto (por nombre de nodo), o None. Sirve
-    cuando no hay secuencia activa (onCreate al cargar un proyecto) o la
-    activa es otra."""
+def _owner_sequences(gizmo):
+    """Secuencias que contienen un efecto con el nombre de este nodo. El
+    nombre (LGA_BurnIn1...) se repite entre secuencias, asi que puede haber
+    varias; el que llama elige."""
+    found = []
     try:
         import hiero.core
 
         name = gizmo.name()
         for project in hiero.core.projects():
             for seq in project.sequences():
+                hit = False
                 for track in seq.videoTracks():
                     for sub in track.subTrackItems():
                         for item in sub:
                             try:
                                 if item.node().name() == name:
-                                    return seq
+                                    hit = True
+                                    break
                             except Exception:
                                 continue
+                        if hit:
+                            break
+                    if hit:
+                        break
+                if hit:
+                    found.append(seq)
     except Exception:
         pass
-    return None
+    return found
 
 
-def _timeline_format(gizmo):
-    """(width, height) del formato del timeline, o None si no se puede saber.
-
-    OJO: gizmo.width()/height() por API devuelve el formato default (640x480),
-    NO el del stream (medido): ya no se usa como fallback, porque un pivote
-    en ese espacio deja el fondo en cualquier lado. Sin formato conocido el
-    que llama conserva el pivote guardado."""
+def _seq_format(seq):
     try:
-        import hiero.ui
-
-        seq = hiero.ui.activeSequence()
-        if seq is None:
-            seq = _owner_sequence(gizmo)
         fmt = seq.format()
-        return float(fmt.width()), float(fmt.height())
+        w, h = float(fmt.width()), float(fmt.height())
+        return (w, h) if w > 0 and h > 0 else None
     except Exception:
         return None
 
 
-def apply_rotation(gizmo, fields=None):
-    """Escribe la rotacion literal de cada campo en su Text2 interno.
+def _timeline_format(gizmo):
+    """(width, height) del formato del timeline del efecto, o None.
 
-    fields: iterable de campos a actualizar (default: todos). Idempotente;
-    con rot=0 escribe el layer identidad (pivote indiferente).
+    Orden: la secuencia activa si contiene el efecto; si no, la primera que
+    lo contenga; si no, la activa. Una secuencia sin formato (0x0, medido en
+    una secuencia vacia) no cuenta: el pivote de los costados girados sale
+    de este formato y con 0x0 quedaba en (9.6, 9.6) y los campos girados
+    fuera del cuadro.
+
+    OJO: gizmo.width()/height() por API devuelve el formato default (640x480),
+    NO el del stream (medido): no se usa. Sin formato conocido el que llama
+    conserva el pivote guardado."""
+    try:
+        import hiero.ui
+
+        active = hiero.ui.activeSequence()
+    except Exception:
+        active = None
+    owners = _owner_sequences(gizmo)
+    ordered = []
+    if active is not None and any(active == s for s in owners):
+        ordered.append(active)
+    ordered.extend(owners)
+    if active is not None:
+        ordered.append(active)
+    for seq in ordered:
+        fmt = _seq_format(seq)
+        if fmt is not None:
+            return fmt
+    return None
+
+
+def _layout_arr(gizmo):
+    import LGA_NKS_BurnIn_Logic as bi_logic
+
+    return bi_layout.active(bi_layout.parse(bi_logic.layout_text(gizmo)))
+
+
+def _rotation_of(arr, field):
+    """Rotacion en grados del campo segun el mapa: 90 en el costado izquierdo
+    girado (se lee de abajo hacia arriba), 270 en el derecho, 0 el resto."""
+    if arr.get("sides") != "rotated":
+        return 0.0
+    slot = bi_layout.slot_of(arr, field)
+    if slot == "ml":
+        return 90.0
+    if slot == "mr":
+        return 270.0
+    return 0.0
+
+
+def _side_pivot(gizmo, field, arr, fmt):
+    """Pivote fijo del costado del campo: el mismo de Layout.compute."""
+    import LGA_NKS_BurnIn_Logic as bi_logic
+
+    fmt_w, fmt_h = fmt
+    h = bi_logic.line_height_px(gizmo, fmt_h)
+    edge = "l" if bi_layout.slot_of(arr, field) == "ml" else "r"
+    return bi_layout.side_pivot(edge, fmt_w, fmt_h, h)
+
+
+def apply_rotation(gizmo, fields=None):
+    """Escribe la rotacion literal de cada campo en su Text2 interno y el
+    pivote en bi_<f>_ax/ay (que lee el kernel). Idempotente; con rot=0
+    escribe el layer identidad.
+
+    El pivote de un campo girado es fijo por costado: no depende del ancho
+    del texto (que cambia de clip a clip), solo del formato, del tamano y
+    del padding. Sin formato conocido se conserva el pivote guardado.
     """
     if gizmo is None:
         return
-    try:
-        import LGA_NKS_BurnIn_Logic as bi_logic
-    except Exception:
-        return
+    arr = _layout_arr(gizmo)
     fmt = _timeline_format(gizmo)
     if fmt is None:
         _log("formato del timeline desconocido: conservo los pivotes guardados")
@@ -332,45 +402,11 @@ def apply_rotation(gizmo, fields=None):
             if text_node is None:
                 continue
             rot = float(gizmo["bi_%s_rot" % f].value())
-            # Centro del panel = pivote. El ancho sale de panel_geo('w') (mide
-            # el texto, no depende del formato); el ancla y el alto se computan
-            # aca con el formato REAL (panel_geo('x'/'cx') usa parent.width(),
-            # que por API es el default: no sirve fuera del render).
-            width = float(bi_logic.panel_geo(f, "w", gizmo, None) or 0.0)
-            # El pivote solo se recalcula si se pudo MEDIR: hace falta el
-            # formato y, en los campos de metadata, un texto. En el onCreate el
-            # Input todavia no tiene stream: bi_text() devuelve '' (medido en
-            # el log), panel_geo('w') da 0 y el pivote de los campos left/right
-            # caia en el borde en vez del centro (los center no dependen del
-            # ancho: por eso "algunos si, otros no"). Sin medida se conserva el
-            # pivote guardado en los knobs (el del .hrox ya es correcto).
-            measurable = fmt is not None and (
-                width > 0.0 or f in ("custom1", "custom2")
-            )
-            if measurable:
-                fmt_w, fmt_h = fmt
-                anchor = float(gizmo["bi_%s_x" % f].value()) * fmt_w
-                justify = bi_logic.PANEL_ANCHOR.get(f, "left")
-                if justify == "left":
-                    cx = anchor + width / 2.0
-                elif justify == "center":
-                    cx = anchor
-                else:
-                    cx = anchor - width / 2.0
-                scale = float(gizmo["bi_scale"].value())
-                size = float(gizmo["bi_%s_size" % f].value())
-                pad = float(gizmo["bi_text_pad"].value())
-                h = 100.0 * scale * size / 100.0 * 1.3 + pad
-                cy = float(gizmo["bi_%s_y" % f].value()) * fmt_h + h / 2.0
+            if rot != 0.0 and fmt is not None:
+                cx, cy = _side_pivot(gizmo, f, arr, fmt)
+                gizmo["bi_%s_ax" % f].setValue(round(cx, 4))
+                gizmo["bi_%s_ay" % f].setValue(round(cy, 4))
             else:
-                # Sin medida se conserva el pivote guardado en ax/ay, pero la
-                # ROTACION se escribe igual (antes se salteaba el campo y el
-                # texto quedaba sin rotar; medido en el e2e del panel).
-                if rot != 0.0:
-                    _log(
-                        "campo {} rotado sin medida (formato {} / ancho {}): "
-                        "roto sobre el pivote guardado".format(f, fmt, width)
-                    )
                 cx = float(gizmo["bi_%s_ax" % f].value())
                 cy = float(gizmo["bi_%s_ay" % f].value())
             blob = "{1 11 %s %s 0 0 1 1 0 0 %s 0}" % (
@@ -380,20 +416,54 @@ def apply_rotation(gizmo, fields=None):
                 '{0} imported: 0 selected: 0 items: "root transform"'
             )
             text_node["animation_layers"].fromScript(blob)
-            # El kernel usa EL MISMO pivote via los knobs bi_<f>_ax/ay.
-            if measurable:
-                try:
-                    gizmo["bi_%s_ax" % f].setValue(round(cx, 4))
-                    gizmo["bi_%s_ay" % f].setValue(round(cy, 4))
-                except Exception:
-                    pass
         except Exception as exc:
             _log("ERROR rotando campo {}: {}".format(f, exc))
 
 
+def apply_layout(gizmo):
+    """Traduce el mapa (bi_layout) y el modo de fondo (bi_bg_mode) a los
+    knobs de cada campo: on (esta en el mapa), bg (modo Panels) y rot
+    (costado girado). Despues re-escribe las rotaciones. Lo llaman el panel,
+    el knobChanged del registro y el onCreate."""
+    if gizmo is None:
+        return
+    arr = _layout_arr(gizmo)
+    visible = set(bi_layout.visible_fields(arr))
+    try:
+        panels = int(gizmo["bi_bg_mode"].getValue()) == 0
+    except Exception:
+        panels = True
+    for f in FIELDS:
+        try:
+            on = 1.0 if f in visible else 0.0
+            if gizmo["bi_%s_on" % f].value() != on:
+                gizmo["bi_%s_on" % f].setValue(on)
+            bg = 1.0 if panels else 0.0
+            if gizmo["bi_%s_bg" % f].value() != bg:
+                gizmo["bi_%s_bg" % f].setValue(bg)
+            rot = _rotation_of(arr, f)
+            if float(gizmo["bi_%s_rot" % f].value()) != rot:
+                gizmo["bi_%s_rot" % f].setValue(rot)
+        except Exception as exc:
+            _log("ERROR aplicando layout a {}: {}".format(f, exc))
+    apply_rotation(gizmo)
+    nudge(gizmo)
+
+
 def nudge(gizmo):
     """Ensucia el gizmo para que el timeline re-renderice (el write por API de
-    animation_layers no dispara el re-render solo; medido)."""
+    animation_layers no dispara el re-render solo; medido).
+
+    Incrementa bi_rev, que el kernel lee (param rev): los params de geometria
+    son [python] y Nuke no ve que dependen del mapa, asi que sin un valor que
+    cambie el timeline reusaba el render cacheado del kernel y los paneles
+    quedaban donde estaban antes (medido en NKS 17 al pasar a Edge). El
+    toque de opacidad ensucia los Text2."""
+    try:
+        rev = float(gizmo["bi_rev"].value())
+        gizmo["bi_rev"].setValue((rev + 1.0) % 100000.0)
+    except Exception:
+        pass
     try:
         value = gizmo["bi_opacity"].value()
         gizmo["bi_opacity"].setValue(value - 0.001)
@@ -409,6 +479,6 @@ def setup(node):
         if _compile_kernel(node):
             _bind_params(node)
         apply_font(gizmo)
-        apply_rotation(gizmo)
+        apply_layout(gizmo)
     except Exception as exc:
         _log("ERROR en setup: {}".format(exc))

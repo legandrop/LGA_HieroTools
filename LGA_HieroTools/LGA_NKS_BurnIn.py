@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn v1.05 | Lega
+  LGA_NKS_BurnIn v1.06 | Lega
 
   Registra los soft effects LGA_BurnIn (BlinkScript + Text2, paneles
   redondeados) y LGA_BurnIn_v0 (solo Text2) en el menu Effects del
@@ -14,6 +14,10 @@ ____________________________________________________________________
   "foundry.timeline.effect." + setData(clase del nodo), via
   hiero.ui.registerAction (patron oficial de custom_soft_effect.py).
 
+  v1.06: knobChanged del panel con mapa: bi_layout y bi_bg_mode
+         re-aplican el mapa a los knobs de cada campo (apply_layout);
+         bi_size y bi_text_pad re-escriben los pivotes de los costados
+         girados. Fuera los branches de x/y/size por campo (inertes).
   v1.05: Fuera el refresh con Viewer.flushCache(): la pausa del cacheo
          que trae flushCache llega asincronica, el resumeCaching()
          inmediato no la deshacia y el viewer quedaba pausado. Con el
@@ -107,11 +111,13 @@ def _apply_layout_change(gizmo, name):
     except Exception:
         return
     if name == "bi_weight":
-        # El peso cambia la fuente Y las metricas: re-aplicar ambas y ensuciar
-        # el nodo (el bi_font seteado por codigo no siempre invalida solo).
+        # El peso cambia la fuente Y las metricas: re-aplicar la fuente y
+        # ensuciar el nodo (el bi_font seteado por codigo no siempre invalida).
         bi_blink.apply_font(gizmo)
-        bi_blink.apply_rotation(gizmo)
         bi_blink.nudge(gizmo)
+    elif name in ("bi_layout", "bi_bg_mode"):
+        # El mapa decide que campo se ve, si lleva panel y si gira.
+        bi_blink.apply_layout(gizmo)
     elif name.endswith("_rot"):
         # bi_<campo>_rot: reescribir el literal del campo tocado. El write
         # del blob animation_layers no ensucia el nodo solo: nudge.
@@ -119,14 +125,8 @@ def _apply_layout_change(gizmo, name):
         if field in bi_blink.FIELDS:
             bi_blink.apply_rotation(gizmo, fields=(field,))
             bi_blink.nudge(gizmo)
-    elif name.endswith(("_x", "_y", "_size", "_text")):
-        # Mover el ancla, el tamano o el texto custom corre el pivote (ancho
-        # o centro del panel): re-aplicar el campo (con rot=0 es inocuo).
-        field = name[3:].rsplit("_", 1)[0]
-        if field in bi_blink.FIELDS:
-            bi_blink.apply_rotation(gizmo, fields=(field,))
-    elif name in ("bi_scale", "bi_text_pad"):
-        # Cambian el alto de TODOS los paneles (y sus centros).
+    elif name in ("bi_size", "bi_text_pad"):
+        # El pivote de los costados girados depende del alto de la linea.
         bi_blink.apply_rotation(gizmo)
 
 

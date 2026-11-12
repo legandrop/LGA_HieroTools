@@ -1,6 +1,7 @@
-// LGA_RoundedPanels v0.05 | Lega
+// LGA_RoundedPanels v0.06 | Lega
 // Fondos redondeados de los campos del burn-in, en una pasada.
 // SDF de rounded box + antialiasing 1px, con rotacion por campo.
+// v0.06: 11 campos y franjas del modo Band (band_t/b/l/r).
 // v0.05: muestreo en el centro del pixel (pos + 0.5); defaults del gizmo.
 // v0.04: rotacion por campo (ax,ay = ancla; rot en radianes).
 // v0.03: sin funcion miembro, logica inline por campo.
@@ -59,6 +60,30 @@ kernel LGARoundedPanels : ImageComputationKernel<ePixelWise>
     float fps_ax;
     float fps_ay;
     float fps_rot;
+    float track_x;
+    float track_y;
+    float track_w;
+    float track_h;
+    float track_on;
+    float track_ax;
+    float track_ay;
+    float track_rot;
+    float date_x;
+    float date_y;
+    float date_w;
+    float date_h;
+    float date_on;
+    float date_ax;
+    float date_ay;
+    float date_rot;
+    float codec_x;
+    float codec_y;
+    float codec_w;
+    float codec_h;
+    float codec_on;
+    float codec_ax;
+    float codec_ay;
+    float codec_rot;
     float custom1_x;
     float custom1_y;
     float custom1_w;
@@ -80,6 +105,13 @@ kernel LGARoundedPanels : ImageComputationKernel<ePixelWise>
     float color_g;
     float color_b;
     float bg_opacity;
+    float band_t;
+    float band_b;
+    float band_l;
+    float band_r;
+    float fmt_w;
+    float fmt_h;
+    float rev;
 
   void define() {
     defineParam(clip_x, "clip_x", 0.0f);
@@ -130,6 +162,30 @@ kernel LGARoundedPanels : ImageComputationKernel<ePixelWise>
     defineParam(fps_ax, "fps_ax", 0.0f);
     defineParam(fps_ay, "fps_ay", 0.0f);
     defineParam(fps_rot, "fps_rot", 0.0f);
+    defineParam(track_x, "track_x", 0.0f);
+    defineParam(track_y, "track_y", 0.0f);
+    defineParam(track_w, "track_w", 0.0f);
+    defineParam(track_h, "track_h", 0.0f);
+    defineParam(track_on, "track_on", 0.0f);
+    defineParam(track_ax, "track_ax", 0.0f);
+    defineParam(track_ay, "track_ay", 0.0f);
+    defineParam(track_rot, "track_rot", 0.0f);
+    defineParam(date_x, "date_x", 0.0f);
+    defineParam(date_y, "date_y", 0.0f);
+    defineParam(date_w, "date_w", 0.0f);
+    defineParam(date_h, "date_h", 0.0f);
+    defineParam(date_on, "date_on", 0.0f);
+    defineParam(date_ax, "date_ax", 0.0f);
+    defineParam(date_ay, "date_ay", 0.0f);
+    defineParam(date_rot, "date_rot", 0.0f);
+    defineParam(codec_x, "codec_x", 0.0f);
+    defineParam(codec_y, "codec_y", 0.0f);
+    defineParam(codec_w, "codec_w", 0.0f);
+    defineParam(codec_h, "codec_h", 0.0f);
+    defineParam(codec_on, "codec_on", 0.0f);
+    defineParam(codec_ax, "codec_ax", 0.0f);
+    defineParam(codec_ay, "codec_ay", 0.0f);
+    defineParam(codec_rot, "codec_rot", 0.0f);
     defineParam(custom1_x, "custom1_x", 0.0f);
     defineParam(custom1_y, "custom1_y", 0.0f);
     defineParam(custom1_w, "custom1_w", 0.0f);
@@ -151,6 +207,13 @@ kernel LGARoundedPanels : ImageComputationKernel<ePixelWise>
     defineParam(color_g, "color_g", 0.0f);
     defineParam(color_b, "color_b", 0.0f);
     defineParam(bg_opacity, "bg_opacity", 0.65f);
+    defineParam(band_t, "band_t", 0.0f);
+    defineParam(band_b, "band_b", 0.0f);
+    defineParam(band_l, "band_l", 0.0f);
+    defineParam(band_r, "band_r", 0.0f);
+    defineParam(fmt_w, "fmt_w", 0.0f);
+    defineParam(fmt_h, "fmt_h", 0.0f);
+    defineParam(rev, "rev", 0.0f);
   }
 
   void process(int2 pos) {
@@ -273,6 +336,63 @@ kernel LGARoundedPanels : ImageComputationKernel<ePixelWise>
       a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
     }
 
+    // panel track
+    if (track_on > 0.5f && track_w > 0.0f && track_h > 0.0f) {
+      float cx = track_x + track_w * 0.5f;
+      float cy = track_y + track_h * 0.5f;
+      float ca = cos(track_rot);
+      float sa = sin(track_rot);
+      float rx = ppx - track_ax;
+      float ry = ppy - track_ay;
+      float lx = ca * rx + sa * ry + track_ax - cx;
+      float ly = -sa * rx + ca * ry + track_ay - cy;
+      float r = min(corner_radius, min(track_w, track_h) * 0.5f);
+      float dx = fabs(lx) - (track_w * 0.5f - r);
+      float dy = fabs(ly) - (track_h * 0.5f - r);
+      float qx = max(dx, 0.0f);
+      float qy = max(dy, 0.0f);
+      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
+      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+    }
+
+    // panel date
+    if (date_on > 0.5f && date_w > 0.0f && date_h > 0.0f) {
+      float cx = date_x + date_w * 0.5f;
+      float cy = date_y + date_h * 0.5f;
+      float ca = cos(date_rot);
+      float sa = sin(date_rot);
+      float rx = ppx - date_ax;
+      float ry = ppy - date_ay;
+      float lx = ca * rx + sa * ry + date_ax - cx;
+      float ly = -sa * rx + ca * ry + date_ay - cy;
+      float r = min(corner_radius, min(date_w, date_h) * 0.5f);
+      float dx = fabs(lx) - (date_w * 0.5f - r);
+      float dy = fabs(ly) - (date_h * 0.5f - r);
+      float qx = max(dx, 0.0f);
+      float qy = max(dy, 0.0f);
+      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
+      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+    }
+
+    // panel codec
+    if (codec_on > 0.5f && codec_w > 0.0f && codec_h > 0.0f) {
+      float cx = codec_x + codec_w * 0.5f;
+      float cy = codec_y + codec_h * 0.5f;
+      float ca = cos(codec_rot);
+      float sa = sin(codec_rot);
+      float rx = ppx - codec_ax;
+      float ry = ppy - codec_ay;
+      float lx = ca * rx + sa * ry + codec_ax - cx;
+      float ly = -sa * rx + ca * ry + codec_ay - cy;
+      float r = min(corner_radius, min(codec_w, codec_h) * 0.5f);
+      float dx = fabs(lx) - (codec_w * 0.5f - r);
+      float dy = fabs(ly) - (codec_h * 0.5f - r);
+      float qx = max(dx, 0.0f);
+      float qy = max(dy, 0.0f);
+      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
+      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+    }
+
     // panel custom1
     if (custom1_on > 0.5f && custom1_w > 0.0f && custom1_h > 0.0f) {
       float cx = custom1_x + custom1_w * 0.5f;
@@ -310,6 +430,12 @@ kernel LGARoundedPanels : ImageComputationKernel<ePixelWise>
       float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
       a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
     }
+
+    // franjas del modo Band (grosor en px desde cada borde)
+    if (band_b > 0.0f && ppy < band_b) a = 1.0f;
+    if (band_t > 0.0f && ppy > fmt_h - band_t) a = 1.0f;
+    if (band_l > 0.0f && ppx < band_l) a = 1.0f;
+    if (band_r > 0.0f && ppx > fmt_w - band_r) a = 1.0f;
 
     a = a * bg_opacity;
     float4 panel = float4(color_r, color_g, color_b, 1.0f);
