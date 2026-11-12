@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Layout v1.00 | Lega
+  LGA_NKS_BurnIn_Layout v1.01 | Lega
 
   Modelo del mapa de LGA BurnIn, en Python puro (sin Nuke ni Qt, se
   prueba con el runtime embebido). Lo comparten el panel (que edita el
@@ -18,6 +18,8 @@ ____________________________________________________________________
   Es el mismo modelo que el menu Burn-ins de Shot Player (LGA Media
   Tools), del que sale el diseno.
 
+  v1.01: Mascara del viewer: mask_inset() y compute(inset=) acomodan los
+         campos dentro del area visible (tambien con la mascara al 50%).
   v1.00: Version inicial.
 ____________________________________________________________________
 """
@@ -252,12 +254,32 @@ def is_default(state):
 # otros se corrian (medido en NKS 17). Con costados derechos no pasaba.
 
 
-def side_pivot(edge, fmt_w, fmt_h, h):
+def mask_inset(aspect, fmt_w, fmt_h):
+    """(ix, iy): lo que tapa la mascara del viewer en cada borde, en px.
+
+    aspect es el de la mascara (3:2 = 1.5); 0 o None = sin mascara. Una
+    mascara mas angosta que el formato deja barras a los costados (ix); una
+    mas ancha, arriba y abajo (iy). Los burn-ins se acomodan dentro de lo que
+    queda visible, tambien con la mascara al 50% (Half)."""
+    try:
+        a = float(aspect or 0.0)
+        W, H = float(fmt_w), float(fmt_h)
+    except (TypeError, ValueError):
+        return (0.0, 0.0)
+    if a <= 0.0 or W <= 0.0 or H <= 0.0:
+        return (0.0, 0.0)
+    if a < W / H:
+        return (max(0.0, (W - H * a) / 2.0), 0.0)
+    return (0.0, max(0.0, (H - W / a) / 2.0))
+
+
+def side_pivot(edge, fmt_w, fmt_h, h, inset_x=0.0):
     """Pivote fijo del costado 'l' (gira 90) o 'r' (gira 270): el punto
     que lleva el centro del formato al centro de la primera linea del
-    costado (a media altura, a margen + h/2 del borde)."""
+    costado (a media altura, a margen + h/2 del borde visible; inset_x es
+    la barra de la mascara)."""
     W, H = float(fmt_w), float(fmt_h)
-    d = MARGIN_FRAC * H + h / 2.0
+    d = float(inset_x) + MARGIN_FRAC * H + h / 2.0
     if edge == "l":
         return ((W / 2.0 + d) / 2.0, (H + d - W / 2.0) / 2.0)
     return ((1.5 * W - d) / 2.0, (H - W / 2.0 + d) / 2.0)
@@ -278,7 +300,7 @@ def _unrotate(cx, cy, w, h, rot, pivot):
     return (ux - w / 2.0, uy - h / 2.0, w, h)
 
 
-def compute(arr, widths, fmt_w, fmt_h, fs, pad):
+def compute(arr, widths, fmt_w, fmt_h, fs, pad, inset=(0.0, 0.0)):
     """Rectangulos de todos los campos visibles con texto.
 
     widths: {campo: ancho del panel en px} SOLO de los campos con texto (un
@@ -286,8 +308,13 @@ def compute(arr, widths, fmt_w, fmt_h, fs, pad):
     Devuelve ({campo: (x, y, w, h, rot, pivot_x, pivot_y)}, bandas), donde bandas es
     {'t': grosor, 'b': grosor, 'l': grosor, 'r': grosor} en px (0 = sin
     banda) para el modo Band.
+
+    inset = (ix, iy): barras de la mascara del viewer (mask_inset). Los
+    campos se ubican dentro del area visible; las bandas suman la barra a su
+    grosor para empezar donde termina la mascara.
     """
     W, H = float(fmt_w), float(fmt_h)
+    ix, iy = float(inset[0]), float(inset[1])
     m = MARGIN_FRAC * H
     g = GAP_FS * fs
     vg = LINE_GAP_FS * fs
@@ -318,17 +345,17 @@ def compute(arr, widths, fmt_w, fmt_h, fs, pad):
         if not n:
             continue
         edge = "t" if slot[0] == "t" else "b"
-        bands[edge] = max(bands[edge], block(n) + 2.0 * m)
+        bands[edge] = max(bands[edge], block(n) + 2.0 * m + iy)
         for i, line in enumerate(lines):
             if edge == "t":
-                y = H - m - h - i * (h + vg)
+                y = H - iy - m - h - i * (h + vg)
             else:
-                y = m + (n - 1 - i) * (h + vg)
+                y = iy + m + (n - 1 - i) * (h + vg)
             total = line_len(line)
             if slot[1] == "l":
-                x = m
+                x = ix + m
             elif slot[1] == "r":
-                x = W - m - total
+                x = W - ix - m - total
             else:
                 x = (W - total) / 2.0
             for f in line:
@@ -344,12 +371,12 @@ def compute(arr, widths, fmt_w, fmt_h, fs, pad):
         edge = "l" if slot == "ml" else "r"
         if not rotated:
             # Derechos: bloque de lineas centrado en vertical.
-            bands[edge] = max(bands[edge], max(line_len(l) for l in lines) + 2.0 * m)
+            bands[edge] = max(bands[edge], max(line_len(l) for l in lines) + 2.0 * m + ix)
             top = H / 2.0 + block(n) / 2.0
             for i, line in enumerate(lines):
                 y = top - h - i * (h + vg)
                 total = line_len(line)
-                x = m if edge == "l" else W - m - total
+                x = ix + m if edge == "l" else W - ix - m - total
                 for f in line:
                     rects[f] = (x, y, widths[f], h, 0.0) + center
                     x += widths[f] + g
@@ -357,11 +384,11 @@ def compute(arr, widths, fmt_w, fmt_h, fs, pad):
         # Girados a lo largo del borde: el izquierdo se lee de abajo hacia
         # arriba (90), el derecho de arriba hacia abajo (270). Cada linea
         # corre paralela al borde; la primera es la mas cercana a el.
-        bands[edge] = max(bands[edge], block(n) + 2.0 * m)
+        bands[edge] = max(bands[edge], block(n) + 2.0 * m + ix)
         rot = 90.0 if edge == "l" else 270.0
-        pivot = side_pivot(edge, W, H, h)
+        pivot = side_pivot(edge, W, H, h, ix)
         for i, line in enumerate(lines):
-            dist = m + i * (h + vg) + h / 2.0
+            dist = ix + m + i * (h + vg) + h / 2.0
             cx = dist if edge == "l" else W - dist
             total = line_len(line)
             along = (H - total) / 2.0

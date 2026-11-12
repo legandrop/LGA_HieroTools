@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Logic v1.08 | Lega
+  LGA_NKS_BurnIn_Logic v1.09 | Lega
 
   Logica viva del soft effect LGA_BurnIn. Las expresiones [python ...]
   de los Text2 internos del gizmo llaman a bi_text() y bi_ok() en cada
@@ -13,6 +13,9 @@ ____________________________________________________________________
   proyecto; el modulo de registro invalida el cache en los eventos de
   load/save de proyecto.
 
+  v1.09: Mascara del viewer: el layout se calcula dentro del area visible
+         (mask_inset_px, knob bi_mask_aspect) y el aspect entra en la
+         firma del cache de geometria.
   v1.08: Panel con mapa. field_geo() calcula en render la geometria de
          cada campo (x, y, w, h) desde el mapa del knob bi_layout
          (LGA_NKS_BurnIn_Layout.compute): los paneles del kernel y las
@@ -729,7 +732,7 @@ def _layout_state(parent):
 def _knob_sig(parent):
     sig = []
     for name in ("bi_weight", "bi_size", "bi_text_pad", "bi_labels",
-                 "bi_custom1_text", "bi_custom2_text"):
+                 "bi_custom1_text", "bi_custom2_text", "bi_mask_aspect"):
         try:
             sig.append(parent[name].value())
         except Exception:
@@ -768,7 +771,9 @@ def _compute_layout(parent, frame, fmt):
         if t:
             widths[f] = _measure_text(t, fs, style) + 2.0 * pad
             _last_width[f] = widths[f]
-    result = bi_layout.compute(arr, widths, fmt_w, fmt_h, fs, pad)
+    result = bi_layout.compute(
+        arr, widths, fmt_w, fmt_h, fs, pad, mask_inset_px(parent, fmt_w, fmt_h)
+    )
     if key is not None:
         if len(_geo_cache) > _GEO_CACHE_MAX:
             _geo_cache.clear()
@@ -801,6 +806,15 @@ def field_geo(field, comp, parent, frame=None):
     except Exception as exc:
         _log_error_once("geo:" + str(field) + comp, str(exc))
         return 0.0
+
+
+def mask_inset_px(parent, fmt_w, fmt_h):
+    """(ix, iy) de la mascara del viewer segun el knob bi_mask_aspect."""
+    try:
+        aspect = float(parent["bi_mask_aspect"].value())
+    except Exception:
+        aspect = 0.0
+    return bi_layout.mask_inset(aspect, fmt_w, fmt_h)
 
 
 def line_height_px(parent, fmt_h):

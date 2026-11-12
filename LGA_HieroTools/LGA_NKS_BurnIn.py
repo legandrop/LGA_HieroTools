@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn v1.06 | Lega
+  LGA_NKS_BurnIn v1.07 | Lega
 
   Registra los soft effects LGA_BurnIn (BlinkScript + Text2, paneles
   redondeados) y LGA_BurnIn_v0 (solo Text2) en el menu Effects del
@@ -14,6 +14,10 @@ ____________________________________________________________________
   "foundry.timeline.effect." + setData(clase del nodo), via
   hiero.ui.registerAction (patron oficial de custom_soft_effect.py).
 
+  v1.07: Vigia de la mascara del viewer (QTimer de 500 ms en el hilo
+         principal): con una mascara Half o Full, de cualquier aspect, los
+         LGA_BurnIn de la secuencia activa se acomodan dentro del area
+         visible (bi_mask_aspect). La mascara sola no tiene evento.
   v1.06: knobChanged del panel con mapa: bi_layout y bi_bg_mode
          re-aplican el mapa a los knobs de cada campo (apply_layout);
          bi_size y bi_text_pad re-escriben los pivotes de los costados
@@ -125,9 +129,11 @@ def _apply_layout_change(gizmo, name):
         if field in bi_blink.FIELDS:
             bi_blink.apply_rotation(gizmo, fields=(field,))
             bi_blink.nudge(gizmo)
-    elif name in ("bi_size", "bi_text_pad"):
-        # El pivote de los costados girados depende del alto de la linea.
+    elif name in ("bi_size", "bi_text_pad", "bi_mask_aspect"):
+        # El pivote de los costados girados depende del alto de la linea y
+        # del area que deja visible la mascara del viewer.
         bi_blink.apply_rotation(gizmo)
+        bi_blink.nudge(gizmo)
 
 
 def _on_knob_changed():
@@ -152,6 +158,74 @@ def _on_knob_changed():
         _log("ERROR en knobChanged {}: {}".format(name, exc))
     finally:
         _state["in_handler"] = False
+
+
+# ── Vigia de la mascara del viewer ───────────────────────────────────────────
+#
+# La mascara se elige desde el viewer (o con el boton del panel Viewer | TL) y
+# no hay un evento de hiero que avise: el viewer tiene senales propias, pero
+# se destruye y se recrea al cambiar de timeline. Un QTimer en el hilo
+# principal mira cada 500 ms el aspect visible y la secuencia activa (tres
+# lecturas baratas); solo cuando algo cambia recorre los efectos LGA_BurnIn
+# de la secuencia y les escribe bi_mask_aspect.
+
+_MASK_POLL_MS = 500
+
+
+def _burnins_of(seq):
+    out = []
+    try:
+        for track in seq.videoTracks():
+            for sub in track.subTrackItems():
+                for item in sub:
+                    try:
+                        node = item.node()
+                    except Exception:
+                        continue
+                    if node is not None and node.Class() == "LGA_BurnIn":
+                        out.append(node)
+    except Exception:
+        pass
+    return out
+
+
+def _mask_tick():
+    try:
+        import hiero.ui
+        import LGA_NKS_BurnIn_Blink as bi_blink
+
+        aspect = round(bi_blink.viewer_mask_aspect(), 4)
+        seq = hiero.ui.activeSequence()
+        key = (aspect, id(seq) if seq is not None else None)
+        if key == _state.get("mask_key") or seq is None:
+            _state["mask_key"] = key
+            return
+        _state["mask_key"] = key
+        changed = 0
+        for node in _burnins_of(seq):
+            if bi_blink.apply_mask(node, aspect):
+                changed += 1
+        if changed:
+            _log("mascara del viewer {} -> {} efecto(s)".format(aspect, changed))
+    except Exception as exc:
+        _log("ERROR en el vigia de mascara: {}".format(exc))
+
+
+def _start_mask_watcher():
+    from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtCore
+
+    old = _state.get("mask_timer")
+    if old is not None:
+        try:
+            old.stop()
+        except Exception:
+            pass
+    timer = QtCore.QTimer()
+    timer.setInterval(_MASK_POLL_MS)
+    timer.timeout.connect(_mask_tick)
+    timer.start()
+    # Referencia viva: sin ella PySide destruye el timer.
+    _state["mask_timer"] = timer
 
 
 def _register():
@@ -185,6 +259,9 @@ def _register():
     # Un cambio de knob del gizmo (panel, script o UI) re-aplica fuente y
     # rotacion segun corresponda (el viewer re-renderiza solo).
     nuke.addKnobChanged(_on_knob_changed, nodeClass="LGA_BurnIn")
+
+    # La mascara del viewer acomoda los burn-ins dentro del area visible.
+    _start_mask_watcher()
 
     # La config cacheada por proyecto se invalida en los eventos de proyecto:
     # al cargar (los tags ya estan disponibles), al guardar (por si la ventana

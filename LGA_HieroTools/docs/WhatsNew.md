@@ -15,6 +15,7 @@ platforms: [win, mac]
 ## v4.026
 - [improved] El panel de LGA BurnIn (botón `Open Burn-in Panel`) ahora funciona como el de Shot Player: elegís una distribución, arrastrás cada campo a su lugar del cuadro o lo escondés en `Hidden`, y el tamaño, el fondo (`Panels`, `Band` o `Text`) y el giro de los costados valen para todos los campos.
 - [new] LGA BurnIn suma los campos `Track`, `Date` y `Codec`.
+- [improved] Con una máscara en el viewer, incluso al 50%, los burn-ins de LGA BurnIn se corren hacia adentro y quedan a la vista, con cualquier aspect que elijas.
 - [new] Shot Marks pone una marca por clip en un timeline de edit refs (un clip por shot), sin necesitar timecodes en la planilla: cada marca dura lo que su clip, y la vista previa te muestra los shots sin clip y los clips sin fila en la planilla.
 - [improved] La ventana de la marca muestra también el grupo del shot (columna Grupo), y con el brief en dos idiomas usa el inglés.
 

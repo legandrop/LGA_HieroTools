@@ -27,6 +27,8 @@ Gizmo {
  bi_labels true
  addUserKnob {7 bi_rev l "rev" +INVISIBLE}
  bi_rev 0
+ addUserKnob {7 bi_mask_aspect l "mask aspect" +INVISIBLE}
+ bi_mask_aspect 0
  addUserKnob {6 bi_clip_on l "clip name" +INVISIBLE}
  bi_clip_on true
  addUserKnob {6 bi_clip_bg l "bg" +INVISIBLE}

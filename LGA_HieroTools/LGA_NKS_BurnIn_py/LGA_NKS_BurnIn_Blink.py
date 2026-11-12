@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Blink v1.06 | Lega
+  LGA_NKS_BurnIn_Blink v1.07 | Lega
 
   Setup del nodo BlinkScript interno del gizmo LGA_BurnIn. Lo llama el
   onCreate del nodo al instanciarse el efecto en el timeline (y al
@@ -16,6 +16,9 @@ ____________________________________________________________________
      de compilar, con el nombre del kernel como prefijo, asi que no se
      pueden escribir en el archivo del gizmo).
 
+  v1.07: Mascara del viewer: viewer_mask_aspect() lee la mascara visible
+         (estilo Half o Full, cualquier aspect) y apply_mask() la escribe
+         en bi_mask_aspect; el pivote de los costados girados la suma.
   v1.06: Panel con mapa. Once campos (FIELDS sale del modulo de layout).
          x/y/w/h de cada panel se atan a field_geo() de la logica (la
          misma geometria que las cajas de los Text2), las franjas del
@@ -378,7 +381,8 @@ def _side_pivot(gizmo, field, arr, fmt):
     fmt_w, fmt_h = fmt
     h = bi_logic.line_height_px(gizmo, fmt_h)
     edge = "l" if bi_layout.slot_of(arr, field) == "ml" else "r"
-    return bi_layout.side_pivot(edge, fmt_w, fmt_h, h)
+    inset_x = bi_logic.mask_inset_px(gizmo, fmt_w, fmt_h)[0]
+    return bi_layout.side_pivot(edge, fmt_w, fmt_h, h, inset_x)
 
 
 def apply_rotation(gizmo, fields=None):
@@ -472,6 +476,55 @@ def nudge(gizmo):
         pass
 
 
+def _aspect_from_name(name):
+    """'3:2' -> 1.5, '2.35' -> 2.35; 0.0 si no se entiende."""
+    try:
+        text = str(name or "").strip()
+        if ":" in text:
+            num, den = text.split(":", 1)
+            return float(num) / float(den)
+        return float(text)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return 0.0
+
+
+def viewer_mask_aspect():
+    """Aspect de la mascara que se ve en el viewer actual, o 0.0 sin mascara.
+
+    Cuenta como mascara cualquier estilo que no sea None (Half, al 50%, ya
+    tapa los burn-ins) con los overlays a la vista. El nombre de la mascara
+    (maskOverlayName) queda puesto aunque el estilo sea None: por eso se mira
+    el estilo (medido en NKS 17: '3:2' con estilo 0). Solo hilo principal."""
+    try:
+        import hiero.ui
+
+        viewer = hiero.ui.currentViewer()
+        if viewer is None or not viewer.overlaysShown():
+            return 0.0
+        style = viewer.maskOverlayStyle()
+        if style == hiero.ui.Player.MaskOverlayStyle.eMaskOverlayNone:
+            return 0.0
+        return _aspect_from_name(viewer.maskOverlayName())
+    except Exception:
+        return 0.0
+
+
+def apply_mask(gizmo, aspect):
+    """Escribe el aspect de la mascara en el efecto y re-ubica los pivotes de
+    los costados girados (dependen del area visible). No hace nada si ya
+    tenia ese valor."""
+    try:
+        aspect = round(float(aspect), 4)
+        if abs(float(gizmo["bi_mask_aspect"].value()) - aspect) < 1e-4:
+            return False
+        gizmo["bi_mask_aspect"].setValue(aspect)
+    except Exception:
+        return False
+    apply_rotation(gizmo)
+    nudge(gizmo)
+    return True
+
+
 def setup(node):
     """Punto de entrada del onCreate del BlinkScript interno del gizmo."""
     try:
@@ -479,6 +532,12 @@ def setup(node):
         if _compile_kernel(node):
             _bind_params(node)
         apply_font(gizmo)
+        try:
+            # Un efecto recien agregado arranca con la mascara que ya tiene
+            # el viewer (el vigia del registro solo avisa cambios).
+            gizmo["bi_mask_aspect"].setValue(round(viewer_mask_aspect(), 4))
+        except Exception:
+            pass
         apply_layout(gizmo)
     except Exception as exc:
         _log("ERROR en setup: {}".format(exc))

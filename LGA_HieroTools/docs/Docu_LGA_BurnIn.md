@@ -74,6 +74,30 @@ resuelve en pixeles en cada frame.
   a lado en cada borde usado: `field_geo('_band', t/b/l/r)`) o Text (sin
   fondo, con la sombra de los Text2).
 
+## Mascara del viewer
+
+Con una mascara en el viewer (cualquier aspect, elegida desde el menu del
+viewer o con el boton del panel Viewer | TL), los burn-ins se corren hacia
+adentro para quedar en el area visible. Cuenta tambien la mascara al 50%
+(Half): ya los tapa a medias.
+
+- **Deteccion**: `viewer_mask_aspect()` (Blink) lee `maskOverlayStyle()`,
+  `maskOverlayName()` (`"3:2"`, `"2.35:1"`) y `overlaysShown()`. Ojo: el
+  nombre queda puesto aunque el estilo sea None (medido en NKS 17), por eso
+  manda el estilo.
+- **Vigia**: un QTimer de 500 ms en el hilo principal (`_mask_tick` del
+  registro). La mascara no tiene evento de hiero y el viewer se recrea al
+  cambiar de timeline, asi que no alcanza con conectarse a sus senales. Solo
+  cuando cambia el aspect o la secuencia activa recorre los LGA_BurnIn de la
+  secuencia y escribe `bi_mask_aspect` (`apply_mask`). Un efecto nuevo toma
+  la mascara en su onCreate (`setup`).
+- **Layout**: `Layout.mask_inset(aspect, W, H)` da lo que tapa cada barra
+  (3:2 en 3840x2160: 300 px por costado; 2.35:1: 263 px arriba y abajo) y
+  `compute(..., inset=)` ubica todo dentro de lo visible. Las franjas de Band
+  suman la barra a su grosor; el pivote de los costados girados tambien.
+- El boton viejo (`LGA_NKS_Viewer_Mask`) sigue moviendo los Text del track
+  BurnIn con su `box`; a LGA_BurnIn no lo toca (no tiene `box`).
+
 ## Arquitectura del gizmo
 
 ```
@@ -235,10 +259,11 @@ duena (el pivote se fuerza con el formato del Read).
 
 | Modulo | Import | Funciones clave |
 |---|---|---|
-| `LGA_HieroTools/LGA_NKS_BurnIn.py` | registro (startup) | `_register`, `_on_knob_changed`, `_apply_layout_change` |
-| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Layout.py` | `import LGA_NKS_BurnIn_Layout` | `parse`, `dump`, `active`, `default_state`, `fresh_arrangement`, `move_to`, `move_next_to`, `slot_of`, `visible_fields`, `stack_state`, `set_stack`, `is_default`, `compute`, `side_pivot`, `line_height` |
-| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Logic.py` | `import LGA_NKS_BurnIn_Logic` | `bi_text`, `bi_ok`, `field_geo`, `layout_text`, `line_height_px`, `panel_geo` (legado), `invalidate_cache` |
-| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Blink.py` | `import LGA_NKS_BurnIn_Blink` | `setup`, `apply_layout`, `apply_rotation`, `apply_font`, `nudge`, `_timeline_format` |
+| `LGA_HieroTools/LGA_NKS_BurnIn.py` | registro (startup) | `_register`, `_on_knob_changed`, `_apply_layout_change`, `_start_mask_watcher`, `_mask_tick` |
+| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Layout.py` | `import LGA_NKS_BurnIn_Layout` | `parse`, `dump`, `active`, `default_state`, `fresh_arrangement`, `move_to`, `move_next_to`, `slot_of`, `visible_fields`, `stack_state`, `set_stack`, `is_default`, `compute`, `mask_inset`, `side_pivot`, `line_height` |
+| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Logic.py` | `import LGA_NKS_BurnIn_Logic` | `bi_text`, `bi_ok`, `field_geo`, `layout_text`, `mask_inset_px`, `line_height_px`, `panel_geo` (legado), `invalidate_cache` |
+| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Blink.py` | `import LGA_NKS_BurnIn_Blink` | `setup`, `apply_layout`, `apply_rotation`, `apply_font`, `nudge`, `viewer_mask_aspect`, `apply_mask`, `_timeline_format` |
+| `LGA_HieroTools/LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Viewer_Mask.py` | `from LGA_NKS_ViewerTL_Panel_py import LGA_NKS_Viewer_Mask` | `set_mask`, `apply_mask` (el boton 3:2; solo pone la mascara para LGA_BurnIn) |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Panel.py` | `import LGA_NKS_BurnIn_Panel` | `show_panel`, `BurnInPanel`, `BurnInMap`, `TickSlider`, `Segmented`, `HieroController` |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Config.py` | `import LGA_NKS_BurnIn_Config` | `resolve`, `load_user_file`, `save_user_file`, `list_presets`, `load_preset`, `save_preset` |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_ProjectTag.py` | `import LGA_NKS_BurnIn_ProjectTag` | `find_project`, `read_config_json`, `write_config` |
