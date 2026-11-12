@@ -28,7 +28,7 @@ coincide con el objetivo del proyecto.
 | TC | `TC: <input/timecode>` | no |
 | FPS | `input/frame_rate` | si: difiere del objetivo |
 | Track | `Track: <nombre>`: el track del clip visible. Por API (`hiero/track` llega vacio en el stream, medido): el track item de la secuencia activa cuya fuente es el clip y cubre el frame, de arriba abajo; cache de 1,5 s | no |
-| Date | fecha de modificacion del archivo visible (`input/mtime`, `AAAA-MM-DD`). Supuesto: Lega no eligio todavia entre esta y la fecha del dia | no |
+| Date | fecha de modificacion del archivo visible (`input/mtime`, `AAAA-MM-DD`), no la del dia: decision de Lega (12-11-2026) | no |
 | Codec | EXR: `exr/compressionName` con el nivel si es DWA (`DWAA 60`); otra media: la primera key de metadata que nombre un codec | no |
 | Custom 1 / 2 | texto libre (`bi_custom1_text`, `bi_custom2_text`) | no |
 
