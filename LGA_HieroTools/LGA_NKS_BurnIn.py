@@ -1,19 +1,20 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn v1.07 | Lega
+  LGA_NKS_BurnIn v1.08 | Lega
 
-  Registra los soft effects LGA_BurnIn (BlinkScript + Text2, paneles
-  redondeados) y LGA_BurnIn_v0 (solo Text2) en el menu Effects del
-  timeline de NKS. Muestran metadata del clip visible y pintan en
-  rojo resolucion/fps cuando no coinciden con el objetivo del
-  proyecto. La config vive en AppData y el override por proyecto en
+  Registra el soft effect LGA_BurnIn (BlinkScript + Text2, paneles
+  redondeados) en el menu Effects del timeline de NKS. Muestra
+  metadata del clip visible y pinta en rojo resolucion/fps cuando no
+  coinciden con el objetivo del proyecto. La config vive en AppData y el override por proyecto en
   un tag que viaja en el .hrox.
 
   Mecanismo de registro: QAction con objectName prefijado
   "foundry.timeline.effect." + setData(clase del nodo), via
   hiero.ui.registerAction (patron oficial de custom_soft_effect.py).
 
+  v1.08: Fuera LGA BurnIn v0 (la version solo Text2): ya no se registra
+         y se borro su gizmo.
   v1.07: Vigia de la mascara del viewer (QTimer de 500 ms en el hilo
          principal): con una mascara Half o Full, de cualquier aspect, los
          LGA_BurnIn de la secuencia activa se acomodan dentro del area
@@ -66,8 +67,6 @@ TOOLTIPS = {
         "effect": "Aplica el burn-in de LGA: metadata del clip visible con "
         "paneles redondeados de fondo; resolucion y fps en rojo si no "
         "coinciden con el proyecto",
-        "effect_v0": "Version anterior del burn-in de LGA (solo Text2, "
-        "fondos rectangulares nativos)",
     },
 }
 
@@ -249,12 +248,6 @@ def _register():
     action.setToolTip(_tooltip("effect"))
     action.setData("LGA_BurnIn")
     registerAction(action)
-
-    action_v0 = QAction(QtGui.QIcon("icons:Text.png"), "LGA BurnIn v0", None)
-    action_v0.setObjectName("foundry.timeline.effect.addLGABurnInV0")
-    action_v0.setToolTip(_tooltip("effect_v0"))
-    action_v0.setData("LGA_BurnIn_v0")
-    registerAction(action_v0)
 
     # Un cambio de knob del gizmo (panel, script o UI) re-aplica fuente y
     # rotacion segun corresponda (el viewer re-renderiza solo).

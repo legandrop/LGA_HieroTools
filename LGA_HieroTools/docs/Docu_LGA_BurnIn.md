@@ -6,7 +6,9 @@
 > look es global. Once campos (suma Track, Date y Codec), fondo Panels /
 > Band / Text, costados girados. Validado en NKS 17.0v4 por dev-link
 > (render a archivo y panel real) y con el harness. La version anterior
-> queda como **LGA_BurnIn_v0** (solo Text2) en el mismo menu.
+> (LGA_BurnIn_v0, solo Text2) se borro el 12-11-2026: no se registra mas y su
+> gizmo no existe. Un proyecto viejo que la use la muestra como efecto
+> desconocido.
 
 ## Que es
 
@@ -35,6 +37,24 @@ coincide con el objetivo del proyecto.
 Objetivos: `res_target` y `fps_target` — `"timeline"` (formato/fps de la
 secuencia) o explicitos (`"3840x2160"`, `24`). **Labels** (`bi_labels`)
 prende o apaga el prefijo `Frame:`, `TC:` y `Track:`.
+
+## Default de fabrica
+
+Lo que trae un efecto recien agregado es el default que Lega armo para
+distribuir (12-11-2026): **Bottom line** con Clip abajo a la izquierda,
+`FPS Res` abajo al centro, Codec y Colorspace abajo a la derecha, y TC y
+Frame arriba a la derecha; fondo Panels al 79%, radio 29, Labels apagados,
+Inter SemiBold, Size M. Vive en el codigo, no en la maquina de nadie:
+
+- la distribucion, en `_PRESET_SLOTS["bottom"]` y `DEFAULT_PRESET` de
+  `LGA_NKS_BurnIn_Layout` (tambien es lo que devuelve Reset);
+- los valores del look, en el generador del gizmo
+  (`gen_LGA_BurnIn_gizmo.py`, que se regenera) y en `_SLIDERS` del panel
+  (el click en el rotulo de un slider vuelve a ese valor).
+
+Para cambiarlo: armar el efecto en NKS, guardar el proyecto, leer del
+`.hrox` el bloque `LGA_BurnIn { ... }` (knobs `bi_*` y `bi_layout`) y pasar
+esos valores a los tres lugares.
 
 ## Layout: el mapa
 
@@ -143,10 +163,9 @@ TTF del peso nuevo).
 
 ```
 LGA_HieroTools/
-  LGA_NKS_BurnIn.py                registro de LGA_BurnIn y LGA_BurnIn_v0 + eventos
+  LGA_NKS_BurnIn.py                registro de LGA_BurnIn + eventos + vigia de mascara
   LGA_NKS_BurnIn_py/
     LGA_BurnIn.gizmo               el efecto (generado)
-    LGA_BurnIn_v0.gizmo            version anterior (solo Text2)
     LGA_RoundedPanels.blink        kernel de los paneles (produccion)
     LGA_RoundedPanel.blink         kernel de UN panel (sonda historica)
     LGA_NKS_BurnIn_Blink.py        setup del BlinkScript (compilar + atar params)

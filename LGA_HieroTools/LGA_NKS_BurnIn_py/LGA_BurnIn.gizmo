@@ -12,9 +12,9 @@ Gizmo {
  addUserKnob {19 bi_bg_color l "bg color" +INVISIBLE}
  bi_bg_color {0.0 0.0 0.0 1.0}
  addUserKnob {7 bi_bg_opacity l "bg opacity" +INVISIBLE R 0.0 1.0}
- bi_bg_opacity 0.65
+ bi_bg_opacity 0.79
  addUserKnob {7 bi_bg_radius l "bg corner radius" +INVISIBLE R 0 120}
- bi_bg_radius 11
+ bi_bg_radius 29
  addUserKnob {7 bi_text_pad l "text padding" +INVISIBLE R 0 120}
  bi_text_pad 28
  addUserKnob {1 bi_layout l "layout" +INVISIBLE}
@@ -24,7 +24,7 @@ Gizmo {
  addUserKnob {4 bi_bg_mode l "background" +INVISIBLE M {Panels Band Text}}
  bi_bg_mode Panels
  addUserKnob {6 bi_labels l "labels" +INVISIBLE}
- bi_labels true
+ bi_labels false
  addUserKnob {7 bi_rev l "rev" +INVISIBLE}
  bi_rev 0
  addUserKnob {7 bi_mask_aspect l "mask aspect" +INVISIBLE}

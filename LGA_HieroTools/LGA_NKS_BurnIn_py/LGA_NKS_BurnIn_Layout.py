@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Layout v1.01 | Lega
+  LGA_NKS_BurnIn_Layout v1.02 | Lega
 
   Modelo del mapa de LGA BurnIn, en Python puro (sin Nuke ni Qt, se
   prueba con el runtime embebido). Lo comparten el panel (que edita el
@@ -18,6 +18,9 @@ ____________________________________________________________________
   Es el mismo modelo que el menu Burn-ins de Shot Player (LGA Media
   Tools), del que sale el diseno.
 
+  v1.02: Default de fabrica: Bottom line con la distribucion de Lega
+         (clip | fps res | codec y colorspace abajo; TC y Frame arriba a
+         la derecha).
   v1.01: Mascara del viewer: mask_inset() y compute(inset=) acomodan los
          campos dentro del area visible (tambien con la mascara al 50%).
   v1.00: Version inicial.
@@ -51,15 +54,17 @@ PRESETS = (
     ("edge", "Edge"),
     ("left", "Left list"),
 )
-DEFAULT_PRESET = "tb"
+DEFAULT_PRESET = "bottom"
 
 _PRESET_SLOTS = {
     "corners": {"tl": [["clip"]], "tr": [["cspace"]],
                 "bl": [["frame"], ["tc"]], "br": [["res", "fps"]]},
     "tb": {"tl": [["clip"]], "tc": [["cspace"]], "tr": [["res"]],
            "bl": [["frame"]], "bc": [["tc"]], "br": [["fps"]]},
-    "bottom": {"bl": [["clip"], ["tc"]], "bc": [["fps", "res"]],
-               "br": [["cspace"]]},
+    # Bottom line es la de fabrica: la que Lega armo para distribuir
+    # (12-11-2026). TC y Frame quedan arriba a la derecha.
+    "bottom": {"bl": [["clip"]], "bc": [["fps", "res"]],
+               "br": [["codec"], ["cspace"]], "tr": [["tc"], ["frame"]]},
     "edge": {"tl": [["clip"]], "ml": [["tc"]], "mr": [["res", "fps"]],
              "br": [["frame"]]},
     "left": {"tl": [["clip"], ["cspace"], ["res"], ["fps"], ["frame"], ["tc"]]},

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Panel v3.00 | Lega
+  LGA_NKS_BurnIn_Panel v3.01 | Lega
 
   Panel "Burn-ins" del soft effect LGA_BurnIn, con el diseno del menu
   Burn-ins de Shot Player (LGA Media Tools): cinco distribuciones
@@ -18,6 +18,9 @@ ____________________________________________________________________
   (LGA_NKS_BurnIn_Logic.field_geo). La ventana solo escribe knobs y
   config; los cambios se ven en el visor al instante.
 
+  v3.01: Defaults de fabrica nuevos (Bg opacity 79, Radius 29) para el
+         click en el rotulo. Ventana mas ancha (520) y '&' escapado en los
+         segmentados.
   v3.00: Rediseno con mapa (reemplaza la tabla X / Y / Size por campo).
          Campos Track, Date y Codec. Background Panels / Band / Text,
          Size S/M/L, Labels, Stack y Sides. Sliders de marcas como los
@@ -53,9 +56,9 @@ _WEIGHTS = ("Regular", "SemiBold", "Bold")
 
 # Defaults de los sliders (los del gizmo). Click en el rotulo vuelve a este.
 _SLIDERS = {
-    "bg_opacity": ("bi_bg_opacity", 0.0, 100.0, 65.0, 0.01, "%"),
+    "bg_opacity": ("bi_bg_opacity", 0.0, 100.0, 79.0, 0.01, "%"),
     "text_opacity": ("bi_opacity", 0.0, 100.0, 100.0, 0.01, "%"),
-    "radius": ("bi_bg_radius", 0.0, 60.0, 11.0, 1.0, ""),
+    "radius": ("bi_bg_radius", 0.0, 60.0, 29.0, 1.0, ""),
     "padding": ("bi_text_pad", 0.0, 80.0, 28.0, 1.0, ""),
 }
 
