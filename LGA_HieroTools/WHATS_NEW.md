@@ -1,5 +1,15 @@
 # What's new in LGA HieroTools
 
+## v4.026 (2026-11-12)
+
+- **New:** LGA BurnIn suma los campos `Track`, `Date` y `Codec`.
+- **New:** Shot Marks pone una marca por clip en un timeline de edit refs (un clip por shot), sin necesitar timecodes en la planilla: cada marca dura lo que su clip, y la vista previa te muestra los shots sin clip y los clips sin fila en la planilla.
+- **Improved:** El panel de LGA BurnIn (botón `Open Burn-in Panel`) ahora funciona como el de Shot Player: elegís una distribución, arrastrás cada campo a su lugar del cuadro o lo escondés en `Hidden`, y el tamaño, el fondo (`Panels`, `Band` o `Text`) y el giro de los costados valen para todos los campos.
+- **Improved:** LGA BurnIn arranca con un layout nuevo: el nombre del clip, los fps, la resolución, el codec y el colorspace abajo, y el timecode y el frame arriba a la derecha.
+- **Improved:** Se quitó `LGA BurnIn v0` del menú Effects: queda un solo LGA BurnIn.
+- **Improved:** Con una máscara en el viewer, incluso al 50%, los burn-ins de LGA BurnIn se corren hacia adentro y quedan a la vista, con cualquier aspect que elijas.
+- **Improved:** La ventana de la marca muestra también el grupo del shot (columna Grupo), y con el brief en dos idiomas usa el inglés.
+
 ## v4.025 (2026-11-06)
 
 - **New:** En el panel Flow | S3, `Download Clip` con Ctrl+Alt+Click te deja elegir la carpeta donde se baja la última versión del clip, y con Ctrl+Alt+Shift+Click baja a la última carpeta que elegiste, sin preguntar (hace falta FileManager S3 actualizado).
