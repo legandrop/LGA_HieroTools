@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Panel v3.02 | Lega
+  LGA_NKS_BurnIn_Panel v3.03 | Lega
 
   Panel "Burn-ins" del soft effect LGA_BurnIn, con el diseno del menu
   Burn-ins de Shot Player (LGA Media Tools): cinco distribuciones
@@ -18,6 +18,7 @@ ____________________________________________________________________
   (LGA_NKS_BurnIn_Logic.field_geo). La ventana solo escribe knobs y
   config; los cambios se ven en el visor al instante.
 
+  v3.03: El chip TC lleva el punto rojo como Res y FPS.
   v3.02: Performance. Los cambios pasan por Blink.schedule_update (una sola
          actualizacion y un solo nudge por efecto y por ciclo de eventos, en
          vez de apply_layout directo + el del knobChanged). Los sliders
@@ -1145,7 +1146,7 @@ class BurnInPanel(QtWidgets.QDialog):
             self._loading = False
 
     def _bad_fields(self):
-        return [f for f in ("res", "fps") if self.ctl.field_ok(f) < 0.5]
+        return [f for f in ("res", "fps", "tc") if self.ctl.field_ok(f) < 0.5]
 
     def _sync_mapa(self):
         """Refleja el estado del mapa en los controles que dependen de el."""

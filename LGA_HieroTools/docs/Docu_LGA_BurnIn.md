@@ -27,7 +27,7 @@ coincide con el objetivo del proyecto.
 | Colorspace | `sourceMediaColourTransform()` del clip (por API + cache; no viaja en la metadata del stream) | no |
 | Res | `input/width` x `input/height` | si: difiere del objetivo. **Solo compara plates** (`compare_res_exts`, default `exr`) |
 | Frame | `Frame: <input/frame>` | no |
-| TC | `TC: <input/timecode>` | no |
+| TC | `TC: <input/timecode>` | si: difiere del TC del clip del track **aPlate** en ese frame (`timecodeStart` + `sourceIn` + offset, items cacheados 3 s). Sin timecode en la metadata (comp sin TC) o sin aPlate en el frame, no compara |
 | FPS | `input/frame_rate` | si: difiere del objetivo |
 | Track | `Track: <nombre>`: el track del clip visible. Por API (`hiero/track` llega vacio en el stream, medido): el track item de la secuencia activa cuya fuente es el clip y cubre el frame, de arriba abajo; cache de 1,5 s | no |
 | Date | fecha de modificacion del archivo visible (`input/mtime`, `AAAA-MM-DD`), no la del dia: decision de Lega (12-11-2026) | no |
@@ -200,7 +200,7 @@ en `+Building_Blocks/BurnIn/design/BurnIn_Panel_Mapa.html`.
   el lugar. Soltarlo al costado de otro lo pone en la misma linea; arriba o
   abajo, en una linea nueva (el lado sale de la posicion relativa al centro
   del chip, normalizada por su medio ancho y medio alto, como Shot Player).
-  En **Hidden** se oculta. Res y FPS llevan un punto rojo si no coinciden.
+  En **Hidden** se oculta. Res, FPS y TC llevan un punto rojo si no coinciden.
 - **Custom 1 / 2**: una fila de texto fija cada uno. Escribir en un Custom
   oculto lo muestra abajo al centro.
 - **Look** (global, para todos los campos): Background Panels / Band / Text,
@@ -325,7 +325,7 @@ duena (el pivote se fuerza con el formato del Read).
 |---|---|---|
 | `LGA_HieroTools/LGA_NKS_BurnIn.py` | registro (startup) | `_register`, `_on_knob_changed`, `_es_derivado`, `_start_mask_watcher`, `_mask_tick` |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Layout.py` | `import LGA_NKS_BurnIn_Layout` | `parse`, `dump`, `active`, `default_state`, `fresh_arrangement`, `move_to`, `move_next_to`, `slot_of`, `visible_fields`, `stack_state`, `set_stack`, `is_default`, `compute`, `mask_inset`, `side_pivot`, `line_height` |
-| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Logic.py` | `import LGA_NKS_BurnIn_Logic` | `bi_text`, `bi_ok`, `field_geo`, `_frame_state`, `layout_text`, `mask_inset_px`, `line_height_px`, `panel_geo` (legado), `invalidate_cache` |
+| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Logic.py` | `import LGA_NKS_BurnIn_Logic` | `bi_text`, `bi_ok`, `field_geo`, `_frame_state`, `layout_text`, `mask_inset_px`, `line_height_px`, `_plate_tc_frames` (TC de aPlate), `invalidate_cache` |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Blink.py` | `import LGA_NKS_BurnIn_Blink` | `setup`, `schedule_update`, `update_now`, `is_busy`, `apply_layout`, `apply_rotation`, `apply_font`, `nudge`, `viewer_mask_aspect`, `apply_mask`, `_timeline_format` |
 | `LGA_HieroTools/LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Viewer_Mask.py` | `from LGA_NKS_ViewerTL_Panel_py import LGA_NKS_Viewer_Mask` | `set_mask`, `apply_mask` (el boton 3:2; solo pone la mascara para LGA_BurnIn) |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Panel.py` | `import LGA_NKS_BurnIn_Panel` | `show_panel`, `BurnInPanel`, `BurnInMap`, `TickSlider`, `Segmented`, `HieroController` |

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Logic v1.10 | Lega
+  LGA_NKS_BurnIn_Logic v1.11 | Lega
 
   Logica viva del soft effect LGA_BurnIn. Las expresiones [python ...]
   de los Text2 internos del gizmo llaman a bi_text() y bi_ok() en cada
@@ -13,6 +13,9 @@ ____________________________________________________________________
   proyecto; el modulo de registro invalida el cache en los eventos de
   load/save de proyecto.
 
+  v1.11: TC en rojo si no coincide con el del clip de aPlate en ese
+         frame (_plate_tc_frames, items de aPlate cacheados 3 s). Sin
+         timecode en la metadata o sin aPlate en el frame, no compara.
   v1.10: Performance. Un estado por frame (_frame_state): toda la
          metadata en UNA lectura del Input, textos medidos y geometria
          calculados una vez, y cada expresion del gizmo (cajas de los
@@ -364,6 +367,62 @@ def _clip_track(parent, frame=None, clip_name=None):
     return spans[0][0]
 
 
+# TC contra aPlate: el TC del clip visible se pinta rojo si no coincide con el
+# del clip del track aPlate en el mismo frame (un comp renderizado con otro
+# rango que el plate). Los items de aPlate se cachean con TTL corto, como el
+# track: (in, out, frame de media del in, velocidad).
+REF_TRACK = "aplate"
+_plate_cache = {"t": 0.0, "spans": None}
+
+
+def _tc_to_frames(tc, fps):
+    """'HH:MM:SS:FF' (o con ';') a frames. None si no se puede."""
+    try:
+        parts = [int(p) for p in str(tc).replace(";", ":").split(":")]
+        if len(parts) != 4 or not fps:
+            return None
+        base = int(round(float(fps)))
+        h, m, s, f = parts
+        return ((h * 60 + m) * 60 + s) * base + f
+    except (TypeError, ValueError):
+        return None
+
+
+def _plate_spans():
+    now = time.time()
+    if _plate_cache["spans"] is not None and (now - _plate_cache["t"]) < _TRACK_TTL:
+        return _plate_cache["spans"]
+    spans = []
+    try:
+        import hiero.ui
+
+        seq = hiero.ui.activeSequence()
+        for track in (seq.videoTracks() if seq is not None else []):
+            if track.name().lower() != REF_TRACK:
+                continue
+            for item in track.items():
+                try:
+                    src = item.source()
+                    start = int(src.timecodeStart()) + int(item.sourceIn())
+                    spans.append((item.timelineIn(), item.timelineOut(), start,
+                                  float(item.playbackSpeed() or 1.0)))
+                except Exception:
+                    continue
+    except Exception as exc:
+        _log_error_once("plate_spans", str(exc))
+    _plate_cache["spans"] = spans
+    _plate_cache["t"] = now
+    return spans
+
+
+def _plate_tc_frames(frame):
+    """Frame de TC del clip de aPlate en el frame de la secuencia, o None."""
+    if frame is None:
+        return None
+    for tin, tout, start, speed in _plate_spans():
+        if tin <= frame <= tout:
+            return start + int(round((frame - tin) * speed))
+    return None
 
 
 # ── Textos de los campos ──────────────────────────────────────────────────────
@@ -418,8 +477,15 @@ def _text_from(field, parent, frame, meta):
     return ""
 
 
-def _ok_from(field, parent, meta):
-    """1.0 si res/fps coinciden con el objetivo del proyecto, 0.0 si no."""
+def _ok_from(field, parent, meta, frame=None):
+    """1.0 si res/fps coinciden con el objetivo del proyecto (o el TC con el
+    de aPlate), 0.0 si no."""
+    if field == "tc":
+        mine = _tc_to_frames(meta.get("input/timecode"), meta.get("input/frame_rate"))
+        ref = _plate_tc_frames(frame)
+        if mine is None or ref is None:
+            return 1.0
+        return 0.0 if mine != ref else 1.0
     cfg = get_config(_project_name(parent, meta))
     if field == "res":
         filename = str(meta.get("input/filename") or "")
@@ -487,7 +553,7 @@ def bi_ok(field, parent, frame=None):
             return 1.0
         oks = st["oks"]
         if field not in oks:
-            oks[field] = _ok_from(field, parent, st["meta"])
+            oks[field] = _ok_from(field, parent, st["meta"], frame)
         return oks[field]
     except Exception as exc:
         _log_error_once("ok:" + str(field), str(exc))

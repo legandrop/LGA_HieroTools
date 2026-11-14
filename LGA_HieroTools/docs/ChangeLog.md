@@ -1,4 +1,6 @@
 v4.027:
+El TC de LGA BurnIn no avisaba cuando un comp quedaba corrido respecto del plate. Ahora se pinta en rojo si no coincide con el TC del clip del track aPlate en ese frame, calculado por API (`timecodeStart` + `sourceIn` + offset, cache de 3 s); un comp sin timecode o un frame sin aPlate no se comparan. El chip TC del panel lleva el punto rojo como Res y FPS. `_Logic v1.11`, `_Panel v3.03`, gizmo v10. [ BurnIn - TC en rojo contra aPlate ]
+
 LGA BurnIn: cada expresion del gizmo (cajas, params del kernel, mensajes y colores) pedia su metadata y rehacia el layout por su cuenta, y el panel y el knobChanged aplicaban el layout cada uno con varios writes. Ahora la logica arma un estado por frame (una lectura de metadata, textos medidos una vez) del que leen todas, los cambios se juntan en una actualizacion por ciclo de eventos (`schedule_update`), `nudge` escribe un solo knob y los sliders escriben a lo sumo cada 33 ms. El kernel v0.08 precalcula en `init()` la caja girada de cada panel y solo hace la SDF adentro. Se probo reemplazar el BlinkScript por Crop/Expression/Merge: en el timeline esos nodos no dibujan y tres Merge encadenados tiran NKS, asi que queda el BlinkScript. `_Logic v1.10`, `_Blink v1.08`, `_Panel v3.02`, `LGA_NKS_BurnIn v1.09`, gizmo v9. [ BurnIn - Estado por frame y kernel con cajas ]
 
 v4.026:

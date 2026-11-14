@@ -12,6 +12,9 @@ platforms: [win, mac]
 
 ## Unreleased
 
+## v4.027
+- [new] En LGA BurnIn, el timecode se pinta de rojo cuando no coincide con el del plate del track `aPlate` en ese frame, así ves enseguida un comp corrido.
+
 ## v4.026
 - [improved] El panel de LGA BurnIn (botón `Open Burn-in Panel`) ahora funciona como el de Shot Player: elegís una distribución, arrastrás cada campo a su lugar del cuadro o lo escondés en `Hidden`, y el tamaño, el fondo (`Panels`, `Band` o `Text`) y el giro de los costados valen para todos los campos.
 - [new] LGA BurnIn suma los campos `Track`, `Date` y `Codec`.

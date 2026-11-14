@@ -408,7 +408,7 @@ Gizmo {
   group_animations {{0} imported: 0 selected: 0 items: "root transform/"}
   animation_layers {{1 11 1024 778 0 0 1 1 0 0 0 0}
     }
-  color {{parent.bi_color} {parent.bi_color} {parent.bi_color} {parent.bi_color}}
+  color {{parent.bi_color.r} {"\[python \{__import__('LGA_NKS_BurnIn_Logic').bi_ok('tc', nuke.thisParent(), nuke.frame())\}]"} {"\[python \{__import__('LGA_NKS_BurnIn_Logic').bi_ok('tc', nuke.thisParent(), nuke.frame())\}]"} {parent.bi_color.a}}
   enable_shadows {{parent.bi_bg_mode==2}}
   shadow_opacity 0.85
   shadow_distance {{height/720}}
