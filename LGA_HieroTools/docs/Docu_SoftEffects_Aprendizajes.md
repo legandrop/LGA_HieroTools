@@ -45,6 +45,16 @@ Consecuencia concreta: no hay esquinas redondeadas para fondos — el fondo
 nativo de Text2 es rectangular y no se puede meter un nodo que dibuje otra
 cosa. (Camino posible no explorado: BlinkScript, que si es soft effect.)
 
+**Confirmado otra vez, y con trampa (medido 2026-11-14, NKS 17.0v4):** un
+gizmo con Crop + Expression + Merge2 (o un Rectangle solo, encima de la
+entrada) no dibuja NADA en el visor del timeline, aunque el mismo gizmo en
+`Read -> gizmo -> Write` renderiza perfecto. Un banco offline da por buena
+una estructura que en el timeline no anda: validar SIEMPRE con
+`viewer.image()` del timeline. Ademas, tres o mas Merge2 encadenados en el
+gizmo tiran NKS 17 al renderizar en el timeline (crash nativo; con dos no,
+con un Merge2 multi-A tampoco), y un `[python]` en un knob `disable`
+tambien. Los paneles redondeados de LGA_BurnIn son un BlinkScript por eso.
+
 ## El gran clasico: campos que no aparecen o aparecen todos apilados
 
 Sintomas que tuvimos en LGA_BurnIn, en orden, con su causa real:

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Logic v1.09 | Lega
+  LGA_NKS_BurnIn_Logic v1.10 | Lega
 
   Logica viva del soft effect LGA_BurnIn. Las expresiones [python ...]
   de los Text2 internos del gizmo llaman a bi_text() y bi_ok() en cada
@@ -13,6 +13,12 @@ ____________________________________________________________________
   proyecto; el modulo de registro invalida el cache en los eventos de
   load/save de proyecto.
 
+  v1.10: Performance. Un estado por frame (_frame_state): toda la
+         metadata en UNA lectura del Input, textos medidos y geometria
+         calculados una vez, y cada expresion del gizmo (cajas de los
+         Text2, params del kernel, mensajes y colores) lee de ese estado.
+         Antes cada una pedia su metadata y rehacia el layout. La config
+         ya no mira el disco en cada llamada (mtime cada 2 s).
   v1.09: Mascara del viewer: el layout se calcula dentro del area visible
          (mask_inset_px, knob bi_mask_aspect) y el aspect entra en la
          firma del cache de geometria.
@@ -128,6 +134,12 @@ def _file_mtime():
         return None
 
 
+# El mtime del BurnIn.json se mira a lo sumo cada _MTIME_EVERY segundos: es una
+# llamada al disco y get_config se usaba en cada evaluacion del color de res/fps.
+_MTIME_EVERY = 2.0
+_mtime_checked_at = [0.0]
+
+
 def _read_project_tag_json(project_name):
     """JSON del tag LGA_BurnIn_Settings del proyecto, via el modulo de tag."""
     try:
@@ -144,10 +156,13 @@ def _read_project_tag_json(project_name):
 def get_config(project_name):
     """Config efectiva para un proyecto, cacheada."""
     global _config_file_mtime
-    mtime = _file_mtime()
-    if mtime != _config_file_mtime:
-        _config_file_mtime = mtime
-        _config_cache.clear()
+    now = time.time()
+    if now - _mtime_checked_at[0] >= _MTIME_EVERY:
+        _mtime_checked_at[0] = now
+        mtime = _file_mtime()
+        if mtime != _config_file_mtime:
+            _config_file_mtime = mtime
+            _config_cache.clear()
 
     key = project_name or ""
     cfg = _config_cache.get(key)
@@ -174,7 +189,7 @@ def get_config(project_name):
 
 
 def _meta(parent, key, frame=None):
-    """Metadata del input del gizmo (el stream visible del timeline)."""
+    """Una key de metadata del input del gizmo (el stream visible)."""
     try:
         input_node = parent.node("Input1")
         if input_node is None:
@@ -187,7 +202,7 @@ def _meta(parent, key, frame=None):
         return None
 
 
-def _project_name(parent):
+def _project_name(parent, meta=None):
     """Nombre del proyecto del clip visible.
 
     MEDIDO en NKS 16: la key hiero/project llega VACIA en el stream del
@@ -195,7 +210,7 @@ def _project_name(parent):
     asi que hay cadena de fallbacks: metadata -> secuencia activa ->
     unico proyecto de usuario abierto.
     """
-    name = _meta(parent, "hiero/project")
+    name = meta.get("hiero/project") if meta is not None else _meta(parent, "hiero/project")
     if name:
         return name
     try:
@@ -217,46 +232,24 @@ def _project_name(parent):
     return None
 
 
-def _clip_res(parent):
-    try:
-        w = _meta(parent, "input/width")
-        h = _meta(parent, "input/height")
-        if w is None or h is None:
-            return None
-        return (int(float(w)), int(float(h)))
-    except (TypeError, ValueError):
-        return None
-
-
-def _clip_fps(parent):
-    try:
-        v = _meta(parent, "input/frame_rate")
-        return float(v) if v is not None else None
-    except (TypeError, ValueError):
-        return None
-
-
 # El colorspace no viaja en la metadata del stream del timeline, asi que se
 # resuelve por API: se ubica el clip por nombre y se le pregunta su transform.
 # Cache con TTL: NO se puede cachear indefinido porque cambiar el colorspace
 # de un clip a mano no dispara ningun evento de proyecto (medido: con cache
-# permanente el burn-in nunca se actualizaba). El TTL corto hace que el
-# re-escaneo (caro) sea raro pero que un cambio manual se refleje solo. Se
-# guarda (valor, timestamp) por (proyecto, clip).
+# permanente el burn-in nunca se actualizaba). Se guarda (valor, timestamp)
+# por clip.
 _colorspace_cache = {}
-_COLORSPACE_TTL = 1.5
+_COLORSPACE_TTL = 3.0
 
 
-def _clip_colorspace(parent):
-    proj_name = _project_name(parent)
-    clip_name = _meta(parent, "hiero/clip")
+def _clip_colorspace(parent, clip_name):
     if not clip_name:
         return ""
-    key = (proj_name, clip_name)
     now = time.time()
-    cached = _colorspace_cache.get(key)
+    cached = _colorspace_cache.get(clip_name)
     if cached is not None and (now - cached[1]) < _COLORSPACE_TTL:
         return cached[0]
+    proj_name = _project_name(parent)
     value = ""
     try:
         import hiero.core
@@ -271,16 +264,8 @@ def _clip_colorspace(parent):
             break
     except Exception as exc:
         _log_error_once("cspace:" + str(clip_name), str(exc))
-    _colorspace_cache[key] = (value, now)
+    _colorspace_cache[clip_name] = (value, now)
     return value
-
-
-def _is_plate(parent, cfg):
-    """True si el archivo visible entra en la comparacion de resolucion (EXR)."""
-    filename = _meta(parent, "input/filename") or ""
-    ext = os.path.splitext(str(filename))[1].lstrip(".").lower()
-    exts = [str(e).lstrip(".").lower() for e in cfg.get("compare_res_exts", [])]
-    return ext in exts
 
 
 def _target_res(parent, cfg):
@@ -295,17 +280,6 @@ def _target_res(parent, cfg):
         return None
 
 
-def _target_fps(parent, cfg):
-    explicit = bi_config.parse_fps(cfg.get("fps_target"))
-    if explicit is not None:
-        return explicit
-    try:
-        v = _meta(parent, "hiero/sequence/frame_rate")
-        return float(v) if v is not None else None
-    except (TypeError, ValueError):
-        return None
-
-
 def _labeled(parent, label, value):
     """'Label: valor' con los labels prendidos (bi_labels), o el valor solo."""
     if not value:
@@ -317,31 +291,20 @@ def _labeled(parent, label, value):
     return "{}: {}".format(label, value) if on else str(value)
 
 
-def _file_date(parent, frame=None):
-    """Fecha de modificacion del archivo visible (input/mtime, 'AAAA-MM-DD')."""
-    mtime = _meta(parent, "input/mtime", frame) or ""
-    return str(mtime).split(" ")[0]
-
-
-def _all_meta(parent):
-    try:
-        return parent.node("Input1").metadata() or {}
-    except Exception:
-        return {}
-
-
-def _clip_codec(parent, frame=None):
+def _clip_codec(parent, frame=None, meta=None):
     """Compresion EXR (con el nivel si es DWA) o el codec de la media.
 
     MEDIDO en NKS 17: un EXR trae exr/compressionName ('DWAA') y
     exr/dwaCompressionLevel ('60'). Para el resto se busca la primera key
     de metadata que nombre un codec (cada reader usa su prefijo).
     """
-    name = _meta(parent, "exr/compressionName", frame)
+    if meta is None:
+        meta = _frame_meta(parent, frame)
+    name = meta.get("exr/compressionName")
     if name:
         name = str(name)
         if name.upper().startswith("DWA"):
-            level = _meta(parent, "exr/dwaCompressionLevel", frame)
+            level = meta.get("exr/dwaCompressionLevel")
             if level:
                 try:
                     level = "%g" % float(level)
@@ -349,7 +312,6 @@ def _clip_codec(parent, frame=None):
                     pass
                 return "{} {}".format(name, level)
         return name
-    meta = _all_meta(parent)
     for key in sorted(meta):
         low = key.lower()
         if low.endswith(("codec_name", "/codec", "compressor")):
@@ -364,11 +326,10 @@ def _clip_codec(parent, frame=None):
 # cuya fuente es el clip visible y que cubre el frame. Cache con TTL corto,
 # como el colorspace: clip -> [(nombre del track, in, out)], de arriba abajo.
 _track_cache = {}
-_TRACK_TTL = 1.5
+_TRACK_TTL = 3.0
 
 
-def _clip_track(parent, frame=None):
-    clip_name = _meta(parent, "hiero/clip")
+def _clip_track(parent, frame=None, clip_name=None):
     if not clip_name:
         return ""
     now = time.time()
@@ -403,60 +364,111 @@ def _clip_track(parent, frame=None):
     return spans[0][0]
 
 
+
+
+# ── Textos de los campos ──────────────────────────────────────────────────────
+
+
+def _text_from(field, parent, frame, meta):
+    """Texto de un campo. meta: dict de metadata del frame (una sola lectura
+    por frame, ver _frame_meta) o None para leer key por key."""
+
+    def m(key):
+        if meta is not None:
+            return meta.get(key)
+        return _meta(parent, key, frame)
+
+    if field == "clip":
+        return str(m("hiero/clip") or "")
+    if field == "res":
+        try:
+            w, h = m("input/width"), m("input/height")
+            if w is None or h is None:
+                return ""
+            return "{}x{}".format(int(float(w)), int(float(h)))
+        except (TypeError, ValueError):
+            return ""
+    if field == "fps":
+        try:
+            v = m("input/frame_rate")
+            return "{} fps".format("%g" % float(v)) if v is not None else ""
+        except (TypeError, ValueError):
+            return ""
+    if field == "frame":
+        return _labeled(parent, "Frame", m("input/frame"))
+    if field == "tc":
+        return _labeled(parent, "TC", m("input/timecode"))
+    if field == "cspace":
+        return _clip_colorspace(parent, m("hiero/clip"))
+    if field == "track":
+        return _labeled(parent, "Track", _clip_track(parent, frame, m("hiero/clip")))
+    if field == "date":
+        return str(m("input/mtime") or "").split(" ")[0]
+    if field == "codec":
+        return _clip_codec(parent, frame, meta)
+    if field in ("custom1", "custom2"):
+        # Texto libre que escribe el usuario en el knob del campo.
+        try:
+            return str(parent["bi_%s_text" % field].value() or "")
+        except Exception:
+            return ""
+    if field == "frametc":
+        # Compatibilidad con instancias viejas del gizmo (campo unificado).
+        return "Frame: {}        TC: {}".format(m("input/frame") or "", m("input/timecode") or "")
+    return ""
+
+
+def _ok_from(field, parent, meta):
+    """1.0 si res/fps coinciden con el objetivo del proyecto, 0.0 si no."""
+    cfg = get_config(_project_name(parent, meta))
+    if field == "res":
+        filename = str(meta.get("input/filename") or "")
+        ext = os.path.splitext(filename)[1].lstrip(".").lower()
+        exts = [str(e).lstrip(".").lower() for e in cfg.get("compare_res_exts", [])]
+        if ext not in exts:
+            return 1.0
+        try:
+            clip = (int(float(meta["input/width"])), int(float(meta["input/height"])))
+        except (KeyError, TypeError, ValueError):
+            return 1.0
+        target = _target_res(parent, cfg)
+        return 0.0 if target is not None and clip != target else 1.0
+    if field == "fps":
+        try:
+            clip = float(meta["input/frame_rate"])
+        except (KeyError, TypeError, ValueError):
+            return 1.0
+        target = bi_config.parse_fps(cfg.get("fps_target"))
+        if target is None:
+            try:
+                v = meta.get("hiero/sequence/frame_rate")
+                target = float(v) if v is not None else None
+            except (TypeError, ValueError):
+                target = None
+        if target is not None and abs(clip - target) >= 0.001:
+            return 0.0
+    return 1.0
+
+
 # ── API para las expresiones del gizmo ────────────────────────────────────────
-
-
-_call_counts = {}
-
-
-def _log_call(kind, field, result):
-    """Registra las primeras llamadas por campo para diagnosticar evaluacion."""
-    key = kind + ":" + str(field)
-    count = _call_counts.get(key, 0) + 1
-    _call_counts[key] = count
-    if count <= 3 or count % 500 == 0:
-        _log("{} #{} -> {!r}".format(key, count, result))
+#
+# PERFORMANCE (medido en NKS 17, 2026-11-14): las ~150 expresiones [python] del
+# gizmo se evaluan en el HILO PRINCIPAL, varias veces por frame, y una
+# referencia TCL a un knob con [python] vuelve a correr el python (no hay
+# cache de Nuke en el medio). Por eso TODO sale de _frame_state(): un estado
+# por (efecto, frame, knobs) calculado una vez, y cada llamada siguiente es
+# una busqueda en un dict (~10 us). La version anterior pedia metadata del
+# input en cada llamada solo para armar la clave del cache (~100-250 us x
+# 150 llamadas por frame).
 
 
 def bi_text(field, parent, frame=None):
     """Texto de un campo. La llama la expresion del message de cada Text2."""
     try:
-        result = ""
-        if field == "clip":
-            result = str(_meta(parent, "hiero/clip") or "")
-        elif field == "res":
-            res = _clip_res(parent)
-            result = "{}x{}".format(res[0], res[1]) if res else ""
-        elif field == "fps":
-            fps = _clip_fps(parent)
-            result = "{} fps".format("%g" % fps) if fps is not None else ""
-        elif field == "frame":
-            frame_str = _meta(parent, "input/frame", frame)
-            result = _labeled(parent, "Frame", frame_str)
-        elif field == "tc":
-            tc = _meta(parent, "input/timecode", frame)
-            result = _labeled(parent, "TC", tc)
-        elif field == "cspace":
-            result = _clip_colorspace(parent)
-        elif field == "track":
-            result = _labeled(parent, "Track", _clip_track(parent, frame))
-        elif field == "date":
-            result = _file_date(parent, frame)
-        elif field == "codec":
-            result = _clip_codec(parent, frame)
-        elif field in ("custom1", "custom2"):
-            # Texto libre que escribe el usuario en el knob del campo.
-            try:
-                result = str(parent["bi_%s_text" % field].value() or "")
-            except Exception:
-                result = ""
-        elif field == "frametc":
-            # Compatibilidad con instancias viejas del gizmo (campo unificado).
-            frame_str = _meta(parent, "input/frame", frame)
-            tc = _meta(parent, "input/timecode", frame)
-            result = "Frame: {}        TC: {}".format(frame_str or "", tc or "")
-        _log_call("text", field, result)
-        return result
+        st = _frame_state(parent, frame)
+        if st is not None and field in st["texts"]:
+            return st["texts"][field]
+        return _text_from(field, parent, frame, None)
     except Exception as exc:
         _log_error_once("text:" + str(field), str(exc))
         return ""
@@ -465,49 +477,34 @@ def bi_text(field, parent, frame=None):
 def bi_ok(field, parent, frame=None):
     """1.0 si el campo esta OK, 0.0 si hay mismatch (pinta rojo).
 
-    La llaman las expresiones de los knobs bi_res_ok / bi_fps_ok del gizmo.
-    El parametro frame no se usa: esta para que la expresion dependa del
-    frame y Nuke la re-evalue (sin eso se evalua una sola vez, al cargar).
-    Ante cualquier duda devuelve 1.0: un burn-in roto no debe gritar rojo.
+    La llaman las expresiones de color de Text_Res / Text_Fps. El parametro
+    frame hace que la expresion dependa del frame (sin el, Nuke la evalua una
+    sola vez). Ante cualquier duda devuelve 1.0: un burn-in roto no grita rojo.
     """
     try:
-        cfg = get_config(_project_name(parent))
-        result = 1.0
-        if field == "res":
-            if _is_plate(parent, cfg):
-                clip = _clip_res(parent)
-                target = _target_res(parent, cfg)
-                if clip is not None and target is not None and clip != target:
-                    result = 0.0
-        elif field == "fps":
-            clip = _clip_fps(parent)
-            target = _target_fps(parent, cfg)
-            if clip is not None and target is not None:
-                if abs(clip - target) >= 0.001:
-                    result = 0.0
-        _log_call("ok", field, result)
-        return result
+        st = _frame_state(parent, frame)
+        if st is None:
+            return 1.0
+        oks = st["oks"]
+        if field not in oks:
+            oks[field] = _ok_from(field, parent, st["meta"])
+        return oks[field]
     except Exception as exc:
         _log_error_once("ok:" + str(field), str(exc))
         return 1.0
 
 
-# ── Geometria de los paneles de fondo (medida del texto real) ─────────────────
+# ── Medicion del texto ────────────────────────────────────────────────────────
 #
 # El panel de cada campo ABRAZA a su texto. La fuente del burn-in es Inter (la
 # del pack). Para que el ancho medido coincida con lo que Nuke RENDERIZA se mide
 # con QFontMetrics cargando EL MISMO archivo TTF que Nuke usa: se le pregunta a
-# nuke.getFonts() el path de (family, style) y se carga ESE en Qt. Asi la
-# medicion y el render usan el mismo TTF, aunque Qt "Inter" sustituiria distinto.
-# El peso (Regular/SemiBold/Bold) cambia el TTF y por lo tanto las metricas: el
-# panel se recalcula solo al cambiar de peso. Para frame/tc los digitos se
-# normalizan a '0' (ancho estable por frame). Todo cacheado.
-# VERIFICADO en NKS (sonda 29-08): render Inter + paneles abrazan.
+# nuke.getFonts() el path de (family, style) y se carga ESE en Qt. El peso
+# (Regular/SemiBold/Bold) cambia el TTF y por lo tanto las metricas. Para
+# frame/tc los digitos se normalizan a '0' (ancho estable por frame). Todo
+# cacheado. VERIFICADO en NKS (sonda 29-08): render Inter + paneles abrazan.
 
 _measure_cache = {}
-# Ultimo ancho de panel medido por campo EN RENDER (con texto real). Lo usa
-# panel_geo('w') cuando se la llama por API y el texto llega vacio.
-_last_width = {}
 _qt_family_cache = {}  # (family, style) -> familia que informa Qt (carga 1 vez)
 
 # El TTF del repo, fallback cuando no hay `nuke` (banco) o la fuente no esta en
@@ -585,23 +582,9 @@ def _qt_family(family, style):
     return fam
 
 
-PANEL_ANCHOR = {
-    "clip": "left",
-    "cspace": "center",
-    "res": "right",
-    "frame": "left",
-    "tc": "left",
-    "fps": "right",
-    "custom1": "center",
-    "custom2": "center",
-}
-
-
 # Solo frame y tc cambian de contenido por frame: para que su panel no
-# "respire" se mide con los digitos normalizados a '0' (asumiendo el peor
-# caso de conteo de digitos, como pidio Lega; si el numero real es mas
-# angosto sobra un poco, aceptable). El resto de los campos (clip, res,
-# fps, cspace) se miden EXACTOS: no cambian por frame, no hace falta padding.
+# "respire" se mide con los digitos normalizados a '0'. El resto de los
+# campos se miden exactos: no cambian por frame.
 _DIGIT_FIELDS = ("frame", "tc")
 
 
@@ -653,65 +636,28 @@ def _measure_text(text, px, style):
     if not width:
         # Sin Qt/fuente: estimacion gruesa (0.5 em promedio por caracter).
         width = px * 0.5 * len(text)
+    if len(_measure_cache) > 4000:
+        _measure_cache.clear()
     _measure_cache[key] = width
     return width
 
 
-def panel_geo(field, comp, parent, frame=None):
-    """'w', 'x' o 'cx' (en pixeles) del panel de un campo, medido de su texto.
-
-    'cx' es el centro horizontal del panel (x + w/2): es el pivote de la
-    rotacion del campo, compartido entre el kernel (bind de ax) y el texto
-    (apply_rotation escribe el mismo centro en animation_layers).
-
-    Sin texto devuelve 0: el kernel descarta paneles de ancho 0, asi que un
-    campo vacio no dibuja panel.
-    """
-    try:
-        text = bi_text(field, parent, frame)
-        if field in _DIGIT_FIELDS:
-            text = _digit_template(text)
-        if not text:
-            # Por API (panel, apply_rotation, onCreate) el Input del gizmo no
-            # tiene stream y los campos de metadata miden vacio. El render ya
-            # midio ese campo en este mismo proceso: se devuelve el ultimo
-            # ancho conocido para que el pivote y el ancla 3x3 tengan con que
-            # trabajar. Sin ese dato (nunca se rendereo) sigue siendo 0.
-            if comp == "w":
-                return float(_last_width.get(field, 0.0))
-            return 0.0
-        pad = float(parent["bi_text_pad"].value())
-        width = _measure_text(text, _font_px(parent, field), _weight_style(parent))
-        width += 2.0 * pad
-        _last_width[field] = width
-        if comp == "w":
-            return width
-        anchor = float(parent["bi_%s_x" % field].value()) * float(parent.width())
-        justify = PANEL_ANCHOR.get(field, "left")
-        if justify == "left":
-            x = anchor
-        elif justify == "center":
-            x = anchor - width * 0.5
-        else:
-            x = anchor - width
-        if comp == "cx":
-            return x + width * 0.5
-        return x
-    except Exception as exc:
-        _log_error_once("panel:" + str(field), str(exc))
-        return 0.0
-
-
-# ── Geometria desde el mapa ───────────────────────────────────────────────────
+# ── Estado por frame: textos + geometria desde el mapa ────────────────────────
 #
-# field_geo() la llaman TODAS las cajas de los Text2 y los params x/y/w/h del
-# kernel, para los once campos, en cada frame: el layout entero se calcula una
-# vez y se cachea por (efecto, frame, estado de los knobs que lo afectan). Los
-# textos de frame/tc se miden con los digitos normalizados, asi que el layout
-# no "respira" de un frame a otro.
+# Lo leen TODAS las expresiones del gizmo (cajas y mensajes de los Text2, los
+# paneles y las franjas) para los once campos. Se calcula una vez
+# por (efecto, frame, formato, knobs que lo afectan) y las llamadas siguientes
+# son un dict lookup. Los textos de frame/tc se miden con los digitos
+# normalizados, asi que el layout no "respira" de un frame a otro.
 
 _geo_cache = {}
-_GEO_CACHE_MAX = 400
+_GEO_CACHE_MAX = 300
+
+# Knobs que cambian textos o geometria. El resto (colores, opacidades, radio)
+# llega al render por expresiones TCL directas y no pasa por aca.
+_SIG_KNOBS = ("bi_weight", "bi_size", "bi_text_pad", "bi_labels", "bi_bg_mode",
+              "bi_custom1_text", "bi_custom2_text", "bi_mask_aspect")
+
 
 
 def layout_text(node):
@@ -724,84 +670,110 @@ def layout_text(node):
         return ""
 
 
-def _layout_state(parent):
-    text = layout_text(parent)
-    return text, bi_layout.active(bi_layout.parse(text))
-
-
 def _knob_sig(parent):
     sig = []
-    for name in ("bi_weight", "bi_size", "bi_text_pad", "bi_labels",
-                 "bi_custom1_text", "bi_custom2_text", "bi_mask_aspect"):
+    for name in _SIG_KNOBS:
         try:
-            sig.append(parent[name].value())
+            k = parent[name]
+            sig.append(k.getText() if name.endswith("_text") else k.value())
         except Exception:
             sig.append(None)
     return tuple(sig)
 
 
-def _compute_layout(parent, frame, fmt):
-    text, arr = _layout_state(parent)
-    fmt_w, fmt_h = fmt
-    key = None
-    # Solo se cachea con stream: fuera del render (un setValue, el onCreate)
-    # el Input no tiene metadata, todos los textos dan '' y ese layout vacio
-    # quedaba guardado para el frame y el render lo reusaba (medido: todo
-    # apilado en el origen y sin paneles).
-    if frame is not None and _meta(parent, "input/width") is not None:
-        try:
-            name = parent.fullName()
-        except Exception:
-            name = ""
-        key = (name, frame, text, fmt_w, fmt_h, _knob_sig(parent))
-        hit = _geo_cache.get(key)
-        if hit is not None:
-            return hit
+def _frame_meta(parent, frame):
+    """Toda la metadata del input en UNA lectura (dict). {} sin stream."""
+    try:
+        inp = parent.node("Input1")
+        if inp is None:
+            return {}
+        if frame is None:
+            return dict(inp.metadata() or {})
+        return dict(inp.metadata(time=frame) or {})
+    except Exception as exc:
+        _log_error_once("meta_dict", str(exc))
+        return {}
+
+
+def _frame_state(parent, frame):
+    """Estado del efecto en un frame: textos, rects, bandas, crops, oks.
+
+    Sin stream (el Input no tiene metadata: un setValue, el onCreate, el
+    panel) no se cachea: el render despues lo calcula con los textos reales.
+    """
+    try:
+        fmt_w, fmt_h = float(parent.width()), float(parent.height())
+        name = parent.fullName()
+    except Exception:
+        return None
+    text = layout_text(parent)
+    sig = _knob_sig(parent)
+    key = (name, frame, fmt_w, fmt_h, text, sig)
+    hit = _geo_cache.get(key)
+    if hit is not None:
+        return hit
+
+    meta = _frame_meta(parent, frame)
+    arr = bi_layout.active(bi_layout.parse(text))
     style = _weight_style(parent)
     fs = _font_px(parent, None, fmt_h)
     try:
         pad = float(parent["bi_text_pad"].value())
     except Exception:
         pad = 28.0
-    widths = {}
+    try:
+        mode = int(parent["bi_bg_mode"].getValue())
+    except Exception:
+        mode = 0
+    texts, widths = {}, {}
     for f in bi_layout.visible_fields(arr):
-        t = bi_text(f, parent, frame)
+        t = _text_from(f, parent, frame, meta)
+        texts[f] = t
         if f in _DIGIT_FIELDS:
             t = _digit_template(t)
         if t:
             widths[f] = _measure_text(t, fs, style) + 2.0 * pad
-            _last_width[f] = widths[f]
-    result = bi_layout.compute(
+    rects, bands = bi_layout.compute(
         arr, widths, fmt_w, fmt_h, fs, pad, mask_inset_px(parent, fmt_w, fmt_h)
     )
-    if key is not None:
+    state = {
+        "texts": texts,
+        "rects": rects,
+        "bands": bands if mode == 1 else {"t": 0.0, "b": 0.0, "l": 0.0, "r": 0.0},
+        "line_h": bi_layout.line_height(fs, pad),
+        "meta": meta,
+        "oks": {},
+    }
+    if "input/width" in meta:
         if len(_geo_cache) > _GEO_CACHE_MAX:
             _geo_cache.clear()
-        _geo_cache[key] = result
-    return result
+        _geo_cache[key] = state
+    return state
+
+
+_RECT_INDEX = {"x": 0, "y": 1, "w": 2, "h": 3}
 
 
 def field_geo(field, comp, parent, frame=None):
-    """Geometria en px de un campo segun el mapa: 'x', 'y', 'w', 'h' del panel
-    SIN ROTAR. Con field '_band', el grosor de la franja del modo Band en el
-    borde comp ('t', 'b', 'l', 'r'); 0 si el modo no es Band.
+    """Geometria en px desde el mapa.
 
-    Un campo oculto o sin texto devuelve 0 en todo: el kernel descarta los
-    paneles de ancho 0 y la caja vacia del Text2 no dibuja nada.
+    - Un campo, caja del Text2: 'x', 'y', 'w', 'h' del panel SIN ROTAR, o
+      'y2' (= y + h). Oculto o sin texto: 0.
+    - '_band': grosor de la franja del modo Band en el borde comp ('t', 'b',
+      'l', 'r'); 0 si el modo no es Band.
     """
     try:
-        fmt = (float(parent.width()), float(parent.height()))
-        rects, bands = _compute_layout(parent, frame, fmt)
+        st = _frame_state(parent, frame)
+        if st is None:
+            return 0.0
         if field == "_band":
-            try:
-                mode = int(parent["bi_bg_mode"].getValue())
-            except Exception:
-                mode = 0
-            return float(bands.get(comp, 0.0)) if mode == 1 else 0.0
-        rect = rects.get(field)
+            return float(st["bands"].get(comp, 0.0))
+        rect = st["rects"].get(field)
         if rect is None:
             return 0.0
-        idx = {"x": 0, "y": 1, "w": 2, "h": 3}.get(comp)
+        if comp == "y2":
+            return float(rect[1] + rect[3])
+        idx = _RECT_INDEX.get(comp)
         return float(rect[idx]) if idx is not None else 0.0
     except Exception as exc:
         _log_error_once("geo:" + str(field) + comp, str(exc))

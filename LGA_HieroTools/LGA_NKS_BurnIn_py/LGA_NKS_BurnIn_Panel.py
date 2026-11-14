@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Panel v3.01 | Lega
+  LGA_NKS_BurnIn_Panel v3.02 | Lega
 
   Panel "Burn-ins" del soft effect LGA_BurnIn, con el diseno del menu
   Burn-ins de Shot Player (LGA Media Tools): cinco distribuciones
@@ -18,6 +18,12 @@ ____________________________________________________________________
   (LGA_NKS_BurnIn_Logic.field_geo). La ventana solo escribe knobs y
   config; los cambios se ven en el visor al instante.
 
+  v3.02: Performance. Los cambios pasan por Blink.schedule_update (una sola
+         actualizacion y un solo nudge por efecto y por ciclo de eventos, en
+         vez de apply_layout directo + el del knobChanged). Los sliders
+         escriben a lo sumo cada 33 ms mientras se arrastran (el ultimo
+         valor siempre llega) y los de opacidad y radio ya no ensucian el
+         efecto: van al render por expresiones directas.
   v3.01: Defaults de fabrica nuevos (Bg opacity 79, Radius 29) para el
          click en el rotulo. Ventana mas ancha (520) y '&' escapado en los
          segmentados.
@@ -53,6 +59,9 @@ import LGA_NKS_BurnIn_Config as bi_config
 import LGA_NKS_BurnIn_Layout as bi_layout
 
 _WEIGHTS = ("Regular", "SemiBold", "Bold")
+
+# Intervalo minimo entre writes de un slider arrastrado (~30 por segundo).
+_SLIDER_MS = 33
 
 # Defaults de los sliders (los del gizmo). Click en el rotulo vuelve a este.
 _SLIDERS = {
@@ -716,31 +725,28 @@ class HieroController(object):
             self.node["bi_weight"].setValue(style)
         except Exception:
             pass
-        try:
-            import LGA_NKS_BurnIn_Blink as bi_blink
-
-            bi_blink.apply_font(self.node)
-        except Exception:
-            pass
-        self.nudge()
+        self._schedule(font=True)
 
     def get_layout(self):
         return self.get_text("bi_layout", "")
 
     def set_layout(self, text):
-        """Escribe el mapa y lo aplica a los knobs de cada campo. El
-        knobChanged del registro hace lo mismo; la llamada directa es para
-        una sesion donde el registro cargado sea anterior."""
+        """Escribe el mapa y pide aplicarlo a los knobs de cada campo."""
         self.set("bi_layout", text)
         self.apply_layout()
 
-    def apply_layout(self):
+    def _schedule(self, font=False):
+        """Una sola actualizacion por ciclo de eventos (Blink.schedule_update):
+        el knobChanged del registro pide la misma y se juntan."""
         try:
             import LGA_NKS_BurnIn_Blink as bi_blink
 
-            bi_blink.apply_layout(self.node)
+            bi_blink.schedule_update(self.node, font=font)
         except Exception:
             pass
+
+    def apply_layout(self):
+        self._schedule()
 
     def field_ok(self, field):
         """1.0/0.0 del campo (res/fps) para el punto rojo del chip. Por API el
@@ -794,13 +800,8 @@ class HieroController(object):
             pass
 
     def nudge(self):
-        """Ensucia el efecto para que el timeline re-renderice."""
-        try:
-            import LGA_NKS_BurnIn_Blink as bi_blink
-
-            bi_blink.nudge(self.node)
-        except Exception:
-            pass
+        """Ensucia el efecto para que el timeline re-renderice (agrupado)."""
+        self._schedule()
 
     def list_presets(self):
         return bi_config.list_presets()
@@ -829,6 +830,12 @@ class BurnInPanel(QtWidgets.QDialog):
         # de abajo se cortaban a 460 (medido con el harness).
         self.setMinimumWidth(520)
         self._keep_on_top = True
+        # Escritura de sliders a lo sumo cada _SLIDER_MS (ver _on_slider).
+        self._slider_pend = {}
+        self._slider_timer = QtCore.QTimer(self)
+        self._slider_timer.setSingleShot(True)
+        self._slider_timer.setInterval(_SLIDER_MS)
+        self._slider_timer.timeout.connect(self._flush_sliders)
         self._apply_on_top()
         self._armar_ui()
         apply_ui_font(self)
@@ -1225,14 +1232,24 @@ class BurnInPanel(QtWidgets.QDialog):
         self._pintar_valor(key)
         if self._loading:
             return
-        knob, _lo, _hi, _default, scale, _suf = _SLIDERS[key]
-        self.ctl.set(knob, float(value) * scale)
-        if key == "padding":
-            # El padding cambia el alto de la linea: el pivote de los
-            # costados girados se re-escribe.
-            self.ctl.apply_layout()
-        else:
-            self.ctl.nudge()
+        # Arrastrar un slider emite un valor por movimiento del mouse; cada
+        # write re-renderiza. Se escribe a lo sumo cada _SLIDER_MS y el
+        # ultimo valor siempre llega (lo escribe el timer al vencer).
+        self._slider_pend[key] = value
+        if not self._slider_timer.isActive():
+            self._flush_sliders()
+            self._slider_timer.start()
+
+    def _flush_sliders(self):
+        pend, self._slider_pend = self._slider_pend, {}
+        for key, value in pend.items():
+            knob, _lo, _hi, _default, scale, _suf = _SLIDERS[key]
+            self.ctl.set(knob, float(value) * scale)
+            if key == "padding":
+                # El padding cambia la geometria (python) y el pivote de los
+                # costados girados. Opacidades y radio van al render por
+                # expresiones directas: no hace falta ensuciar nada.
+                self.ctl.apply_layout()
 
     def _reset_slider(self, key):
         default = _SLIDERS[key][3]

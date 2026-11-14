@@ -1,21 +1,24 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Blink v1.07 | Lega
+  LGA_NKS_BurnIn_Blink v1.08 | Lega
 
-  Setup del nodo BlinkScript interno del gizmo LGA_BurnIn. Lo llama el
-  onCreate del nodo al instanciarse el efecto en el timeline (y al
-  recargar un proyecto). Hace dos cosas, en forma idempotente:
+  Puente entre los knobs del soft effect LGA_BurnIn y su BlinkScript
+  interno. setup() es el onCreate del BlinkScript: compila el kernel
+  LGA_RoundedPanels y ata sus params, fuente, mascara del viewer y
+  layout. apply_layout() traduce el mapa a los knobs on/bg/rot de cada
+  campo y apply_rotation() escribe el giro de los costados en los Text2.
+  schedule_update() junta los pedidos del panel y del knobChanged en una
+  sola actualizacion por ciclo de eventos.
 
-  1. Compila el kernel LGA_RoundedPanels si no esta compilado, usando
-     kernelSourceFile + Load: es la UNICA via que compila por script en
-     el timeline (recompile.execute() no hace nada ahi; medido, ver
-     Docu_SoftEffects_Aprendizajes.md).
-  2. Ata cada parametro del kernel a los knobs de layout del gizmo
-     padre por expresion (los knobs del kernel recien existen despues
-     de compilar, con el nombre del kernel como prefijo, asi que no se
-     pueden escribir en el archivo del gizmo).
-
+  v1.08: Performance. Centinela del kernel v0.08 (param kver: recompila
+         instancias viejas). nudge() escribe UN knob (bi_rev, que el
+         kernel y las cajas de los Text2 leen); el toque de opacidad que
+         ensucia los Text2 queda solo para cuando apply_rotation cambio de
+         verdad algun blob, y apply_rotation ya no reescribe blobs ni
+         pivotes iguales. schedule_update/update_now: actualizacion
+         agrupada; mientras corre, el knobChanged ignora los writes propios
+         (is_busy).
   v1.07: Mascara del viewer: viewer_mask_aspect() lee la mascara visible
          (estilo Half o Full, cualquier aspect) y apply_mask() la escribe
          en bi_mask_aspect; el pivote de los costados girados la suma.
@@ -127,10 +130,9 @@ def _bindings():
     return binds
 
 
-# Param que solo existe en el kernel de la version actual (v0.06, con Band y
-# rev): si el nodo tiene el nombre del kernel pero no este knob, es una
+# Param que solo existe en el kernel de la version actual (v0.08, kver): si el nodo tiene el nombre del kernel pero no este knob, es una
 # instancia compilada con un kernel viejo y hay que recompilar.
-_KERNEL_SENTINEL = "rev"
+_KERNEL_SENTINEL = "kver"
 
 
 def _find_param(node, suffix):
@@ -277,9 +279,10 @@ def apply_font(gizmo):
 # vivir solo en el .gizmo: la escribe apply_rotation() leyendo bi_<f>_rot, en
 # el onCreate (setup) y en el knobChanged (LGA_NKS_BurnIn.py).
 #
-# El pivote (cx, cy) se escribe en bi_<f>_ax/ay, que tambien lee el kernel:
-# texto y fondo giran juntos alrededor del mismo punto. Desde v1.06 el pivote
-# es fijo por costado (ver _side_pivot) y solo los costados girados rotan.
+# El pivote (cx, cy) se escribe en bi_<f>_ax/ay. Desde v1.06 es fijo por
+# costado (ver _side_pivot) y solo los costados girados rotan. El panel de
+# fondo de un campo girado lo calcula la logica con el mismo pivote
+# (Layout.compute), asi que texto y fondo quedan juntos.
 
 
 def _owner_sequences(gizmo):
@@ -385,9 +388,21 @@ def _side_pivot(gizmo, field, arr, fmt):
     return bi_layout.side_pivot(edge, fmt_w, fmt_h, h, inset_x)
 
 
+def _blob_nums(text):
+    """Numeros del blob animation_layers, redondeados (toScript escribe
+    '1024' donde el literal propio dice '1024.0')."""
+    out = []
+    for tok in str(text or "").replace("{", " ").replace("}", " ").split():
+        try:
+            out.append(round(float(tok), 3))
+        except ValueError:
+            out.append(tok)
+    return out
+
+
 def apply_rotation(gizmo, fields=None):
     """Escribe la rotacion literal de cada campo en su Text2 interno y el
-    pivote en bi_<f>_ax/ay (que lee el kernel). Idempotente; con rot=0
+    pivote en bi_<f>_ax/ay. Idempotente; con rot=0
     escribe el layer identidad.
 
     El pivote de un campo girado es fijo por costado: no depende del ancho
@@ -395,7 +410,8 @@ def apply_rotation(gizmo, fields=None):
     del padding. Sin formato conocido se conserva el pivote guardado.
     """
     if gizmo is None:
-        return
+        return False
+    changed = False
     arr = _layout_arr(gizmo)
     fmt = _timeline_format(gizmo)
     if fmt is None:
@@ -408,23 +424,33 @@ def apply_rotation(gizmo, fields=None):
             rot = float(gizmo["bi_%s_rot" % f].value())
             if rot != 0.0 and fmt is not None:
                 cx, cy = _side_pivot(gizmo, f, arr, fmt)
-                gizmo["bi_%s_ax" % f].setValue(round(cx, 4))
-                gizmo["bi_%s_ay" % f].setValue(round(cy, 4))
+                # Solo si cambia: cada setValue invalida el cache del viewer.
+                for comp, val in (("ax", round(cx, 4)), ("ay", round(cy, 4))):
+                    knob = gizmo["bi_%s_%s" % (f, comp)]
+                    if abs(float(knob.value()) - val) > 1e-4:
+                        knob.setValue(val)
             else:
                 cx = float(gizmo["bi_%s_ax" % f].value())
                 cy = float(gizmo["bi_%s_ay" % f].value())
             blob = "{1 11 %s %s 0 0 1 1 0 0 %s 0}" % (
                 repr(round(cx, 4)), repr(round(cy, 4)), repr(round(rot, 4))
             )
+            if _blob_nums(text_node["animation_layers"].toScript()) == _blob_nums(blob):
+                continue
             text_node["group_animations"].fromScript(
                 '{0} imported: 0 selected: 0 items: "root transform"'
             )
             text_node["animation_layers"].fromScript(blob)
+            changed = True
         except Exception as exc:
             _log("ERROR rotando campo {}: {}".format(f, exc))
+    if changed:
+        # El write del blob no ensucia el Text2: un toque de opacidad si.
+        _touch_texts(gizmo)
+    return changed
 
 
-def apply_layout(gizmo):
+def apply_layout(gizmo, do_nudge=True):
     """Traduce el mapa (bi_layout) y el modo de fondo (bi_bg_mode) a los
     knobs de cada campo: on (esta en el mapa), bg (modo Panels) y rot
     (costado girado). Despues re-escribe las rotaciones. Lo llaman el panel,
@@ -451,29 +477,109 @@ def apply_layout(gizmo):
         except Exception as exc:
             _log("ERROR aplicando layout a {}: {}".format(f, exc))
     apply_rotation(gizmo)
-    nudge(gizmo)
+    if do_nudge:
+        nudge(gizmo)
 
 
 def nudge(gizmo):
-    """Ensucia el gizmo para que el timeline re-renderice (el write por API de
-    animation_layers no dispara el re-render solo; medido).
+    """Ensucia el gizmo para que el timeline re-renderice.
 
-    Incrementa bi_rev, que el kernel lee (param rev): los params de geometria
-    son [python] y Nuke no ve que dependen del mapa, asi que sin un valor que
-    cambie el timeline reusaba el render cacheado del kernel y los paneles
-    quedaban donde estaban antes (medido en NKS 17 al pasar a Edge). El
-    toque de opacidad ensucia los Text2."""
+    Incrementa bi_rev. Las expresiones de geometria del gizmo son [python] y
+    Nuke no ve que dependen del mapa: sin un valor que cambie, el timeline
+    reusaba el render cacheado y los paneles quedaban donde estaban antes
+    (medido en NKS 17 al pasar a Edge). Cada una suma 0*parent.bi_rev: esa
+    dependencia TCL hace que Nuke la vuelva a evaluar.
+
+    UN solo write: cada write invalida el cache del viewer y NKS vuelve a
+    renderizar los frames cacheados alrededor del playhead (medido: con los
+    tres writes de antes, mover un slider costaba ~450 ms de CPU)."""
     try:
         rev = float(gizmo["bi_rev"].value())
         gizmo["bi_rev"].setValue((rev + 1.0) % 100000.0)
     except Exception:
         pass
+
+
+def _touch_texts(gizmo):
+    """Ensucia los Text2: el write por API de animation_layers no dispara el
+    re-render solo (medido)."""
     try:
         value = gizmo["bi_opacity"].value()
         gizmo["bi_opacity"].setValue(value - 0.001)
         gizmo["bi_opacity"].setValue(value)
     except Exception:
         pass
+
+
+# ── Actualizacion agrupada ────────────────────────────────────────────────────
+#
+# Cada setValue en un knob del gizmo invalida el cache del viewer y NKS vuelve
+# a renderizar los frames cacheados alrededor del playhead. Antes un cambio
+# del panel disparaba en cadena: el write del panel, apply_layout del panel,
+# apply_layout del knobChanged, y cada _rot / ax / ay que esos escribian volvia
+# a entrar al knobChanged con su propio apply_rotation + nudge (tres writes).
+# Ahora todo pedido (knobChanged, panel) se anota en _pending y se resuelve
+# UNA vez por efecto al volver al loop de eventos; mientras corre, el
+# knobChanged ignora los writes propios (_busy).
+
+_busy = [False]
+_pending = {}
+_timer_holder = []
+
+
+def is_busy():
+    return _busy[0]
+
+
+def schedule_update(gizmo, font=False):
+    """Pide una actualizacion (fuente, layout, rotacion, nudge) del efecto,
+    agrupada con todas las que lleguen en el mismo ciclo de eventos."""
+    if gizmo is None:
+        return
+    try:
+        key = gizmo.fullName()
+    except Exception:
+        return
+    prev = _pending.get(key)
+    _pending[key] = (gizmo, font or (prev[1] if prev else False))
+    if _timer_holder and _timer_holder[0].isActive():
+        return
+    try:
+        from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtCore
+
+        if not _timer_holder:
+            timer = QtCore.QTimer()
+            timer.setSingleShot(True)
+            timer.setInterval(0)
+            timer.timeout.connect(_flush_pending)
+            _timer_holder.append(timer)
+        _timer_holder[0].start()
+    except Exception:
+        _flush_pending()
+
+
+def _flush_pending():
+    items = list(_pending.values())
+    _pending.clear()
+    for gizmo, font in items:
+        update_now(gizmo, font)
+
+
+def update_now(gizmo, font=False):
+    """Aplica fuente (si se pidio), mapa y rotacion, y ensucia el efecto con
+    un solo write. Los writes de aca no re-entran al knobChanged."""
+    if gizmo is None:
+        return
+    _busy[0] = True
+    try:
+        if font:
+            apply_font(gizmo)
+        apply_layout(gizmo, do_nudge=False)
+        nudge(gizmo)
+    except Exception as exc:
+        _log("ERROR en update_now: {}".format(exc))
+    finally:
+        _busy[0] = False
 
 
 def _aspect_from_name(name):
@@ -517,27 +623,38 @@ def apply_mask(gizmo, aspect):
         aspect = round(float(aspect), 4)
         if abs(float(gizmo["bi_mask_aspect"].value()) - aspect) < 1e-4:
             return False
-        gizmo["bi_mask_aspect"].setValue(aspect)
     except Exception:
         return False
-    apply_rotation(gizmo)
-    nudge(gizmo)
+    _busy[0] = True
+    try:
+        gizmo["bi_mask_aspect"].setValue(aspect)
+        apply_rotation(gizmo)
+        nudge(gizmo)
+    finally:
+        _busy[0] = False
     return True
 
 
 def setup(node):
-    """Punto de entrada del onCreate del BlinkScript interno del gizmo."""
+    """onCreate del BlinkScript interno del gizmo: compila el kernel y ata sus
+    params (si hace falta), fuente, mascara del viewer y layout (on/bg/rot por
+    campo y rotaciones). Corre al agregar el efecto y al cargar un proyecto."""
     try:
         gizmo = _gizmo_of(node)
-        if _compile_kernel(node):
-            _bind_params(node)
-        apply_font(gizmo)
+        if gizmo is None:
+            return
+        _busy[0] = True
         try:
+            if _compile_kernel(node):
+                _bind_params(node)
+            apply_font(gizmo)
             # Un efecto recien agregado arranca con la mascara que ya tiene
             # el viewer (el vigia del registro solo avisa cambios).
-            gizmo["bi_mask_aspect"].setValue(round(viewer_mask_aspect(), 4))
-        except Exception:
-            pass
-        apply_layout(gizmo)
+            aspect = round(viewer_mask_aspect(), 4)
+            if abs(float(gizmo["bi_mask_aspect"].value()) - aspect) > 1e-4:
+                gizmo["bi_mask_aspect"].setValue(aspect)
+            apply_layout(gizmo)
+        finally:
+            _busy[0] = False
     except Exception as exc:
         _log("ERROR en setup: {}".format(exc))

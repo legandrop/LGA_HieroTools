@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn v1.08 | Lega
+  LGA_NKS_BurnIn v1.09 | Lega
 
   Registra el soft effect LGA_BurnIn (BlinkScript + Text2, paneles
   redondeados) en el menu Effects del timeline de NKS. Muestra
@@ -13,6 +13,11 @@ ____________________________________________________________________
   "foundry.timeline.effect." + setData(clase del nodo), via
   hiero.ui.registerAction (patron oficial de custom_soft_effect.py).
 
+  v1.09: Performance: el knobChanged solo anota el pedido
+         (Blink.schedule_update, agrupado por ciclo de eventos) e ignora los
+         knobs que van directo al render y los writes de la propia
+         actualizacion. Antes cada write interno volvia a entrar con su
+         apply_rotation + nudge.
   v1.08: Fuera LGA BurnIn v0 (la version solo Text2): ya no se registra
          y se borro su gizmo.
   v1.07: Vigia de la mascara del viewer (QTimer de 500 ms en el hilo
@@ -101,62 +106,52 @@ def _log(message):
 # no ensucia el nodo es el write del blob animation_layers, y para eso esta
 # nudge() en el modulo Blink.
 
-# Knobs bi_* que no cambian el render.
-_KNOBS_SIN_RENDER = ("bi_open_panel",)
+# Knobs bi_* que llegan al render por expresiones TCL directas (o que escribe
+# el propio update): no necesitan re-aplicar nada ni ensuciar el efecto.
+_KNOBS_DIRECTOS = (
+    "bi_open_panel", "bi_rev", "bi_font", "bi_color", "bi_opacity",
+    "bi_bg_color", "bi_bg_opacity", "bi_bg_radius",
+)
+# Por campo (bi_<campo>_<sufijo>): on/bg/rot/ax/ay los deriva apply_layout
+# del mapa; x/y/size quedaron inertes desde el panel con mapa. _text (custom)
+# SI cambia el layout.
+_SUFIJOS_DIRECTOS = ("ax", "ay", "on", "bg", "rot", "x", "y", "size")
 
-_state = {"in_handler": False}
+_state = {}
 
 
-def _apply_layout_change(gizmo, name):
-    """Re-aplica fuente/rotacion segun el knob bi_* que cambio."""
+def _es_derivado(name, fields):
+    parts = name[3:].rsplit("_", 1)
+    return len(parts) == 2 and parts[0] in fields and parts[1] in _SUFIJOS_DIRECTOS
+
+
+def _on_knob_changed():
+    """knobChanged de la clase LGA_BurnIn (registrado en _register).
+
+    Solo ANOTA el pedido: LGA_NKS_BurnIn_Blink.schedule_update lo resuelve
+    una vez por efecto al volver al loop de eventos (una rafaga del panel o de
+    un script termina en una sola actualizacion y un solo nudge). Los writes
+    que hace la propia actualizacion no vuelven a entrar (is_busy)."""
+    import nuke
+
     try:
         import LGA_NKS_BurnIn_Blink as bi_blink
     except Exception:
         return
-    if name == "bi_weight":
-        # El peso cambia la fuente Y las metricas: re-aplicar la fuente y
-        # ensuciar el nodo (el bi_font seteado por codigo no siempre invalida).
-        bi_blink.apply_font(gizmo)
-        bi_blink.nudge(gizmo)
-    elif name in ("bi_layout", "bi_bg_mode"):
-        # El mapa decide que campo se ve, si lleva panel y si gira.
-        bi_blink.apply_layout(gizmo)
-    elif name.endswith("_rot"):
-        # bi_<campo>_rot: reescribir el literal del campo tocado. El write
-        # del blob animation_layers no ensucia el nodo solo: nudge.
-        field = name[3:-4]
-        if field in bi_blink.FIELDS:
-            bi_blink.apply_rotation(gizmo, fields=(field,))
-            bi_blink.nudge(gizmo)
-    elif name in ("bi_size", "bi_text_pad", "bi_mask_aspect"):
-        # El pivote de los costados girados depende del alto de la linea y
-        # del area que deja visible la mascara del viewer.
-        bi_blink.apply_rotation(gizmo)
-        bi_blink.nudge(gizmo)
-
-
-def _on_knob_changed():
-    """knobChanged de la clase LGA_BurnIn (registrado en _register)."""
-    import nuke
-
-    if _state["in_handler"]:
-        # Re-entrada: los writes que hace este mismo handler (ax/ay del
-        # pivote, el nudge de opacidad) vuelven a disparar el callback.
+    if bi_blink.is_busy():
         return
-    n = nuke.thisNode()
     k = nuke.thisKnob()
-    if n is None or k is None:
+    if k is None:
         return
     name = k.name()
-    if not name.startswith("bi_") or name in _KNOBS_SIN_RENDER:
+    if not name.startswith("bi_") or name in _KNOBS_DIRECTOS:
         return
-    _state["in_handler"] = True
+    if _es_derivado(name, bi_blink.FIELDS):
+        return
     try:
-        _apply_layout_change(n, name)
+        bi_blink.schedule_update(nuke.thisNode(), font=(name == "bi_weight"))
     except Exception as exc:
         _log("ERROR en knobChanged {}: {}".format(name, exc))
-    finally:
-        _state["in_handler"] = False
 
 
 # ── Vigia de la mascara del viewer ───────────────────────────────────────────

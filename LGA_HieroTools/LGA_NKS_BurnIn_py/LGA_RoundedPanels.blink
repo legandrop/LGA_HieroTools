@@ -1,10 +1,11 @@
-// LGA_RoundedPanels v0.06 | Lega
+// LGA_RoundedPanels v0.08 | Lega
 // Fondos redondeados de los campos del burn-in, en una pasada.
 // SDF de rounded box + antialiasing 1px, con rotacion por campo.
+// v0.08: init() precalcula cada panel y su caja girada; process()
+//        solo hace la SDF dentro de esas cajas.
 // v0.06: 11 campos y franjas del modo Band (band_t/b/l/r).
 // v0.05: muestreo en el centro del pixel (pos + 0.5); defaults del gizmo.
 // v0.04: rotacion por campo (ax,ay = ancla; rot en radianes).
-// v0.03: sin funcion miembro, logica inline por campo.
 
 kernel LGARoundedPanels : ImageComputationKernel<ePixelWise>
 {
@@ -112,6 +113,146 @@ kernel LGARoundedPanels : ImageComputationKernel<ePixelWise>
     float fmt_w;
     float fmt_h;
     float rev;
+    float kver;
+
+  local:
+    float clip__en;
+    float clip__ca;
+    float clip__sa;
+    float clip__cx;
+    float clip__cy;
+    float clip__hw;
+    float clip__hh;
+    float clip__r;
+    float clip__bx0;
+    float clip__by0;
+    float clip__bx1;
+    float clip__by1;
+    float cspace__en;
+    float cspace__ca;
+    float cspace__sa;
+    float cspace__cx;
+    float cspace__cy;
+    float cspace__hw;
+    float cspace__hh;
+    float cspace__r;
+    float cspace__bx0;
+    float cspace__by0;
+    float cspace__bx1;
+    float cspace__by1;
+    float res__en;
+    float res__ca;
+    float res__sa;
+    float res__cx;
+    float res__cy;
+    float res__hw;
+    float res__hh;
+    float res__r;
+    float res__bx0;
+    float res__by0;
+    float res__bx1;
+    float res__by1;
+    float frame__en;
+    float frame__ca;
+    float frame__sa;
+    float frame__cx;
+    float frame__cy;
+    float frame__hw;
+    float frame__hh;
+    float frame__r;
+    float frame__bx0;
+    float frame__by0;
+    float frame__bx1;
+    float frame__by1;
+    float tc__en;
+    float tc__ca;
+    float tc__sa;
+    float tc__cx;
+    float tc__cy;
+    float tc__hw;
+    float tc__hh;
+    float tc__r;
+    float tc__bx0;
+    float tc__by0;
+    float tc__bx1;
+    float tc__by1;
+    float fps__en;
+    float fps__ca;
+    float fps__sa;
+    float fps__cx;
+    float fps__cy;
+    float fps__hw;
+    float fps__hh;
+    float fps__r;
+    float fps__bx0;
+    float fps__by0;
+    float fps__bx1;
+    float fps__by1;
+    float track__en;
+    float track__ca;
+    float track__sa;
+    float track__cx;
+    float track__cy;
+    float track__hw;
+    float track__hh;
+    float track__r;
+    float track__bx0;
+    float track__by0;
+    float track__bx1;
+    float track__by1;
+    float date__en;
+    float date__ca;
+    float date__sa;
+    float date__cx;
+    float date__cy;
+    float date__hw;
+    float date__hh;
+    float date__r;
+    float date__bx0;
+    float date__by0;
+    float date__bx1;
+    float date__by1;
+    float codec__en;
+    float codec__ca;
+    float codec__sa;
+    float codec__cx;
+    float codec__cy;
+    float codec__hw;
+    float codec__hh;
+    float codec__r;
+    float codec__bx0;
+    float codec__by0;
+    float codec__bx1;
+    float codec__by1;
+    float custom1__en;
+    float custom1__ca;
+    float custom1__sa;
+    float custom1__cx;
+    float custom1__cy;
+    float custom1__hw;
+    float custom1__hh;
+    float custom1__r;
+    float custom1__bx0;
+    float custom1__by0;
+    float custom1__bx1;
+    float custom1__by1;
+    float custom2__en;
+    float custom2__ca;
+    float custom2__sa;
+    float custom2__cx;
+    float custom2__cy;
+    float custom2__hw;
+    float custom2__hh;
+    float custom2__r;
+    float custom2__bx0;
+    float custom2__by0;
+    float custom2__bx1;
+    float custom2__by1;
+    float any_x0;
+    float any_y0;
+    float any_x1;
+    float any_y1;
+    float4 panel_col;
 
   void define() {
     defineParam(clip_x, "clip_x", 0.0f);
@@ -214,6 +355,301 @@ kernel LGARoundedPanels : ImageComputationKernel<ePixelWise>
     defineParam(fmt_w, "fmt_w", 0.0f);
     defineParam(fmt_h, "fmt_h", 0.0f);
     defineParam(rev, "rev", 0.0f);
+    defineParam(kver, "kver", 8.0f);
+  }
+
+  void init() {
+    any_x0 = 1.0e9f;
+    any_y0 = 1.0e9f;
+    any_x1 = -1.0e9f;
+    any_y1 = -1.0e9f;
+    clip__en = (clip_on > 0.5f && clip_w > 0.0f && clip_h > 0.0f) ? 1.0f : 0.0f;
+    clip__ca = cos(clip_rot);
+    clip__sa = sin(clip_rot);
+    clip__cx = clip_x + clip_w * 0.5f;
+    clip__cy = clip_y + clip_h * 0.5f;
+    clip__hw = clip_w * 0.5f;
+    clip__hh = clip_h * 0.5f;
+    clip__r = min(corner_radius, min(clip_w, clip_h) * 0.5f);
+    {
+      float X0 = clip__cx - clip_ax;
+      float Y0 = clip__cy - clip_ay;
+      float pcx = clip_ax + clip__ca * X0 - clip__sa * Y0;
+      float pcy = clip_ay + clip__sa * X0 + clip__ca * Y0;
+      float ex = fabs(clip__ca) * clip__hw + fabs(clip__sa) * clip__hh + 2.0f;
+      float ey = fabs(clip__sa) * clip__hw + fabs(clip__ca) * clip__hh + 2.0f;
+      clip__bx0 = pcx - ex;
+      clip__bx1 = pcx + ex;
+      clip__by0 = pcy - ey;
+      clip__by1 = pcy + ey;
+    }
+    if (clip__en > 0.5f) {
+      any_x0 = min(any_x0, clip__bx0);
+      any_y0 = min(any_y0, clip__by0);
+      any_x1 = max(any_x1, clip__bx1);
+      any_y1 = max(any_y1, clip__by1);
+    }
+    cspace__en = (cspace_on > 0.5f && cspace_w > 0.0f && cspace_h > 0.0f) ? 1.0f : 0.0f;
+    cspace__ca = cos(cspace_rot);
+    cspace__sa = sin(cspace_rot);
+    cspace__cx = cspace_x + cspace_w * 0.5f;
+    cspace__cy = cspace_y + cspace_h * 0.5f;
+    cspace__hw = cspace_w * 0.5f;
+    cspace__hh = cspace_h * 0.5f;
+    cspace__r = min(corner_radius, min(cspace_w, cspace_h) * 0.5f);
+    {
+      float X0 = cspace__cx - cspace_ax;
+      float Y0 = cspace__cy - cspace_ay;
+      float pcx = cspace_ax + cspace__ca * X0 - cspace__sa * Y0;
+      float pcy = cspace_ay + cspace__sa * X0 + cspace__ca * Y0;
+      float ex = fabs(cspace__ca) * cspace__hw + fabs(cspace__sa) * cspace__hh + 2.0f;
+      float ey = fabs(cspace__sa) * cspace__hw + fabs(cspace__ca) * cspace__hh + 2.0f;
+      cspace__bx0 = pcx - ex;
+      cspace__bx1 = pcx + ex;
+      cspace__by0 = pcy - ey;
+      cspace__by1 = pcy + ey;
+    }
+    if (cspace__en > 0.5f) {
+      any_x0 = min(any_x0, cspace__bx0);
+      any_y0 = min(any_y0, cspace__by0);
+      any_x1 = max(any_x1, cspace__bx1);
+      any_y1 = max(any_y1, cspace__by1);
+    }
+    res__en = (res_on > 0.5f && res_w > 0.0f && res_h > 0.0f) ? 1.0f : 0.0f;
+    res__ca = cos(res_rot);
+    res__sa = sin(res_rot);
+    res__cx = res_x + res_w * 0.5f;
+    res__cy = res_y + res_h * 0.5f;
+    res__hw = res_w * 0.5f;
+    res__hh = res_h * 0.5f;
+    res__r = min(corner_radius, min(res_w, res_h) * 0.5f);
+    {
+      float X0 = res__cx - res_ax;
+      float Y0 = res__cy - res_ay;
+      float pcx = res_ax + res__ca * X0 - res__sa * Y0;
+      float pcy = res_ay + res__sa * X0 + res__ca * Y0;
+      float ex = fabs(res__ca) * res__hw + fabs(res__sa) * res__hh + 2.0f;
+      float ey = fabs(res__sa) * res__hw + fabs(res__ca) * res__hh + 2.0f;
+      res__bx0 = pcx - ex;
+      res__bx1 = pcx + ex;
+      res__by0 = pcy - ey;
+      res__by1 = pcy + ey;
+    }
+    if (res__en > 0.5f) {
+      any_x0 = min(any_x0, res__bx0);
+      any_y0 = min(any_y0, res__by0);
+      any_x1 = max(any_x1, res__bx1);
+      any_y1 = max(any_y1, res__by1);
+    }
+    frame__en = (frame_on > 0.5f && frame_w > 0.0f && frame_h > 0.0f) ? 1.0f : 0.0f;
+    frame__ca = cos(frame_rot);
+    frame__sa = sin(frame_rot);
+    frame__cx = frame_x + frame_w * 0.5f;
+    frame__cy = frame_y + frame_h * 0.5f;
+    frame__hw = frame_w * 0.5f;
+    frame__hh = frame_h * 0.5f;
+    frame__r = min(corner_radius, min(frame_w, frame_h) * 0.5f);
+    {
+      float X0 = frame__cx - frame_ax;
+      float Y0 = frame__cy - frame_ay;
+      float pcx = frame_ax + frame__ca * X0 - frame__sa * Y0;
+      float pcy = frame_ay + frame__sa * X0 + frame__ca * Y0;
+      float ex = fabs(frame__ca) * frame__hw + fabs(frame__sa) * frame__hh + 2.0f;
+      float ey = fabs(frame__sa) * frame__hw + fabs(frame__ca) * frame__hh + 2.0f;
+      frame__bx0 = pcx - ex;
+      frame__bx1 = pcx + ex;
+      frame__by0 = pcy - ey;
+      frame__by1 = pcy + ey;
+    }
+    if (frame__en > 0.5f) {
+      any_x0 = min(any_x0, frame__bx0);
+      any_y0 = min(any_y0, frame__by0);
+      any_x1 = max(any_x1, frame__bx1);
+      any_y1 = max(any_y1, frame__by1);
+    }
+    tc__en = (tc_on > 0.5f && tc_w > 0.0f && tc_h > 0.0f) ? 1.0f : 0.0f;
+    tc__ca = cos(tc_rot);
+    tc__sa = sin(tc_rot);
+    tc__cx = tc_x + tc_w * 0.5f;
+    tc__cy = tc_y + tc_h * 0.5f;
+    tc__hw = tc_w * 0.5f;
+    tc__hh = tc_h * 0.5f;
+    tc__r = min(corner_radius, min(tc_w, tc_h) * 0.5f);
+    {
+      float X0 = tc__cx - tc_ax;
+      float Y0 = tc__cy - tc_ay;
+      float pcx = tc_ax + tc__ca * X0 - tc__sa * Y0;
+      float pcy = tc_ay + tc__sa * X0 + tc__ca * Y0;
+      float ex = fabs(tc__ca) * tc__hw + fabs(tc__sa) * tc__hh + 2.0f;
+      float ey = fabs(tc__sa) * tc__hw + fabs(tc__ca) * tc__hh + 2.0f;
+      tc__bx0 = pcx - ex;
+      tc__bx1 = pcx + ex;
+      tc__by0 = pcy - ey;
+      tc__by1 = pcy + ey;
+    }
+    if (tc__en > 0.5f) {
+      any_x0 = min(any_x0, tc__bx0);
+      any_y0 = min(any_y0, tc__by0);
+      any_x1 = max(any_x1, tc__bx1);
+      any_y1 = max(any_y1, tc__by1);
+    }
+    fps__en = (fps_on > 0.5f && fps_w > 0.0f && fps_h > 0.0f) ? 1.0f : 0.0f;
+    fps__ca = cos(fps_rot);
+    fps__sa = sin(fps_rot);
+    fps__cx = fps_x + fps_w * 0.5f;
+    fps__cy = fps_y + fps_h * 0.5f;
+    fps__hw = fps_w * 0.5f;
+    fps__hh = fps_h * 0.5f;
+    fps__r = min(corner_radius, min(fps_w, fps_h) * 0.5f);
+    {
+      float X0 = fps__cx - fps_ax;
+      float Y0 = fps__cy - fps_ay;
+      float pcx = fps_ax + fps__ca * X0 - fps__sa * Y0;
+      float pcy = fps_ay + fps__sa * X0 + fps__ca * Y0;
+      float ex = fabs(fps__ca) * fps__hw + fabs(fps__sa) * fps__hh + 2.0f;
+      float ey = fabs(fps__sa) * fps__hw + fabs(fps__ca) * fps__hh + 2.0f;
+      fps__bx0 = pcx - ex;
+      fps__bx1 = pcx + ex;
+      fps__by0 = pcy - ey;
+      fps__by1 = pcy + ey;
+    }
+    if (fps__en > 0.5f) {
+      any_x0 = min(any_x0, fps__bx0);
+      any_y0 = min(any_y0, fps__by0);
+      any_x1 = max(any_x1, fps__bx1);
+      any_y1 = max(any_y1, fps__by1);
+    }
+    track__en = (track_on > 0.5f && track_w > 0.0f && track_h > 0.0f) ? 1.0f : 0.0f;
+    track__ca = cos(track_rot);
+    track__sa = sin(track_rot);
+    track__cx = track_x + track_w * 0.5f;
+    track__cy = track_y + track_h * 0.5f;
+    track__hw = track_w * 0.5f;
+    track__hh = track_h * 0.5f;
+    track__r = min(corner_radius, min(track_w, track_h) * 0.5f);
+    {
+      float X0 = track__cx - track_ax;
+      float Y0 = track__cy - track_ay;
+      float pcx = track_ax + track__ca * X0 - track__sa * Y0;
+      float pcy = track_ay + track__sa * X0 + track__ca * Y0;
+      float ex = fabs(track__ca) * track__hw + fabs(track__sa) * track__hh + 2.0f;
+      float ey = fabs(track__sa) * track__hw + fabs(track__ca) * track__hh + 2.0f;
+      track__bx0 = pcx - ex;
+      track__bx1 = pcx + ex;
+      track__by0 = pcy - ey;
+      track__by1 = pcy + ey;
+    }
+    if (track__en > 0.5f) {
+      any_x0 = min(any_x0, track__bx0);
+      any_y0 = min(any_y0, track__by0);
+      any_x1 = max(any_x1, track__bx1);
+      any_y1 = max(any_y1, track__by1);
+    }
+    date__en = (date_on > 0.5f && date_w > 0.0f && date_h > 0.0f) ? 1.0f : 0.0f;
+    date__ca = cos(date_rot);
+    date__sa = sin(date_rot);
+    date__cx = date_x + date_w * 0.5f;
+    date__cy = date_y + date_h * 0.5f;
+    date__hw = date_w * 0.5f;
+    date__hh = date_h * 0.5f;
+    date__r = min(corner_radius, min(date_w, date_h) * 0.5f);
+    {
+      float X0 = date__cx - date_ax;
+      float Y0 = date__cy - date_ay;
+      float pcx = date_ax + date__ca * X0 - date__sa * Y0;
+      float pcy = date_ay + date__sa * X0 + date__ca * Y0;
+      float ex = fabs(date__ca) * date__hw + fabs(date__sa) * date__hh + 2.0f;
+      float ey = fabs(date__sa) * date__hw + fabs(date__ca) * date__hh + 2.0f;
+      date__bx0 = pcx - ex;
+      date__bx1 = pcx + ex;
+      date__by0 = pcy - ey;
+      date__by1 = pcy + ey;
+    }
+    if (date__en > 0.5f) {
+      any_x0 = min(any_x0, date__bx0);
+      any_y0 = min(any_y0, date__by0);
+      any_x1 = max(any_x1, date__bx1);
+      any_y1 = max(any_y1, date__by1);
+    }
+    codec__en = (codec_on > 0.5f && codec_w > 0.0f && codec_h > 0.0f) ? 1.0f : 0.0f;
+    codec__ca = cos(codec_rot);
+    codec__sa = sin(codec_rot);
+    codec__cx = codec_x + codec_w * 0.5f;
+    codec__cy = codec_y + codec_h * 0.5f;
+    codec__hw = codec_w * 0.5f;
+    codec__hh = codec_h * 0.5f;
+    codec__r = min(corner_radius, min(codec_w, codec_h) * 0.5f);
+    {
+      float X0 = codec__cx - codec_ax;
+      float Y0 = codec__cy - codec_ay;
+      float pcx = codec_ax + codec__ca * X0 - codec__sa * Y0;
+      float pcy = codec_ay + codec__sa * X0 + codec__ca * Y0;
+      float ex = fabs(codec__ca) * codec__hw + fabs(codec__sa) * codec__hh + 2.0f;
+      float ey = fabs(codec__sa) * codec__hw + fabs(codec__ca) * codec__hh + 2.0f;
+      codec__bx0 = pcx - ex;
+      codec__bx1 = pcx + ex;
+      codec__by0 = pcy - ey;
+      codec__by1 = pcy + ey;
+    }
+    if (codec__en > 0.5f) {
+      any_x0 = min(any_x0, codec__bx0);
+      any_y0 = min(any_y0, codec__by0);
+      any_x1 = max(any_x1, codec__bx1);
+      any_y1 = max(any_y1, codec__by1);
+    }
+    custom1__en = (custom1_on > 0.5f && custom1_w > 0.0f && custom1_h > 0.0f) ? 1.0f : 0.0f;
+    custom1__ca = cos(custom1_rot);
+    custom1__sa = sin(custom1_rot);
+    custom1__cx = custom1_x + custom1_w * 0.5f;
+    custom1__cy = custom1_y + custom1_h * 0.5f;
+    custom1__hw = custom1_w * 0.5f;
+    custom1__hh = custom1_h * 0.5f;
+    custom1__r = min(corner_radius, min(custom1_w, custom1_h) * 0.5f);
+    {
+      float X0 = custom1__cx - custom1_ax;
+      float Y0 = custom1__cy - custom1_ay;
+      float pcx = custom1_ax + custom1__ca * X0 - custom1__sa * Y0;
+      float pcy = custom1_ay + custom1__sa * X0 + custom1__ca * Y0;
+      float ex = fabs(custom1__ca) * custom1__hw + fabs(custom1__sa) * custom1__hh + 2.0f;
+      float ey = fabs(custom1__sa) * custom1__hw + fabs(custom1__ca) * custom1__hh + 2.0f;
+      custom1__bx0 = pcx - ex;
+      custom1__bx1 = pcx + ex;
+      custom1__by0 = pcy - ey;
+      custom1__by1 = pcy + ey;
+    }
+    if (custom1__en > 0.5f) {
+      any_x0 = min(any_x0, custom1__bx0);
+      any_y0 = min(any_y0, custom1__by0);
+      any_x1 = max(any_x1, custom1__bx1);
+      any_y1 = max(any_y1, custom1__by1);
+    }
+    custom2__en = (custom2_on > 0.5f && custom2_w > 0.0f && custom2_h > 0.0f) ? 1.0f : 0.0f;
+    custom2__ca = cos(custom2_rot);
+    custom2__sa = sin(custom2_rot);
+    custom2__cx = custom2_x + custom2_w * 0.5f;
+    custom2__cy = custom2_y + custom2_h * 0.5f;
+    custom2__hw = custom2_w * 0.5f;
+    custom2__hh = custom2_h * 0.5f;
+    custom2__r = min(corner_radius, min(custom2_w, custom2_h) * 0.5f);
+    {
+      float X0 = custom2__cx - custom2_ax;
+      float Y0 = custom2__cy - custom2_ay;
+      float pcx = custom2_ax + custom2__ca * X0 - custom2__sa * Y0;
+      float pcy = custom2_ay + custom2__sa * X0 + custom2__ca * Y0;
+      float ex = fabs(custom2__ca) * custom2__hw + fabs(custom2__sa) * custom2__hh + 2.0f;
+      float ey = fabs(custom2__sa) * custom2__hw + fabs(custom2__ca) * custom2__hh + 2.0f;
+      custom2__bx0 = pcx - ex;
+      custom2__bx1 = pcx + ex;
+      custom2__by0 = pcy - ey;
+      custom2__by1 = pcy + ey;
+    }
+    if (custom2__en > 0.5f) {
+      any_x0 = min(any_x0, custom2__bx0);
+      any_y0 = min(any_y0, custom2__by0);
+      any_x1 = max(any_x1, custom2__bx1);
+      any_y1 = max(any_y1, custom2__by1);
+    }
+    panel_col = float4(color_r, color_g, color_b, 1.0f);
   }
 
   void process(int2 pos) {
@@ -222,223 +658,153 @@ kernel LGARoundedPanels : ImageComputationKernel<ePixelWise>
     float ppy = float(pos.y) + 0.5f;
     float a = 0.0f;
 
-    // panel clip
-    if (clip_on > 0.5f && clip_w > 0.0f && clip_h > 0.0f) {
-      float cx = clip_x + clip_w * 0.5f;
-      float cy = clip_y + clip_h * 0.5f;
-      float ca = cos(clip_rot);
-      float sa = sin(clip_rot);
-      float rx = ppx - clip_ax;
-      float ry = ppy - clip_ay;
-      float lx = ca * rx + sa * ry + clip_ax - cx;
-      float ly = -sa * rx + ca * ry + clip_ay - cy;
-      float r = min(corner_radius, min(clip_w, clip_h) * 0.5f);
-      float dx = fabs(lx) - (clip_w * 0.5f - r);
-      float dy = fabs(ly) - (clip_h * 0.5f - r);
-      float qx = max(dx, 0.0f);
-      float qy = max(dy, 0.0f);
-      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
-      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
-    }
-
-    // panel cspace
-    if (cspace_on > 0.5f && cspace_w > 0.0f && cspace_h > 0.0f) {
-      float cx = cspace_x + cspace_w * 0.5f;
-      float cy = cspace_y + cspace_h * 0.5f;
-      float ca = cos(cspace_rot);
-      float sa = sin(cspace_rot);
-      float rx = ppx - cspace_ax;
-      float ry = ppy - cspace_ay;
-      float lx = ca * rx + sa * ry + cspace_ax - cx;
-      float ly = -sa * rx + ca * ry + cspace_ay - cy;
-      float r = min(corner_radius, min(cspace_w, cspace_h) * 0.5f);
-      float dx = fabs(lx) - (cspace_w * 0.5f - r);
-      float dy = fabs(ly) - (cspace_h * 0.5f - r);
-      float qx = max(dx, 0.0f);
-      float qy = max(dy, 0.0f);
-      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
-      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
-    }
-
-    // panel res
-    if (res_on > 0.5f && res_w > 0.0f && res_h > 0.0f) {
-      float cx = res_x + res_w * 0.5f;
-      float cy = res_y + res_h * 0.5f;
-      float ca = cos(res_rot);
-      float sa = sin(res_rot);
-      float rx = ppx - res_ax;
-      float ry = ppy - res_ay;
-      float lx = ca * rx + sa * ry + res_ax - cx;
-      float ly = -sa * rx + ca * ry + res_ay - cy;
-      float r = min(corner_radius, min(res_w, res_h) * 0.5f);
-      float dx = fabs(lx) - (res_w * 0.5f - r);
-      float dy = fabs(ly) - (res_h * 0.5f - r);
-      float qx = max(dx, 0.0f);
-      float qy = max(dy, 0.0f);
-      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
-      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
-    }
-
-    // panel frame
-    if (frame_on > 0.5f && frame_w > 0.0f && frame_h > 0.0f) {
-      float cx = frame_x + frame_w * 0.5f;
-      float cy = frame_y + frame_h * 0.5f;
-      float ca = cos(frame_rot);
-      float sa = sin(frame_rot);
-      float rx = ppx - frame_ax;
-      float ry = ppy - frame_ay;
-      float lx = ca * rx + sa * ry + frame_ax - cx;
-      float ly = -sa * rx + ca * ry + frame_ay - cy;
-      float r = min(corner_radius, min(frame_w, frame_h) * 0.5f);
-      float dx = fabs(lx) - (frame_w * 0.5f - r);
-      float dy = fabs(ly) - (frame_h * 0.5f - r);
-      float qx = max(dx, 0.0f);
-      float qy = max(dy, 0.0f);
-      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
-      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
-    }
-
-    // panel tc
-    if (tc_on > 0.5f && tc_w > 0.0f && tc_h > 0.0f) {
-      float cx = tc_x + tc_w * 0.5f;
-      float cy = tc_y + tc_h * 0.5f;
-      float ca = cos(tc_rot);
-      float sa = sin(tc_rot);
-      float rx = ppx - tc_ax;
-      float ry = ppy - tc_ay;
-      float lx = ca * rx + sa * ry + tc_ax - cx;
-      float ly = -sa * rx + ca * ry + tc_ay - cy;
-      float r = min(corner_radius, min(tc_w, tc_h) * 0.5f);
-      float dx = fabs(lx) - (tc_w * 0.5f - r);
-      float dy = fabs(ly) - (tc_h * 0.5f - r);
-      float qx = max(dx, 0.0f);
-      float qy = max(dy, 0.0f);
-      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
-      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
-    }
-
-    // panel fps
-    if (fps_on > 0.5f && fps_w > 0.0f && fps_h > 0.0f) {
-      float cx = fps_x + fps_w * 0.5f;
-      float cy = fps_y + fps_h * 0.5f;
-      float ca = cos(fps_rot);
-      float sa = sin(fps_rot);
-      float rx = ppx - fps_ax;
-      float ry = ppy - fps_ay;
-      float lx = ca * rx + sa * ry + fps_ax - cx;
-      float ly = -sa * rx + ca * ry + fps_ay - cy;
-      float r = min(corner_radius, min(fps_w, fps_h) * 0.5f);
-      float dx = fabs(lx) - (fps_w * 0.5f - r);
-      float dy = fabs(ly) - (fps_h * 0.5f - r);
-      float qx = max(dx, 0.0f);
-      float qy = max(dy, 0.0f);
-      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
-      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
-    }
-
-    // panel track
-    if (track_on > 0.5f && track_w > 0.0f && track_h > 0.0f) {
-      float cx = track_x + track_w * 0.5f;
-      float cy = track_y + track_h * 0.5f;
-      float ca = cos(track_rot);
-      float sa = sin(track_rot);
-      float rx = ppx - track_ax;
-      float ry = ppy - track_ay;
-      float lx = ca * rx + sa * ry + track_ax - cx;
-      float ly = -sa * rx + ca * ry + track_ay - cy;
-      float r = min(corner_radius, min(track_w, track_h) * 0.5f);
-      float dx = fabs(lx) - (track_w * 0.5f - r);
-      float dy = fabs(ly) - (track_h * 0.5f - r);
-      float qx = max(dx, 0.0f);
-      float qy = max(dy, 0.0f);
-      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
-      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
-    }
-
-    // panel date
-    if (date_on > 0.5f && date_w > 0.0f && date_h > 0.0f) {
-      float cx = date_x + date_w * 0.5f;
-      float cy = date_y + date_h * 0.5f;
-      float ca = cos(date_rot);
-      float sa = sin(date_rot);
-      float rx = ppx - date_ax;
-      float ry = ppy - date_ay;
-      float lx = ca * rx + sa * ry + date_ax - cx;
-      float ly = -sa * rx + ca * ry + date_ay - cy;
-      float r = min(corner_radius, min(date_w, date_h) * 0.5f);
-      float dx = fabs(lx) - (date_w * 0.5f - r);
-      float dy = fabs(ly) - (date_h * 0.5f - r);
-      float qx = max(dx, 0.0f);
-      float qy = max(dy, 0.0f);
-      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
-      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
-    }
-
-    // panel codec
-    if (codec_on > 0.5f && codec_w > 0.0f && codec_h > 0.0f) {
-      float cx = codec_x + codec_w * 0.5f;
-      float cy = codec_y + codec_h * 0.5f;
-      float ca = cos(codec_rot);
-      float sa = sin(codec_rot);
-      float rx = ppx - codec_ax;
-      float ry = ppy - codec_ay;
-      float lx = ca * rx + sa * ry + codec_ax - cx;
-      float ly = -sa * rx + ca * ry + codec_ay - cy;
-      float r = min(corner_radius, min(codec_w, codec_h) * 0.5f);
-      float dx = fabs(lx) - (codec_w * 0.5f - r);
-      float dy = fabs(ly) - (codec_h * 0.5f - r);
-      float qx = max(dx, 0.0f);
-      float qy = max(dy, 0.0f);
-      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
-      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
-    }
-
-    // panel custom1
-    if (custom1_on > 0.5f && custom1_w > 0.0f && custom1_h > 0.0f) {
-      float cx = custom1_x + custom1_w * 0.5f;
-      float cy = custom1_y + custom1_h * 0.5f;
-      float ca = cos(custom1_rot);
-      float sa = sin(custom1_rot);
-      float rx = ppx - custom1_ax;
-      float ry = ppy - custom1_ay;
-      float lx = ca * rx + sa * ry + custom1_ax - cx;
-      float ly = -sa * rx + ca * ry + custom1_ay - cy;
-      float r = min(corner_radius, min(custom1_w, custom1_h) * 0.5f);
-      float dx = fabs(lx) - (custom1_w * 0.5f - r);
-      float dy = fabs(ly) - (custom1_h * 0.5f - r);
-      float qx = max(dx, 0.0f);
-      float qy = max(dy, 0.0f);
-      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
-      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
-    }
-
-    // panel custom2
-    if (custom2_on > 0.5f && custom2_w > 0.0f && custom2_h > 0.0f) {
-      float cx = custom2_x + custom2_w * 0.5f;
-      float cy = custom2_y + custom2_h * 0.5f;
-      float ca = cos(custom2_rot);
-      float sa = sin(custom2_rot);
-      float rx = ppx - custom2_ax;
-      float ry = ppy - custom2_ay;
-      float lx = ca * rx + sa * ry + custom2_ax - cx;
-      float ly = -sa * rx + ca * ry + custom2_ay - cy;
-      float r = min(corner_radius, min(custom2_w, custom2_h) * 0.5f);
-      float dx = fabs(lx) - (custom2_w * 0.5f - r);
-      float dy = fabs(ly) - (custom2_h * 0.5f - r);
-      float qx = max(dx, 0.0f);
-      float qy = max(dy, 0.0f);
-      float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - r;
-      a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
-    }
-
     // franjas del modo Band (grosor en px desde cada borde)
     if (band_b > 0.0f && ppy < band_b) a = 1.0f;
     if (band_t > 0.0f && ppy > fmt_h - band_t) a = 1.0f;
     if (band_l > 0.0f && ppx < band_l) a = 1.0f;
     if (band_r > 0.0f && ppx > fmt_w - band_r) a = 1.0f;
 
-    a = a * bg_opacity;
-    float4 panel = float4(color_r, color_g, color_b, 1.0f);
-    dst() = input * (1.0f - a) + panel * a;
+    // paneles: solo dentro de la union de sus cajas
+    if (a < 1.0f && ppx >= any_x0 && ppx <= any_x1 && ppy >= any_y0 && ppy <= any_y1) {
+      if (clip__en > 0.5f && ppx >= clip__bx0 && ppx <= clip__bx1 && ppy >= clip__by0 && ppy <= clip__by1) {
+        float rx = ppx - clip_ax;
+        float ry = ppy - clip_ay;
+        float lx = clip__ca * rx + clip__sa * ry + clip_ax - clip__cx;
+        float ly = -clip__sa * rx + clip__ca * ry + clip_ay - clip__cy;
+        float dx = fabs(lx) - (clip__hw - clip__r);
+        float dy = fabs(ly) - (clip__hh - clip__r);
+        float qx = max(dx, 0.0f);
+        float qy = max(dy, 0.0f);
+        float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - clip__r;
+        a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+      }
+      if (cspace__en > 0.5f && ppx >= cspace__bx0 && ppx <= cspace__bx1 && ppy >= cspace__by0 && ppy <= cspace__by1) {
+        float rx = ppx - cspace_ax;
+        float ry = ppy - cspace_ay;
+        float lx = cspace__ca * rx + cspace__sa * ry + cspace_ax - cspace__cx;
+        float ly = -cspace__sa * rx + cspace__ca * ry + cspace_ay - cspace__cy;
+        float dx = fabs(lx) - (cspace__hw - cspace__r);
+        float dy = fabs(ly) - (cspace__hh - cspace__r);
+        float qx = max(dx, 0.0f);
+        float qy = max(dy, 0.0f);
+        float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - cspace__r;
+        a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+      }
+      if (res__en > 0.5f && ppx >= res__bx0 && ppx <= res__bx1 && ppy >= res__by0 && ppy <= res__by1) {
+        float rx = ppx - res_ax;
+        float ry = ppy - res_ay;
+        float lx = res__ca * rx + res__sa * ry + res_ax - res__cx;
+        float ly = -res__sa * rx + res__ca * ry + res_ay - res__cy;
+        float dx = fabs(lx) - (res__hw - res__r);
+        float dy = fabs(ly) - (res__hh - res__r);
+        float qx = max(dx, 0.0f);
+        float qy = max(dy, 0.0f);
+        float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - res__r;
+        a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+      }
+      if (frame__en > 0.5f && ppx >= frame__bx0 && ppx <= frame__bx1 && ppy >= frame__by0 && ppy <= frame__by1) {
+        float rx = ppx - frame_ax;
+        float ry = ppy - frame_ay;
+        float lx = frame__ca * rx + frame__sa * ry + frame_ax - frame__cx;
+        float ly = -frame__sa * rx + frame__ca * ry + frame_ay - frame__cy;
+        float dx = fabs(lx) - (frame__hw - frame__r);
+        float dy = fabs(ly) - (frame__hh - frame__r);
+        float qx = max(dx, 0.0f);
+        float qy = max(dy, 0.0f);
+        float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - frame__r;
+        a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+      }
+      if (tc__en > 0.5f && ppx >= tc__bx0 && ppx <= tc__bx1 && ppy >= tc__by0 && ppy <= tc__by1) {
+        float rx = ppx - tc_ax;
+        float ry = ppy - tc_ay;
+        float lx = tc__ca * rx + tc__sa * ry + tc_ax - tc__cx;
+        float ly = -tc__sa * rx + tc__ca * ry + tc_ay - tc__cy;
+        float dx = fabs(lx) - (tc__hw - tc__r);
+        float dy = fabs(ly) - (tc__hh - tc__r);
+        float qx = max(dx, 0.0f);
+        float qy = max(dy, 0.0f);
+        float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - tc__r;
+        a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+      }
+      if (fps__en > 0.5f && ppx >= fps__bx0 && ppx <= fps__bx1 && ppy >= fps__by0 && ppy <= fps__by1) {
+        float rx = ppx - fps_ax;
+        float ry = ppy - fps_ay;
+        float lx = fps__ca * rx + fps__sa * ry + fps_ax - fps__cx;
+        float ly = -fps__sa * rx + fps__ca * ry + fps_ay - fps__cy;
+        float dx = fabs(lx) - (fps__hw - fps__r);
+        float dy = fabs(ly) - (fps__hh - fps__r);
+        float qx = max(dx, 0.0f);
+        float qy = max(dy, 0.0f);
+        float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - fps__r;
+        a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+      }
+      if (track__en > 0.5f && ppx >= track__bx0 && ppx <= track__bx1 && ppy >= track__by0 && ppy <= track__by1) {
+        float rx = ppx - track_ax;
+        float ry = ppy - track_ay;
+        float lx = track__ca * rx + track__sa * ry + track_ax - track__cx;
+        float ly = -track__sa * rx + track__ca * ry + track_ay - track__cy;
+        float dx = fabs(lx) - (track__hw - track__r);
+        float dy = fabs(ly) - (track__hh - track__r);
+        float qx = max(dx, 0.0f);
+        float qy = max(dy, 0.0f);
+        float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - track__r;
+        a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+      }
+      if (date__en > 0.5f && ppx >= date__bx0 && ppx <= date__bx1 && ppy >= date__by0 && ppy <= date__by1) {
+        float rx = ppx - date_ax;
+        float ry = ppy - date_ay;
+        float lx = date__ca * rx + date__sa * ry + date_ax - date__cx;
+        float ly = -date__sa * rx + date__ca * ry + date_ay - date__cy;
+        float dx = fabs(lx) - (date__hw - date__r);
+        float dy = fabs(ly) - (date__hh - date__r);
+        float qx = max(dx, 0.0f);
+        float qy = max(dy, 0.0f);
+        float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - date__r;
+        a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+      }
+      if (codec__en > 0.5f && ppx >= codec__bx0 && ppx <= codec__bx1 && ppy >= codec__by0 && ppy <= codec__by1) {
+        float rx = ppx - codec_ax;
+        float ry = ppy - codec_ay;
+        float lx = codec__ca * rx + codec__sa * ry + codec_ax - codec__cx;
+        float ly = -codec__sa * rx + codec__ca * ry + codec_ay - codec__cy;
+        float dx = fabs(lx) - (codec__hw - codec__r);
+        float dy = fabs(ly) - (codec__hh - codec__r);
+        float qx = max(dx, 0.0f);
+        float qy = max(dy, 0.0f);
+        float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - codec__r;
+        a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+      }
+      if (custom1__en > 0.5f && ppx >= custom1__bx0 && ppx <= custom1__bx1 && ppy >= custom1__by0 && ppy <= custom1__by1) {
+        float rx = ppx - custom1_ax;
+        float ry = ppy - custom1_ay;
+        float lx = custom1__ca * rx + custom1__sa * ry + custom1_ax - custom1__cx;
+        float ly = -custom1__sa * rx + custom1__ca * ry + custom1_ay - custom1__cy;
+        float dx = fabs(lx) - (custom1__hw - custom1__r);
+        float dy = fabs(ly) - (custom1__hh - custom1__r);
+        float qx = max(dx, 0.0f);
+        float qy = max(dy, 0.0f);
+        float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - custom1__r;
+        a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+      }
+      if (custom2__en > 0.5f && ppx >= custom2__bx0 && ppx <= custom2__bx1 && ppy >= custom2__by0 && ppy <= custom2__by1) {
+        float rx = ppx - custom2_ax;
+        float ry = ppy - custom2_ay;
+        float lx = custom2__ca * rx + custom2__sa * ry + custom2_ax - custom2__cx;
+        float ly = -custom2__sa * rx + custom2__ca * ry + custom2_ay - custom2__cy;
+        float dx = fabs(lx) - (custom2__hw - custom2__r);
+        float dy = fabs(ly) - (custom2__hh - custom2__r);
+        float qx = max(dx, 0.0f);
+        float qy = max(dy, 0.0f);
+        float dist = sqrt(qx * qx + qy * qy) + min(max(dx, dy), 0.0f) - custom2__r;
+        a = max(a, clamp(0.5f - dist, 0.0f, 1.0f));
+      }
+    }
+
+    if (a > 0.0f) {
+      a = a * bg_opacity;
+      dst() = input * (1.0f - a) + panel_col * a;
+    } else {
+      dst() = input;
+    }
   }
 };

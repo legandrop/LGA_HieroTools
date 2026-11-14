@@ -143,7 +143,11 @@ TTF del peso nuevo).
   abajo). Detalle en `Docu_SoftEffects_Aprendizajes.md`.
 - **Blink_Panels**: kernel `LGA_RoundedPanels.blink` (SDF de rounded box,
   antialiasing 1px, los 11 paneles y las 4 franjas de Band en UNA pasada,
-  params solo float; x/y/w/h atados a `field_geo()`). Su
+  params solo float; x/y/w/h atados a `field_geo()`). Desde v0.08 un
+  `init()` precalcula por panel seno, coseno, centro, radio y la caja ya
+  girada, y `process()` solo hace la SDF dentro de esas cajas (el resto del
+  cuadro copia la entrada). Es el UNICO nodo que puede dibujar los paneles:
+  ver "Rendimiento" abajo. Su
   `onCreate` llama a `LGA_NKS_BurnIn_Blink.setup()`, que compila el kernel
   via `kernelSourceFile` + Load (la unica via que compila por script en el
   timeline) y ata cada parametro a los knobs del gizmo padre por expresion
@@ -154,7 +158,9 @@ TTF del peso nuevo).
   el origen). Cada message llama a `LGA_NKS_BurnIn_Logic.bi_text()` con
   `[frame]`; res y fps llevan el color condicional via `bi_ok()` en los
   canales g/b. El texto se centra verticalmente dentro de su panel
-  (`yjustify center`) con `text padding`.
+  (`yjustify center`) con `text padding`. La caja de cada Text2 usa tres
+  llamadas a `field_geo` (x, y, y2; el borde derecho es `width*3`) y suma
+  `0*parent.bi_rev`, para que `nudge()` la haga re-evaluar.
 - El gizmo se REGENERA con
   `+Building_Blocks/BurnIn/gen_LGA_BurnIn_gizmo.py` (tabla de layout +
   kernel + plantilla Text2). No editar el `.gizmo` a mano.
@@ -232,6 +238,40 @@ el Script Editor con `__import__('LGA_NKS_BurnIn_Panel').show_panel()`.
 Cache por proyecto en la logica; se invalida en load/save/close de proyecto
 y al cambiar el mtime del JSON.
 
+## Rendimiento (medido 2026-11-14, NKS 17.0v4)
+
+Toda la logica de Python lee de UN estado por frame
+(`LGA_NKS_BurnIn_Logic._frame_state`): la metadata se pide una vez al Input,
+los textos se miden una vez y el layout se calcula una vez; las ~60
+expresiones del gizmo (cajas, params del kernel, mensajes, colores) solo
+leen de ahi. El panel y el knobChanged piden la actualizacion a
+`LGA_NKS_BurnIn_Blink.schedule_update`, que junta todo lo de un ciclo de
+eventos en una sola por efecto, y `nudge()` escribe un solo knob.
+
+Numeros (CPU del proceso, instancia aparte):
+
+| Caso | CPU |
+|---|---|
+| Recorrer el timeline, efecto apagado | ~1 ms por frame |
+| Recorrer el timeline, efecto prendido (publicado v4.026 o actual) | ~18 ms por frame |
+| Python del efecto en un proyecto real (cientos de clips) | ~10 ms por frame |
+| Abrir el panel | 77 ms, sin escribir ningun knob |
+| Panel abierto y quieto | ~5 ms por segundo |
+| Un movimiento de slider (cualquier soft effect, incluido el BurnIn nativo) | ~130-170 ms |
+
+El costo de un movimiento de slider es NKS re-renderizando tras el cambio
+de knob: el BurnIn nativo cuesta lo mismo. Varios writes en el mismo ciclo
+de eventos se juntan en un solo re-render.
+
+**Lo que NO funciona, medido:** reemplazar el BlinkScript por nodos nativos
+(Crop + Expression + Merge, o Rectangle). En un render offline
+(`Read -> gizmo -> Write`) da bien y hasta mas barato, pero en el timeline
+esos nodos no dibujan nada (solo corren los nodos con motor de soft effect)
+y tres o mas Merge2 encadenados tiran NKS 17. Detalle en
+`Docu_SoftEffects_Aprendizajes.md`. Por eso el banco offline NO sirve para
+decidir el diseno: todo cambio de estructura se valida mirando el visor del
+timeline.
+
 ## Limitaciones conocidas
 
 - Un burn-in por vez en la ventana: edita el primer efecto LGA_BurnIn que
@@ -239,8 +279,10 @@ y al cambiar el mtime del JSON.
 - El colorspace se cachea por clip; un cambio a mano se refleja al
   guardar/reabrir el proyecto.
 - Comparacion de resolucion solo para plates (EXR por default).
-- El costo GPU del kernel es una pasada full-frame por instancia; con "Use
-  GPU if available" activo es despreciable frente a un Denoise.
+- El kernel es una pasada full-frame por instancia. En el timeline corre en
+  GPU y cuesta poco; fuera del timeline (render offline en CPU) el
+  BlinkScript tiene un costo fijo de ~40-70 ms por frame que no depende de
+  lo que calcule adentro (medido: v0.06 y v0.08 dan lo mismo ahi).
 - **Costados girados**: el pivote sale del formato de la secuencia que
   contiene el efecto (`_timeline_format`: la activa si lo contiene, si no la
   primera que lo contenga). Una secuencia sin formato da 0x0 (medido en una
@@ -267,8 +309,11 @@ y al cambiar el mtime del JSON.
 
 ## Como probarlo sin el visor
 
-El visor de una instancia aparte de NKS no redibuja (escritorio oculto) y el
-de la instancia de Lega puede mostrar frames del cache. Para validar el
+El visor de una instancia aparte SI dibuja si el cacheo no esta pausado:
+`viewer.resumeCaching()`, esperar ~1 s, `setTime()` a un frame NUEVO y
+`viewer.image()` (medido 2026-11-14). Es la unica forma de validar lo que se
+ve en el timeline (ver "Rendimiento"). Lo de abajo sirve solo para el
+render offline. Para validar el
 render se arma dentro de NKS, por dev-link, un `Read -> LGA_BurnIn ->
 Write` con `nuke.execute` a un PNG: el gizmo es un nodo comun y el render es
 deterministico. Ahi no hay metadata `hiero/*` (Clip vacio) ni secuencia
@@ -278,15 +323,15 @@ duena (el pivote se fuerza con el formato del Read).
 
 | Modulo | Import | Funciones clave |
 |---|---|---|
-| `LGA_HieroTools/LGA_NKS_BurnIn.py` | registro (startup) | `_register`, `_on_knob_changed`, `_apply_layout_change`, `_start_mask_watcher`, `_mask_tick` |
+| `LGA_HieroTools/LGA_NKS_BurnIn.py` | registro (startup) | `_register`, `_on_knob_changed`, `_es_derivado`, `_start_mask_watcher`, `_mask_tick` |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Layout.py` | `import LGA_NKS_BurnIn_Layout` | `parse`, `dump`, `active`, `default_state`, `fresh_arrangement`, `move_to`, `move_next_to`, `slot_of`, `visible_fields`, `stack_state`, `set_stack`, `is_default`, `compute`, `mask_inset`, `side_pivot`, `line_height` |
-| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Logic.py` | `import LGA_NKS_BurnIn_Logic` | `bi_text`, `bi_ok`, `field_geo`, `layout_text`, `mask_inset_px`, `line_height_px`, `panel_geo` (legado), `invalidate_cache` |
-| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Blink.py` | `import LGA_NKS_BurnIn_Blink` | `setup`, `apply_layout`, `apply_rotation`, `apply_font`, `nudge`, `viewer_mask_aspect`, `apply_mask`, `_timeline_format` |
+| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Logic.py` | `import LGA_NKS_BurnIn_Logic` | `bi_text`, `bi_ok`, `field_geo`, `_frame_state`, `layout_text`, `mask_inset_px`, `line_height_px`, `panel_geo` (legado), `invalidate_cache` |
+| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Blink.py` | `import LGA_NKS_BurnIn_Blink` | `setup`, `schedule_update`, `update_now`, `is_busy`, `apply_layout`, `apply_rotation`, `apply_font`, `nudge`, `viewer_mask_aspect`, `apply_mask`, `_timeline_format` |
 | `LGA_HieroTools/LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Viewer_Mask.py` | `from LGA_NKS_ViewerTL_Panel_py import LGA_NKS_Viewer_Mask` | `set_mask`, `apply_mask` (el boton 3:2; solo pone la mascara para LGA_BurnIn) |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Panel.py` | `import LGA_NKS_BurnIn_Panel` | `show_panel`, `BurnInPanel`, `BurnInMap`, `TickSlider`, `Segmented`, `HieroController` |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Config.py` | `import LGA_NKS_BurnIn_Config` | `resolve`, `load_user_file`, `save_user_file`, `list_presets`, `load_preset`, `save_preset` |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_ProjectTag.py` | `import LGA_NKS_BurnIn_ProjectTag` | `find_project`, `read_config_json`, `write_config` |
-| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_RoundedPanels.blink` | kernel `LGARoundedPanels` | paneles SDF + franjas Band |
+| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_RoundedPanels.blink` | kernel `LGARoundedPanels` v0.08 | `init` (cajas por panel), `process` (SDF + franjas Band) |
 | `LGA_HieroTools/LGA_NKS_Shared/LGA_UI_Style_HieroTools.py` | `from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, Metric` | `apply_ui_font`, `semibold_css`, `emphasis` |
 | `LGA_HieroTools/LGA_NKS_Shared/LGA_UI_CustomTooltip_HieroTools.py` | `from LGA_NKS_Shared.LGA_UI_CustomTooltip_HieroTools import set_custom_tooltip` | tooltips del panel |
 
