@@ -1,4 +1,6 @@
 v4.028:
+Flow Push no adjuntaba la captura de ReviewPic a la nota en el sitio del cliente ("Solo se adjuntaron 0 de 1") y despues borraba igual `ReviewPic_Cache`, asi que la captura se perdia. Cada sitio de Flow sube a su propio bucket de storage y `shotgun_api3` solo reintenta el PUT ante un 500/503: un socket bloqueado en el primer intento (GateBouncer filtra por destino) o un corte pasajero perdian la imagen sin decir por que. Ahora cada adjunto se sube con 3 reintentos cada 5 s, el warning trae el motivo real, el timeout suma 15 s por imagen y la cache no se borra si falta alguna. `LGA_NKS_Flow_Push_connector v1.16`, `LGA_NKS_Flow_Push v4.24`. [ Flow Push - Reintentos al adjuntar imagenes ]
+
 A un artista sin los labels de XYplorer de Lega, el Flow Pull le abria un cartel "Label Rev_Sup is not defined." por cada shot: el Pull manda `::tag` con el nombre del label y XYplorer no lo conoce. Ahora el Pull lee los labels definidos en la cabecera del `tag.dat` del XYplorer abierto y saltea los que faltan. Para pasarle los colores a otra maquina, `XYplorer_Labels/Install_XYplorer_Labels.bat` agrega los seis labels y sus Color Filters sin tocar lo existente. `LGA_NKS_Flow_Pull v3.78`. [ Flow Pull - Sin carteles de labels de XYplorer ]
 
 v4.027:

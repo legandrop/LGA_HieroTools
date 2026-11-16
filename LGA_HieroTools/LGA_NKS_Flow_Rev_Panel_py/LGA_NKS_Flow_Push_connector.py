@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push_connector v1.15 | Lega
+  LGA_NKS_Flow_Push_connector v1.16 | Lega
 
   Conector simple para operaciones de red con Flow
   Este script se ejecuta con Python personalizado para evitar problemas de dependencias
@@ -11,6 +11,11 @@ ____________________________________________________________________
   - PROYECTO_TEMP_EP_SEQ_SHOT_DESC1_DESC2 (6 bloques con descripción)
   - PROYECTO_TEMP_EP_SEQ_SHOT (4 bloques simplificado)
 
+  v1.16: Cada adjunto de la nota se sube con 3 reintentos cada 5 s
+         (upload_with_retries): un fallo de red pasajero, o el firewall
+         bloqueando el primer intento hacia el storage del sitio, dejaba la
+         imagen sin subir. Si igual falla, el motivo real viaja en el warning
+         en vez de solo "0 de 1".
   v1.15: La submission compara contra Flow antes de escribir
          (`submission_expected`): HieroTools abre el dialogo con lo que tiene
          pipesync.db, que puede estar viejo. Si la task entro a la cola de
@@ -103,6 +108,7 @@ import re
 import sys
 import tempfile
 import shutil
+import time
 
 # Agregar la ruta de shotgun_api3 al sys.path
 script_dir = os.path.dirname(__file__)
@@ -128,6 +134,12 @@ import shotgun_api3
 # Apagado por default desde v1.10: los errores que el usuario tiene que ver NO
 # dependen de esto, viajan en el campo "warnings" de la respuesta.
 DEBUG = False
+
+# Reintentos de cada adjunto: 3 reintentos cada 5 s, para que un bloqueo del
+# firewall en el primer intento o un corte pasajero no pierdan la imagen.
+# Flow_Push suma este margen al timeout del conector (retry_budget).
+UPLOAD_ATTEMPTS = 4
+UPLOAD_RETRY_PAUSE_S = 5
 
 # Tipos de entidad que Flow acepta en Note.addressings_to.
 ADDRESSABLE_TYPES = ("HumanUser", "Group")
@@ -265,6 +277,34 @@ class ShotGridManager:
         except Exception as e:
             debug_print(f"Error al inicializar la conexion a ShotGrid: {e}")
             self.sg = None
+        # Motivo de cada adjunto que no subio en el ultimo attach_*: viaja en
+        # el warning del push para que el cartel diga por que.
+        self.attach_errors = []
+
+    def upload_with_retries(self, entity_type, entity_id, path, field_name):
+        """
+        sg.upload con UPLOAD_ATTEMPTS intentos y UPLOAD_RETRY_PAUSE_S entre
+        cada uno. shotgun_api3 solo reintenta el PUT al storage ante un 500 o
+        503: un socket bloqueado o cortado falla de una. Devuelve
+        (attachment_id, None) o (None, ultimo_error).
+        """
+        last_error = None
+        for attempt in range(1, UPLOAD_ATTEMPTS + 1):
+            try:
+                attachment_id = self.sg.upload(
+                    entity_type, entity_id, path, field_name=field_name
+                )
+                if attachment_id:
+                    return attachment_id, None
+                last_error = "Flow no devolvio el id del adjunto"
+            except Exception as e:
+                last_error = f"{type(e).__name__}: {e}"
+            debug_print(
+                f"  intento {attempt}/{UPLOAD_ATTEMPTS} de {os.path.basename(path)} fallo: {last_error}"
+            )
+            if attempt < UPLOAD_ATTEMPTS:
+                time.sleep(UPLOAD_RETRY_PAUSE_S)
+        return None, last_error
 
     def get_author_firstname(self):
         """Nombre de pila del usuario autenticado, cacheado.
@@ -782,6 +822,9 @@ class ShotGridManager:
                     )
                     failed_count += 1
                     failed_images.append(f"[{idx}] {image_path} (no existe)")
+                    self.attach_errors.append(
+                        f"la imagen ya no existe en disco: {os.path.basename(image_path)}"
+                    )
                     continue
 
                 # Extraer numero de frame del nombre del archivo
@@ -807,30 +850,20 @@ class ShotGridManager:
                     failed_images.append(
                         f"[{idx}] {image_path} (error al copiar: {copy_error})"
                     )
+                    self.attach_errors.append(f"no se pudo copiar la imagen: {copy_error}")
                     continue
 
-                # Subir archivo directamente a la nota usando el metodo que funciono en exploracion
-                try:
-                    debug_print(f"  Subiendo a Flow (Note ID: {note_id})...")
-                    uploaded_attachment_id = self.sg.upload(
-                        "Note", note_id, temp_file_path, field_name="attachments"
+                # Subir archivo directamente a la nota, con reintentos
+                debug_print(f"  Subiendo a Flow (Note ID: {note_id})...")
+                uploaded_attachment_id, upload_error = self.upload_with_retries(
+                    "Note", note_id, temp_file_path, "attachments"
+                )
+                if uploaded_attachment_id:
+                    attached_count += 1
+                    debug_print(
+                        f"  ✅ ÉXITO: Imagen [{idx}] adjuntada correctamente (Attachment ID: {uploaded_attachment_id})"
                     )
-
-                    if uploaded_attachment_id:
-                        attached_count += 1
-                        debug_print(
-                            f"  ✅ ÉXITO: Imagen [{idx}] adjuntada correctamente (Attachment ID: {uploaded_attachment_id})"
-                        )
-                    else:
-                        debug_print(
-                            f"  ❌ ERROR: No se obtuvo ID de attachment para {new_filename}"
-                        )
-                        failed_count += 1
-                        failed_images.append(
-                            f"[{idx}] {image_path} (no se obtuvo attachment ID)"
-                        )
-
-                except Exception as upload_error:
+                else:
                     debug_print(
                         f"  ❌ ERROR subiendo archivo {new_filename}: {upload_error}"
                     )
@@ -838,7 +871,7 @@ class ShotGridManager:
                     failed_images.append(
                         f"[{idx}] {image_path} (error al subir: {upload_error})"
                     )
-                    continue
+                    self.attach_errors.append(upload_error)
 
             # Limpiar carpeta temporal
             try:
@@ -923,36 +956,30 @@ class ShotGridManager:
                     f"  ❌ ERROR: El archivo [{idx}] NO EXISTE en disco: {file_path}"
                 )
                 failed_files.append(f"[{idx}] {file_path} (no existe)")
+                self.attach_errors.append(
+                    f"el archivo ya no existe en disco: {os.path.basename(file_path)}"
+                )
                 continue
 
-            try:
+            debug_print(
+                f"  Subiendo {os.path.basename(file_path)} a Flow (Note ID: {note_id})..."
+            )
+            uploaded_attachment_id, upload_error = self.upload_with_retries(
+                "Note", note_id, file_path, "attachments"
+            )
+            if uploaded_attachment_id:
+                attached_count += 1
                 debug_print(
-                    f"  Subiendo {os.path.basename(file_path)} a Flow (Note ID: {note_id})..."
+                    f"  ✅ ÉXITO: Archivo [{idx}] adjuntado (Attachment ID: {uploaded_attachment_id})"
                 )
-                uploaded_attachment_id = self.sg.upload(
-                    "Note", note_id, file_path, field_name="attachments"
-                )
-
-                if uploaded_attachment_id:
-                    attached_count += 1
-                    debug_print(
-                        f"  ✅ ÉXITO: Archivo [{idx}] adjuntado (Attachment ID: {uploaded_attachment_id})"
-                    )
-                else:
-                    debug_print(
-                        f"  ❌ ERROR: No se obtuvo ID de attachment para {os.path.basename(file_path)}"
-                    )
-                    failed_files.append(
-                        f"[{idx}] {file_path} (no se obtuvo attachment ID)"
-                    )
-
-            except Exception as upload_error:
+            else:
                 debug_print(
                     f"  ❌ ERROR subiendo {os.path.basename(file_path)}: {upload_error}"
                 )
                 failed_files.append(
                     f"[{idx}] {file_path} (error al subir: {upload_error})"
                 )
+                self.attach_errors.append(upload_error)
 
         debug_print(
             f"attach_files_to_note: adjuntados {attached_count} de {len(file_paths)}"
@@ -1405,10 +1432,18 @@ def execute_full_push_operation(
                             f"{images_attached} de {len(pending_images)}"
                         )
                         if images_attached < len(pending_images):
-                            warnings.append(
+                            warning = (
                                 f"Solo se adjuntaron {images_attached} de "
                                 f"{len(pending_images)} imágenes a la nota"
                             )
+                            # El motivo real, sin repetir el mismo error
+                            # por cada imagen.
+                            reasons = list(dict.fromkeys(sg_manager.attach_errors))
+                            if reasons:
+                                warning += ".\nMotivo: " + "\n".join(
+                                    r[:300] for r in reasons[:3]
+                                )
+                            warnings.append(warning)
 
                     return {
                         "success": True,

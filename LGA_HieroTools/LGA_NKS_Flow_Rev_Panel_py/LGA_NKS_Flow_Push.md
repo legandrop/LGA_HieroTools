@@ -5,8 +5,8 @@
 
 Este sistema consta de dos componentes principales que automatizan la gestión de estados de tareas y versiones en ShotGrid para proyectos de Nuke/Hiero:
 
-* **`LGA_NKS_Flow/LGA_NKS_Flow_Push.py`** - Interfaz principal y lógica de UI (corre en Hiero/Nuke)
-* **`LGA_NKS_Flow/LGA_NKS_Flow_Push_connector.py`** - Operaciones de red optimizadas (corre con Python personalizado)
+* **`LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py`** - Interfaz principal y lógica de UI (corre en Hiero/Nuke)
+* **`LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push_connector.py`** - Operaciones de red optimizadas (corre con Python personalizado)
 
 Su propósito principal es mantener sincronizada la información entre ShotGrid y una base de datos SQLite local (`pipesync.db`), optimizando el rendimiento mediante arquitectura distribuida.
 
@@ -117,7 +117,7 @@ El sistema utiliza una arquitectura distribuida optimizada:
 * **Operaciones asíncronas:** Todas las llamadas a ShotGrid se ejecutan en hilos separados para evitar congelamiento de UI
 * **Operación completa optimizada:** Una sola llamada `execute_full_push` reemplaza múltiples operaciones individuales
 * **Verificación de versiones asíncrona:** Se realiza en background sin bloquear la interfaz
-* **Timeouts inteligentes:** 10 segundos para operaciones normales, 30 segundos para subida de imágenes
+* **Timeouts inteligentes:** 10 segundos para operaciones normales; con imágenes, 10 s de base más 25 s por imagen (10 de subida y 15 de margen para los reintentos) y 10 s por cada 5 MB de media arrastrada
 
 ## Integración con ReviewPic:
 
@@ -143,7 +143,7 @@ Cuando se abre el diálogo para introducir notas, el script automáticamente:
 
 ### Funciones Clave:
 
-**En `LGA_NKS_Flow/LGA_NKS_Flow_Push.py`:**
+**En `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py`:**
 - **`push_from_selected_clips()`**: Función principal que usa el método centralizado para obtener clips de `TASK_EXR_TRACKS`. Soporta selecciones múltiples, filtra clips por task EXR válida, permite elegir task cuando hay mezcla de tasks y mantiene confirmación para más de 4 clips.
 - **`Push_Task_Status()`**: Función legacy que procesa un clip individual cuando se proporciona `base_name`. Mantiene compatibilidad con paneles que llaman esta función directamente. Verifica versiones del timeline antes de abrir el diálogo de notas.
 - **`get_clip_versions_from_timeline()`**: Obtiene todas las versiones disponibles del clip seleccionado usando la API de Hiero, detecta la versión actual y encuentra la versión más alta.
@@ -151,19 +151,20 @@ Cuando se abre el diálogo para introducir notas, el script automáticamente:
 - **`PushVersionDialog`**: Diálogo personalizado que muestra advertencia cuando la versión actual no es la más alta, permitiendo continuar o cancelar.
 - **`call_flow_connector()`**: Puente que comunica con el conector externo de forma asíncrona
 - **`handle_version_check_result()`**: Maneja confirmaciones de versión del usuario para verificaciones asíncronas con Flow
-- **`find_review_images()`**: Localiza imágenes en `LGA_NKS_Flow/ReviewPic_Cache/`
+- **`find_review_images()`**: Localiza imágenes en `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/ReviewPic_Cache/`
 - **`delete_single_image()`**: Borra una imagen individual del disco y la remueve de la UI y de la lista de imágenes a subir. Solo se conecta a los thumbnails de ReviewPic
 - **`add_dropped_images()`** / **`remove_dropped_image()`** / **`get_dropped_images()`**: Manejan la media arrastrada al diálogo. `remove_dropped_image()` solo la saca del mensaje, sin tocar el archivo en disco
 - **`_media_paths_from_mime()`**: Filtra las rutas locales de un drop, quedándose solo con `.png`, `.jpg` y `.jpeg` existentes
 - **`_create_drop_overlay()`**: Arma el cartel "Drop to add media" que tapa el diálogo durante el arrastre
 - **`apply_xyplorer_tag()`**: Aplica el tag correspondiente en xyplorer después de actualizar exitosamente el estado
 
-**En `LGA_NKS_Flow/LGA_NKS_Flow_Push_connector.py`:**
+**En `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push_connector.py`:**
 - **`execute_full_push_operation()`**: Operación completa que actualiza estado, versión y comentarios en una sola llamada
 - **`find_specific_version_for_shot()`**: Busca la versión específica correspondiente al número de versión del clip actual para agregar comentarios
 - **`find_highest_version_for_shot()`**: Busca la versión más alta disponible para otras operaciones
 - **`execute_flow_operation()`**: Dispatcher principal para todas las operaciones de red
 - **`attach_images_to_note()`**: Sube imágenes a ShotGrid con números de frame
+- **`upload_with_retries()`** (clase `ShotGridManager`): `sg.upload` con 4 intentos cada 5 s; devuelve el id del adjunto o el último error, que se junta en `attach_errors` para el warning
 - **`attach_files_to_note()`**: Sube a la nota la media arrastrada, con su nombre original y sin la convención de anotaciones
 
 ## Media Arrastrada al Diálogo de Notas:
@@ -211,6 +212,15 @@ o desde cualquier aplicación que exponga rutas locales:
    captura. Si alguna imagen no llega a la nota, el conector lo devuelve como warning y el panel
    lo muestra en una ventana de advertencia.
 
+9. **Reintentos y motivo del fallo:** cada adjunto se sube con `upload_with_retries()` del
+   conector: 4 intentos con 5 s entre cada uno. `shotgun_api3` solo reintenta el PUT al storage
+   ante un 500 o 503; un socket bloqueado o cortado falla de una. Pasaba en el sitio del cliente:
+   la imagen va a un bucket de storage distinto del de studio (cada sitio de Flow tiene el suyo),
+   y un firewall por destino como GateBouncer bloquea el primer intento hacia un servidor nuevo.
+   Con los reintentos llega a pasar. Si igual falla, el warning dice el motivo real
+   (`attach_errors`), no solo "0 de 1". Y si falta alguna imagen, `ReviewPic_Cache` NO se borra
+   aunque el checkbox de limpieza esté marcado: la captura queda para volver a mandarla.
+
 ## Lógica de tracks
 
 La convención funcional de nombres del timeline está documentada en [docs/Docu_Logica_Nombres_Tracks.md](/Users/leg4/.nuke/Python/Startup/docs/Docu_Logica_Nombres_Tracks.md).
@@ -243,7 +253,7 @@ Después de actualizar exitosamente un estado en ShotGrid y la base de datos loc
 
 ### Funciones Clave para XYplorer:
 
-**En `LGA_NKS_Flow/LGA_NKS_Flow_Push.py`:**
+**En `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Push.py`:**
 - **`apply_xyplorer_tag()`**: Método de la clase `Worker` que calcula la ruta del shot, obtiene el tag correspondiente y aplica el tag en xyplorer después de actualizar exitosamente el estado.
 - **`tag_shot_folder()`**: Inicia el tagging de xyplorer en un hilo separado para no bloquear Hiero.
 - **`_tag_shot_folder_thread()`**: Ejecuta el tagging de forma asíncrona, enviando comandos a xyplorer mediante `Send_WM_COPYDATA()`.

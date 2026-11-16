@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push v4.23 | Lega
+  LGA_NKS_Flow_Push v4.24 | Lega
 
   Envia a flow nuevos estados de las tasks comps.
   En algunos estados permite enviar un mensaje a la version
@@ -12,6 +12,9 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v4.24: Si alguna imagen no llega a la nota, ReviewPic_Cache ya no se
+         borra (antes se borraba igual y la captura se perdia). El timeout
+         del conector suma 15 s por imagen para sus reintentos de subida.
   v4.23: Despues de escribir el estado de la task en pipesync.db, avisa a
          PipeSync abierto (LGA_NKS_PipeSyncEvents) para que el cambio se vea
          al instante en todos sus tabs.
@@ -511,7 +514,11 @@ def call_flow_connector(operation, **kwargs):
                     except OSError:
                         pass
                 size_budget = int(extra_bytes / (5 * 1024 * 1024)) * 10
-                timeout_seconds = 10 + (num_images * 10) + size_budget
+                # El conector reintenta cada adjunto 3 veces cada 5 s
+                # (connector v1.16): ese margen va por imagen, o el timeout
+                # corta los reintentos que justo iban a salvarla.
+                retry_budget = num_images * 15
+                timeout_seconds = 10 + (num_images * 10) + size_budget + retry_budget
                 debug_print(
                     f"Timeout ajustado para execute_full_push: {timeout_seconds}s "
                     f"({num_images} imágenes, {extra_bytes / (1024 * 1024):.1f} MB arrastrados)"
@@ -2367,6 +2374,9 @@ class Worker(QRunnable):
     def run(self):
         db_manager = DBManager()  # Crear la conexión en el hilo correcto
         success = False
+        # El finally los usa para decidir si borra ReviewPic_Cache.
+        images_total = len(self.review_images) + len(self.extra_images)
+        images_attached = 0
 
         try:
             debug_print(
@@ -2480,15 +2490,19 @@ class Worker(QRunnable):
             if db_manager:
                 db_manager.close()
 
-            # Borrar imagenes SOLO si se completó exitosamente y el usuario lo solicitó
-            if success and self.should_delete_images:
+            # Borrar imagenes SOLO si se completó exitosamente, todas llegaron
+            # a la nota y el usuario lo solicitó. Si alguna no subió, la
+            # captura queda en ReviewPic_Cache para volver a mandarla.
+            images_missing = images_attached < images_total
+            if success and self.should_delete_images and not images_missing:
                 debug_print(
                     "Worker: Operacion exitosa: Borrando carpeta ReviewPic_Cache como solicitó el usuario"
                 )
                 delete_review_pic_cache()
-            elif not success and self.should_delete_images:
+            elif self.should_delete_images:
                 debug_print(
-                    "Worker: Operacion fallida: NO se borra la carpeta ReviewPic_Cache"
+                    "Worker: NO se borra la carpeta ReviewPic_Cache "
+                    f"(success={success}, imagenes {images_attached} de {images_total})"
                 )
 
             if not success and self.task_only_prompt_context:
