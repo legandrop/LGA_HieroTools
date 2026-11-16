@@ -1,5 +1,10 @@
 # What's new in LGA HieroTools
 
+## v4.027 (2026-11-16)
+
+- **New:** En LGA BurnIn, el timecode se pinta de rojo cuando no coincide con el del plate del track `aPlate` en ese frame, así ves enseguida un comp corrido.
+- **Improved:** Fix Colorspaces, y el arreglo automático después de un Flow Pull, dejan todos los MXF del timeline en Video Range y en `Output - Rec.709`: NKS los abría en Full Range y se veían lavados, y uno puesto en el track de comps podía quedar en ACES.
+
 ## v4.026 (2026-11-12)
 
 - **New:** LGA BurnIn suma los campos `Track`, `Date` y `Codec`.
