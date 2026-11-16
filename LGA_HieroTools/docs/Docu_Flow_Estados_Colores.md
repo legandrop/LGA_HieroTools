@@ -106,7 +106,7 @@ con el `Error` (`#c25252`) del ClipColor Panel. `slapr` cae entre el lima de
 Review Dir y el cyan de OK for Delivery: ya aprobado, todavia no es entrega. En
 Flow tienen el mismo `bg_color` que el clip. `revnfx` pide nota en el push,
 como `rev_di`; `slapr` no. `pubsh` (OK for Delivery) tambien abre el dialogo
-de nota, opcional, pero no manda la Version a `vwd`.
+de nota, opcional, y manda la Version a `vwd` como los demas.
 
 ## Estados de SHOT
 

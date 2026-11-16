@@ -63,11 +63,10 @@ lado**: estuvo copiada en cinco lugares (cuatro en `LGA_NKS_Flow_Push.py` y una
 en el conector), las copias se desincronizaron y el resultado fue un push que
 pedia la nota y despues la descartaba en silencio.
 
-Un estado que pide nota tambien manda la Version a `vwd` (vista), con una
-excepcion: **OK for Delivery (`pubsh`)** abre el dialogo pero deja la Version
-como estaba. Lo decide `marks_version_viewed(code)`, en el mismo modulo. La nota
-de OK for Delivery es opcional: OK con el texto vacio y sin imagenes empuja el
-estado sin crear nota.
+Un estado que pide nota tambien manda la Version a `vwd` (vista). Los dos
+efectos van siempre juntos y los decide la misma condicion. La nota es
+opcional: OK con el texto vacio y sin imagenes empuja el estado y la Version
+sin crear nota (asi se usa casi siempre OK for Delivery).
 
 | Boton | Codigo | studio | client |
 |---|---|:--:|:--:|
@@ -80,7 +79,7 @@ estado sin crear nota.
 | Rev Prod | `revprd` | no | si |
 | Rev Dir | `rev_di` | si | si |
 | Rev Netflix | `revnfx` | no | si |
-| OK for Delivery | `pubsh` (sin `vwd`) | si | si |
+| OK for Delivery | `pubsh` | si | si |
 
 **Rev Sebas (`rev_su`) es la excepcion**: no pide nota y manda la Version a
 `rev`, no a `vwd`. Es el unico estado de review que queda afuera.

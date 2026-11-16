@@ -1,8 +1,9 @@
 """Estados que piden nota en el Flow Push y efecto sobre la Version.
 
-OK for Delivery (pubsh) abre el dialogo de nota pero no manda la Version a
-`vwd`; el resto de los estados con nota si. Corre execute_full_push_operation
-del conector sin red, con un sg_manager falso que registra las llamadas.
+OK for Delivery (pubsh) abre el dialogo de nota y manda la Version a `vwd`
+como los demas estados con nota; con el texto vacio no se crea nota. Corre
+execute_full_push_operation del conector sin red, con un sg_manager falso que
+registra las llamadas.
 """
 
 import importlib.util
@@ -13,11 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "LGA_NKS_Shared"))
 
-from LGA_NKS_Flow_Status_Config import (  # noqa: E402
-    NOTE_CAPABLE_CODES,
-    is_note_capable,
-    marks_version_viewed,
-)
+from LGA_NKS_Flow_Status_Config import is_note_capable  # noqa: E402
 
 CONNECTOR_PATH = ROOT / "LGA_NKS_Flow_Rev_Panel_py" / "LGA_NKS_Flow_Push_connector.py"
 
@@ -75,29 +72,23 @@ class NoteStatesTests(unittest.TestCase):
         )
         return result, manager.calls
 
-    def test_ok_for_delivery_asks_note_without_viewed(self):
+    def test_ok_for_delivery_asks_note(self):
         self.assertTrue(is_note_capable("pubsh"))
-        self.assertFalse(marks_version_viewed("pubsh"))
+        self.assertFalse(is_note_capable("rev_su"))
 
-    def test_other_note_states_still_mark_viewed(self):
-        for code in NOTE_CAPABLE_CODES:
-            if code != "pubsh":
-                self.assertTrue(marks_version_viewed(code), code)
-        self.assertFalse(marks_version_viewed("rev_su"))
-
-    def test_ok_for_delivery_push_creates_note_and_keeps_version(self):
+    def test_ok_for_delivery_push_creates_note_and_marks_viewed(self):
         result, calls = self.push("OK for Delivery", "Ready, ship it")
         self.assertTrue(result["success"], result)
         self.assertIn(("task", "pubsh"), calls)
+        self.assertIn(("version", "vwd"), calls)
         self.assertIn(("note", "Ready, ship it"), calls)
-        self.assertFalse([c for c in calls if c[0] == "version"])
-        self.assertFalse(result["applied"]["version_status"])
+        self.assertEqual(result["applied"]["version_status_value"], "vwd")
         self.assertTrue(result["applied"]["note"])
 
-    def test_ok_for_delivery_empty_note_creates_nothing(self):
+    def test_ok_for_delivery_empty_note_marks_viewed_without_note(self):
         result, calls = self.push("OK for Delivery", "")
         self.assertTrue(result["success"], result)
-        self.assertEqual(calls, [("task", "pubsh")])
+        self.assertEqual(calls, [("task", "pubsh"), ("version", "vwd")])
 
     def test_corrections_marks_version_viewed(self):
         result, calls = self.push("Corrections", "Fix the edge")

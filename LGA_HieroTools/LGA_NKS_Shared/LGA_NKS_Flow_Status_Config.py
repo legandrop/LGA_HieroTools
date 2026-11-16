@@ -29,9 +29,9 @@ ____________________________________________________________________
   los nombres tambien, salvo las divergencias declaradas en
   docs/Docu_Flow_Estados_Colores.md.
 
-  v1.04: OK for Delivery (pubsh) abre el dialogo de nota, pero NO manda la
-         Version a `vwd`: pedir nota y marcar la Version vista dejan de ser
-         lo mismo. marks_version_viewed() decide lo segundo.
+  v1.04: OK for Delivery (pubsh) entra en NOTE_CAPABLE_CODES: abre el dialogo
+         de nota (opcional: OK vacio no crea nota) y manda la Version a `vwd`
+         como los demas estados con nota.
   v1.03: Estados nuevos solo de client: Review Netflix (revnfx) y SL Approved
          (slapr), despues de Review Dir. Botones "Rev Netflix" y "SL Approved"
          en el Flow Rev Panel. revnfx pide nota como rev_di; slapr no.
@@ -238,20 +238,10 @@ NOTE_CAPABLE_CODES = (
     "pubsh",
 )
 
-# Estados que abren el dialogo de nota pero NO tocan el estado de la Version.
-# OK for Delivery no es una revision: la nota es opcional (OK vacio = sin nota)
-# y la Version queda como estaba, igual que antes de pedir nota.
-NOTE_WITHOUT_VIEWED_CODES = ("pubsh",)
-
 
 def is_note_capable(code):
-    """True si ese estado abre el dialogo de nota en el push."""
+    """True si ese estado pide nota en el push y manda la Version a `vwd`."""
     return code in NOTE_CAPABLE_CODES
-
-
-def marks_version_viewed(code):
-    """True si el push de ese estado manda la Version a `vwd` (vista)."""
-    return is_note_capable(code) and code not in NOTE_WITHOUT_VIEWED_CODES
 
 
 def _normalize_mode(mode):
