@@ -140,6 +140,25 @@ el clip de COMPARE de Compare Versions, que usa la misma resolucion.
 🔴 **Un `.mov` de camara en log (ProRes LogC, S-Log, ...) tambien va a Rec.709.** Hoy no se
 distingue: si un show trae plates en mov log, esta regla los deja mal y hay que sumar una excepcion.
 
+## Los MXF van a Video Range (los dos caminos)
+
+Desde `LGA_NKS_FixColorspaces v1.27`, el boton (no el Flow Pull) pasa a **Video Range** todos los
+`.mxf` de la secuencia activa, en cualquier track, y las demas versiones MXF ya cargadas de su
+BinItem. Corre despues del camino managed o del viejo, sea cual sea. **Por que existe:** los MXF de
+review (DNxHR) son video legal, pero NKS los abre en Full Range y se ven lavados.
+
+Lo que costo descubrir (medido en NKS 17.0v4):
+
+- El rango vive en el knob `dataRange` del Read del clip (`Full Range` / `Video Range`). El `Clip`
+  no tiene setter para eso, pero `clip.readNode()` devuelve el Read **vivo**, no una copia: lo que
+  se escribe ahi persiste y cambia la decodificacion. Prueba: `clip.thumbnail(t, "rgba")` de un
+  DNxHR paso de media 28.9 a 18.8 (y maximo de 159 a 169) al pasar a Video Range.
+- `clip.thumbnail()` sin capa tira `Layer 'rgb' does not exist` en un MXF: hay que pedir `"rgba"`.
+- Para verificar, `currentViewer().image()` no sirve: mientras se manda codigo por el dev-link el
+  visor no se redibuja (ni apagando todos los tracks queda negro).
+- Un EXR del mismo shot en `_comp_` no tiene el knob `dataRange`: por eso se filtra por extension y
+  se lee el knob con `knobs().get()`.
+
 ## Todas las versiones del clip, no solo la visible
 
 Desde `LGA_NKS_FixColorspaces v1.24` el camino managed corrige, ademas del clip que muestra el
@@ -364,7 +383,7 @@ el mapa lo incluya.
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_Flow_NamingUtils.py` —
   `extract_project_name_from_path()`, `extract_project_name()`, `clean_base_name()`.
 - `LGA_HieroTools/LGA_NKS_Edit_Panel.py` — `fix_colorspaces()`, `execute_external_script()`.
-- `LGA_HieroTools/LGA_NKS_Edit_Panel_py/LGA_NKS_FixColorspaces.py` — `run_if_color_managed()`, el punto de entrada que comparten el boton y el Pull; `aplicar_a_track_item_si_managed()`, el de Compare Versions; `corregir_versiones_del_bin_item()`, `resolver_nombre_para_clip()`, `aplicar_nombre_a_clip()`, `ListaTransformsDeRespaldo`, `programar_verificacion()`.
+- `LGA_HieroTools/LGA_NKS_Edit_Panel_py/LGA_NKS_FixColorspaces.py` — `run_if_color_managed()`, el punto de entrada que comparten el boton y el Pull; `aplicar_a_track_item_si_managed()`, el de Compare Versions; `corregir_versiones_del_bin_item()`, `resolver_nombre_para_clip()`, `aplicar_nombre_a_clip()`, `ListaTransformsDeRespaldo`, `programar_verificacion()`; `pasar_mxf_a_video_range()` y `_poner_video_range()`, la pasada de MXF que solo corre el boton (`main()`).
 - `LGA_HieroTools/LGA_NKS_Review_Panel_py/LGA_NKS_Compare_Versions.py` — `aplicar_color_management()`.
 - `LGA_HieroTools/+Building_Blocks/explore_fixcolor_versions.py` — la sonda de tiempos y persistencia por version (no se publica; se respalda en el contenedor).
 - `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py` — `fix_colorspaces_si_proyecto_managed()`, `GUI_Table.update_table()`, `HieroOperations.change_to_highest_version()`.

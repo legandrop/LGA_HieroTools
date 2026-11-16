@@ -255,7 +255,8 @@ indicators.
 - **Fix Colorspaces**  
   Uses the project's PipeSync color-management settings when enabled, on every
   loaded version of each clip; otherwise detects and fixes clips using `rec709`
-  or `gamma2.2`.
+  or `gamma2.2`. In both cases it also sets every MXF in the active timeline to
+  Video Range.
 - **Apply AMF**
   Adds or removes the shot's CDL/CLF/.cube effects on selected EXRs, or on EXRs
   under the playhead when fewer than two clips are selected. A .csp LUT in

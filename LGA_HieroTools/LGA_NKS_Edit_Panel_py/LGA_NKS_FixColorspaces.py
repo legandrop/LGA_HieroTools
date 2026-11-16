@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_FixColorspaces v1.26 | Lega
+  LGA_NKS_FixColorspaces v1.27 | Lega
 
   Corrige el color transform de los clips del timeline activo.
 
@@ -60,6 +60,11 @@ ____________________________________________________________________
   adentro de las funciones que los usan: este archivo se puede importar en
   un proceso sin Nuke/Hiero sin que explote y sin que haga nada.
 
+  v1.27: Ademas, en los dos caminos, pasa a Video Range (knob dataRange del
+         Read) todos los MXF de la secuencia activa, en cualquier track, y las
+         demas versiones MXF ya cargadas de su BinItem: NKS los abre en Full
+         Range y se ven lavados (pasar_mxf_a_video_range). Solo el boton; el
+         Flow Pull no lo corre.
   v1.26: Los tracks EditRef (EditRefClean, "Edit Ref") tambien se revisan: sus
          mp4 y mov van a Rec.709; lo que no es video ahi sigue sin tocarse. El
          mismo video en aPlate y en EditRef ya no cuenta como conflicto.
@@ -1004,6 +1009,125 @@ def _imprimir_resumen_managed(
 
 
 # ============================
+# MXF a Video Range (los dos caminos)
+# ============================
+
+# Knob del Read de NKS que decide como se interpreta el rango del YUV de un MXF.
+# Sus valores son exactamente estos dos (medido en NKS 17.0v4).
+KNOB_DATA_RANGE = "dataRange"
+DATA_RANGE_VIDEO = "Video Range"
+
+
+def _es_mxf(clip):
+    return _ruta_media(clip).lower().endswith(".mxf")
+
+
+def _poner_video_range(clip):
+    """
+    Pone el knob dataRange del Read del clip en 'Video Range'.
+
+    Devuelve (estado, antes) con estado 'corregido', 'ya_bien' o 'sin_knob'.
+
+    `clip.readNode()` devuelve el Read VIVO del clip, no una copia: el valor
+    escrito ahi persiste y cambia la decodificacion (medido con
+    clip.thumbnail(): un DNxHR pasa de media 28.9 a 18.8 al pasar a Video
+    Range). El Clip no tiene un setter propio para esto.
+    """
+    try:
+        knob = clip.readNode().knobs().get(KNOB_DATA_RANGE)
+    except Exception:
+        knob = None
+    if knob is None:
+        return "sin_knob", None
+    antes = knob.value()
+    if antes == DATA_RANGE_VIDEO:
+        return "ya_bien", antes
+    knob.setValue(DATA_RANGE_VIDEO)
+    return "corregido", antes
+
+
+def pasar_mxf_a_video_range(seq=None):
+    """
+    Pasa a Video Range todos los MXF de la secuencia activa, en cualquier track,
+    y las demas versiones ya cargadas de su BinItem que tambien sean MXF.
+
+    POR QUE: los MXF de review (DNxHR) son video legal, pero NKS los abre en
+    Full Range y se ven lavados. Esto no depende del color management del
+    proyecto: corre igual en los dos caminos. Las demas versiones se tocan por el
+    mismo motivo que el colorspace: cada Version es otro Clip con su propio Read.
+    """
+    import hiero.core
+    import hiero.ui
+
+    if seq is None:
+        seq = hiero.ui.activeSequence()
+    if seq is None:
+        debug_print("[mxf] No hay secuencia activa.")
+        return
+
+    corregidos = []
+    ya_bien = 0
+    sin_knob = []
+    vistos = set()
+    bins_vistos = set()
+
+    def tratar(clip):
+        nonlocal ya_bien
+        key = _clip_key(clip)
+        if key in vistos or not _es_mxf(clip):
+            return
+        vistos.add(key)
+        try:
+            estado, antes = _poner_video_range(clip)
+        except Exception as e:
+            debug_print("[mxf][ERROR] {0}: {1}".format(_nombre_clip_seguro(clip), e))
+            return
+        if estado == "corregido":
+            corregidos.append((_nombre_clip_seguro(clip), antes))
+        elif estado == "ya_bien":
+            ya_bien += 1
+        else:
+            sin_knob.append(_nombre_clip_seguro(clip))
+
+    for track in seq.videoTracks():
+        for item in track:
+            if isinstance(item, hiero.core.EffectTrackItem):
+                continue
+            try:
+                clip = item.source()
+            except Exception:
+                continue
+            if clip is None or not _es_mxf(clip):
+                continue
+            tratar(clip)
+            bin_item = _bin_item_seguro(clip)
+            if bin_item is None or _bin_key(bin_item) in bins_vistos:
+                continue
+            bins_vistos.add(_bin_key(bin_item))
+            try:
+                versiones = list(bin_item.items())
+            except Exception:
+                versiones = []
+            for version in versiones:
+                try:
+                    clip_version = version.item()
+                except Exception:
+                    clip_version = None
+                if clip_version is not None:
+                    tratar(clip_version)
+
+    debug_print(
+        "MXF a Video Range: {0} corregidos, {1} ya estaban, {2} sin knob {3}.".format(
+            len(corregidos), ya_bien, len(sin_knob), KNOB_DATA_RANGE
+        )
+    )
+    for nombre, antes in corregidos:
+        debug_print(" - {0}: {1} -> {2}".format(nombre, antes, DATA_RANGE_VIDEO))
+    for nombre in sin_knob:
+        debug_print(" - SIN KNOB {0}".format(nombre))
+
+
+# ============================
 # Entry point
 # ============================
 
@@ -1195,6 +1319,11 @@ def main():
         if not run_if_color_managed():
             debug_print("[main] proyecto no managed, camino viejo")
             corregir_clips_con_colorspace_rec709()
+        try:
+            pasar_mxf_a_video_range()
+        except Exception as e:
+            print("Fix Colorspaces: no se pudieron pasar los MXF a Video Range: {0}".format(e))
+            debug_print("[mxf][ERROR] {0}".format(traceback.format_exc()))
     finally:
         volcar_log()
 
