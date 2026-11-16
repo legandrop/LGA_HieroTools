@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Push_connector v1.16 | Lega
+  LGA_NKS_Flow_Push_connector v1.17 | Lega
 
   Conector simple para operaciones de red con Flow
   Este script se ejecuta con Python personalizado para evitar problemas de dependencias
@@ -11,6 +11,9 @@ ____________________________________________________________________
   - PROYECTO_TEMP_EP_SEQ_SHOT_DESC1_DESC2 (6 bloques con descripción)
   - PROYECTO_TEMP_EP_SEQ_SHOT (4 bloques simplificado)
 
+  v1.17: OK for Delivery crea la nota pero no pasa la Version a `vwd`: el
+         update de Version se decide con marks_version_viewed(), aparte de
+         is_note_capable().
   v1.16: Cada adjunto de la nota se sube con 3 reintentos cada 5 s
          (upload_with_retries): un fallo de red pasajero, o el firewall
          bloqueando el primer intento hacia el storage del sitio, dejaba la
@@ -177,7 +180,11 @@ except ImportError as e:
 # Flow_Push; tener una copia propia aca ya hizo que el conector empujara codigos
 # distintos a los que el panel creia estar mandando.
 try:
-    from LGA_NKS_Flow_Status_Config import get_status_translation, is_note_capable
+    from LGA_NKS_Flow_Status_Config import (
+        get_status_translation,
+        is_note_capable,
+        marks_version_viewed,
+    )
 except ImportError as e:
     debug_print(f"⚠️ ImportError: {e} - LGA_NKS_Flow_Status_Config no disponible")
     raise
@@ -1334,17 +1341,19 @@ def execute_full_push_operation(
         version_require_token = version_token if version_token != task_name else None
 
         if is_note_capable(sg_status):
-            debug_print(f"Actualizando versión a vwd")
-            version_ok, version_error = sg_manager.update_version_status(
-                project_name, shot_code, target_version_label, "vwd",
-                require_token=version_require_token,
-                expected_code=expected_version_code,
-            )
-            if version_ok:
-                applied["version_status"] = True
-                applied["version_status_value"] = "vwd"
-            else:
-                warnings.append(version_error)
+            # OK for Delivery pide nota pero deja la Version como estaba.
+            if marks_version_viewed(sg_status):
+                debug_print(f"Actualizando versión a vwd")
+                version_ok, version_error = sg_manager.update_version_status(
+                    project_name, shot_code, target_version_label, "vwd",
+                    require_token=version_require_token,
+                    expected_code=expected_version_code,
+                )
+                if version_ok:
+                    applied["version_status"] = True
+                    applied["version_status_value"] = "vwd"
+                else:
+                    warnings.append(version_error)
 
             # Nota en la version especifica, no en la mas alta. Alcanza con que
             # haya mensaje O imagenes: arrastrar una referencia y apretar OK sin

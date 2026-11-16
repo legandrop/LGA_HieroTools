@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.028
+- [improved] El botón OK for Delivery del Flow Review Panel abre la ventana de nota, para mandar un mensaje y capturas junto con la aprobación; si la dejás vacía, no se crea nota.
 - [fixed] Flow Push vuelve a adjuntar a la nota las capturas de ReviewPic cuando la conexión falla en el primer intento; si igual no sube, el aviso dice por qué y la captura no se borra.
 - [fixed][win] Flow Pull ya no llena XYplorer de carteles «Label … is not defined» cuando tu XYplorer no tiene las etiquetas de color de los estados de Flow: esas carpetas simplemente no se pintan.
 
