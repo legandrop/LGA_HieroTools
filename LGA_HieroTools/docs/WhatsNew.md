@@ -13,7 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.027
-- [improved] Fix Colorspaces también pasa a Video Range todos los MXF del timeline, que NKS abría en Full Range y se veían lavados.
+- [improved] Fix Colorspaces, y el arreglo automático después de un Flow Pull, dejan todos los MXF del timeline en Video Range y en `Output - Rec.709`: NKS los abría en Full Range y se veían lavados, y uno puesto en el track de comps podía quedar en ACES.
 - [new] En LGA BurnIn, el timecode se pinta de rojo cuando no coincide con el del plate del track `aPlate` en ese frame, así ves enseguida un comp corrido.
 
 ## v4.026

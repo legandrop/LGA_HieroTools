@@ -60,11 +60,14 @@ ____________________________________________________________________
   adentro de las funciones que los usan: este archivo se puede importar en
   un proceso sin Nuke/Hiero sin que explote y sin que haga nada.
 
-  v1.27: Ademas, en los dos caminos, pasa a Video Range (knob dataRange del
-         Read) todos los MXF de la secuencia activa, en cualquier track, y las
-         demas versiones MXF ya cargadas de su BinItem: NKS los abre en Full
-         Range y se ven lavados (pasar_mxf_a_video_range). Solo el boton; el
-         Flow Pull no lo corre.
+  v1.27: Los MXF. En los dos caminos, y tambien al terminar el Flow Pull,
+         pasar_mxf_a_video_range() pone en Video Range (knob dataRange del
+         Read) y en Rec.709 de display todos los MXF de la secuencia activa y
+         las versiones MXF ya cargadas de sus BinItems: NKS los abre en Full
+         Range y se ven lavados. En el camino managed un MXF cuenta como video
+         salvo en un track de plates (puede ser de camara): uno de review puesto
+         en `_comp_` quedaba en ACES2065-1. En plates recibe el rango pero no el
+         colorspace.
   v1.26: Los tracks EditRef (EditRefClean, "Edit Ref") tambien se revisan: sus
          mp4 y mov van a Rec.709; lo que no es video ahi sigue sin tocarse. El
          mismo video en aPlate y en EditRef ya no cuenta como conflicto.
@@ -229,9 +232,25 @@ def _ruta_media(clip):
         return ""
 
 
-def _es_video(clip):
-    """True si la media del clip es un archivo de video (mp4, mov)."""
-    return es_archivo_de_video(_ruta_media(clip))
+def _es_video(clip, mxf_es_video=False):
+    """
+    True si la media del clip es un archivo de video (mp4, mov). Con
+    `mxf_es_video`, un .mxf tambien cuenta (ver _mxf_es_video_en_track).
+    """
+    ruta = _ruta_media(clip)
+    if mxf_es_video and ruta.lower().endswith(".mxf"):
+        return True
+    return es_archivo_de_video(ruta)
+
+
+def _mxf_es_video_en_track(track_token):
+    """
+    Un MXF es video de display (DNxHR de review: Rec.709) salvo en un track de
+    plates, donde puede ser material de camara (ARRIRAW, X-OCN) y sigue el token
+    del track. POR QUE: un MXF de review puesto en `_comp_` tomaba la regla de
+    los EXR publicados y quedaba en ACES2065-1.
+    """
+    return track_token != "plates"
 
 
 def _project_name_de_clip(clip):
@@ -400,7 +419,7 @@ def _regla_de_clip(clip, track_token):
     """
     if not track_token:
         return None
-    if _es_video(clip):
+    if _es_video(clip, _mxf_es_video_en_track(track_token)):
         return REGLA_VIDEO
     if track_token == "editref":
         return None
@@ -581,9 +600,11 @@ def _resolver_en_lista(clip, wanted_token, lista):
     """
     Un video (mp4, mov) va al Rec.709 de display del config, sin importar el
     token de su track: es material de display, no un plate de camara. Un EditRef
-    en mp4 que quedo en un track de plates terminaba en ACEScg.
+    en mp4 que quedo en un track de plates terminaba en ACEScg. Un MXF llega aca
+    como video solo con wanted_token == REGLA_VIDEO (lo decide _regla_de_clip
+    con su track).
     """
-    if _es_video(clip):
+    if wanted_token == REGLA_VIDEO or _es_video(clip):
         return resolve_video_ocio_name(lista)
     return resolve_ocio_name(wanted_token, lista)
 
@@ -730,6 +751,7 @@ def corregir_versiones_del_bin_item(
     clip_visible=None,
     wanted_token=None,
     respaldo=None,
+    track_token=None,
 ):
     """
     Aplica `nombre_real` a TODAS las versiones ya cargadas en el BinItem, no solo
@@ -756,6 +778,8 @@ def corregir_versiones_del_bin_item(
       su v02 en EXR) no hereda `nombre_real`: se resuelve aparte, una vez por
       tipo. Un video va a Rec.709; lo que no es video sigue `wanted_token`, que
       es el token del TRACK (None en un EditRef: esas versiones no se tocan).
+    - `track_token`: token del track ('plates', 'exr_publish', 'editref'). Decide
+      si una version MXF cuenta como video (ver _mxf_es_video_en_track).
 
     Costo medido: ~0.1 ms por version en Python mas ~5 ms por version que NKS
     procesa despues, al volver al event loop. No lee media: cuesta lo mismo con
@@ -769,7 +793,8 @@ def corregir_versiones_del_bin_item(
         )
         return
     por_tipo = clip_visible is not None
-    nombres_por_tipo = {_es_video(clip_visible): nombre_real} if por_tipo else {}
+    mxf_video = _mxf_es_video_en_track(track_token)
+    nombres_por_tipo = {_es_video(clip_visible, mxf_video): nombre_real} if por_tipo else {}
     for version in versiones:
         try:
             clip_version = version.item()
@@ -783,10 +808,12 @@ def corregir_versiones_del_bin_item(
         ya_procesados.add(key)
         nombre_version = nombre_real
         if por_tipo:
-            tipo = _es_video(clip_version)
+            tipo = _es_video(clip_version, mxf_video)
             if tipo not in nombres_por_tipo:
                 nombres_por_tipo[tipo] = (
-                    resolver_nombre_para_clip(clip_version, wanted_token, respaldo)[0]
+                    resolver_nombre_para_clip(
+                        clip_version, REGLA_VIDEO if tipo else wanted_token, respaldo
+                    )[0]
                     if tipo or wanted_token
                     else None
                 )
@@ -897,7 +924,7 @@ def corregir_clips_con_color_management(project_name, cm_config, seq, incluir_ve
                     track_name,
                     actual,
                     nombre_real,
-                    " (video: Rec.709)" if _es_video(clip) else "",
+                    " (video: Rec.709)" if token == REGLA_VIDEO else "",
                     " (lista de respaldo)" if via_respaldo else "",
                 )
             )
@@ -929,6 +956,7 @@ def corregir_clips_con_color_management(project_name, cm_config, seq, incluir_ve
             clip_visible=clip,
             wanted_token=cm_config.get(_clasificar_track(track_name, exr_tracks) or ""),
             respaldo=respaldo,
+            track_token=_clasificar_track(track_name, exr_tracks),
         )
 
     _imprimir_resumen_managed(
@@ -1048,13 +1076,20 @@ def _poner_video_range(clip):
 
 def pasar_mxf_a_video_range(seq=None):
     """
-    Pasa a Video Range todos los MXF de la secuencia activa, en cualquier track,
-    y las demas versiones ya cargadas de su BinItem que tambien sean MXF.
+    Pasa a Video Range y a Rec.709 de display todos los MXF de la secuencia
+    activa, en cualquier track, y las versiones MXF ya cargadas del BinItem de
+    cada clip del timeline (aunque la version visible no sea MXF).
 
-    POR QUE: los MXF de review (DNxHR) son video legal, pero NKS los abre en
-    Full Range y se ven lavados. Esto no depende del color management del
-    proyecto: corre igual en los dos caminos. Las demas versiones se tocan por el
-    mismo motivo que el colorspace: cada Version es otro Clip con su propio Read.
+    POR QUE: los MXF de review (DNxHR) son video legal en Rec.709, pero NKS los
+    abre en Full Range y se ven lavados, y en un track sin regla (por ejemplo
+    `MXF`) el camino managed no les toca el colorspace. Esto no depende del color
+    management del proyecto: corre igual en los dos caminos, y tambien al
+    terminar el Flow Pull. Las demas versiones se tocan porque cada Version es
+    otro Clip con su propio Read y su propio colorspace.
+
+    Un MXF que aparece en un track de plates (el mismo clip, o una version de un
+    BinItem que esta en plates) recibe el Video Range pero NO el colorspace:
+    puede ser material de camara y su espacio lo decide el token del track.
     """
     import hiero.core
     import hiero.ui
@@ -1065,31 +1100,12 @@ def pasar_mxf_a_video_range(seq=None):
         debug_print("[mxf] No hay secuencia activa.")
         return
 
-    corregidos = []
-    ya_bien = 0
-    sin_knob = []
-    vistos = set()
-    bins_vistos = set()
-
-    def tratar(clip):
-        nonlocal ya_bien
-        key = _clip_key(clip)
-        if key in vistos or not _es_mxf(clip):
-            return
-        vistos.add(key)
-        try:
-            estado, antes = _poner_video_range(clip)
-        except Exception as e:
-            debug_print("[mxf][ERROR] {0}: {1}".format(_nombre_clip_seguro(clip), e))
-            return
-        if estado == "corregido":
-            corregidos.append((_nombre_clip_seguro(clip), antes))
-        elif estado == "ya_bien":
-            ya_bien += 1
-        else:
-            sin_knob.append(_nombre_clip_seguro(clip))
+    exr_tracks = _get_task_exr_tracks()
+    clips = {}  # clip_key -> [clip, en_plates]
+    bins = {}  # bin_key -> [bin_item, en_plates]
 
     for track in seq.videoTracks():
+        en_plates = _clasificar_track(track.name(), exr_tracks) == "plates"
         for item in track:
             if isinstance(item, hiero.core.EffectTrackItem):
                 continue
@@ -1097,34 +1113,98 @@ def pasar_mxf_a_video_range(seq=None):
                 clip = item.source()
             except Exception:
                 continue
-            if clip is None or not _es_mxf(clip):
+            if clip is None:
                 continue
-            tratar(clip)
+            if _es_mxf(clip):
+                entrada = clips.setdefault(_clip_key(clip), [clip, False])
+                entrada[1] = entrada[1] or en_plates
             bin_item = _bin_item_seguro(clip)
-            if bin_item is None or _bin_key(bin_item) in bins_vistos:
-                continue
-            bins_vistos.add(_bin_key(bin_item))
+            if bin_item is not None:
+                entrada = bins.setdefault(_bin_key(bin_item), [bin_item, False])
+                entrada[1] = entrada[1] or en_plates
+
+    for bin_item, en_plates in bins.values():
+        try:
+            versiones = list(bin_item.items())
+        except Exception:
+            continue
+        for version in versiones:
             try:
-                versiones = list(bin_item.items())
+                clip_version = version.item()
             except Exception:
-                versiones = []
-            for version in versiones:
-                try:
-                    clip_version = version.item()
-                except Exception:
-                    clip_version = None
-                if clip_version is not None:
-                    tratar(clip_version)
+                continue
+            if clip_version is None or not _es_mxf(clip_version):
+                continue
+            entrada = clips.setdefault(_clip_key(clip_version), [clip_version, False])
+            entrada[1] = entrada[1] or en_plates
+
+    rango_corregidos = []
+    rango_ya_bien = 0
+    sin_knob = []
+    cs_corregidos = []
+    cs_ya_bien = 0
+    cs_sin_transform = []
+    en_plates_saltados = []
+    pendientes = []
+    respaldo = ListaTransformsDeRespaldo(seq)
+
+    for clip, en_plates in clips.values():
+        nombre = _nombre_clip_seguro(clip)
+        try:
+            estado, antes = _poner_video_range(clip)
+        except Exception as e:
+            debug_print("[mxf][ERROR] rango de {0}: {1}".format(nombre, e))
+            estado, antes = "error", None
+        if estado == "corregido":
+            rango_corregidos.append((nombre, antes))
+        elif estado == "ya_bien":
+            rango_ya_bien += 1
+        elif estado == "sin_knob":
+            sin_knob.append(nombre)
+
+        if en_plates:
+            en_plates_saltados.append(nombre)
+            continue
+        nombre_real, error, via_respaldo = resolver_nombre_para_clip(clip, REGLA_VIDEO, respaldo)
+        if not nombre_real:
+            cs_sin_transform.append((nombre, error))
+            continue
+        estado_cs, antes_cs = aplicar_nombre_a_clip(clip, nombre_real)
+        if estado_cs == "corregido":
+            cs_corregidos.append((nombre, antes_cs, nombre_real))
+            if via_respaldo:
+                pendientes.append(_pendiente(clip, nombre_real))
+        elif estado_cs == "ya_bien":
+            cs_ya_bien += 1
+        else:
+            cs_sin_transform.append((nombre, "no se pudo setear"))
 
     debug_print(
-        "MXF a Video Range: {0} corregidos, {1} ya estaban, {2} sin knob {3}.".format(
-            len(corregidos), ya_bien, len(sin_knob), KNOB_DATA_RANGE
+        "MXF: {0} pasados a {1} ({2} ya estaban, {3} sin knob {4}); colorspace: "
+        "{5} corregidos, {6} ya estaban, {7} sin transform, {8} en tracks de plates "
+        "(no se les toca el colorspace).".format(
+            len(rango_corregidos),
+            DATA_RANGE_VIDEO,
+            rango_ya_bien,
+            len(sin_knob),
+            KNOB_DATA_RANGE,
+            len(cs_corregidos),
+            cs_ya_bien,
+            len(cs_sin_transform),
+            len(en_plates_saltados),
         )
     )
-    for nombre, antes in corregidos:
-        debug_print(" - {0}: {1} -> {2}".format(nombre, antes, DATA_RANGE_VIDEO))
+    for nombre, antes in rango_corregidos:
+        debug_print(" - rango {0}: {1} -> {2}".format(nombre, antes, DATA_RANGE_VIDEO))
+    for nombre, antes, despues in cs_corregidos:
+        debug_print(" - colorspace {0}: {1} -> {2}".format(nombre, antes, despues))
     for nombre in sin_knob:
         debug_print(" - SIN KNOB {0}".format(nombre))
+    for nombre, motivo in cs_sin_transform:
+        debug_print(" - SIN TRANSFORM {0}: {1}".format(nombre, motivo))
+    for nombre in en_plates_saltados:
+        debug_print(" - EN PLATES (colorspace sin tocar) {0}".format(nombre))
+    programar_verificacion(pendientes)
 
 
 # ============================
@@ -1295,6 +1375,7 @@ def aplicar_a_track_item_si_managed(track_item, track_name_regla, seq=None):
                 clip_visible=clip,
                 wanted_token=cm_config.get(token or ""),
                 respaldo=respaldo,
+                track_token=token,
             )
         for nombre, _track, antes, despues in versiones_corregidas:
             debug_print("[compare]  version {0}: {1} -> {2}".format(nombre, antes, despues))

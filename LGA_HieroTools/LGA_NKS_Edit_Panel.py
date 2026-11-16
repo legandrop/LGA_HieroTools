@@ -6,7 +6,7 @@ ____________________________________________________________________
   Tools panel for Hiero / Nuke Studio
 
   v3.16: El tooltip de Fix Colorspaces dice que tambien pasa los MXF del
-         timeline a Video Range.
+         timeline a Video Range y Rec.709.
   v3.15: Arrastrar una o varias carpetas de shot al panel abre Import Shot
          con esas carpetas, con el mismo cartel violeta punteado que el drop
          del Projects Panel. Los tooltips pasan al tooltip propio del pack.
@@ -341,7 +341,7 @@ class ReconnectMediaWidget(QtWidgets.QWidget):
             ("Rec709 | Clip", self.rec709_clip, "#434c41", None, "Cambia el color transform a Rec.709 en los clips seleccionados"),
             ("Default | Clip", self.default_clip, "#434c41", None, "Cambia el color transform a default en los clips seleccionados"),
             ("Compositing Log | Clip", self.set_compositing_log, "#434c41", None, "Cambia el color transform a compositing_log en los clips seleccionados"),
-            ("Fix Colorspaces", self.fix_colorspaces, "#434c41", None, "Corrige el colorspace de los clips segun la configuracion del proyecto: si esta color managed en PipeSync usa el espacio de plates y el de publish segun el track, y si no corrige rec709 y gamma2.2.\nAdemas pasa a Video Range todos los MXF del timeline."),
+            ("Fix Colorspaces", self.fix_colorspaces, "#434c41", None, "Corrige el colorspace de los clips segun la configuracion del proyecto: si esta color managed en PipeSync usa el espacio de plates y el de publish segun el track, y si no corrige rec709 y gamma2.2.\nAdemas pasa todos los MXF del timeline a Video Range y Rec.709."),
             ("App&ly AMF", self.apply_amf, "#434c41", "Shift+L", "Shift+L\nPone o saca los soft effects de color del shot segun _input/Look_Files: si hay un .csp, solo ese (linear, ACEScg); si no, el .amf, o sin .amf el .cdl mas el LMT (.clf o, si no hay, .cube).\nSi los clips ya los tienen, los borra.\nCon 2 o mas clips seleccionados trabaja sobre esos; si no, sobre los .exr bajo el playhead en todos los tracks"),
             # Toggle AMF queda DESACTIVADO a proposito, no borrado: Apply AMF
             # ahora pone y saca los efectos, asi que tener ademas un boton que

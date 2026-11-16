@@ -1,12 +1,15 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.76 | Lega
+  LGA_NKS_Flow_Pull v3.77 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.77: Al terminar, ademas del Fix Colorspaces managed, pasa los MXF del
+         timeline a Video Range y Rec.709 (managed o no): cada bump de version
+         trae un Clip nuevo en Full Range.
   v3.76: v_NKS muestra la version con la que queda el clip despues del Pull.
          La fila se agregaba antes del escaneo de versiones, con la version
          vieja: un clip que ya habia subido a la ultima en disco quedaba en
@@ -1327,6 +1330,7 @@ def fix_colorspaces_si_proyecto_managed():
     Es la MISMA funcion que usa el boton del Edit Panel (`run_if_color_managed`), no una
     copia: si el proyecto no esta color managed no hace nada, y en particular NO cae al
     barrido viejo de rec709, que como efecto secundario de un pull seria una sorpresa fea.
+    La pasada de MXF (`pasar_mxf_a_video_range`) si corre siempre: solo toca MXF.
 
     🔴 NO abre grupo de undo, a proposito. Este camino YA corre dentro del
     `project.beginUndo("Run External Script")` que abren `run_FPT_pull()` y
@@ -1351,6 +1355,9 @@ def fix_colorspaces_si_proyecto_managed():
 
         corrio = fixcs.run_if_color_managed()
         debug_print(f"Fix Colorspaces post-pull: proyecto managed={corrio}")
+        # Los MXF (Video Range y Rec.709) van managed o no: un bump de version trae
+        # un Clip nuevo en Full Range, que se ve lavado.
+        fixcs.pasar_mxf_a_video_range()
     except Exception as e:
         debug_print(f"Fix Colorspaces post-pull fallo (el pull sigue igual): {e}")
     finally:

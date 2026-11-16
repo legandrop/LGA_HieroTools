@@ -140,12 +140,24 @@ el clip de COMPARE de Compare Versions, que usa la misma resolucion.
 🔴 **Un `.mov` de camara en log (ProRes LogC, S-Log, ...) tambien va a Rec.709.** Hoy no se
 distingue: si un show trae plates en mov log, esta regla los deja mal y hay que sumar una excepcion.
 
-## Los MXF van a Video Range (los dos caminos)
+## Los MXF van a Video Range y Rec.709 (los dos caminos)
 
-Desde `LGA_NKS_FixColorspaces v1.27`, el boton (no el Flow Pull) pasa a **Video Range** todos los
-`.mxf` de la secuencia activa, en cualquier track, y las demas versiones MXF ya cargadas de su
-BinItem. Corre despues del camino managed o del viejo, sea cual sea. **Por que existe:** los MXF de
-review (DNxHR) son video legal, pero NKS los abre en Full Range y se ven lavados.
+Desde `LGA_NKS_FixColorspaces v1.27`, `pasar_mxf_a_video_range()` pasa a **Video Range** y a
+**Rec.709 de display** (`resolve_video_ocio_name`) todos los `.mxf` de la secuencia activa, en
+cualquier track, y las versiones MXF ya cargadas del BinItem de cada clip del timeline (aunque la
+visible sea un EXR). Corre despues del camino managed o del viejo, sea cual sea, en el boton y al
+terminar el Flow Pull (`fix_colorspaces_si_proyecto_managed()`). **Por que existe:** los MXF de
+review (DNxHR) son video legal en Rec.709, pero NKS los abre en Full Range y se ven lavados, y un
+track sin regla (por ejemplo `MXF`) el camino managed no lo toca.
+
+En el camino managed un MXF tambien cuenta como **video** (`_mxf_es_video_en_track`), salvo en un
+track de plates: un MXF de review puesto en `_comp_` tomaba la regla `exr_publish` y quedaba en
+ACES2065-1. En un track de plates el MXF puede ser de camara (ARRIRAW, X-OCN), asi que ahi sigue el
+token del track y la pasada de MXF le pone el rango pero **no** el colorspace. Las dos pasadas dan
+el mismo nombre, asi que no se pisan: la segunda corrida no cambia nada (medido).
+
+Ojo: el Pull importa `LGA_NKS_FixColorspaces` por nombre; un NKS que ya lo tenia cargado de antes
+sigue con la version vieja hasta reiniciarse (el fallo queda en el log del Pull, no lo voltea).
 
 Lo que costo descubrir (medido en NKS 17.0v4):
 
@@ -383,7 +395,7 @@ el mapa lo incluya.
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_Flow_NamingUtils.py` —
   `extract_project_name_from_path()`, `extract_project_name()`, `clean_base_name()`.
 - `LGA_HieroTools/LGA_NKS_Edit_Panel.py` — `fix_colorspaces()`, `execute_external_script()`.
-- `LGA_HieroTools/LGA_NKS_Edit_Panel_py/LGA_NKS_FixColorspaces.py` — `run_if_color_managed()`, el punto de entrada que comparten el boton y el Pull; `aplicar_a_track_item_si_managed()`, el de Compare Versions; `corregir_versiones_del_bin_item()`, `resolver_nombre_para_clip()`, `aplicar_nombre_a_clip()`, `ListaTransformsDeRespaldo`, `programar_verificacion()`; `pasar_mxf_a_video_range()` y `_poner_video_range()`, la pasada de MXF que solo corre el boton (`main()`).
+- `LGA_HieroTools/LGA_NKS_Edit_Panel_py/LGA_NKS_FixColorspaces.py` — `run_if_color_managed()`, el punto de entrada que comparten el boton y el Pull; `aplicar_a_track_item_si_managed()`, el de Compare Versions; `corregir_versiones_del_bin_item()`, `resolver_nombre_para_clip()`, `aplicar_nombre_a_clip()`, `ListaTransformsDeRespaldo`, `programar_verificacion()`; `pasar_mxf_a_video_range()` y `_poner_video_range()`, la pasada de MXF que corren el boton (`main()`) y el Pull; `_mxf_es_video_en_track()`, que decide si un MXF es video.
 - `LGA_HieroTools/LGA_NKS_Review_Panel_py/LGA_NKS_Compare_Versions.py` — `aplicar_color_management()`.
 - `LGA_HieroTools/+Building_Blocks/explore_fixcolor_versions.py` — la sonda de tiempos y persistencia por version (no se publica; se respalda en el contenedor).
 - `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py` — `fix_colorspaces_si_proyecto_managed()`, `GUI_Table.update_table()`, `HieroOperations.change_to_highest_version()`.
