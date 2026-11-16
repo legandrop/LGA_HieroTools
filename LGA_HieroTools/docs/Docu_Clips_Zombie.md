@@ -36,12 +36,23 @@ clip roto:
 | `binItem.project()` | el proyecto | `None` |
 | `binItem.activeVersion()` | la `Version` | error: *Model is null* |
 | `binItem.activeItem()` | el mismo `Clip` | **crashea NKS** |
+| `binItem.items()` | las `Version` | **crashea NKS** |
 
 🔴 **`activeItem()` sobre un BinItem huérfano tira abajo NKS entero**, con
 access violation adentro de `studio-<version>.dll`, sin excepción de Python que
 se pueda atajar. Cualquier código que recorra clips tiene que chequear primero
 `parentBin()` y `project()`, que son seguras, y no seguir si el BinItem está
 huérfano.
+
+`items()` hace lo mismo (medido el 2026-11-16 en NKS 16, lectura de NULL en
+`studio-16.0.4.dll`). Así se cayó NKS al terminar cada Flow Pull en una
+secuencia con 153 zombies: la pasada de MXF de Fix Colorspaces recorría las
+versiones de todos los BinItems del timeline. Desde `LGA_NKS_FixColorspaces`
+v1.28, su `_bin_item_seguro()` descarta los huérfanos antes de tocarlos. El
+crash quedó registrado por faulthandler en
+`%USERPROFILE%\.nuke\logsaulthandler\crash_studio_*.log` (la pila del
+hilo que rompe va bajo «Current thread»); la sonda que lo reprodujo es
+`+Building_Blocks/explore_mxf_pull_crash.py`.
 
 **De dónde sale el huérfano:** de sacar del proyecto un BinItem que el timeline
 todavía usa. No está confirmado cuál lo hace; los candidatos con código a la
@@ -90,10 +101,29 @@ En `+Building_Blocks/` (solo lectura, log crash-safe línea por línea):
   Clip/BinItem/Version de los clips seleccionados. El log acumula corridas, así
   que sirve para seguir el mismo clip recién importado, después de guardar y
   después de reabrir NKS. `RESET_LOG = True` para empezar de cero.
+- **`explore_mxf_pull_crash.py`** — repite la recolección de BinItems y
+  versiones de la pasada de MXF, escribiendo cada llamada antes de hacerla;
+  `run()` es el patrón viejo (crashea con zombies), `run_clip_vivo()` el
+  recorrido sin guardar BinItems.
 - **`explore_replace_clip_probe.py`** — lo que Hiero recuerda del media de un
   clip (incluso offline), qué hay en disco en esa ruta, y comparación contra un
   archivo elegido a mano. Es la que fijó el criterio de validación de Replace
   Clip.
+
+## Referencias técnicas
+
+- `LGA_NKS_Edit_Panel_py/LGA_NKS_FixZombieClips.py` — `es_zombie()` (detección
+  con `parentBin()`/`project()`), `arreglar()` (self replace), `main()`.
+- `LGA_NKS_Edit_Panel_py/LGA_NKS_ReplaceClip.py` — `datos_media()` (lo que el
+  clip recuerda del media), `main()`.
+- `LGA_NKS_Edit_Panel_py/LGA_NKS_FixColorspaces.py` — `_bin_item_seguro()`
+  (mismo chequeo, devuelve None para un huérfano), `pasar_mxf_a_video_range()`
+  y `corregir_versiones_del_bin_item()`, que recorren `items()`.
+- `LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py` —
+  `fix_colorspaces_si_proyecto_managed()`, que corre la pasada de MXF al
+  terminar el Pull.
+- `LGA_NKS_Projects_Panel_py/LGA_NKS_CleanProject.py` — candidato a dejar
+  huérfanos (ver Pendiente).
 
 ## Pendiente
 

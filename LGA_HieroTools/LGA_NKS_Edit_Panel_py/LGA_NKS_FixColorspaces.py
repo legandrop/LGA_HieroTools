@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_FixColorspaces v1.27 | Lega
+  LGA_NKS_FixColorspaces v1.28 | Lega
 
   Corrige el color transform de los clips del timeline activo.
 
@@ -60,6 +60,12 @@ ____________________________________________________________________
   adentro de las funciones que los usan: este archivo se puede importar en
   un proceso sin Nuke/Hiero sin que explote y sin que haga nada.
 
+  v1.28: Ya no crashea NKS al terminar el Flow Pull en un timeline con clips
+         zombie. pasar_mxf_a_video_range() recorria las versiones de TODOS los
+         BinItems del timeline, y sobre uno huerfano `items()` lee un puntero
+         nulo (access violation, sin excepcion atajable). _bin_item_seguro()
+         ahora descarta los huerfanos con parentBin()/project(); protege
+         tambien al camino managed.
   v1.27: Los MXF. En los dos caminos, y tambien al terminar el Flow Pull,
          pasar_mxf_a_video_range() pone en Video Range (knob dataRange del
          Read) y en Rec.709 de display todos los MXF de la secuencia activa y
@@ -728,10 +734,30 @@ def aplicar_nombre_a_clip(clip, nombre_real):
 
 
 def _bin_item_seguro(clip):
+    """
+    BinItem del clip, o None si no hay o si quedo HUERFANO (clip zombie).
+
+    🔴 Sobre un BinItem huerfano, `items()` y `activeItem()` CRASHEAN NKS (access
+    violation, lectura de NULL en studio-16.0.4.dll): no tiran una excepcion que se
+    pueda atajar. Un timeline con zombies tiraba NKS al terminar cada Flow Pull
+    (medido: 153 zombies en una secuencia; crash en el primero). Por eso se
+    descartan antes con las dos unicas llamadas seguras, `parentBin()` y
+    `project()`, igual que `es_zombie()` de LGA_NKS_FixZombieClips.py. Ver
+    docs/Docu_Clips_Zombie.md.
+    """
     try:
-        return clip.binItem()
+        bin_item = clip.binItem()
     except Exception:
         return None
+    if bin_item is None:
+        return None
+    try:
+        bin_item.parentBin()
+        if bin_item.project() is None:
+            return None
+    except Exception:
+        return None
+    return bin_item
 
 
 def _bin_key(bin_item):
@@ -1102,7 +1128,7 @@ def pasar_mxf_a_video_range(seq=None):
 
     exr_tracks = _get_task_exr_tracks()
     clips = {}  # clip_key -> [clip, en_plates]
-    bins = {}  # bin_key -> [bin_item, en_plates]
+    del_timeline = {}  # clip_key -> [clip, en_plates], todos los clips (MXF o no)
 
     for track in seq.videoTracks():
         en_plates = _clasificar_track(track.name(), exr_tracks) == "plates"
@@ -1115,15 +1141,19 @@ def pasar_mxf_a_video_range(seq=None):
                 continue
             if clip is None:
                 continue
+            key = _clip_key(clip)
             if _es_mxf(clip):
-                entrada = clips.setdefault(_clip_key(clip), [clip, False])
+                entrada = clips.setdefault(key, [clip, False])
                 entrada[1] = entrada[1] or en_plates
-            bin_item = _bin_item_seguro(clip)
-            if bin_item is not None:
-                entrada = bins.setdefault(_bin_key(bin_item), [bin_item, False])
-                entrada[1] = entrada[1] or en_plates
+            entrada = del_timeline.setdefault(key, [clip, False])
+            entrada[1] = entrada[1] or en_plates
 
-    for bin_item, en_plates in bins.values():
+    # Un BinItem por clip unico del timeline. _bin_item_seguro() descarta los
+    # huerfanos (clips zombie): sobre esos, items() crashea NKS.
+    for clip, en_plates in del_timeline.values():
+        bin_item = _bin_item_seguro(clip)
+        if bin_item is None:
+            continue
         try:
             versiones = list(bin_item.items())
         except Exception:

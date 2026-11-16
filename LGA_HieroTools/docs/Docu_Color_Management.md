@@ -156,6 +156,11 @@ ACES2065-1. En un track de plates el MXF puede ser de camara (ARRIRAW, X-OCN), a
 token del track y la pasada de MXF le pone el rango pero **no** el colorspace. Las dos pasadas dan
 el mismo nombre, asi que no se pisan: la segunda corrida no cambia nada (medido).
 
+🔴 Recorrer las versiones de TODOS los BinItems del timeline toca tambien los de clips zombie, y
+`items()` sobre un BinItem huerfano crashea NKS sin excepcion. Desde v1.28 `_bin_item_seguro()` los
+descarta antes (detalle en `Docu_Clips_Zombie.md`): sin eso el Pull tiraba NKS en cada corrida
+sobre una secuencia con zombies.
+
 Ojo: el Pull importa `LGA_NKS_FixColorspaces` por nombre; un NKS que ya lo tenia cargado de antes
 sigue con la version vieja hasta reiniciarse (el fallo queda en el log del Pull, no lo voltea).
 
