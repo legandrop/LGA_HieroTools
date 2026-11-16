@@ -171,6 +171,7 @@ En contexto client no hay assignees: ver
 
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_Flow_Status_Config.py` — **fuente unica**.
   - `TASK_STATUS_CATALOG` — code -> (nombre, color de clip, tag XYplorer). Superset, sin filtrar.
+    Los labels de XYplorer: ver [Docu_XYplorer_Labels.md](Docu_XYplorer_Labels.md).
   - `TASK_STATUS_CODES_BY_MODE`, `SHOT_STATUS_CODES_BY_MODE` — espejo del `sg_status_list` de cada sitio.
   - `PUSH_BUTTONS`, `get_push_buttons(mode)` — botones del Flow Review Panel por contexto.
   - `get_status_translation(mode=None)` — label -> codigo, para Push y conector.

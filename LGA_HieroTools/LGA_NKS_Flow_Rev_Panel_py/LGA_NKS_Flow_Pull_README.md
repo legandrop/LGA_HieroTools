@@ -12,7 +12,7 @@ Script de integración entre Hiero y Flow Production Tracker. Compara los estado
 - **Comparación automática**: Compara versiones y estados entre Hiero y Flow Production
 - **Cambio de versiones**: Actualiza automáticamente clips a la versión más alta disponible
 - **Aplicación de colores**: Aplica colores de estado de Flow PT en los clips de Hiero
-- **Tags XYplorer**: Aplica tags automáticos en XYplorer según estado de tareas
+- **Tags XYplorer**: Aplica tags automáticos en XYplorer según estado de tareas. Solo si ese label está definido en el XYplorer de la máquina; para instalarlos, `XYplorer_Labels/Install_XYplorer_Labels.bat`. Ver [docs/Docu_XYplorer_Labels.md](../docs/Docu_XYplorer_Labels.md).
 - **Procesamiento masivo**: Puede procesar múltiples clips seleccionados simultáneamente
 - **Advertencia de Task/Track Mismatch**: Al finalizar el pull, si detecta clips cuya task en el filename no coincide con el nombre del track donde están ubicados, muestra una ventana con la lista. Solo informa, no bloquea el procesamiento. Ver [docs/Docu_MultiTask.md](/Users/leg4/.nuke/Python/Startup/docs/Docu_MultiTask.md).
 

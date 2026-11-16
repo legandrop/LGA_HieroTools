@@ -1,3 +1,6 @@
+v4.028:
+A un artista sin los labels de XYplorer de Lega, el Flow Pull le abria un cartel "Label Rev_Sup is not defined." por cada shot: el Pull manda `::tag` con el nombre del label y XYplorer no lo conoce. Ahora el Pull lee los labels definidos en la cabecera del `tag.dat` del XYplorer abierto y saltea los que faltan. Para pasarle los colores a otra maquina, `XYplorer_Labels/Install_XYplorer_Labels.bat` agrega los seis labels y sus Color Filters sin tocar lo existente. `LGA_NKS_Flow_Pull v3.78`. [ Flow Pull - Sin carteles de labels de XYplorer ]
+
 v4.027:
 Un MXF de review puesto en `_comp_` quedaba en ACES2065-1: el camino managed le aplicaba la regla de los EXR publicados. Ahora un MXF cuenta como video (Rec.709 de display) salvo en un track de plates, donde puede ser de camara. Ademas la pasada de MXF pone Rec.709 a los MXF de tracks sin regla y a las versiones MXF de todos los BinItems del timeline, y corre tambien al terminar el Flow Pull, managed o no. `LGA_NKS_FixColorspaces v1.27`, `LGA_NKS_Flow_Pull v3.77`. [ Fix Colorspaces - MXF en Rec.709 y en el Pull ]
 

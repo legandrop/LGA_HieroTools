@@ -1,11 +1,16 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.77 | Lega
+  LGA_NKS_Flow_Pull v3.78 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
+
+  v3.78: El tag de XYplorer solo se manda si ese label esta definido en el
+         XYplorer abierto (se lee la cabecera de su tag.dat). Sin los labels
+         instalados, XYplorer abria un cartel "Label X is not defined." por
+         cada shot del Pull.
 
   v3.77: Al terminar, ademas del Fix Colorspaces managed, pasa los MXF del
          timeline a Video Range y Rec.709 (managed o no): cada bump de version
@@ -3411,6 +3416,120 @@ def Send_WM_COPYDATA(xyHwnd, message):
     return result
 
 
+def _xy_exe_dir(hwnd):
+    """Carpeta del XYplorer.exe dueño de la ventana, o "" si no se puede leer."""
+    try:
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+        pid = ctypes.wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        # PROCESS_QUERY_LIMITED_INFORMATION
+        handle = kernel32.OpenProcess(0x1000, False, pid.value)
+        if not handle:
+            return ""
+        try:
+            buf = ctypes.create_unicode_buffer(1024)
+            size = ctypes.wintypes.DWORD(1024)
+            if kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size)):
+                return os.path.dirname(buf.value)
+        finally:
+            kernel32.CloseHandle(handle)
+    except Exception as e:
+        debug_print(f"No se pudo leer la ruta de XYplorer.exe: {e}")
+    return ""
+
+
+def _xy_read_ini_value(ini_path, key):
+    """Lee `key=valor` de un ini de XYplorer sin parsear secciones (UTF-16 o ANSI)."""
+    try:
+        with open(ini_path, "rb") as f:
+            raw = f.read()
+        text = raw.decode("utf-16") if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else raw.decode("mbcs", "replace")
+        prefix = key.lower() + "="
+        for line in text.splitlines():
+            if line.strip().lower().startswith(prefix):
+                return line.strip()[len(prefix):].strip()
+    except Exception:
+        pass
+    return ""
+
+
+def _xy_tag_dat_path(hwnd):
+    """
+    Ubica el tag.dat que usa el XYplorer abierto. Orden: carpeta de datos que
+    fija Startup.ini junto al exe, la carpeta del exe (instalacion portable) y
+    las default de %APPDATA%. Si el ini de esa carpeta trae TagDatCustom, manda.
+    """
+    candidates = []
+    exe_dir = _xy_exe_dir(hwnd)
+    if exe_dir:
+        startup_ini = os.path.join(exe_dir, "Startup.ini")
+        if os.path.isfile(startup_ini):
+            data_path = _xy_read_ini_value(startup_ini, "Path")
+            if data_path:
+                data_path = os.path.expandvars(data_path)
+                if not os.path.isabs(data_path):
+                    data_path = os.path.join(exe_dir, data_path)
+                candidates.append(data_path)
+        candidates.append(exe_dir)
+    appdata = os.environ.get("APPDATA", "")
+    if appdata:
+        candidates.append(os.path.join(appdata, "XYplorer64"))
+        candidates.append(os.path.join(appdata, "XYplorer"))
+
+    for data_dir in candidates:
+        ini = os.path.join(data_dir, "XYplorer.ini")
+        if not os.path.isfile(ini):
+            continue
+        custom = _xy_read_ini_value(ini, "TagDatCustom")
+        if custom:
+            custom = os.path.expandvars(custom.replace("<xydata>", data_dir))
+            if not os.path.isabs(custom):
+                custom = os.path.join(data_dir, custom)
+            return custom
+        return os.path.join(data_dir, "tag.dat")
+    return ""
+
+
+# Cache de labels por (ruta, mtime) para no releer tag.dat en cada shot del Pull
+_xy_labels_cache = {"key": None, "labels": None}
+
+
+def _xy_defined_labels(hwnd):
+    """
+    Nombres (en minuscula) de los labels definidos en el XYplorer abierto, leidos
+    de la cabecera de su tag.dat (linea siguiente a "Labels:", formato
+    nombre|texto|fondo;...). None si no se encontro el tag.dat.
+    """
+    path = _xy_tag_dat_path(hwnd)
+    if not path or not os.path.isfile(path):
+        debug_print(f"XYplorer: no se encontro tag.dat (ruta probada: '{path}')")
+        return None
+    key = (path, os.path.getmtime(path))
+    if _xy_labels_cache["key"] == key:
+        return _xy_labels_cache["labels"]
+    labels = set()
+    try:
+        with open(path, "rb") as f:
+            raw = f.read(65536)  # La cabecera esta al principio
+        text = raw.decode("utf-16", "replace") if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else raw.decode("mbcs", "replace")
+        lines = text.splitlines()
+        for i, line in enumerate(lines):
+            if line.strip() == "Labels:" and i + 1 < len(lines):
+                for entry in lines[i + 1].split(";"):
+                    name = entry.split("|")[0].strip()
+                    if name:
+                        labels.add(name.lower())
+                break
+    except Exception as e:
+        debug_print(f"XYplorer: error leyendo labels de {path}: {e}")
+        return None
+    debug_print(f"XYplorer: labels definidos en {path}: {sorted(labels)}")
+    _xy_labels_cache["key"] = key
+    _xy_labels_cache["labels"] = labels
+    return labels
+
+
 def _tag_shot_folder_thread(shot_base_path, tag):
     """Función que ejecuta el tagging de XYplorer en un thread separado para no bloquear Hiero."""
     debug_print(f"tag_shot_folder_thread started with shot_base_path='{shot_base_path}', tag='{tag}'")
@@ -3422,6 +3541,13 @@ def _tag_shot_folder_thread(shot_base_path, tag):
         hwnd = get_xy_hwnd()
         debug_print(f"XYplorer hwnd: {hwnd}")
         if hwnd:
+            # Un label que el XYplorer de esta maquina no tiene definido hace que
+            # XYplorer abra un cartel "Label X is not defined." por cada shot.
+            # Sin los labels de Lega instalados (o sin poder leerlos) no se etiqueta.
+            labels = _xy_defined_labels(hwnd)
+            if labels is None or tag.lower() not in labels:
+                debug_print(f"XYplorer: label '{tag}' no definido en esta maquina, no se etiqueta {shot_base_path}")
+                return
             tag_command = f"::tag '{tag}', '{shot_base_path}';"
             debug_print(f"Sending command to XYplorer: {tag_command}")
             result = Send_WM_COPYDATA(hwnd, tag_command)
