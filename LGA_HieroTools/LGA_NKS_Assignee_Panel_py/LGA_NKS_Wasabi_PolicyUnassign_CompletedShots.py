@@ -1,10 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyUnassign_CompletedShots v1.05 | Lega
+  LGA_NKS_Wasabi_PolicyUnassign_CompletedShots v1.06 | Lega
 
   Limpia policies de Wasabi para shots ya entregados.
 
+  v1.06: Recorre tambien las policies de desborde de PipeSync
+         (`{usuario}_policy_2` ... `_5`) y manda el documento compacto:
+         Wasabi corta en 5120 caracteres contando los espacios.
   v1.05: La ventana lleva la fuente del pack (apply_ui_font), al
          armarla y de nuevo al llenar la tabla; sin eso salia con
          la fuente del host.
@@ -66,6 +69,7 @@ from LGA_NKS_Shared.LGA_NKS_PipeSyncPaths import get_pipesync_db_path
 from wasabi_policy_utils import (
     get_existing_policy_document,
     manage_policy_versions,
+    policy_json,
     validate_and_repair_policy,
 )
 
@@ -176,7 +180,9 @@ def collect_policy_matches(iam_client, completed_shots_map):
     matches = {}
     for policy in iter_local_policies(iam_client):
         policy_name = policy.get("PolicyName", "")
-        if not policy_name.endswith("_policy"):
+        # Las personales: `{usuario}_policy` y las de desborde `{usuario}_policy_<n>`.
+        base, _, suffix = policy_name.rpartition("_policy_")
+        if not (policy_name.endswith("_policy") or (base and suffix.isdigit())):
             continue
 
         policy_arn = policy.get("Arn")
@@ -340,7 +346,7 @@ class CleanWorker(QRunnable):
 
                 iam.create_policy_version(
                     PolicyArn=policy_arn,
-                    PolicyDocument=json.dumps(policy_document),
+                    PolicyDocument=policy_json(policy_document),
                     SetAsDefault=True,
                 )
                 updated_policies += 1

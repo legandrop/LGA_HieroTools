@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.028
+- [fixed][for: Coordinators][studio] quitar shots de Wasabi desde el panel de assignees (Ctrl+Shift+Click en un usuario, o la limpieza de shots entregados) encuentra también los shots de las personas que tienen muchos asignados, y ya no falla al sacar uno de una policy casi llena.
 - [fixed] Flow Pull ya no cierra Nuke Studio al terminar cuando el timeline tiene clips rotos (los que arregla Fix Zombies).
 - [improved] El botón OK for Delivery del Flow Review Panel abre la ventana de nota, para mandar un mensaje y capturas junto con la aprobación; si la dejás vacía, no se crea nota.
 - [fixed] Flow Push vuelve a adjuntar a la nota las capturas de ReviewPic cuando la conexión falla en el primer intento; si igual no sube, el aviso dice por qué y la captura no se borra.

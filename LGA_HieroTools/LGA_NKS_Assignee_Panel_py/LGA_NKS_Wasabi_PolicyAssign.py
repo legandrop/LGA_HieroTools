@@ -1,7 +1,11 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Wasabi_PolicyAssign v1.02 | Lega
+  LGA_NKS_Wasabi_PolicyAssign v1.03 | Lega
+
+  v1.03
+  - El documento se manda compacto: Wasabi corta una policy en 5120
+    caracteres contando los espacios que agrega json.dumps() por defecto.
 
   v1.02
   - La ventana lleva la fuente del pack (apply_ui_font). Sin la llamada la
@@ -762,7 +766,7 @@ def create_and_manage_policy(username, paths_info):
         try:
             iam.create_policy_version(
                 PolicyArn=policy_arn,
-                PolicyDocument=json.dumps(final_policy),
+                PolicyDocument=json.dumps(final_policy, separators=(",", ":")),
                 SetAsDefault=True,
             )
             debug_print(f"Policy '{policy_name}' actualizada.")
@@ -776,7 +780,7 @@ def create_and_manage_policy(username, paths_info):
                     try:
                         iam.create_policy_version(
                             PolicyArn=policy_arn,
-                            PolicyDocument=json.dumps(final_policy),
+                            PolicyDocument=json.dumps(final_policy, separators=(",", ":")),
                             SetAsDefault=True,
                         )
                         debug_print(
@@ -797,7 +801,7 @@ def create_and_manage_policy(username, paths_info):
         debug_print(f"Creando policy '{policy_name}'...")
         try:
             response = iam.create_policy(
-                PolicyName=policy_name, PolicyDocument=json.dumps(final_policy)
+                PolicyName=policy_name, PolicyDocument=json.dumps(final_policy, separators=(",", ":"))
             )
             policy_arn = response["Policy"]["Arn"]
             debug_print(f"Policy '{policy_name}' creada.")

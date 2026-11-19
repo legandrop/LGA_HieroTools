@@ -48,11 +48,11 @@ escritores con políticas diferentes.
 **Configuración:**
 - Recibe el usuario como parámetro en `main(username=None)`
 - Por defecto usa "TestPoli" si no se especifica usuario
-- Lee política: `{username}_policy`
+- Lee la política `{username}_policy` y las de desborde que arma PipeSync (`{username}_policy_2` ... `_5`)
 - Utiliza credenciales seguras desde PipeSync (SecureConfig_Reader)
 
 **Funciones principales:**
-- `remove_shot_from_policy()`: Elimina un shot específico de la policy
+- `remove_shot_from_policy()`: Elimina un shot de la policy principal o de la de desborde donde esté
 
 **Uso desde Panel:**
 1. Hacer **Ctrl+Shift+Click** en el botón del usuario deseado en el panel LGA_NKS_Flow_Assignee_Panel
@@ -76,7 +76,7 @@ escritores con políticas diferentes.
 
 **Funcionalidad:**
 - Lee `pipesync.db` y toma shots en estados `approved` / `delivery_checked` (aceptando aliases internos `apr` / `check`)
-- Escanea policies locales de Wasabi (`*_policy`) y detecta coincidencias por shot
+- Escanea policies locales de Wasabi (`*_policy` y las de desborde `*_policy_<n>`) y detecta coincidencias por shot
 - Muestra una ventana con filas:
   - `Nombre de policy | Nombre de shot | Estado del shot`
 - Todas las filas se cargan con checkbox activo por defecto
@@ -145,10 +145,11 @@ Flow por PipeSync. No existe fallback JSON local. Los perfiles con
 **Funciones principales:**
 - `validate_and_repair_policy()`: Valida y repara policies corruptas o inválidas
 - `create_minimal_policy()`: Crea una policy mínima válida con permisos básicos
+- `policy_json()`: El texto que se manda a IAM, compacto: Wasabi corta una policy en 5120 caracteres (`MAX_POLICY_CHARS`) contando los espacios
 - `get_existing_policy_document()`: Obtiene el documento de policy existente
 - `manage_policy_versions()`: Gestiona las versiones de policies (límite de 5)
-- `read_user_policy_shots()`: Lee y extrae shots de una policy existente
-- `remove_shot_from_policy()`: Elimina un shot específico de la policy
+- `read_user_policy_shots()`: Junta los shots de la policy principal y las de desborde (`personal_policy_names()`)
+- `remove_shot_from_policy()`: Elimina un shot de la policy principal o de la de desborde donde esté
 
 **Validación y Reparación:**
 - Detecta statements inválidos o corruptos

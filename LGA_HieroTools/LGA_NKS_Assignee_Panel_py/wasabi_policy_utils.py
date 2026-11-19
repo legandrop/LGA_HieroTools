@@ -1,9 +1,13 @@
 """
 ______________________________________________________________________
 
-  Wasabi Policy Utils v0.96 | Lega
+  Wasabi Policy Utils v0.97 | Lega
   Funciones auxiliares para gestión de políticas IAM de Wasabi
 
+  v0.97: leer y sacar shots recorre tambien las policies de desborde que arma
+         PipeSync (`{usuario}_policy_2` ... `_5`), y el documento se manda
+         compacto: Wasabi corta en 5120 caracteres medidos sobre el texto tal
+         como llega, espacios incluidos.
   v0.96: al sacar un shot de una policy, prefijos y recursos se comparan por
          segmento exacto y no con `in`. Con el naming que lleva vendor code al
          final, el shot base es un prefijo literal del shot con vendor, asi que
@@ -29,6 +33,27 @@ def debug_print(*message):
     DEBUG = False
     if DEBUG:
         print(*message)
+
+
+# Tope de Wasabi para una policy, medido sobre el texto tal como se manda (no los 6144 de
+# AWS). Por eso todo documento sale por `policy_json()`, sin los espacios de `json.dumps()`.
+MAX_POLICY_CHARS = 5120
+
+# PipeSync reparte los shots de una persona entre `{usuario}_policy` y, cuando no le entran,
+# `{usuario}_policy_2` ... `_5` (`MAX_PERSONAL_POLICIES` de `wasabi_policy_sync.py`).
+MAX_PERSONAL_POLICIES = 5
+
+
+def policy_json(policy_document):
+    """El texto que se manda a IAM: compacto, que es como Wasabi mide el tope."""
+    return json.dumps(policy_document, separators=(",", ":"))
+
+
+def personal_policy_names(username):
+    """La policy principal de la persona y las de desborde, en orden."""
+    return [f"{username}_policy"] + [
+        f"{username}_policy_{n}" for n in range(2, MAX_PERSONAL_POLICIES + 1)
+    ]
 
 
 def validate_and_repair_policy(policy_document):
@@ -260,7 +285,7 @@ def manage_policy_versions(iam_client, policy_arn):
 
 def read_user_policy_shots(username):
     """
-    Lee la policy del usuario y extrae la lista de shots asignados.
+    Lee las policies del usuario (la principal y las de desborde) y junta sus shots.
 
     Args:
         username (str): Nombre del usuario
@@ -268,8 +293,18 @@ def read_user_policy_shots(username):
     Returns:
         list: Lista de nombres de shots o None si hay error
     """
+    shots = set()
+    for policy_name in personal_policy_names(username):
+        found = _read_policy_shots(policy_name)
+        if found is None:
+            return None
+        shots.update(found)
+    return sorted(shots)
+
+
+def _read_policy_shots(policy_name):
+    """Shots de UNA policy: [] si no existe, None si no se pudo leer."""
     try:
-        policy_name = f"{username}_policy"
 
         # Obtener credenciales de Wasabi desde SecureConfig
         access_key, secret_key, endpoint, region = get_s3_credentials()
@@ -333,7 +368,7 @@ def read_user_policy_shots(username):
                 return None
 
     except Exception as e:
-        debug_print(f"Error en read_user_policy_shots: {e}")
+        debug_print(f"Error en _read_policy_shots: {e}")
         return None
 
 
@@ -365,17 +400,25 @@ def _recurso_es_del_shot(resource, shot_name):
 
 def remove_shot_from_policy(username, shot_name):
     """
-    Elimina un shot específico de la policy del usuario.
+    Elimina un shot específico de las policies del usuario (la principal y las de desborde).
 
     Args:
         username (str): Nombre del usuario
         shot_name (str): Nombre del shot a eliminar
 
     Returns:
-        bool: True si se eliminó exitosamente, False en caso contrario
+        bool: True si se eliminó de alguna, False en caso contrario
     """
+    removed = False
+    for policy_name in personal_policy_names(username):
+        if _remove_shot_from_one_policy(policy_name, shot_name):
+            removed = True
+    return removed
+
+
+def _remove_shot_from_one_policy(policy_name, shot_name):
+    """Saca el shot de UNA policy. False si no existe, no lo tenia o fallo."""
     try:
-        policy_name = f"{username}_policy"
 
         # Obtener credenciales de Wasabi desde SecureConfig
         access_key, secret_key, endpoint, region = get_s3_credentials()
@@ -472,7 +515,7 @@ def remove_shot_from_policy(username, shot_name):
             try:
                 iam.create_policy_version(
                     PolicyArn=policy_arn,
-                    PolicyDocument=json.dumps(new_policy),
+                    PolicyDocument=policy_json(new_policy),
                     SetAsDefault=True,
                 )
                 debug_print(f"Shot {shot_name} eliminado de la policy {policy_name}")
@@ -487,7 +530,7 @@ def remove_shot_from_policy(username, shot_name):
                         try:
                             iam.create_policy_version(
                                 PolicyArn=policy_arn,
-                                PolicyDocument=json.dumps(new_policy),
+                                PolicyDocument=policy_json(new_policy),
                                 SetAsDefault=True,
                             )
                             debug_print(
@@ -513,5 +556,5 @@ def remove_shot_from_policy(username, shot_name):
                 return False
 
     except Exception as e:
-        debug_print(f"Error en remove_shot_from_policy: {e}")
+        debug_print(f"Error en _remove_shot_from_one_policy: {e}")
         return False
