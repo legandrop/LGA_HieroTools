@@ -222,11 +222,52 @@ class FlowTest(unittest.TestCase):
         self.assertEqual(core.flow_highest(versions, SHOT)[0], 3)
         self.assertEqual(stats["without_task"], 1)
         self.assertEqual(stats["unassigned"], 0)
+        self.assertEqual(stats["duplicates"], [])
+
+    def test_fetch_joins_shots_with_same_name(self):
+        # Dos Shots vivos con el mismo code: antes el segundo pisaba al
+        # primero y se perdia la task comp del id 10.
+        class FakeSG(object):
+            def find(self, entity, filters, fields):
+                if entity == "Project":
+                    return [{"id": 1, "name": "PROJA"}]
+                if entity == "Shot":
+                    return [
+                        {"id": 10, "code": SHOT, "sg_sequence": {"name": "101"},
+                         "sg_status_list": "ip"},
+                        {"id": 11, "code": SHOT.lower(), "sg_sequence": None,
+                         "sg_status_list": "wtg"},
+                    ]
+                if entity == "Task":
+                    return [
+                        {"id": 100, "content": "Comp", "entity": {"id": 10},
+                         "sg_status_list": "ip"},
+                        {"id": 101, "content": "Roto", "entity": {"id": 11},
+                         "sg_status_list": "wtg"},
+                    ]
+                return [{"code": "%s_comp_v004" % SHOT, "sg_task": {"id": 100},
+                         "entity": {"id": 10}, "created_at": None}]
+
+        ok, shots, stats = core.fetch_flow_project(
+            FakeSG(), "PROJA", lambda c: str(c).lower() if c else None
+        )
+        shot = shots[SHOT.lower()]
+        self.assertEqual(sorted(shot["tasks"]), ["comp", "roto"])
+        self.assertEqual(shot["ids"], [10, 11])
+        self.assertEqual(shot["sequence"], "101")
+        self.assertEqual(stats["duplicates"], [(SHOT, [10, 11])])
 
 
 class ClassifyTest(unittest.TestCase):
     def test_all_match(self):
         self.assertEqual(row(5, found(5), found(5))["status"], core.ST_OK)
+
+    def test_duplicate_in_flow_is_flagged_first(self):
+        r = row(5, found(5), found(5), flow_shot_ids=[10, 11])
+        self.assertEqual(r["status"], core.ST_DUPLICATE_IN_FLOW)
+        self.assertIn(core.ST_OK, r["statuses"])
+        self.assertTrue(core.is_issue(r))
+        self.assertEqual(row(5, found(5), found(5), flow_shot_ids=[10])["status"], core.ST_OK)
 
     def test_nothing_delivered(self):
         self.assertEqual(row(None)["status"], core.ST_NO_VERSIONS)

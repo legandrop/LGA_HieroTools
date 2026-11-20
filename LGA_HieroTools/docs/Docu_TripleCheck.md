@@ -89,6 +89,7 @@ Una fila es un (shot, task). `F`, `W`, `L` son los números de Flow, Wasabi y Lo
 | Estado (texto en la UI) | Condición | Botón |
 |---|---|---|
 | `Error` | No se pudo leer Wasabi o el disco (policy, disco sin montar, publish plano) | — |
+| `Duplicate in Flow` | Flow tiene dos o más shots vivos con ese nombre y distinto id (creados dos veces desde la web). Detail da los ids. Convive con el estado de las versiones | — |
 | `Not in Flow` | El shot no existe en Flow (lo que hacía Check Shots Exist) | Upload, con pregunta |
 | `Task not in Flow` | El shot existe pero no tiene esa task | Upload, con pregunta |
 | `Not in timeline` | Shot y task en Flow, sin clip en el track | Download si `W > L` (no entra en Download all) |
@@ -126,6 +127,17 @@ también aporta su alto.
 ningún lado es un shot creado y asignado que todavía no se empezó: lo que falta es armarlo en el
 timeline (el plate y la v000). Detail lo dice así. Por eso esas filas cuentan como problema y quedan
 visibles con `Only issues`.
+
+### Shots repetidos en Flow
+
+Flow admite dos Shots con el mismo `code` en un proyecto; PipeSync lo vio el 2026-11-20 (su sync se
+caía por el `UNIQUE` de la base local, ver `Doc_Flow_Sync.md` de PipeSync). Antes, en el Triple Check el
+segundo shot pisaba al primero en el diccionario por nombre y **se perdían sus tasks y versions** sin
+aviso. Ahora `fetch_flow_project()` junta los dos en una entrada (`ids` con los dos, las tasks y versions
+de ambos), lo lista en `stats["duplicates"]`, la fila sale `Duplicate in Flow` y arriba de la tabla va
+una nota por cada repetido **de todo el proyecto**, no solo del timeline. **No cuesta tiempo:** los ids
+vienen en la misma consulta de Shots que ya se hacía. Se arregla en Flow, borrando o renombrando el que
+sobra; el Triple Check no escribe nada allá.
 
 ## Columnas, orden y filtro
 

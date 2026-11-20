@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_TripleCheck_Core v1.02 | Lega
+  LGA_NKS_TripleCheck_Core v1.03 | Lega
 
   Logica del Triple Check del panel Flow | S3: compara la ultima version
   publicada (EXR) de cada shot y task en Flow, en Wasabi y en el disco
@@ -15,6 +15,11 @@ ____________________________________________________________________
 
   Detalle de reglas y estados: docs/Docu_TripleCheck.md.
 
+  v1.03: Shots de Flow con el mismo nombre y distinto id: antes el segundo
+         pisaba al primero y se perdian sus tasks y versions; ahora se
+         juntan, fetch_flow_project() los lista en stats["duplicates"] y la
+         fila sale con el estado nuevo ST_DUPLICATE_IN_FLOW. Sin consultas
+         extra: los ids vienen en la misma consulta de Shots.
   v1.02: Con dos carpetas del mismo numero gana la del propio shot (antes
          ganaba la de otro shot por orden alfabetico y salia Wrong folder
          aunque la version propia estuviera). Las carpetas de otro shot que
@@ -34,6 +39,7 @@ import time
 # Ordenados por importancia: la columna de estado muestra el primero que
 # aplique; el tooltip de la fila los nombra todos.
 ST_ERROR = "error"
+ST_DUPLICATE_IN_FLOW = "duplicate_in_flow"
 ST_NOT_IN_FLOW = "not_in_flow"
 ST_TASK_NOT_IN_FLOW = "task_not_in_flow"
 ST_NOT_IN_TIMELINE = "not_in_timeline"
@@ -49,6 +55,7 @@ ST_NO_VERSIONS = "no_versions"
 
 STATUS_PRIORITY = (
     ST_ERROR,
+    ST_DUPLICATE_IN_FLOW,
     ST_NOT_IN_FLOW,
     ST_TASK_NOT_IN_FLOW,
     ST_NOT_IN_TIMELINE,
@@ -649,9 +656,10 @@ def fetch_flow_project(sg, project_name, task_key_of):
     """Shots, tasks y versions de un proyecto de Flow, en tres consultas.
 
     Devuelve (proyecto_encontrado, {shot_lower: shot}, stats) donde cada shot es:
-      {"code", "sequence", "status", "tasks": {task_key: {"status", "versions"}}}
+      {"code", "sequence", "status", "ids", "tasks": {task_key: {"status", "versions"}}}
     y stats cuenta las Versions leidas, las que no tenian task y las que no
-    se pudieron asignar a ninguna task del pack.
+    se pudieron asignar a ninguna task del pack, y lista en "duplicates" los
+    shots con el mismo nombre y distinto id ([(code, [ids])]).
     task_key_of(content) normaliza el nombre de la task de Flow (`Comp`) a la
     clave del pack (`comp`); si devuelve None la task se ignora.
     """
@@ -671,13 +679,28 @@ def fetch_flow_project(sg, project_name, task_key_of):
         if not code:
             continue
         seq = s.get("sg_sequence") or {}
-        entry = {
-            "code": code,
-            "sequence": (seq.get("name") or seq.get("code") or "") if isinstance(seq, dict) else "",
-            "status": s.get("sg_status_list") or "",
-            "tasks": {},
-        }
-        shots[code.lower()] = entry
+        seq_name = (seq.get("name") or seq.get("code") or "") if isinstance(seq, dict) else ""
+        status = s.get("sg_status_list") or ""
+        entry = shots.get(code.lower())
+        if entry is not None:
+            # Flow admite dos Shots vivos con el mismo code (creados dos veces
+            # desde la web). Se juntan en una sola entrada: las tasks y
+            # versions de los dos cuentan, y la fila avisa con
+            # ST_DUPLICATE_IN_FLOW. Sale de la misma consulta: no cuesta nada.
+            entry["ids"].append(s["id"])
+            if not entry["sequence"]:
+                entry["sequence"] = seq_name
+            if entry["status"].lower() in OMITTED_SHOT_STATUSES and status:
+                entry["status"] = status
+        else:
+            entry = {
+                "code": code,
+                "sequence": seq_name,
+                "status": status,
+                "tasks": {},
+                "ids": [s["id"]],
+            }
+            shots[code.lower()] = entry
         shot_by_id[s["id"]] = entry
 
     task_by_id = {}
@@ -694,7 +717,14 @@ def fetch_flow_project(sg, project_name, task_key_of):
         task["status"] = t.get("sg_status_list") or task["status"]
         task_by_id[t["id"]] = task
 
-    stats = {"versions": 0, "without_task": 0, "unassigned": 0}
+    stats = {
+        "versions": 0,
+        "without_task": 0,
+        "unassigned": 0,
+        "duplicates": sorted(
+            (e["code"], sorted(e["ids"])) for e in shots.values() if len(e["ids"]) > 1
+        ),
+    }
     for v in sg.find(
         "Version",
         [["project", "is", project], ["entity", "type_is", "Shot"]],
@@ -752,6 +782,8 @@ def classify(row):
     l_known = not local.get("error")
     if not (w_known and l_known):
         statuses.append(ST_ERROR)
+    if len(row.get("flow_shot_ids") or []) > 1:
+        statuses.append(ST_DUPLICATE_IN_FLOW)
     if not row.get("shot_in_flow"):
         statuses.append(ST_NOT_IN_FLOW)
     elif not row.get("task_in_flow"):
@@ -923,6 +955,7 @@ def upload_source(local_root, row, canonical_task_dir, isdir=os.path.isdir):
 
 __all__ = [
     "ST_ERROR",
+    "ST_DUPLICATE_IN_FLOW",
     "ST_NOT_IN_FLOW",
     "ST_TASK_NOT_IN_FLOW",
     "ST_NOT_IN_TIMELINE",

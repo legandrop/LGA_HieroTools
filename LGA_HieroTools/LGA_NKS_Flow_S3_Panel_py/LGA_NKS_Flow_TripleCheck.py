@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_TripleCheck v1.03 | Lega
+  LGA_NKS_Flow_TripleCheck v1.04 | Lega
 
   Triple Check del panel Flow | S3: para cada shot y task del timeline
   activo compara la ultima version publicada (EXR) en Flow, en Wasabi y en
@@ -15,6 +15,9 @@ ____________________________________________________________________
   junta los clips del timeline, corre el chequeo fuera del hilo principal
   y muestra la ventana. Detalle: docs/Docu_TripleCheck.md.
 
+  v1.04: Estado Duplicate in Flow para un shot que Flow tiene dos veces
+         con el mismo nombre (distinto id), con los ids en Detail; y una
+         nota arriba con todos los repetidos del proyecto.
   v1.03: Detail lo dibuja un delegate propio (DetailDelegate): en NKS el
          estilo del host ignoraba el salto de linea y cortaba con puntos.
          Parte por palabra o, si un nombre largo no entra, en cualquier
@@ -136,6 +139,7 @@ core.on_retry = debug_print
 # ── Textos visibles (ingles) y tooltips (castellano) ─────────────────────────
 STATUS_LABELS = {
     core.ST_ERROR: "Error",
+    core.ST_DUPLICATE_IN_FLOW: "Duplicate in Flow",
     core.ST_NOT_IN_FLOW: "Not in Flow",
     core.ST_TASK_NOT_IN_FLOW: "Task not in Flow",
     core.ST_NOT_IN_TIMELINE: "Not in timeline",
@@ -152,6 +156,7 @@ STATUS_LABELS = {
 
 STATUS_COLORS = {
     core.ST_ERROR: Color.ERROR_TEXT,
+    core.ST_DUPLICATE_IN_FLOW: Color.ERROR_TEXT,
     core.ST_NOT_IN_FLOW: Color.ERROR_TEXT,
     core.ST_TASK_NOT_IN_FLOW: Color.ERROR_TEXT,
     core.ST_NOT_IN_TIMELINE: Color.INFO,
@@ -457,6 +462,13 @@ class TripleCheckWorker(QtCore.QRunnable):
                 )
             if not found:
                 notes.append("Project %s not found in Flow." % project)
+            for code, ids in flow_stats.get("duplicates") or []:
+                # Todo el proyecto, no solo el timeline: es un error de Flow
+                # que conviene ver aunque el shot no este en este corte.
+                notes.append(
+                    "Duplicate shot in Flow: %s (ids %s)."
+                    % (code, ", ".join(str(i) for i in ids))
+                )
             debug_print(
                 "Flow %s: encontrado=%s shots=%d versions=%s"
                 % (project, found, len(flow_shots), flow_stats)
@@ -573,6 +585,7 @@ class TripleCheckWorker(QtCore.QRunnable):
             "flow": flow_number,
             "flow_code": flow_code,
             "flow_versions": len(versions),
+            "flow_shot_ids": list((shot_flow or {}).get("ids") or []),
         }
 
     def _scan_rows(self, rows, local_lister, wasabi_lister):
@@ -683,6 +696,13 @@ def detail_text(row):
             for label, scan in (("Wasabi", w), ("Local", l)):
                 if scan.get("error"):
                     parts.append("%s: %s" % (label, scan["error"]))
+        elif status == core.ST_DUPLICATE_IN_FLOW:
+            ids = row.get("flow_shot_ids") or []
+            parts.append(
+                "En Flow hay %d shots con este nombre (ids %s): acá se suman las "
+                "tasks y versiones de todos. Borrá o renombrá en Flow el que sobra."
+                % (len(ids), ", ".join(str(i) for i in ids))
+            )
         elif status == core.ST_NOT_IN_FLOW:
             parts.append("El shot no existe en Flow.")
         elif status == core.ST_TASK_NOT_IN_FLOW:
