@@ -33,17 +33,18 @@ La carpeta privada del panel es `LGA_NKS_Flow_S3_Panel_py/`, igual que el módul
 - **Restricción**: Solo admite un clip seleccionado a la vez
 - **Comportamiento**: Lee la configuración real del shot en Flow, precarga la misma UI compacta y aplica únicamente las diferencias solicitadas
 
-### 3. Check Shots Exist
-- **Función**: Chequea si los shots de los tracks de task del contexto existen en Flow
-- **Alcance**: Studio recorre `_comp_`; Client recorre `_comp_` y todos los tracks `_cg_`
-- **Script utilizado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py`
+### 3. Triple Check
+- **Función**: Compara la última versión publicada (EXR) de cada shot y task del timeline en Flow, en Wasabi y en el disco local; avisa los shots que faltan en Flow o en el timeline y deja bajar o subir lo que no coincide
+- **Script utilizado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_TripleCheck.py` (lógica en `LGA_NKS_Shared/LGA_NKS_TripleCheck_Core.py`)
+- **Detalle**: `docs/Docu_TripleCheck.md`
+- Reemplazó a Check Shots Exist (2026-11-20), que solo cruzaba los shots del timeline contra Flow: el Triple Check hace eso y más. El script viejo se borró; está en el historial de Git.
 
 ### 4. Thumbnail
 - **Click normal**: Genera un snapshot del viewer, abre la comparación contra el thumbnail actual y, al confirmar, lo reemplaza en Flow en un hilo de fondo
 - **Shift+Click**: Guarda el snapshot localmente en `N:/<proyecto>/Thumbs`
 - **Script utilizado**: `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_Thumbs.py` y, para el reemplazo en Flow, `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_UpdateThumb.py`
 - **BurnIn**: Ambos gestos deshabilitan el VideoTrack `BurnIn` completo antes del zoom y de la lectura del viewer. El apagado cubre juntos todos los textos contenidos en ese track; no modifica cada soft effect por separado. Tras el refresco y la captura, restaura el estado previo incluso ante un error.
-- **Presentación**: Es el cuarto botón y comparte color con Create Shot, Modify Shot y Check Shots Exist porque las cuatro acciones pertenecen al mismo flujo de gestión del shot
+- **Presentación**: Es el cuarto botón y comparte color con Create Shot, Modify Shot y Triple Check porque las cuatro acciones pertenecen al mismo flujo de gestión del shot
 
 ### 5. Slate Frame
 - **Función**: Guarda el frame actual del viewer como imagen del slate de entrega del shot, en el campo File/Link `sg_slate_frame` del Shot en Flow. Solo contexto studio.
@@ -130,7 +131,7 @@ La lectura visual es intencional:
 ### Botones Disponibles
 1. **Create Shot** - Crea shots automáticamente en Flow
 2. **Modify Shot** - Modifica un shot existente en Flow
-3. **Check Shots Exist** - Chequea los tracks de task del contexto (Comp; también CG en Client)
+3. **Triple Check** - Compara la última versión publicada en Flow, Wasabi y local, con Download/Upload por fila
 4. **Thumbnail** - Reemplaza el thumbnail en Flow; con Shift guarda el snapshot local
 5. **Slate Frame** - Guarda el frame del viewer como imagen del slate de entrega (solo studio)
 6. **Shot Priority** - Cambia la prioridad del shot (alta ↔ normal)
@@ -177,7 +178,7 @@ La lectura visual es intencional:
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_ThumbnailCapture.py` - `capture_viewer_image_without_burnin()` protege la lectura del viewer; `temporarily_disable_burnin_tracks()` identifica, apaga y restaura todos los tracks de burn-in.
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py` - Funcionalidad de Create Shot
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ModifyShot.py` - Funcionalidad de Modify Shot
-- `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py` - Funcionalidad de Check Shots Exist
+- `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_TripleCheck.py` - Funcionalidad de Triple Check (`main()`, `TripleCheckWorker`, `TripleCheckDialog`)
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShotPriority.py` - Funcionalidad de Shot Priority
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_CreatePsync.py` - Generación de archivos `.psync` portables
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_OpenPath.py` - Funcionalidad de PipeSync (Open)

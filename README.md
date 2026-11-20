@@ -140,9 +140,6 @@ Internal reference: [Flow | S3 Panel](LGA_HieroTools/docs/LGA_NKS_Flow_S3_Panel_
   thumbnail temporarily disables the `BurnIn` video track and restores it.
 - **Modify Shot**  
   Modifies an existing shot in Flow. One clip at a time.
-- **Check Shots Exist**  
-  Checks whether shots from the context task tracks exist in Flow: Comp in
-  Studio, and Comp plus every CG track in Client.
 - **Triple Check**  
   For every shot and task of the active timeline, compares the latest
   published EXR version in Flow, in Wasabi and on the local disk, and lists

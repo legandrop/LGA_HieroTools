@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.028
+- [improved] El botón `Check Shots Exist` sale del panel Flow | S3: lo que hacía, avisar los shots del timeline que no están en Flow, ahora lo hace `Triple Check`.
 - [new] Botón `Triple Check` en el panel Flow | S3: compara la última versión publicada de cada shot del timeline en Flow, en Wasabi y en tu disco, te avisa lo que no coincide (versiones que faltan, incompletas o en la carpeta de otro shot, shots que no están en Flow o que faltan en el timeline) y te deja bajar o subir cada una con un click. Muestra el estado de cada task en Flow, se puede filtrar por estado y ordenar con un click en cada columna, y cada fila tiene un botón para ir a ese shot en el timeline.
 - [fixed][for: Coordinators][studio] quitar shots de Wasabi desde el panel de assignees (Ctrl+Shift+Click en un usuario, o la limpieza de shots entregados) encuentra también los shots de las personas que tienen muchos asignados, y ya no falla al sacar uno de una policy casi llena.
 - [fixed] Flow Pull ya no cierra Nuke Studio al terminar cuando el timeline tiene clips rotos (los que arregla Fix Zombies).

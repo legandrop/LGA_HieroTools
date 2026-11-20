@@ -19,7 +19,7 @@ ____________________________________________________________________
     1. Proyecto del timeline activo: primer clip con media de la secuencia
        activa, extract_project_name_from_path() y fallback a
        extract_project_name() (ver LGA_NKS_Flow_NamingUtils, mismo patron
-       de llamada que LGA_NKS_Flow_CheckTimelineShots).
+       de llamada que LGA_NKS_Flow_TripleCheck.collect_timeline).
     2. Por cada VideoTrack de hiero.ui.activeSequence().videoTracks():
          - nombre termina en "plate" (case-insensitive)     -> token 'plates'
          - nombre esta en TASK_EXR_TRACKS (LGA_NKS_GetClip, hoy ["_comp_",
@@ -351,7 +351,7 @@ def _resolve_active_project_name(seq):
     """
     Nombre del proyecto del timeline activo: primer clip con media de la
     secuencia, resuelto con NamingUtils (ruta primero, filename despues).
-    Mismo patron de llamada que LGA_NKS_Flow_CheckTimelineShots.
+    Mismo patron de llamada que LGA_NKS_Flow_TripleCheck.collect_timeline.
 
     Devuelve "" si no se pudo resolver (secuencia vacia, o ningun clip con
     media localizable).

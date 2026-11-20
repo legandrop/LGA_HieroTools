@@ -30,7 +30,7 @@ camino de siempre.
 El nombre del proyecto se resuelve por la **ruta del media** (`VFX-<PROYECTO>`), no por el nombre
 del `.hrox`: `extract_project_name_from_path()` de `LGA_NKS_Flow_NamingUtils.py`, con
 `extract_project_name()` como fallback. Es el mismo patron que usa
-`LGA_NKS_Flow_CheckTimelineShots.py`.
+`LGA_NKS_Flow_TripleCheck.collect_timeline()`.
 
 ### 🔴 La trampa: hay DOS bases, y este repo lee la del PipeSync INSTALADO
 

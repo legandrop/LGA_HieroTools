@@ -3,7 +3,7 @@
 
 # Triple Check (Flow | S3 Panel)
 
-Botón verde del panel **Flow | S3**, al lado de Check Shots Exist. Compara, para cada shot y task del
+Botón verde del panel **Flow | S3**, después de Modify Shot. Compara, para cada shot y task del
 timeline activo, la **última versión publicada (EXR)** en tres lugares:
 
 | Fuente | Qué se lee | Cómo |
@@ -89,7 +89,7 @@ Una fila es un (shot, task). `F`, `W`, `L` son los números de Flow, Wasabi y Lo
 | Estado (texto en la UI) | Condición | Botón |
 |---|---|---|
 | `Error` | No se pudo leer Wasabi o el disco (policy, disco sin montar, publish plano) | — |
-| `Not in Flow` | El shot no existe en Flow (lo de Check Shots Exist) | Upload, con pregunta |
+| `Not in Flow` | El shot no existe en Flow (lo que hacía Check Shots Exist) | Upload, con pregunta |
 | `Task not in Flow` | El shot existe pero no tiene esa task | Upload, con pregunta |
 | `Not in timeline` | Shot y task en Flow, sin clip en el track | Download si `W > L` (no entra en Download all) |
 | `Missing in Wasabi` | `F > W` y `F > L`: Flow tiene una versión que no está en ningún disco | — |
@@ -111,9 +111,16 @@ tabla y **Detail** explica todos en una oración cada uno. `Only issues` (prendi
 **Detail va en castellano** (pedido de Lega, 2026-11-20), aunque los textos de la UI van en inglés: es la
 explicación de la fila, no un rótulo. Por eso también van en castellano los mensajes de error y de
 bloqueo del core que se leen ahí (`ListError`, publish plano, upload bloqueado). La columna no corta
-con puntos suspensivos: la tabla hace salto de línea (`setWordWrap`, `ElideNone`) y cada fila crece a
-las líneas que necesite (`_fit_rows()`, que se recalcula al cambiar el ancho de Detail o de la
-ventana).
+con puntos suspensivos y la dibuja un delegate propio (`DetailDelegate`, con `QTextLayout`): parte por
+palabra y, si un nombre largo como `SHOT_comp_v005` no entra, en cualquier punto. **No alcanza con
+`setWordWrap(True)` de la tabla:** medido en NKS 16, el estilo del host (un `QProxyStyle` de Foundry)
+dibuja las celdas en una sola línea con puntos suspensivos, mientras que en el harness, con el estilo
+por defecto, sí partía; además el salto de línea de Qt no corta los nombres sin espacios. El alto de
+fila es automático (header vertical en `ResizeToContents`, que se recalcula solo al cambiar el ancho
+de Detail o de la ventana). Para que una fila de una línea quede en `Metric.ROW_HEIGHT` y no en
+28 px, las demás columnas usan `OneLineDelegate`, los botones de celda son `CellButton` (su sizeHint
+pide una fila, sin limitar el alto) y el header vertical oculto va sin padding: en `ResizeToContents`
+también aporta su alto.
 
 **`Not in timeline` sin nada publicado no se oculta.** Un shot de Flow con su task y ninguna versión en
 ningún lado es un shot creado y asignado que todavía no se empezó: lo que falta es armarlo en el
@@ -223,9 +230,10 @@ tienen la misma. Un listado completo de esa carpeta en Wasabi y un `os.walk` loc
   - `_flow_connection()`, `_wasabi_client()` (boto3 vendorizado en `LGA_NKS_Assignee_Panel_py`),
     `_project_folder()`, `_with_net_retries()`.
   - `TripleCheckDialog`: tabla (`_fill_table()`, `_fill_row()`, `_task_status_item()`,
-    `_set_goto_cell()`, `_fit_rows()`), `_set_action_cell()`, `_goto_row()`, `_set_keep_on_top()`, orden (`_on_header_clicked()`, `_sort_key()`), filtro
+    `_set_goto_cell()`), `_set_action_cell()`, `_goto_row()`, `_set_keep_on_top()`, orden (`_on_header_clicked()`, `_sort_key()`), filtro
     (`_fill_status_filter()`, `_apply_filter()`), `_download_all()`, `_upload_all()`,
     `_upload_row()` (pregunta).
+  - `DetailDelegate`, `OneLineDelegate`, `CellButton`: alto y salto de línea de las filas.
   - `_load_keep_on_top()`, `_save_keep_on_top()`, `_set_topmost()`, `_goto_icon()`, `_stray_text()`.
   - `download_rows()`, `upload_rows()`, `bulk_download_rows()`, `bulk_upload_rows()`,
     `_launch_filemanagers3()`.
@@ -271,5 +279,5 @@ tienen la misma. Un listado completo de esa carpeta en Wasabi y un `os.walk` loc
   `C:/Portable/LGA_PipeSync_2/src/utils/PathService.cpp` (`getHighestVersionNumber`),
   `C:/Portable/LGA_PipeSync_2/src/utils/TaskNameMapper.cpp`,
   `C:/Portable/LGA_FileManagerS3/src/main.cpp` (`startCliUpload`, parseo de `--download`/`--upload`).
-- Check Shots Exist, que el Triple Check amplía:
-  `C:/Users/leg4-pc/.nuke/Python/Startup/LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py`.
+- Check Shots Exist (`LGA_NKS_Flow_CheckTimelineShots.py`) se borró el 2026-11-20: el Triple Check
+  hace lo mismo y más. Si hace falta, está en el historial de Git de HieroTools.

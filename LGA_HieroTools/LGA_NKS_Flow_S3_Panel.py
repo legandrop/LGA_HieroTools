@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_S3_Panel v1.37 | Lega
+  LGA_NKS_Flow_S3_Panel v1.38 | Lega
   Panel Flow | S3 para operaciones de produccion con Flow y almacenamiento S3:
   - Revelar clips en Flow
   - Crear shots automáticamente
@@ -9,6 +9,8 @@ ________________________________________________________________________________
   - Cambiar prioridad de shots
   - Integración con FileManagerS3 (Open, Download, Upload)
 
+  v1.38: Se saca Check Shots Exist: Triple Check hace lo mismo (shots del
+         timeline que no estan en Flow) y mas. Se borra su script.
   v1.37: Boton nuevo "Triple Check" despues de Check Shots Exist: compara
          la ultima version publicada de cada shot del timeline en Flow, en
          Wasabi y en el disco local, y deja bajar o subir lo que no
@@ -334,13 +336,6 @@ class FlowProdPanel(QtWidgets.QWidget):
                 SHOT_WORKFLOW_COLOR,
                 None,
                 "Modificar shot existente en Flow (1 clip a la vez)",
-            ),
-            (
-                "Check Shots Exist",
-                self.check_timeline_shots,
-                SHOT_WORKFLOW_COLOR,
-                None,
-                "Chequear si los shots de los tracks activos (Comp; CG en Client) existen en Flow",
             ),
             (
                 "Triple Check",
@@ -1092,34 +1087,6 @@ class FlowProdPanel(QtWidgets.QWidget):
     def download_latest_clip_from_filemanagers3(self):
         """Descarga la ultima version disponible del clip (Shift+Click)."""
         self._run_download_clip_from_filemanagers3(download_latest=True)
-
-    def check_timeline_shots(self):
-        """Llama al script de chequeo de shots en el timeline."""
-        script_path = os.path.join(
-            os.path.dirname(__file__), "LGA_NKS_Flow_S3_Panel_py", "LGA_NKS_Flow_CheckTimelineShots.py"
-        )
-        if not os.path.exists(script_path):
-            show_warning(
-                self,
-                "Script no encontrado",
-                f"No se encontró el script en la ruta: {script_path}",
-            )
-            return
-        try:
-            import importlib.util
-
-            spec = importlib.util.spec_from_file_location(
-                "LGA_NKS_Flow_CheckTimelineShots", script_path
-            )
-            if spec is None or spec.loader is None:
-                raise ImportError(
-                    "No se pudo cargar el módulo LGA_NKS_Flow_CheckTimelineShots.py"
-                )
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            module.main()
-        except Exception as e:
-            show_warning(self, "Error al ejecutar Check Shots", str(e))
 
     def triple_check_versions(self):
         """Compara Flow, Wasabi y local para los shots del timeline."""

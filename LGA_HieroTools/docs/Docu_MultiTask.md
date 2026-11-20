@@ -123,7 +123,7 @@ filtre por el mismo scope, y que la familia CG de `normalize_task_name()`
 | `LGA_NKS_Review_Panel._segunda_task()` | `active_track_tasks()` |
 | `LGA_NKS_Clip_DisableCG.py` | `exr_track_for_task("cg")` |
 | `LGA_NKS_Flow_ShowInFlow._nombres_preferidos()` | `is_track_task_active("cg")` |
-| `LGA_NKS_Flow_CheckTimelineShots._tracks_de_tasks_activas()` | `exr_track_for_task()`, `is_track_task_active()` |
+| `LGA_NKS_Flow_TripleCheck.collect_timeline()` | `active_track_tasks()`, `exr_track_for_task()` |
 | `LGA_import_shots._task_folders_for_context()` | `is_track_task_active()`, `task_folder_name()` |
 | `LGA_import_shots_preview.classify_track_type()` | `exr_track_for_task(CG_TASK_NAME)` |
 
@@ -236,7 +236,7 @@ roto no existe ahí.
 | [LGA_NKS_Flow_CreateShot.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py) | ✅ | ✅ | ✅ | ✅ | El diálogo genera una sección por task con `get_available_tasks()` (filtra `AVAILABLE_TASKS` por contexto); antes iteraba `AVAILABLE_TASKS` completo y ofrecía Roto/Cleanup/DMP/3D también en client, sitio de Flow donde esas tasks no existen |
 | [LGA_NKS_Flow_CreateShot_Folders.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py) | ✅ | ✅ | ✅ | ✅ | Suma `TASK_FOLDER_STRUCTURE["CG"]`: una sola carpeta (`cg/0_assets` … `cg/4_publish`) para todas las disciplinas, sin subdividir por stream |
 | [LGA_NKS_Flow_ShowInFlow.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py) | ✅ | — | — | ✅ (fallback) | `_task_preferida()` / `_nombres_preferidos()`: en studio abre solo la task Comp (`("Comp",)`, igual que antes); en client intenta Comp y, si el shot no la tiene, cae a CG. Antes el literal `"Comp"` estaba repetido en cuatro lugares y un shot solo-CG abría la URL del shot pelado |
-| [LGA_NKS_Flow_CheckTimelineShots.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py) | ✅ | — | — | ✅ | `_tracks_de_tasks_activas()`: en studio revisa solo `_comp_` (igual que antes); en client suma `_cg_` y `_collect_shots_from_track()` recorre TODOS los tracks que coincidan con cada nombre — antes tomaba solo el primer track `_comp_` |
+| [LGA_NKS_Flow_TripleCheck.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_TripleCheck.py) | ✅ | ✅ | ✅ | ✅ | `collect_timeline()` recorre TODOS los tracks de las tasks del contexto (`active_track_tasks()`): en client puede haber varios `_cg_`. Reemplazó a Check Shots Exist (borrado el 2026-11-20) |
 
 **Assignee Panel, ViewerTL:** siguen sin auditar para este documento. El assignee por task ya funciona en parte porque Flow/SG devuelve assignees por task, pero hay lugares (ej. el `get_comp_assignee()` del Push) donde la task está hardcodeada a comp. Revisar caso por caso.
 
@@ -378,8 +378,8 @@ con `PROJA_1013_0800_layout_v003` y otro `_cg_` con
   - Carpetas: [LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py) (`TASK_FOLDER_STRUCTURE`)
 - **Show in Flow:** [LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py)
   - Funciones: `_nombres_preferidos()`, `_task_preferida()`
-- **Check Shots:** [LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py)
-  - Funciones: `_tracks_de_tasks_activas()`, `_collect_shots_from_track()`
+- **Triple Check:** [LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_TripleCheck.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_TripleCheck.py)
+  - Funciones: `collect_timeline()`
 - **Advertencia Task/Track Mismatch:** [LGA_NKS_Shared/LGA_NKS_TaskMismatchDialog.py](../LGA_NKS_Shared/LGA_NKS_TaskMismatchDialog.py)
   - Funciones: `collect_task_mismatches()`, `show_task_mismatch_warning()`
 - **Selección de task en playhead:** [LGA_NKS_Shared/LGA_NKS_TaskSelectionDialog.py](../LGA_NKS_Shared/LGA_NKS_TaskSelectionDialog.py)

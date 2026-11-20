@@ -27,7 +27,7 @@ ____________________________________________________________________
   - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py
   - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_Thumbs.py
   - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py
-  - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py
+  - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_TripleCheck.py
   - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShotPriority.py
   - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_Upload.py
   - LGA_NKS_Flow_S3_Panel_py/LGA_NKS_FileManagerS3_Download.py

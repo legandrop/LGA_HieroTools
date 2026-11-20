@@ -184,7 +184,7 @@ Leyenda:
 | `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_Thumbs.py` | 🔵 Analizado · no necesitaba cambio — no interactúa con task names |
 | `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py` | 🔵 Analizado · no necesitaba cambio — no filtra clips por task name ni busca en DB por task |
 | `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ModifyShot.py` | 🔵 Analizado · no necesitaba cambio — ídem CreateShot |
-| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py` | 🔵 Analizado · no necesitaba cambio — no usa task name en absoluto |
+| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py` | Borrado el 2026-11-20 (lo reemplazó Triple Check) |
 | `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShotPriority.py` | 🔵 Analizado · no necesitaba cambio — no filtra clips por task name del filename |
 
 ### FileManagerS3 Panel

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_TripleCheck v1.02 | Lega
+  LGA_NKS_Flow_TripleCheck v1.03 | Lega
 
   Triple Check del panel Flow | S3: para cada shot y task del timeline
   activo compara la ultima version publicada (EXR) en Flow, en Wasabi y en
@@ -15,6 +15,10 @@ ____________________________________________________________________
   junta los clips del timeline, corre el chequeo fuera del hilo principal
   y muestra la ventana. Detalle: docs/Docu_TripleCheck.md.
 
+  v1.03: Detail lo dibuja un delegate propio (DetailDelegate): en NKS el
+         estilo del host ignoraba el salto de linea y cortaba con puntos.
+         Parte por palabra o, si un nombre largo no entra, en cualquier
+         punto. Alto de filas automatico (ResizeToContents).
   v1.02: Detail en castellano y multilinea (la fila crece, sin puntos
          suspensivos). El click en una fila ya no lleva al timeline: lo
          hace un boton propio en la columna de al lado del shot. Keep on
@@ -196,9 +200,9 @@ HEADERS = ["Shot", "", "Task", "Task Status", "Flow", "Wasabi", "Local", "Sync",
 ALL_TASK_STATUSES = "All task statuses"
 ACTION_CELL_WIDTH = 36
 GOTO_CELL_WIDTH = 30
-# Ancho minimo de Detail: con la ventana chica el texto pasa a dos o mas
-# lineas en vez de cortarse con puntos suspensivos.
-DETAIL_MIN_WIDTH = 320
+# Ancho de Detail al abrir: si la ventana se achica, el texto pasa a dos o mas
+# lineas (DetailDelegate) en vez de cortarse.
+DETAIL_MIN_WIDTH = 360
 
 # "Keep on top" persiste como en el Flow Pull, en un INI propio.
 _SETTINGS_PATH = Path(os.environ.get("APPDATA") or os.path.expanduser("~")) / "LGA" / "HieroTools" / "TripleCheck.ini"
@@ -907,6 +911,99 @@ def bulk_upload_rows(rows):
     return [r for r in rows if r["can_upload"] and not r.get("upload_needs_confirm")]
 
 
+# ── Columna Detail ───────────────────────────────────────────────────────────
+class OneLineDelegate(QtWidgets.QStyledItemDelegate):
+    """Las demas columnas piden una sola fila de ROW_HEIGHT.
+
+    El alto de fila es automatico (ResizeToContents toma el maximo de todas
+    las columnas): con el padding de la hoja, una celda comun pedia 28 px y
+    las filas de una linea quedaban mas altas que en el resto de las tablas.
+    """
+
+    def sizeHint(self, option, index):
+        hint = super(OneLineDelegate, self).sizeHint(option, index)
+        return QtCore.QSize(hint.width(), Metric.ROW_HEIGHT)
+
+
+class CellButton(QtWidgets.QPushButton):
+    """Boton de celda (ir al timeline, Download/Upload) que pide una fila.
+
+    Su sizeHint con la hoja da 28 px y el alto automatico de la fila lo
+    toma en cuenta. No se limita con setMaximumHeight: en una fila alta
+    (Detail en varias lineas) el boton tiene que seguir llenando la celda.
+    """
+
+    def sizeHint(self):
+        hint = super(CellButton, self).sizeHint()
+        return QtCore.QSize(hint.width(), Metric.ROW_HEIGHT)
+
+
+class DetailDelegate(QtWidgets.QStyledItemDelegate):
+    """Dibuja Detail con salto de linea propio, sin depender del estilo.
+
+    En NKS el estilo del host (un QProxyStyle de Foundry) ignora el wordWrap
+    de la tabla y corta el texto con puntos suspensivos; en el harness, con el
+    estilo por defecto, si partia. Por eso el texto se arma con QTextLayout:
+    parte por palabra y, si un nombre largo (`SHOT_comp_v005`) no entra en el
+    ancho, en cualquier punto. sizeHint() devuelve el alto que necesita, y el
+    header vertical en ResizeToContents lo recalcula al cambiar el ancho.
+    """
+
+    PAD_X = 6  # el padding de ::item de Style.TABLE
+    PAD_Y = 2  # una linea da 24 px, el ROW_HEIGHT del resto de las tablas
+
+    def _layout(self, text, font, width):
+        layout = QtGui.QTextLayout(text or "", font)
+        option = QtGui.QTextOption()
+        option.setWrapMode(QtGui.QTextOption.WrapAtWordBoundaryOrAnywhere)
+        layout.setTextOption(option)
+        layout.beginLayout()
+        height = 0.0
+        while True:
+            line = layout.createLine()
+            if not line.isValid():
+                break
+            line.setLineWidth(max(10.0, float(width)))
+            line.setPosition(QtCore.QPointF(0.0, height))
+            height += line.height()
+        layout.endLayout()
+        return layout, height
+
+    def _text_width(self, index):
+        view = self.parent()
+        return view.columnWidth(index.column()) - 2 * self.PAD_X
+
+    def sizeHint(self, option, index):
+        _layout, height = self._layout(index.data() or "", option.font, self._text_width(index))
+        return QtCore.QSize(
+            self.parent().columnWidth(index.column()),
+            max(Metric.ROW_HEIGHT, int(height + 0.999) + 2 * self.PAD_Y),
+        )
+
+    def paint(self, painter, option, index):
+        opt = QtWidgets.QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        text = opt.text
+        opt.text = ""
+        # Fondo y seleccion los pinta el estilo (con la hoja de la tabla).
+        widget = opt.widget
+        style = widget.style() if widget else QtWidgets.QApplication.style()
+        style.drawControl(QtWidgets.QStyle.CE_ItemViewItem, opt, painter, widget)
+        rect = opt.rect.adjusted(self.PAD_X, self.PAD_Y, -self.PAD_X, -self.PAD_Y)
+        layout, height = self._layout(text, opt.font, rect.width())
+        if opt.state & QtWidgets.QStyle.State_Selected:
+            color = QtGui.QColor(Color.TEXT_STRONG)
+        else:
+            brush = index.data(Qt.ForegroundRole)
+            color = brush.color() if isinstance(brush, QtGui.QBrush) else QtGui.QColor(Color.TEXT)
+        painter.save()
+        painter.setClipRect(opt.rect)
+        painter.setPen(color)
+        top = rect.top() + max(0.0, (rect.height() - height) / 2.0)
+        layout.draw(painter, QtCore.QPointF(rect.left(), top))
+        painter.restore()
+
+
 # ── Ventana ──────────────────────────────────────────────────────────────────
 class TripleCheckDialog(QtWidgets.QDialog):
     def __init__(self, result, sequence_name, rerun, parent=None):
@@ -984,12 +1081,21 @@ class TripleCheckDialog(QtWidgets.QDialog):
         self.table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.table.setFocusPolicy(Qt.NoFocus)
         self.table.setStyleSheet(Style.TABLE)
-        # Detail se lee entero: salto de linea y la fila crece, sin "...".
-        self.table.setWordWrap(True)
-        self.table.setTextElideMode(Qt.ElideNone)
+        # Detail se lee entero: lo dibuja DetailDelegate con salto de linea y
+        # cada fila toma el alto que necesita (ResizeToContents se recalcula
+        # solo al cambiar el ancho de Detail o de la ventana).
+        self.table.setWordWrap(False)
+        self.table.setItemDelegate(OneLineDelegate(self.table))
+        self.table.setItemDelegateForColumn(COL_DETAIL, DetailDelegate(self.table))
+        rows_header = self.table.verticalHeader()
+        rows_header.setMinimumSectionSize(Metric.ROW_HEIGHT)
+        # El header vertical esta oculto, pero en ResizeToContents igual
+        # aporta su propio alto (el numero de fila con el padding de la hoja,
+        # 28 px). Sin padding, una fila de una linea queda en ROW_HEIGHT.
+        rows_header.setStyleSheet("QHeaderView::section { padding: 0px; border: none; }")
+        rows_header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
         header = self.table.horizontalHeader()
         header.setStretchLastSection(True)
-        header.sectionResized.connect(self._on_section_resized)
         # Orden propio (no el de QTableWidget): la fila de la tabla sigue
         # siendo el indice en self.rows, los numeros de version ordenan como
         # numeros y el estado de la task sigue el orden del flujo de trabajo.
@@ -1118,7 +1224,6 @@ class TripleCheckDialog(QtWidgets.QDialog):
         )
         self._set_goto_cell(index, row)
         self._set_action_cell(index, row)
-        self.table.setRowHeight(index, Metric.ROW_HEIGHT)
 
     def _set_goto_cell(self, index, row):
         item = QtWidgets.QTableWidgetItem("")
@@ -1126,7 +1231,7 @@ class TripleCheckDialog(QtWidgets.QDialog):
         self.table.setItem(index, COL_GOTO, item)
         if not row["in_timeline"]:
             return
-        button = QtWidgets.QPushButton()
+        button = CellButton()
         button.setMinimumWidth(GOTO_CELL_WIDTH)
         button.setCursor(Qt.PointingHandCursor)
         button.setAutoDefault(False)
@@ -1158,7 +1263,7 @@ class TripleCheckDialog(QtWidgets.QDialog):
         else:
             return
         item.setBackground(QtGui.QBrush(QtGui.QColor(Color.ACCENT)))
-        button = QtWidgets.QPushButton()
+        button = CellButton()
         button.setMinimumWidth(ACTION_CELL_WIDTH)
         button.setCursor(Qt.PointingHandCursor)
         button.setAutoDefault(False)
@@ -1190,26 +1295,8 @@ class TripleCheckDialog(QtWidgets.QDialog):
         height = self.table.horizontalHeader().sizeHint().height() + self.table.frameWidth() * 2
         height += Metric.ROW_HEIGHT * min(max(visible, 1), 22)
         self.table.setMinimumHeight(height)
-        width = sum(self.table.columnWidth(c) for c in range(len(HEADERS) - 1)) + 360
+        width = sum(self.table.columnWidth(c) for c in range(len(HEADERS) - 1)) + DETAIL_MIN_WIDTH
         self.resize(max(self.minimumWidth(), min(width, 1500)), self.sizeHint().height())
-        self._fit_rows()
-
-    def _fit_rows(self):
-        """Alto de cada fila: una linea, o las que necesite Detail."""
-        for index in range(self.table.rowCount()):
-            self.table.setRowHeight(
-                index, max(Metric.ROW_HEIGHT, self.table.sizeHintForRow(index))
-            )
-
-    def _on_section_resized(self, column, _old, _new):
-        # Detail es la ultima columna (se estira con la ventana): al cambiar
-        # su ancho cambia cuantas lineas necesita cada fila.
-        if column == COL_DETAIL:
-            self._fit_rows()
-
-    def resizeEvent(self, event):
-        super(TripleCheckDialog, self).resizeEvent(event)
-        self._fit_rows()
 
     def showEvent(self, event):
         super(TripleCheckDialog, self).showEvent(event)
@@ -1292,7 +1379,6 @@ class TripleCheckDialog(QtWidgets.QDialog):
         self.table.clearSelection()
         self._fill_table()
         self._apply_filter()
-        self._fit_rows()
 
     def _apply_filter(self):
         only = self.only_issues.isChecked()

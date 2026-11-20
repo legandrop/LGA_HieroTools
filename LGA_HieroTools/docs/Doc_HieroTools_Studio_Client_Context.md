@@ -199,11 +199,11 @@ Por eso nada arma el nombre de la carpeta con un literal:
   idéntico al comportamiento histórico. En `client` es `("Comp", "CG")`: si
   el shot no tiene task Comp, cae a CG en vez de abrir la URL del shot
   pelado.
-- `Check Shots` ([LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py)):
-  en `studio` sigue revisando solo el track `_comp_`. En `client` suma
-  `_cg_` (`_tracks_de_tasks_activas()`) y recorre TODOS los tracks que
-  coincidan con cada nombre, no solo el primero, porque puede haber varios
-  `_cg_` en el mismo timeline (uno por stream).
+- `Triple Check` ([LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_TripleCheck.py](../LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_TripleCheck.py)):
+  revisa los tracks de las tasks del contexto (`active_track_tasks()`): en
+  `studio` `_comp_`, `_roto_` y `_cleanup_`; en `client` `_comp_` y TODOS
+  los `_cg_`, porque puede haber varios en el mismo timeline (uno por
+  stream). Reemplazó a Check Shots, borrado el 2026-11-20.
 
 ## Impacto en Viewer | TL Panel
 
@@ -262,7 +262,7 @@ Por eso nada arma el nombre de la carpeta con un literal:
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py`
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot_Folders.py`
 - `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShowInFlow.py`
-- `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py`
+- `LGA_HieroTools/LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_TripleCheck.py`
 
 ### Viewer | TL Panel
 

@@ -185,7 +185,7 @@ Leyenda:
 | `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_Thumbs.py` | ✅ Actualizado v1.02 — fix en `get_project_name_from_clip()` |
 | `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CreateShot.py` | ✅ project_name v1.36 (`get_selected_clips_info()`); **sequence v1.37** — `create_shot()` toma `sg_sequence` del segmento post-`VFX-` por clip (`get_active_sequence_name(file_path)` para el default del diálogo) |
 | `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ModifyShot.py` | ✅ project_name hereda de CreateShot v1.36; **sequence v1.36** — `get_active_sequence_name(clip_info["file_path"])` |
-| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py` | ✅ Actualizado v1.01 — fix en `_collect_shots_from_track()` |
+| `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_CheckTimelineShots.py` | Borrado el 2026-11-20 (lo reemplazó Triple Check) |
 | `LGA_NKS_Flow_S3_Panel_py/LGA_NKS_Flow_ShotPriority.py` | ✅ Actualizado v1.01 — fix en `get_selected_clips_info()` |
 
 ### FileManagerS3 Panel
