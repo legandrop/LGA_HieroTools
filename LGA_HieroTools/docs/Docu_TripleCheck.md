@@ -47,6 +47,11 @@ un **Download** o un **Upload** en cada fila que lo necesita, como la columna de
   alias de la task (`comp`, `cmp`, `compo`). Así `SHOT_comp_v052_fix/` no es versión y una
   `SHOT_roto_v060/` dentro de `comp/4_publish` no se ofrece como comp. Si la regla fuera otra, el Triple
   Check y las cards de PipeSync mostrarían números distintos.
+- **A igual número gana la carpeta del propio shot.** Medido en un proyecto real: en el publish de un
+  shot estaban su `SHOT_comp_v005/` (166 archivos) y al lado una copia de la `OTRO_comp_v005/` de otro
+  shot (96 archivos, idéntica a la del otro shot). Con desempate alfabético ganaba la ajena y la fila
+  decía `Wrong folder` aunque la versión propia estaba completa. Ahora la ajena no es la tope y se
+  informa aparte como `Extra folder` (`strays` del escaneo).
 - **`v000` vale 0.** Es el placeholder de frames negros que crea `Create v000`. Se muestra, pero no es
   una entrega.
 - **Una carpeta de versión sin archivos no cuenta** (mismo criterio que `LocalVersionContent` de
@@ -90,10 +95,11 @@ Una fila es un (shot, task). `F`, `W`, `L` son los números de Flow, Wasabi y Lo
 | `Missing in Wasabi` | `F > W` y `F > L`: Flow tiene una versión que no está en ningún disco | — |
 | `Incomplete` | `W = L` pero una tiene menos archivos (descarga o subida cortada) | Download o Upload |
 | `Size differs` | `W = L`, misma cantidad de archivos y distinto peso total | — |
-| `Wrong folder` | La carpeta tope lleva el nombre de **otro shot** (material en el lugar equivocado) | — |
+| `Wrong folder` | La carpeta **tope** (la versión más alta del publish) lleva el nombre de **otro shot**: no hay una propia de ese número o mayor | — |
 | `Upload` | `L > W` | Upload |
 | `Download` | `W > L` | Download |
 | `No Flow version` | `max(W, L) > F`: hay un publish sin Version en Flow | — |
+| `Extra folder` | Además de la versión tope, en el publish hay una carpeta de **otro shot** que sobra (una copia o material bajado al shot equivocado). Convive con `OK` | — |
 | `OK` | `F = W = L > 0` | — |
 | `No versions` | `F = W = L = 0` | — |
 
@@ -102,6 +108,13 @@ Los estados no se excluyen: `F=10, W=8, L=5` es `Missing in Wasabi` (falta la v0
 tabla y **Detail** explica todos en una oración cada uno. `Only issues` (prendido al abrir) oculta `OK` y
 `No versions`.
 
+**Detail va en castellano** (pedido de Lega, 2026-11-20), aunque los textos de la UI van en inglés: es la
+explicación de la fila, no un rótulo. Por eso también van en castellano los mensajes de error y de
+bloqueo del core que se leen ahí (`ListError`, publish plano, upload bloqueado). La columna no corta
+con puntos suspensivos: la tabla hace salto de línea (`setWordWrap`, `ElideNone`) y cada fila crece a
+las líneas que necesite (`_fit_rows()`, que se recalcula al cambiar el ancho de Detail o de la
+ventana).
+
 **`Not in timeline` sin nada publicado no se oculta.** Un shot de Flow con su task y ninguna versión en
 ningún lado es un shot creado y asignado que todavía no se empezó: lo que falta es armarlo en el
 timeline (el plate y la v000). Detail lo dice así. Por eso esas filas cuentan como problema y quedan
@@ -109,7 +122,7 @@ visibles con `Only issues`.
 
 ## Columnas, orden y filtro
 
-`Shot | Task | Task Status | Flow | Wasabi | Local | Sync | (botón) | Detail`.
+`Shot | (ir al timeline) | Task | Task Status | Flow | Wasabi | Local | Sync | (botón) | Detail`.
 
 - **Task Status:** el estado de la task en Flow (`sg_status_list`, leído en la misma consulta de Tasks),
   con el nombre y el color del catálogo `LGA_NKS_Flow_Status_Config`, los mismos de PipeSync y del Flow
@@ -160,7 +173,12 @@ tienen la misma. Un listado completo de esa carpeta en Wasabi y un `os.walk` loc
 - Download all y Upload all preguntan antes, con la cantidad.
 - Ninguna acción re-chequea sola: FileManagerS3 encola y transfiere en segundo plano. **Recheck** vuelve
   a correr todo.
-- **Click en una fila del timeline** lleva el timeline a ese shot (`goto_shot`).
+- **Ir al timeline:** la mira al lado del shot (solo filas del timeline) lleva el timeline a ese shot
+  (`goto_shot`). El click en la fila **no** navega (Lega, 2026-11-20): así se puede seleccionar una fila
+  para leerla sin que el timeline se mueva.
+- **Keep on top:** prendido por defecto y persistido en `%APPDATA%/LGA/HieroTools/TripleCheck.ini`.
+  En Windows usa `SetWindowPos` (el helper del Shot Info, `_set_topmost_native`), que no recrea la
+  ventana; se aplica después del show, porque si no Qt pisa el topmost.
 
 ## Red, tiempos y errores
 
@@ -204,10 +222,11 @@ tienen la misma. Un listado completo de esa carpeta en Wasabi y un `os.walk` loc
     bucket, filas y escaneo en paralelo.
   - `_flow_connection()`, `_wasabi_client()` (boto3 vendorizado en `LGA_NKS_Assignee_Panel_py`),
     `_project_folder()`, `_with_net_retries()`.
-  - `TripleCheckDialog`: tabla (`_fill_table()`, `_fill_row()`, `_task_status_item()`),
-    `_set_action_cell()`, orden (`_on_header_clicked()`, `_sort_key()`), filtro
+  - `TripleCheckDialog`: tabla (`_fill_table()`, `_fill_row()`, `_task_status_item()`,
+    `_set_goto_cell()`, `_fit_rows()`), `_set_action_cell()`, `_goto_row()`, `_set_keep_on_top()`, orden (`_on_header_clicked()`, `_sort_key()`), filtro
     (`_fill_status_filter()`, `_apply_filter()`), `_download_all()`, `_upload_all()`,
-    `_upload_row()` (pregunta), `_on_cell_clicked()` (navegación).
+    `_upload_row()` (pregunta).
+  - `_load_keep_on_top()`, `_save_keep_on_top()`, `_set_topmost()`, `_goto_icon()`, `_stray_text()`.
   - `download_rows()`, `upload_rows()`, `bulk_download_rows()`, `bulk_upload_rows()`,
     `_launch_filemanagers3()`.
   - `version_text()`, `version_color()`, `detail_text()`: presentación de una fila.
@@ -243,6 +262,8 @@ tienen la misma. Un listado completo de esa carpeta en Wasabi y un `os.walk` loc
   `get_flow_credentials()`, `get_s3_credentials()`.
 - `C:/Users/leg4-pc/.nuke/Python/Startup/LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_FileManagerS3Launcher.py`:
   `build_filemanagers3_command()`, `resolve_context_mode()`.
+- `C:/Users/leg4-pc/.nuke/Python/Startup/LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_ShotInfoOnReview.py`:
+  `_set_topmost_native()` (Keep on top).
 - `C:/Users/leg4-pc/.nuke/Python/Startup/LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_ShotNavigation.py`:
   `goto_shot()`.
 - Reglas que se copian de PipeSync y FileManagerS3 (otros repos):

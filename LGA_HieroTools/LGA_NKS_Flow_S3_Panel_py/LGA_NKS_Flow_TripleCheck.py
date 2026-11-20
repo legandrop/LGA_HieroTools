@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_TripleCheck v1.01 | Lega
+  LGA_NKS_Flow_TripleCheck v1.02 | Lega
 
   Triple Check del panel Flow | S3: para cada shot y task del timeline
   activo compara la ultima version publicada (EXR) en Flow, en Wasabi y en
@@ -15,6 +15,11 @@ ____________________________________________________________________
   junta los clips del timeline, corre el chequeo fuera del hilo principal
   y muestra la ventana. Detalle: docs/Docu_TripleCheck.md.
 
+  v1.02: Detail en castellano y multilinea (la fila crece, sin puntos
+         suspensivos). El click en una fila ya no lleva al timeline: lo
+         hace un boton propio en la columna de al lado del shot. Keep on
+         top (prendido, persistido en TripleCheck.ini). Estado Extra
+         folder para una carpeta de otro shot que sobra en el publish.
   v1.01: Columna Task Status (estado de la task en Flow, con su color),
          orden por columna con click en la cabecera, filtro por estado y
          Detail que explica los shots de Flow sin nada publicado. La columna
@@ -28,6 +33,7 @@ import sys
 import time
 import logging
 import threading
+import configparser
 import subprocess
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -135,6 +141,7 @@ STATUS_LABELS = {
     core.ST_UPLOAD: "Upload",
     core.ST_DOWNLOAD: "Download",
     core.ST_NOT_IN_FLOW_VERSION: "No Flow version",
+    core.ST_STRAY: "Extra folder",
     core.ST_OK: "OK",
     core.ST_NO_VERSIONS: "No versions",
 }
@@ -150,6 +157,7 @@ STATUS_COLORS = {
     core.ST_UPLOAD: Color.WARNING_TEXT,
     core.ST_DOWNLOAD: Color.WARNING_TEXT,
     core.ST_NOT_IN_FLOW_VERSION: Color.WARNING_TEXT,
+    core.ST_STRAY: Color.WARNING_TEXT,
     core.ST_OK: Color.OK_TEXT,
     core.ST_NO_VERSIONS: Color.TEXT_DIM,
 }
@@ -170,6 +178,8 @@ TOOLTIPS = {
         "Las que son mas nuevas que Flow se suben de a una, desde su fila."
     ),
     "recheck": "Vuelve a leer Flow, Wasabi y el disco.",
+    "goto": "Lleva el timeline a este shot.",
+    "keep_on_top": "Mantiene esta ventana arriba de NKS.",
     "task_status_filter": (
         "Muestra solo los shots cuya task esta en ese estado de Flow.<br>"
         "Se suma al filtro de Only issues."
@@ -177,14 +187,59 @@ TOOLTIPS = {
 }
 
 (
-    COL_SHOT, COL_TASK, COL_TASK_STATUS, COL_FLOW, COL_WASABI, COL_LOCAL,
+    COL_SHOT, COL_GOTO, COL_TASK, COL_TASK_STATUS, COL_FLOW, COL_WASABI, COL_LOCAL,
     COL_STATUS, COL_ACTION, COL_DETAIL,
-) = range(9)
+) = range(10)
 # "Sync" y no "Status": al lado de "Task Status" (el estado de la task en
 # Flow) dos columnas "Status" se confundian.
-HEADERS = ["Shot", "Task", "Task Status", "Flow", "Wasabi", "Local", "Sync", "", "Detail"]
+HEADERS = ["Shot", "", "Task", "Task Status", "Flow", "Wasabi", "Local", "Sync", "", "Detail"]
 ALL_TASK_STATUSES = "All task statuses"
 ACTION_CELL_WIDTH = 36
+GOTO_CELL_WIDTH = 30
+# Ancho minimo de Detail: con la ventana chica el texto pasa a dos o mas
+# lineas en vez de cortarse con puntos suspensivos.
+DETAIL_MIN_WIDTH = 320
+
+# "Keep on top" persiste como en el Flow Pull, en un INI propio.
+_SETTINGS_PATH = Path(os.environ.get("APPDATA") or os.path.expanduser("~")) / "LGA" / "HieroTools" / "TripleCheck.ini"
+_SETTINGS_SECTION = "TripleCheckWindow"
+
+
+def _load_keep_on_top():
+    try:
+        cfg = configparser.ConfigParser()
+        if _SETTINGS_PATH.exists():
+            cfg.read(str(_SETTINGS_PATH), encoding="utf-8")
+        return cfg.getboolean(_SETTINGS_SECTION, "keep_on_top", fallback=True)
+    except Exception as exc:
+        debug_print("No se pudo leer keep_on_top: %s" % exc)
+        return True
+
+
+def _save_keep_on_top(value):
+    try:
+        cfg = configparser.ConfigParser()
+        if _SETTINGS_PATH.exists():
+            cfg.read(str(_SETTINGS_PATH), encoding="utf-8")
+        if not cfg.has_section(_SETTINGS_SECTION):
+            cfg.add_section(_SETTINGS_SECTION)
+        cfg.set(_SETTINGS_SECTION, "keep_on_top", "true" if value else "false")
+        _SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(str(_SETTINGS_PATH), "w", encoding="utf-8", newline="\n") as fh:
+            cfg.write(fh)
+    except Exception as exc:
+        debug_print("No se pudo guardar keep_on_top: %s" % exc)
+
+
+def _set_topmost(widget, on):
+    """Topmost con SetWindowPos (helper del Shot Info): sin recrear la ventana."""
+    try:
+        from LGA_NKS_Shared.LGA_NKS_ShotInfoOnReview import _set_topmost_native
+
+        return _set_topmost_native(widget, on)
+    except Exception as exc:
+        debug_print("Topmost fallo: %s" % exc)
+        return False
 GLYPH_SIZE = 12
 
 
@@ -528,7 +583,7 @@ class TripleCheckWorker(QtCore.QRunnable):
             for name, lister in (("local", local_lister), ("wasabi", wasabi_lister)):
                 if lister is None:
                     scan = core.empty_scan()
-                    scan["error"] = "No Wasabi bucket for this project."
+                    scan["error"] = "El proyecto no tiene bucket de Wasabi."
                     row[name] = scan
                     continue
                 parts, err = core.resolve_shot_parts(cache, lister, row["seq"], row["shot"])
@@ -614,7 +669,8 @@ def version_color(row, source):
 
 
 def detail_text(row):
-    """Una oracion por estado, en ingles (texto visible)."""
+    """Una oracion por estado. En castellano (pedido de Lega, 2026-11-20): es
+    la explicacion de la fila, no un rotulo de la UI."""
     parts = []
     w = row.get("wasabi") or {}
     l = row.get("local") or {}
@@ -624,56 +680,83 @@ def detail_text(row):
                 if scan.get("error"):
                     parts.append("%s: %s" % (label, scan["error"]))
         elif status == core.ST_NOT_IN_FLOW:
-            parts.append("Shot not found in Flow.")
+            parts.append("El shot no existe en Flow.")
         elif status == core.ST_TASK_NOT_IN_FLOW:
-            parts.append("The shot has no %s task in Flow." % task_display_name(row["task"]))
+            parts.append("El shot no tiene la task %s en Flow." % task_display_name(row["task"]))
         elif status == core.ST_NOT_IN_TIMELINE:
+            track = exr_track_for_task(row["task"])
             if core.has_no_versions(row):
                 # Shot creado y asignado que todavia no se empezo: lo que
                 # falta es armarlo en el timeline.
                 parts.append(
-                    "In Flow but not in the %s track. Nothing published yet: "
-                    "add the plate and the v000 to the timeline."
-                    % exr_track_for_task(row["task"])
+                    "Está en Flow pero no en el track %s. Todavía no hay nada "
+                    "publicado: falta poner el plate y la v000 en el timeline." % track
                 )
             else:
-                parts.append("In Flow but not in the %s track." % exr_track_for_task(row["task"]))
+                parts.append("Está en Flow pero no en el track %s." % track)
         elif status == core.ST_MISSING_STORAGE:
             version = (
                 _short_name(row["flow_code"], row["shot"]) if row["is_cg"]
                 else core.format_version(row["flow"])
             )
-            parts.append("Flow has %s, missing in Wasabi and local." % version)
+            parts.append("Flow tiene la %s, que no está ni en Wasabi ni en local." % version)
         elif status == core.ST_DOWNLOAD:
-            parts.append("Wasabi has %s, not on local disk." % (w.get("name") or "-"))
+            parts.append("Wasabi tiene la %s, que no está en el disco local." % (w.get("name") or "-"))
         elif status == core.ST_UPLOAD:
-            parts.append("Local has %s, not in Wasabi." % (l.get("name") or "-"))
+            parts.append("En local está la %s, que no está en Wasabi." % (l.get("name") or "-"))
         elif status == core.ST_NOT_IN_FLOW_VERSION:
             top = max((w.get("number") or 0), (l.get("number") or 0))
-            parts.append("%s has no Version in Flow." % core.format_version(top))
+            parts.append("La %s no tiene Version en Flow." % core.format_version(top))
         elif status == core.ST_INCOMPLETE:
             content = row.get("content") or {}
             l_n, l_b = content.get("local", (0, 0))
             w_n, w_b = content.get("wasabi", (0, 0))
             if row.get("incomplete") == "differs":
                 parts.append(
-                    "%s has the same %d files in both, but %s differ in total size."
-                    % (l.get("name"), l_n, _human_size(abs(l_b - w_b)))
+                    "%s tiene los mismos %d archivos en los dos lados, pero el peso "
+                    "total difiere en %s." % (l.get("name"), l_n, _human_size(abs(l_b - w_b)))
                 )
             else:
                 parts.append(
-                    "%s is incomplete: %d files local, %d in Wasabi."
+                    "%s está incompleta: %d archivos en local y %d en Wasabi."
                     % (l.get("name"), l_n, w_n)
                 )
         elif status == core.ST_MISNAMED:
-            for label, scan in (("Wasabi", w), ("Local", l)):
+            for label, scan in (("Wasabi", w), ("local", l)):
                 if scan.get("foreign"):
-                    parts.append("%s folder %s is named for another shot." % (label, scan.get("name")))
+                    parts.append(
+                        "En %s, la versión más alta del publish es %s, que lleva el "
+                        "nombre de otro shot." % (label, scan.get("name"))
+                    )
+        elif status == core.ST_STRAY:
+            if core.ST_OK in row.get("statuses", []):
+                parts.append("Las versiones coinciden.")
+            parts.append(_stray_text(w.get("strays") or [], l.get("strays") or []))
     if row.get("upload_blocked") and not l.get("foreign"):
         parts.append(row["upload_blocked"])
     if row.get("upload_needs_confirm"):
-        parts.append("Check the local folder name before uploading.")
+        parts.append("Revisá el nombre de la carpeta local antes de subirla.")
     return " ".join(parts)
+
+
+def _stray_text(wasabi_strays, local_strays):
+    """Carpetas de otro shot que sobran en el publish, diciendo de que lado."""
+    names = sorted(set(wasabi_strays) | set(local_strays), key=str.lower)
+    pieces = []
+    for name in names:
+        sides = [
+            side for side, strays in (("Wasabi", wasabi_strays), ("local", local_strays))
+            if name in strays
+        ]
+        pieces.append("%s (en %s)" % (name, " y en ".join(sides)))
+    return (
+        "En el publish sobra%s %s de otro shot: %s. Revisá si es una copia de más."
+        % (
+            "" if len(names) == 1 else "n",
+            "una carpeta" if len(names) == 1 else "carpetas",
+            ", ".join(pieces),
+        )
+    )
 
 
 def _human_size(size):
@@ -715,6 +798,29 @@ def _glyph_icon(color_hex, upward=False, size=GLYPH_SIZE):
     painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
     painter.scale(size / _GLYPH_VIEWBOX, size / _GLYPH_VIEWBOX)
     painter.fillPath(path, QtGui.QColor(color_hex))
+    painter.end()
+    return QtGui.QIcon(pixmap)
+
+
+def _goto_icon(color_hex, size=GLYPH_SIZE):
+    """Mira (aro y punto): "ubicar en el timeline"."""
+    screen = QtWidgets.QApplication.primaryScreen()
+    dpr = screen.devicePixelRatio() if screen else 1.0
+    pixmap = QtGui.QPixmap(int(round(size * dpr)), int(round(size * dpr)))
+    pixmap.setDevicePixelRatio(dpr)
+    pixmap.fill(Qt.transparent)
+    painter = QtGui.QPainter(pixmap)
+    painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
+    color = QtGui.QColor(color_hex)
+    pen = QtGui.QPen(color)
+    pen.setWidthF(1.4)
+    painter.setPen(pen)
+    painter.setBrush(Qt.NoBrush)
+    c = size / 2.0
+    painter.drawEllipse(QtCore.QPointF(c, c), c - 1.6, c - 1.6)
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(color)
+    painter.drawEllipse(QtCore.QPointF(c, c), size * 0.17, size * 0.17)
     painter.end()
     return QtGui.QIcon(pixmap)
 
@@ -825,6 +931,7 @@ class TripleCheckDialog(QtWidgets.QDialog):
         self.catalog = get_task_status_dict()
         self.sort_column = None
         self.sort_order = Qt.AscendingOrder
+        self.keep_on_top = _load_keep_on_top()
         self.rerun = rerun
         self._build(result, sequence_name)
         apply_ui_font(self)
@@ -861,6 +968,12 @@ class TripleCheckDialog(QtWidgets.QDialog):
         set_custom_tooltip(self.status_filter, TOOLTIPS["task_status_filter"])
         options.addWidget(self.status_filter)
         options.addStretch(1)
+        self.keep_on_top_chk = QtWidgets.QCheckBox("Keep on top")
+        self.keep_on_top_chk.setProperty("lgaLabeled", True)
+        self.keep_on_top_chk.setChecked(self.keep_on_top)
+        self.keep_on_top_chk.toggled.connect(self._set_keep_on_top)
+        set_custom_tooltip(self.keep_on_top_chk, TOOLTIPS["keep_on_top"])
+        options.addWidget(self.keep_on_top_chk)
         layout.addLayout(options)
 
         self.table = QtWidgets.QTableWidget(len(self.rows), len(HEADERS), self)
@@ -871,8 +984,12 @@ class TripleCheckDialog(QtWidgets.QDialog):
         self.table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.table.setFocusPolicy(Qt.NoFocus)
         self.table.setStyleSheet(Style.TABLE)
+        # Detail se lee entero: salto de linea y la fila crece, sin "...".
+        self.table.setWordWrap(True)
+        self.table.setTextElideMode(Qt.ElideNone)
         header = self.table.horizontalHeader()
         header.setStretchLastSection(True)
+        header.sectionResized.connect(self._on_section_resized)
         # Orden propio (no el de QTableWidget): la fila de la tabla sigue
         # siendo el indice en self.rows, los numeros de version ordenan como
         # numeros y el estado de la task sigue el orden del flujo de trabajo.
@@ -880,7 +997,6 @@ class TripleCheckDialog(QtWidgets.QDialog):
         header.setSortIndicatorShown(False)
         header.sectionClicked.connect(self._on_header_clicked)
         self._fill_table()
-        self.table.cellClicked.connect(self._on_cell_clicked)
         layout.addWidget(self.table, 1)
 
         self.empty_label = QtWidgets.QLabel(
@@ -996,9 +1112,38 @@ class TripleCheckDialog(QtWidgets.QDialog):
         self.table.setItem(
             index, COL_STATUS, self._item(label, STATUS_COLORS[row["status"]])
         )
-        self.table.setItem(index, COL_DETAIL, self._item(detail_text(row), Color.TEXT_DIM))
+        self.table.setItem(
+            index, COL_DETAIL,
+            self._item(detail_text(row), Color.TEXT_DIM, int(Qt.AlignLeft | Qt.AlignVCenter)),
+        )
+        self._set_goto_cell(index, row)
         self._set_action_cell(index, row)
         self.table.setRowHeight(index, Metric.ROW_HEIGHT)
+
+    def _set_goto_cell(self, index, row):
+        item = QtWidgets.QTableWidgetItem("")
+        item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+        self.table.setItem(index, COL_GOTO, item)
+        if not row["in_timeline"]:
+            return
+        button = QtWidgets.QPushButton()
+        button.setMinimumWidth(GOTO_CELL_WIDTH)
+        button.setCursor(Qt.PointingHandCursor)
+        button.setAutoDefault(False)
+        button.setFocusPolicy(Qt.NoFocus)
+        # Sin caja, como la celda de accion pero sin el violeta: navegar no es
+        # la accion de la fila.
+        button.setStyleSheet(
+            Style.BTN_ICON
+            + "QPushButton { background-color: transparent; border: none;"
+            " border-radius: 0px; padding: 0px; }"
+            + " QPushButton:hover { background-color: %s; }" % Color.SURFACE_HOVER
+        )
+        button.setIcon(_goto_icon(Color.TEXT))
+        button.setIconSize(QtCore.QSize(GLYPH_SIZE, GLYPH_SIZE))
+        set_custom_tooltip(button, TOOLTIPS["goto"])
+        button.clicked.connect(lambda _c=False, r=row: self._goto_row(r))
+        self.table.setCellWidget(index, COL_GOTO, button)
 
     def _set_action_cell(self, index, row):
         item = QtWidgets.QTableWidgetItem("")
@@ -1038,6 +1183,7 @@ class TripleCheckDialog(QtWidgets.QDialog):
     def _fit_columns(self):
         self.table.resizeColumnsToContents()
         self.table.setColumnWidth(COL_ACTION, ACTION_CELL_WIDTH)
+        self.table.setColumnWidth(COL_GOTO, GOTO_CELL_WIDTH)
         for col in (COL_FLOW, COL_WASABI, COL_LOCAL):
             self.table.setColumnWidth(col, max(self.table.columnWidth(col), 64))
         visible = sum(1 for i in range(self.table.rowCount()) if not self.table.isRowHidden(i))
@@ -1046,6 +1192,45 @@ class TripleCheckDialog(QtWidgets.QDialog):
         self.table.setMinimumHeight(height)
         width = sum(self.table.columnWidth(c) for c in range(len(HEADERS) - 1)) + 360
         self.resize(max(self.minimumWidth(), min(width, 1500)), self.sizeHint().height())
+        self._fit_rows()
+
+    def _fit_rows(self):
+        """Alto de cada fila: una linea, o las que necesite Detail."""
+        for index in range(self.table.rowCount()):
+            self.table.setRowHeight(
+                index, max(Metric.ROW_HEIGHT, self.table.sizeHintForRow(index))
+            )
+
+    def _on_section_resized(self, column, _old, _new):
+        # Detail es la ultima columna (se estira con la ventana): al cambiar
+        # su ancho cambia cuantas lineas necesita cada fila.
+        if column == COL_DETAIL:
+            self._fit_rows()
+
+    def resizeEvent(self, event):
+        super(TripleCheckDialog, self).resizeEvent(event)
+        self._fit_rows()
+
+    def showEvent(self, event):
+        super(TripleCheckDialog, self).showEvent(event)
+        if self.keep_on_top:
+            # Despues del show, como en el Flow Pull: si no, Qt pisa el topmost.
+            QtCore.QTimer.singleShot(0, lambda: _set_topmost(self, True))
+
+    def _set_keep_on_top(self, value):
+        self.keep_on_top = bool(value)
+        _save_keep_on_top(self.keep_on_top)
+        if not _set_topmost(self, self.keep_on_top):
+            flags = self.windowFlags()
+            if self.keep_on_top:
+                flags |= Qt.WindowStaysOnTopHint
+            else:
+                flags &= ~Qt.WindowStaysOnTopHint
+            geometry = self.geometry()
+            self.setWindowFlags(flags)
+            self.setGeometry(geometry)
+            self.show()
+        debug_print("Keep on top: %s" % self.keep_on_top)
 
     # -- filtro y botones masivos
     def _visible_rows(self):
@@ -1107,6 +1292,7 @@ class TripleCheckDialog(QtWidgets.QDialog):
         self.table.clearSelection()
         self._fill_table()
         self._apply_filter()
+        self._fit_rows()
 
     def _apply_filter(self):
         only = self.only_issues.isChecked()
@@ -1192,12 +1378,9 @@ class TripleCheckDialog(QtWidgets.QDialog):
         self.rerun()
 
     # -- navegacion
-    def _on_cell_clicked(self, index, column):
-        if column == COL_ACTION or index >= len(self.rows):
-            return
-        row = self.rows[index]
-        if not row["in_timeline"]:
-            return
+    def _goto_row(self, row):
+        """Boton de la fila: lleva el timeline al shot. El click en la fila no
+        navega (Lega, 2026-11-20): asi se puede seleccionar sin moverse."""
         try:
             from LGA_NKS_Shared.LGA_NKS_ShotNavigation import goto_shot
 

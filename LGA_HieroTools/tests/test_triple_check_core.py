@@ -159,7 +159,7 @@ class ScanTest(unittest.TestCase):
     def test_flat_publish_is_an_error(self):
         files = {"101/%s/comp" % SHOT: [], BASE: ["%s_comp_v001.1001.exr" % SHOT]}
         result = scan(FakeLister(files))
-        self.assertIn("flat publish", result["error"])
+        self.assertIn("publish plano", result["error"])
 
     def test_list_error_is_reported(self):
         result = scan(FakeLister(tree(1), fail_on="101/%s" % SHOT))
@@ -300,6 +300,22 @@ class ClassifyTest(unittest.TestCase):
         result = scan(FakeLister(files))
         self.assertEqual(result["number"], 4)
         self.assertTrue(result["foreign"])
+        self.assertEqual(result["strays"], [])
+
+    def test_own_folder_wins_tie_and_copy_is_a_stray(self):
+        # Caso real: la v005 del shot y al lado una copia de la v005 de otro
+        # shot. Por orden alfabetico ganaba la ajena y salia Wrong folder.
+        files = tree(5)
+        stray = "PROJA_1005_0175_VND_comp_v005"
+        files["%s/%s" % (BASE, stray)] = ["a.exr"]
+        result = scan(FakeLister(files))
+        self.assertEqual(result["number"], 5)
+        self.assertFalse(result["foreign"])
+        self.assertEqual(result["strays"], [stray])
+        r = row(5, dict(result), dict(result))
+        self.assertNotIn(core.ST_MISNAMED, r["statuses"])
+        self.assertEqual(r["statuses"], [core.ST_STRAY, core.ST_OK])
+        self.assertTrue(core.is_issue(r))
 
     def test_wasabi_folder_of_another_shot_is_not_downloaded(self):
         wasabi = found(6, name="PROJA_1074_2000_VND_comp_v006")

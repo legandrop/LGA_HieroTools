@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_TripleCheck_Core v1.01 | Lega
+  LGA_NKS_TripleCheck_Core v1.02 | Lega
 
   Logica del Triple Check del panel Flow | S3: compara la ultima version
   publicada (EXR) de cada shot y task en Flow, en Wasabi y en el disco
@@ -15,6 +15,11 @@ ____________________________________________________________________
 
   Detalle de reglas y estados: docs/Docu_TripleCheck.md.
 
+  v1.02: Con dos carpetas del mismo numero gana la del propio shot (antes
+         ganaba la de otro shot por orden alfabetico y salia Wrong folder
+         aunque la version propia estuviera). Las carpetas de otro shot que
+         sobran se informan con el estado nuevo ST_STRAY. Textos de error y
+         de bloqueo en castellano (se leen en la columna Detail).
   v1.01: task_status_info() y has_no_versions().
   v1.00: Version inicial.
 ____________________________________________________________________
@@ -38,6 +43,7 @@ ST_MISNAMED = "misnamed"
 ST_UPLOAD = "upload"
 ST_DOWNLOAD = "download"
 ST_NOT_IN_FLOW_VERSION = "not_in_flow_version"
+ST_STRAY = "stray"
 ST_OK = "ok"
 ST_NO_VERSIONS = "no_versions"
 
@@ -52,6 +58,7 @@ STATUS_PRIORITY = (
     ST_UPLOAD,
     ST_DOWNLOAD,
     ST_NOT_IN_FLOW_VERSION,
+    ST_STRAY,
     ST_OK,
     ST_NO_VERSIONS,
 )
@@ -236,7 +243,7 @@ class LocalLister(object):
         """(carpetas, archivos) de un nivel. Un nivel que no existe da ([], [])."""
         path = self.path_of(parts)
         if not parts and not os.path.isdir(path):
-            raise ListError("Local project folder not found: %s" % path)
+            raise ListError("No se encontró la carpeta local del proyecto: %s" % path)
         if not os.path.isdir(path):
             return [], []
         dirs, files = [], []
@@ -251,7 +258,7 @@ class LocalLister(object):
                     except OSError:
                         continue
         except OSError as exc:
-            raise ListError("Cannot read %s: %s" % (path, exc))
+            raise ListError("No se pudo leer %s: %s" % (path, exc))
         return dirs, files
 
     def has_files(self, parts):
@@ -289,7 +296,7 @@ class LocalLister(object):
                     except OSError:
                         pass
         except OSError as exc:
-            raise ListError("Cannot read %s: %s" % (path, exc))
+            raise ListError("No se pudo leer %s: %s" % (path, exc))
         return count, total
 
 
@@ -407,6 +414,7 @@ def empty_scan():
         "shot_parts": [],     # [seq, shot] con su caso real
         "present": False,     # CG: si esta la entrega de Flow
         "foreign": False,     # la carpeta tope lleva el nombre de otro shot
+        "strays": [],         # OTRAS carpetas de version con nombre de otro shot
         "error": "",
     }
 
@@ -445,7 +453,7 @@ def scan_task(lister, shot_parts, task_folder, cg_version_code=None):
             # Publish plano: los frames sueltos en `4_publish`. Ni se compara
             # ni se ofrece nada: bajar la "version" crearia una subcarpeta y
             # duplicaria el material.
-            result["error"] = "Files directly in %s (flat publish), not handled." % publish_dir
+            result["error"] = "Archivos sueltos en %s (publish plano): no se compara." % publish_dir
             return result
 
         if cg_version_code:
@@ -459,14 +467,25 @@ def scan_task(lister, shot_parts, task_folder, cg_version_code=None):
 
         # De la mas alta a la mas baja; la primera con archivos. v000 es el
         # placeholder de Create v000: vale como "hay carpeta" pero numero 0.
-        for name, number in sorted(entries, key=lambda e: (-e[1], e[0])):
+        # A igual numero gana la carpeta del PROPIO shot: con
+        # `SHOT_comp_v005/` y una copia `OTRO_comp_v005/` al lado, el orden
+        # alfabetico podia elegir la ajena y marcar Wrong folder aunque la
+        # version propia estuviera completa.
+        shot = shot_parts[-1]
+        own = {name: version_belongs_to_shot(name, shot) for name, _n in entries}
+        for name, number in sorted(entries, key=lambda e: (-e[1], not own[e[0]], e[0])):
             if lister.has_files(base + [name]):
                 result["name"] = name
                 result["number"] = number
                 # Cuenta igual que en PipeSync, pero se marca: una carpeta con
                 # el nombre de OTRO shot es material bajado al lugar equivocado.
-                result["foreign"] = not version_belongs_to_shot(name, shot_parts[-1])
+                result["foreign"] = not own[name]
                 break
+        # Las demas carpetas con nombre de otro shot sobran en este publish
+        # (una copia, o material bajado al shot equivocado): se informan.
+        result["strays"] = sorted(
+            name for name, _n in entries if not own[name] and name != result["name"]
+        )
     except ListError as exc:
         result["error"] = str(exc)
     return result
@@ -790,6 +809,10 @@ def classify(row):
                 version_statuses.append(ST_MISNAMED)
             if not version_statuses:
                 version_statuses.append(ST_OK if f > 0 else ST_NO_VERSIONS)
+            if wasabi.get("strays") or local.get("strays"):
+                # Aparte del OK: las versiones coinciden, pero en el publish
+                # hay una carpeta de otro shot que sobra.
+                version_statuses.append(ST_STRAY)
 
     # Subir algo de un shot que Flow no tiene (o sin esa task) suele ser un
     # timeline de otro contexto o una carpeta equivocada: se pregunta.
@@ -803,7 +826,7 @@ def classify(row):
     blocked = ""
     if can_upload and local.get("foreign"):
         # Subirla replicaria en Wasabi el error de nombre.
-        blocked = "Local folder %s is named for another shot." % local.get("name")
+        blocked = "La carpeta local %s lleva el nombre de otro shot." % local.get("name")
         can_upload = False
     if can_upload and not blocked:
         w_pub = (wasabi.get("publish_dir") or "").lower()
@@ -811,7 +834,7 @@ def classify(row):
         if w_pub and l_pub and w_pub != l_pub:
             # FileManagerS3 sube a la ruta tal cual: con otro nombre de
             # publish quedarian dos carpetas de publish en Wasabi.
-            blocked = "Publish folder differs: local '%s', Wasabi '%s'." % (
+            blocked = "El publish se llama distinto: local '%s', Wasabi '%s'." % (
                 local.get("publish_dir"), wasabi.get("publish_dir"))
             can_upload = False
 
