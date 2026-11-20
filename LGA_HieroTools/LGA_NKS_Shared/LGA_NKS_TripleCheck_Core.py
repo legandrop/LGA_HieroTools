@@ -2,7 +2,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_TripleCheck_Core v1.00 | Lega
+  LGA_NKS_TripleCheck_Core v1.01 | Lega
 
   Logica del Triple Check del panel Flow | S3: compara la ultima version
   publicada (EXR) de cada shot y task en Flow, en Wasabi y en el disco
@@ -15,6 +15,7 @@ ____________________________________________________________________
 
   Detalle de reglas y estados: docs/Docu_TripleCheck.md.
 
+  v1.01: task_status_info() y has_no_versions().
   v1.00: Version inicial.
 ____________________________________________________________________
 """
@@ -828,6 +829,32 @@ def classify(row):
 def is_issue(row):
     """True si la fila tiene algo que mirar (no es solo OK / No versions)."""
     return any(s not in QUIET_STATUSES for s in row.get("statuses", []))
+
+
+def has_no_versions(row):
+    """True si ningun lado tiene una version real (Flow, Wasabi y local en 0)."""
+    return not any(
+        (row.get(source) if source == "flow" else (row.get(source) or {}).get("number"))
+        for source in ("flow", "wasabi", "local")
+    )
+
+
+def task_status_info(code, catalog):
+    """(nombre visible, color de fondo, orden) del estado de la task en Flow.
+
+    catalog: code -> (nombre, color, ...) en el orden del flujo de trabajo
+    (Not ready -> In progress -> reviews -> entregas), el de
+    LGA_NKS_Flow_Status_Config. Ordenar por estado sigue ese orden, no el
+    alfabetico. Un codigo que el catalogo no conoce se muestra crudo, sin
+    color, despues de los conocidos; sin task en Flow va al final.
+    """
+    codes = list(catalog)
+    if not code:
+        return "", None, len(codes) + 1
+    if code in catalog:
+        info = catalog[code]
+        return info[0], info[1], codes.index(code)
+    return code, None, len(codes)
 
 
 # ── Rutas de las acciones ────────────────────────────────────────────────────

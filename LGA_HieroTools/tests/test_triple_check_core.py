@@ -424,5 +424,39 @@ class WasabiListerTest(unittest.TestCase):
         self.assertEqual(len(calls), core.NET_ATTEMPTS)
 
 
+class TaskStatusTest(unittest.TestCase):
+    # Mismo formato que LGA_NKS_Flow_Status_Config: code -> (nombre, color, tag),
+    # en el orden del flujo de trabajo.
+    CATALOG = {
+        "noread": ("Not ready", "#000000", None),
+        "progre": ("In progress", "#7d4cff", None),
+        "revleg": ("Review Lega", "#69135e", "Rev_Lega"),
+        "apr": ("Delivery Apr", "#266612", "Approved"),
+    }
+
+    def test_known_status_follows_workflow_order(self):
+        self.assertEqual(
+            core.task_status_info("revleg", self.CATALOG), ("Review Lega", "#69135e", 2)
+        )
+        orders = [core.task_status_info(c, self.CATALOG)[2] for c in ("apr", "noread", "progre")]
+        self.assertEqual(orders, [3, 0, 1])
+
+    def test_unknown_code_is_shown_raw_after_known(self):
+        self.assertEqual(core.task_status_info("xyz", self.CATALOG), ("xyz", None, 4))
+
+    def test_no_task_goes_last(self):
+        self.assertEqual(core.task_status_info("", self.CATALOG), ("", None, 5))
+
+    def test_has_no_versions(self):
+        empty = core.empty_scan()
+        row = {"flow": None, "wasabi": empty, "local": empty}
+        self.assertTrue(core.has_no_versions(row))
+        # v000 es el placeholder: no es una entrega.
+        v000 = dict(empty, number=0)
+        self.assertTrue(core.has_no_versions(dict(row, local=v000)))
+        self.assertFalse(core.has_no_versions(dict(row, wasabi=dict(empty, number=3))))
+        self.assertFalse(core.has_no_versions(dict(row, flow=2)))
+
+
 if __name__ == "__main__":
     unittest.main()

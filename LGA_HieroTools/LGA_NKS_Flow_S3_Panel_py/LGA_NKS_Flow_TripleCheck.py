@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_TripleCheck v1.00 | Lega
+  LGA_NKS_Flow_TripleCheck v1.01 | Lega
 
   Triple Check del panel Flow | S3: para cada shot y task del timeline
   activo compara la ultima version publicada (EXR) en Flow, en Wasabi y en
@@ -15,6 +15,10 @@ ____________________________________________________________________
   junta los clips del timeline, corre el chequeo fuera del hilo principal
   y muestra la ventana. Detalle: docs/Docu_TripleCheck.md.
 
+  v1.01: Columna Task Status (estado de la task en Flow, con su color),
+         orden por columna con click en la cabecera, filtro por estado y
+         Detail que explica los shots de Flow sin nada publicado. La columna
+         del chequeo pasa a llamarse Sync. Reload del core robusto.
   v1.00: Version inicial.
 ____________________________________________________________________
 """
@@ -48,7 +52,14 @@ from LGA_NKS_Shared import LGA_NKS_TripleCheck_Core as core
 # abierto mezclaria la ventana nueva con la logica vieja.
 import importlib as _importlib
 
-core = _importlib.reload(core)
+# Si el modulo salio de sys.modules, el paquete conserva el atributo viejo:
+# el import de arriba lo devuelve y reload() falla con ImportError. En ese
+# caso se importa de cero.
+_CORE_NAME = "LGA_NKS_Shared.LGA_NKS_TripleCheck_Core"
+if _CORE_NAME in sys.modules:
+    core = _importlib.reload(sys.modules[_CORE_NAME])
+else:
+    core = _importlib.import_module(_CORE_NAME)
 from LGA_NKS_Shared.LGA_NKS_TaskScope import (
     active_track_tasks,
     exr_track_for_task,
@@ -56,6 +67,7 @@ from LGA_NKS_Shared.LGA_NKS_TaskScope import (
     task_display_name,
     CG_TASK_NAME,
 )
+from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import get_task_status_dict
 from LGA_NKS_Shared.LGA_NKS_Flow_NamingUtils import (
     clean_base_name,
     extract_project_name,
@@ -158,10 +170,20 @@ TOOLTIPS = {
         "Las que son mas nuevas que Flow se suben de a una, desde su fila."
     ),
     "recheck": "Vuelve a leer Flow, Wasabi y el disco.",
+    "task_status_filter": (
+        "Muestra solo los shots cuya task esta en ese estado de Flow.<br>"
+        "Se suma al filtro de Only issues."
+    ),
 }
 
-COL_SHOT, COL_TASK, COL_FLOW, COL_WASABI, COL_LOCAL, COL_STATUS, COL_ACTION, COL_DETAIL = range(8)
-HEADERS = ["Shot", "Task", "Flow", "Wasabi", "Local", "Status", "", "Detail"]
+(
+    COL_SHOT, COL_TASK, COL_TASK_STATUS, COL_FLOW, COL_WASABI, COL_LOCAL,
+    COL_STATUS, COL_ACTION, COL_DETAIL,
+) = range(9)
+# "Sync" y no "Status": al lado de "Task Status" (el estado de la task en
+# Flow) dos columnas "Status" se confundian.
+HEADERS = ["Shot", "Task", "Task Status", "Flow", "Wasabi", "Local", "Sync", "", "Detail"]
+ALL_TASK_STATUSES = "All task statuses"
 ACTION_CELL_WIDTH = 36
 GLYPH_SIZE = 12
 
@@ -606,7 +628,16 @@ def detail_text(row):
         elif status == core.ST_TASK_NOT_IN_FLOW:
             parts.append("The shot has no %s task in Flow." % task_display_name(row["task"]))
         elif status == core.ST_NOT_IN_TIMELINE:
-            parts.append("In Flow but not in the %s track." % exr_track_for_task(row["task"]))
+            if core.has_no_versions(row):
+                # Shot creado y asignado que todavia no se empezo: lo que
+                # falta es armarlo en el timeline.
+                parts.append(
+                    "In Flow but not in the %s track. Nothing published yet: "
+                    "add the plate and the v000 to the timeline."
+                    % exr_track_for_task(row["task"])
+                )
+            else:
+                parts.append("In Flow but not in the %s track." % exr_track_for_task(row["task"]))
         elif status == core.ST_MISSING_STORAGE:
             version = (
                 _short_name(row["flow_code"], row["shot"]) if row["is_cg"]
@@ -781,7 +812,7 @@ class TripleCheckDialog(QtWidgets.QDialog):
         self.setMinimumWidth(980)
         # Primero los shots del timeline, por importancia; despues los de Flow
         # que no estan en el timeline, que suelen ser muchos y menos urgentes.
-        self.rows = sorted(
+        self.default_rows = sorted(
             result["rows"],
             key=lambda r: (
                 not r["in_timeline"],
@@ -790,6 +821,10 @@ class TripleCheckDialog(QtWidgets.QDialog):
                 r["task"],
             ),
         )
+        self.rows = list(self.default_rows)
+        self.catalog = get_task_status_dict()
+        self.sort_column = None
+        self.sort_order = Qt.AscendingOrder
         self.rerun = rerun
         self._build(result, sequence_name)
         apply_ui_font(self)
@@ -819,6 +854,12 @@ class TripleCheckDialog(QtWidgets.QDialog):
         self.only_issues.toggled.connect(self._apply_filter)
         set_custom_tooltip(self.only_issues, TOOLTIPS["only_issues"])
         options.addWidget(self.only_issues)
+        self.status_filter = QtWidgets.QComboBox()
+        self.status_filter.setStyleSheet(Style.COMBO)
+        self._fill_status_filter()
+        self.status_filter.currentIndexChanged.connect(self._apply_filter)
+        set_custom_tooltip(self.status_filter, TOOLTIPS["task_status_filter"])
+        options.addWidget(self.status_filter)
         options.addStretch(1)
         layout.addLayout(options)
 
@@ -830,9 +871,15 @@ class TripleCheckDialog(QtWidgets.QDialog):
         self.table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.table.setFocusPolicy(Qt.NoFocus)
         self.table.setStyleSheet(Style.TABLE)
-        self.table.horizontalHeader().setStretchLastSection(True)
-        for index, row in enumerate(self.rows):
-            self._fill_row(index, row)
+        header = self.table.horizontalHeader()
+        header.setStretchLastSection(True)
+        # Orden propio (no el de QTableWidget): la fila de la tabla sigue
+        # siendo el indice en self.rows, los numeros de version ordenan como
+        # numeros y el estado de la task sigue el orden del flujo de trabajo.
+        header.setSectionsClickable(True)
+        header.setSortIndicatorShown(False)
+        header.sectionClicked.connect(self._on_header_clicked)
+        self._fill_table()
         self.table.cellClicked.connect(self._on_cell_clicked)
         layout.addWidget(self.table, 1)
 
@@ -896,10 +943,48 @@ class TripleCheckDialog(QtWidgets.QDialog):
             item.setTextAlignment(align)
         return item
 
+    def _status_info(self, row):
+        return core.task_status_info(row.get("flow_status") or "", self.catalog)
+
+    def _task_status_item(self, row):
+        name, color, _order = self._status_info(row)
+        if not name:
+            return self._item("-", Color.TEXT_DIM, int(Qt.AlignCenter))
+        item = self._item(name, align=int(Qt.AlignCenter))
+        if color:
+            # Como la columna de estado del Flow Pull: el color del estado de
+            # Flow de fondo (es dato) y el texto claro u oscuro segun el fondo.
+            background = QtGui.QColor(color)
+            luminance = (
+                0.299 * background.red() + 0.587 * background.green() + 0.114 * background.blue()
+            )
+            item.setBackground(QtGui.QBrush(background))
+            item.setForeground(QtGui.QBrush(QtGui.QColor(
+                Color.TEXT_ON_COLOR if luminance < 128 else Color.WINDOW
+            )))
+        return item
+
+    def _fill_status_filter(self):
+        counts = {}
+        for row in self.rows:
+            code = row.get("flow_status") or ""
+            counts[code] = counts.get(code, 0) + 1
+        self.status_filter.addItem(ALL_TASK_STATUSES, None)
+        for code in sorted(counts, key=lambda c: core.task_status_info(c, self.catalog)[2]):
+            name = core.task_status_info(code, self.catalog)[0] or "No task in Flow"
+            self.status_filter.addItem("%s (%d)" % (name, counts[code]), code)
+
+    def _fill_table(self):
+        self.table.setRowCount(0)
+        self.table.setRowCount(len(self.rows))
+        for index, row in enumerate(self.rows):
+            self._fill_row(index, row)
+
     def _fill_row(self, index, row):
         center = int(Qt.AlignCenter)
         self.table.setItem(index, COL_SHOT, self._item(row["shot"]))
         self.table.setItem(index, COL_TASK, self._item(task_display_name(row["task"])))
+        self.table.setItem(index, COL_TASK_STATUS, self._task_status_item(row))
         for col, source in ((COL_FLOW, "flow"), (COL_WASABI, "wasabi"), (COL_LOCAL, "local")):
             self.table.setItem(
                 index, col,
@@ -968,11 +1053,69 @@ class TripleCheckDialog(QtWidgets.QDialog):
             self.rows[i] for i in range(self.table.rowCount()) if not self.table.isRowHidden(i)
         ]
 
+    # -- orden
+    def _sort_key(self, column):
+        def _number(row, source):
+            if source == "flow":
+                value = row.get("flow") if row.get("task_in_flow") else None
+            else:
+                value = (row.get(source) or {}).get("number")
+            return -1 if value is None else value
+
+        def key(row):
+            tie = (row["shot"].lower(), row["task"])
+            if column == COL_TASK:
+                return (row["task"],) + tie
+            if column == COL_TASK_STATUS:
+                return (self._status_info(row)[2],) + tie
+            if column in (COL_FLOW, COL_WASABI, COL_LOCAL):
+                source = {COL_FLOW: "flow", COL_WASABI: "wasabi", COL_LOCAL: "local"}[column]
+                return (_number(row, source),) + tie
+            if column == COL_STATUS:
+                return (core.STATUS_PRIORITY.index(row["status"]),) + tie
+            if column == COL_ACTION:
+                return (0 if row["can_upload"] else 1 if row["can_download"] else 2,) + tie
+            if column == COL_DETAIL:
+                return (detail_text(row).lower(),) + tie
+            return tie
+
+        return key
+
+    def _on_header_clicked(self, column):
+        if column == self.sort_column:
+            if self.sort_order == Qt.DescendingOrder:
+                # Tercer click: vuelve al orden de entrada (por importancia).
+                self.sort_column = None
+            else:
+                self.sort_order = Qt.DescendingOrder
+        else:
+            self.sort_column, self.sort_order = column, Qt.AscendingOrder
+        header = self.table.horizontalHeader()
+        if self.sort_column is None:
+            self.rows = list(self.default_rows)
+            header.setSortIndicatorShown(False)
+        else:
+            self.rows = sorted(
+                self.default_rows,
+                key=self._sort_key(self.sort_column),
+                reverse=self.sort_order == Qt.DescendingOrder,
+            )
+            header.setSortIndicatorShown(True)
+            header.setSortIndicator(self.sort_column, self.sort_order)
+        debug_print("Orden: columna=%s descendente=%s" % (
+            self.sort_column, self.sort_order == Qt.DescendingOrder))
+        self.table.clearSelection()
+        self._fill_table()
+        self._apply_filter()
+
     def _apply_filter(self):
         only = self.only_issues.isChecked()
+        wanted = self.status_filter.currentData()
         visible = 0
         for index, row in enumerate(self.rows):
             hide = only and not core.is_issue(row)
+            if wanted is not None and (row.get("flow_status") or "") != wanted:
+                hide = True
             self.table.setRowHidden(index, hide)
             visible += 0 if hide else 1
         self.table.setVisible(visible > 0)

@@ -150,6 +150,8 @@ Internal reference: [Flow | S3 Panel](LGA_HieroTools/docs/LGA_NKS_Flow_S3_Panel_
   version folders, shots that are not in Flow, and Flow shots of the same
   sequences that are not in the timeline. Rows that need it get a Download or
   Upload button (through FileManagerS3), plus Download all / Upload all.
+  Shows the Flow status of each task, can be filtered by status and sorted
+  by clicking any column header.
 - **Thumbnail**
 
   Click: replaces the shot's thumbnail in Flow with a viewer snapshot, after a

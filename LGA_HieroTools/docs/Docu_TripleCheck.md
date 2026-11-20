@@ -98,9 +98,35 @@ Una fila es un (shot, task). `F`, `W`, `L` son los números de Flow, Wasabi y Lo
 | `No versions` | `F = W = L = 0` | — |
 
 Los estados no se excluyen: `F=10, W=8, L=5` es `Missing in Wasabi` (falta la v010) y además `Download`
-(la v008 está en Wasabi y no en local). La columna Status muestra el más importante en el orden de la
-tabla y **Detail** explica todos en una oración cada uno. Las filas del timeline van primero; las de
-Flow que faltan en el timeline, al final. `Only issues` (prendido al abrir) oculta `OK` y `No versions`.
+(la v008 está en Wasabi y no en local). La columna **Sync** muestra el más importante en el orden de la
+tabla y **Detail** explica todos en una oración cada uno. `Only issues` (prendido al abrir) oculta `OK` y
+`No versions`.
+
+**`Not in timeline` sin nada publicado no se oculta.** Un shot de Flow con su task y ninguna versión en
+ningún lado es un shot creado y asignado que todavía no se empezó: lo que falta es armarlo en el
+timeline (el plate y la v000). Detail lo dice así. Por eso esas filas cuentan como problema y quedan
+visibles con `Only issues`.
+
+## Columnas, orden y filtro
+
+`Shot | Task | Task Status | Flow | Wasabi | Local | Sync | (botón) | Detail`.
+
+- **Task Status:** el estado de la task en Flow (`sg_status_list`, leído en la misma consulta de Tasks),
+  con el nombre y el color del catálogo `LGA_NKS_Flow_Status_Config`, los mismos de PipeSync y del Flow
+  Pull. El texto va claro u oscuro según la luminancia del fondo. Un código que el catálogo no conoce
+  sale crudo y sin color; sin task en Flow, `-`. La columna del chequeo se llama **Sync** y no Status
+  para que no se confunda con esta.
+- **Orden:** click en una cabecera ordena por esa columna; otro click, al revés; el tercero vuelve al
+  orden de entrada (filas del timeline primero, por importancia del estado; después las de Flow que
+  faltan en el timeline). Las versiones ordenan como número (`-` y `?` antes que `v000`) y Task Status
+  en el **orden del flujo de trabajo** del catálogo (Not ready → In progress → reviews → entregas), no
+  alfabético. Desempate siempre por shot. El orden es propio y no el de `QTableWidget`: la fila de la
+  tabla sigue siendo el índice en `self.rows` (lo usan la navegación, el filtro y los botones masivos),
+  y la tabla se rearma en cada orden.
+- **Filtro por estado:** el combo al lado de `Only issues` lista los estados presentes con su cantidad
+  (`Review Lega (12)`) y `No task in Flow`. Se suma a `Only issues`: con los dos se ve qué shots en
+  Review Lega tienen algo desparejo; con `Only issues` apagado, todos los de ese estado. Download all y
+  Upload all trabajan sobre lo que queda visible.
 
 **`Incomplete`** compara cantidad de archivos y bytes de la versión tope, solo cuando Wasabi y local
 tienen la misma. Un listado completo de esa carpeta en Wasabi y un `os.walk` local por fila.
@@ -149,7 +175,8 @@ tienen la misma. Un listado completo de esa carpeta en Wasabi y un `os.walk` loc
   Hiero, corre antes en el hilo principal.
 - El core se recarga en cada click (`importlib.reload`): el panel carga el script de cero, pero el core
   queda en `sys.modules`, y una actualización con NKS abierto mezclaría la ventana nueva con la lógica
-  vieja.
+  vieja. Si el core salió de `sys.modules`, el paquete `LGA_NKS_Shared` conserva el atributo viejo y
+  `reload` falla con `ImportError`: en ese caso se importa de cero (`importlib.import_module`).
 - Log siempre a `LGA_HieroTools/logs/DebugPy_FlowTripleCheck.log`, pisado en cada corrida: fuentes,
   raíz, bucket, una línea por fila con lo que leyó de cada lado, reintentos y las rutas que se mandan a
   FileManagerS3.
@@ -157,10 +184,11 @@ tienen la misma. Un listado completo de esa carpeta en Wasabi y un `os.walk` loc
 ## Cómo se prueba
 
 - `tests/test_triple_check_core.py`: regla de versión, escaneo sobre un árbol falso, Versions de Flow
-  (minicuts, sin task), todos los estados, rutas de Download/Upload y el `WasabiLister` con un cliente
-  falso (paginación, AccessDenied sin reintento, red caída).
+  (minicuts, sin task), todos los estados, rutas de Download/Upload, el `WasabiLister` con un cliente
+  falso (paginación, AccessDenied sin reintento, red caída) y el orden de los estados de task.
 - Ventana: harness de UI con `+Building_Blocks/UI_Capture/fixtures/h3_flow_triplecheck.py` (una fila
-  por estado, datos ficticios); captura en `_LGA_Release/UI_Captures/FlowTripleCheck_*.png`.
+  por estado, datos ficticios); capturas en `_LGA_Release/UI_Captures/FlowTripleCheck_*.png`, entre
+  ellas una ordenada por Task Status y otra filtrada por Review Lega.
 - En vivo: con el dev-link se corre `collect_timeline()` y el worker sin abrir la ventana. Para probar
   otro contexto sin tocar el INI de la máquina, el worker se puede correr fuera de NKS con
   `LGA_HIEROTOOLS_CONTEXT_INI` apuntando a un INI propio, el Python de Nuke y los módulos de UI
@@ -176,8 +204,10 @@ tienen la misma. Un listado completo de esa carpeta en Wasabi y un `os.walk` loc
     bucket, filas y escaneo en paralelo.
   - `_flow_connection()`, `_wasabi_client()` (boto3 vendorizado en `LGA_NKS_Assignee_Panel_py`),
     `_project_folder()`, `_with_net_retries()`.
-  - `TripleCheckDialog`: tabla, `_set_action_cell()`, `_apply_filter()`, `_download_all()`,
-    `_upload_all()`, `_upload_row()` (pregunta), `_on_cell_clicked()` (navegación).
+  - `TripleCheckDialog`: tabla (`_fill_table()`, `_fill_row()`, `_task_status_item()`),
+    `_set_action_cell()`, orden (`_on_header_clicked()`, `_sort_key()`), filtro
+    (`_fill_status_filter()`, `_apply_filter()`), `_download_all()`, `_upload_all()`,
+    `_upload_row()` (pregunta), `_on_cell_clicked()` (navegación).
   - `download_rows()`, `upload_rows()`, `bulk_download_rows()`, `bulk_upload_rows()`,
     `_launch_filemanagers3()`.
   - `version_text()`, `version_color()`, `detail_text()`: presentación de una fila.
@@ -190,10 +220,14 @@ tienen la misma. Un listado completo de esa carpeta en Wasabi y un `os.walk` loc
   - `scan_task()`, `resolve_shot_parts()`, `compare_content()`, `cg_folder_for()`.
   - `fetch_flow_project()`, `flow_highest()`, `flow_latest_cg()`, `version_belongs_to_shot()`,
     `shot_prefixes()`.
-  - `classify()`, `is_issue()`, `STATUS_PRIORITY`, `download_target()`, `upload_source()`.
+  - `classify()`, `is_issue()`, `has_no_versions()`, `STATUS_PRIORITY`, `download_target()`,
+    `upload_source()`.
+  - `task_status_info()`: nombre, color y orden del estado de la task.
 - `C:/Users/leg4-pc/.nuke/Python/Startup/LGA_HieroTools/LGA_NKS_Flow_S3_Panel.py`
   - `FlowProdPanel.triple_check_versions()`: carga el script y llama a `main()`.
   - `panel_tooltip_html()`: tooltips del panel en el globo propio.
+- `C:/Users/leg4-pc/.nuke/Python/Startup/LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_Flow_Status_Config.py`:
+  `get_task_status_dict()` (catálogo de estados de task: nombre, color, orden del flujo).
 - `C:/Users/leg4-pc/.nuke/Python/Startup/LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_CG_Versions.py`:
   `ultima_version_cg()`, `misma_entrega()`, `clave_de_version()`.
 - `C:/Users/leg4-pc/.nuke/Python/Startup/LGA_HieroTools/LGA_NKS_Shared/LGA_NKS_TaskScope.py`:
