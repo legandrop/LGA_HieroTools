@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________________________
 
-  LGA_NKS_Flow_S3_Panel v1.36 | Lega
+  LGA_NKS_Flow_S3_Panel v1.37 | Lega
   Panel Flow | S3 para operaciones de produccion con Flow y almacenamiento S3:
   - Revelar clips en Flow
   - Crear shots automáticamente
@@ -9,6 +9,11 @@ ________________________________________________________________________________
   - Cambiar prioridad de shots
   - Integración con FileManagerS3 (Open, Download, Upload)
 
+  v1.37: Boton nuevo "Triple Check" despues de Check Shots Exist: compara
+         la ultima version publicada de cada shot del timeline en Flow, en
+         Wasabi y en el disco local, y deja bajar o subir lo que no
+         coincide (LGA_NKS_Flow_TripleCheck). Los tooltips del panel pasan
+         del nativo de Qt al tooltip propio de los packs.
   v1.36: Download Clip suma Ctrl+Alt+Click (abre el selector de carpetas del
          sistema y baja la ultima version a la carpeta elegida, que queda
          guardada) y Ctrl+Alt+Shift+Click (baja a la ultima carpeta elegida
@@ -83,6 +88,10 @@ import time
 from logging.handlers import QueueHandler, QueueListener
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
 from LGA_NKS_Shared.LGA_NKS_MessageBox import show_warning
+from LGA_NKS_Shared.LGA_UI_CustomTooltip_HieroTools import (
+    set_custom_tooltip,
+    tooltip_label,
+)
 from LGA_NKS_Shared.LGA_NKS_ContextProfile import get_context_mode
 from LGA_NKS_Shared.LGA_NKS_Slate_Config import (
     SLATE_CONTEXT_MODE,
@@ -219,6 +228,32 @@ SCROLLBAR_VISIBLE = False
 SHOT_WORKFLOW_COLOR = "#2a4d3a"
 
 
+_TOOLTIP_LABEL_RE = re.compile(r"^((?:[A-Za-z]+\+)*Click):\s*(.*)$")
+
+
+def panel_tooltip_html(text):
+    """Texto de tooltip del panel en el formato de las apps LGA.
+
+    Los textos de la lista de botones vienen en lineas (salto de linea) con
+    rotulos `Click:` / `Shift+Click:`. Cada linea pasa a ser un renglon
+    (`<br>`) y, solo si hay DOS o mas gestos, el rotulo va con
+    tooltip_label(); con un gesto solo el rotulo sobra y se saca.
+    """
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    labeled = [_TOOLTIP_LABEL_RE.match(line) for line in lines]
+    gestures = sum(1 for match in labeled if match)
+    out = []
+    for line, match in zip(lines, labeled):
+        if match and gestures >= 2:
+            out.append("%s %s" % (tooltip_label(match.group(1) + ":"), match.group(2)))
+        elif match:
+            body = match.group(2)
+            out.append(body[:1].upper() + body[1:])
+        else:
+            out.append(line)
+    return "<br>".join(out)
+
+
 def debug_print(*message, level="info"):
     global script_start_time
 
@@ -247,10 +282,8 @@ def debug_print(*message, level="info"):
 # Importar funciones de utilidad de estilos
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "LGA_NKS_Shared"))
 from LGA_NKS_Shared.LGA_NKS_StyleUtils import (
-    calculate_dynamic_border,
-    calculate_dynamic_hover,
+    create_data_button_stylesheet,
     create_gradient_style,
-    create_tooltip_stylesheet,
 )
 
 
@@ -283,7 +316,7 @@ class FlowProdPanel(QtWidgets.QWidget):
         self.scroll_widget.setLayout(self.layout)
         self.scroll_area.setWidget(self.scroll_widget)
 
-        # Los siete primeros pertenecen a Flow; los cinco restantes, a S3.
+        # Los ocho primeros pertenecen a Flow; los cinco restantes, a S3.
         # .Psync esta fuera de uso y se conserva solamente como codigo legado:
         # LGA_NKS_Flow_S3_Panel_py/LGA_NKS_PipeSync_CreatePsync.py.
         # Se conserva el objectName del dock (com.lega.FlowProdPanel) para no romper layouts.
@@ -308,6 +341,16 @@ class FlowProdPanel(QtWidgets.QWidget):
                 SHOT_WORKFLOW_COLOR,
                 None,
                 "Chequear si los shots de los tracks activos (Comp; CG en Client) existen en Flow",
+            ),
+            (
+                "Triple Check",
+                self.triple_check_versions,
+                SHOT_WORKFLOW_COLOR,
+                None,
+                "Compara la ultima version publicada (EXR) de cada shot del timeline<br>"
+                "en Flow, en Wasabi y en el disco local.<br>"
+                "Avisa los shots que faltan en Flow o en el timeline<br>"
+                "y deja bajar o subir lo que no coincide.",
             ),
             (
                 "Thumbnail",
@@ -417,24 +460,9 @@ class FlowProdPanel(QtWidgets.QWidget):
                 if button_stylesheet is None:
                     raise ValueError(f"Gradiente de boton desconocido: {style}")
             else:
-                border_color = calculate_dynamic_border(style)
-                hover_color = calculate_dynamic_hover(style)
-                button_stylesheet = f"""
-                    QPushButton {{
-                        background-color: {style};
-                        border: 1px solid {border_color};
-                        border-radius: 3px;
-                        color: #d8d8d8;
-                        padding: 0px 0px;
-                        min-height: 20px;
-                    }}
-                    QPushButton:hover {{
-                        background-color: {hover_color};
-                    }}
-                    QPushButton:pressed {{
-                        background-color: {style}aa;
-                    }}
-                """
+                # Color de grupo del boton (dato): la hoja comun del pack para
+                # botones de color, con caja, texto, hover y foco centralizados.
+                button_stylesheet = create_data_button_stylesheet(style)
 
             # Usar CustomButton para el bot?n "Reveal in Flow" para soportar Shift+Click
             if name == "Thumbnail":
@@ -464,23 +492,10 @@ class FlowProdPanel(QtWidgets.QWidget):
             # Aplicar estilos del bot?n
             button.setStyleSheet(button_stylesheet)
 
-            # Agregar estilos de tooltip din?micos si hay tooltip
+            # Tooltip propio de los packs (el nativo de Qt esta prohibido).
             if tooltip:
-                # Crear un selector ?nico para este bot?n usando su objectName
-                button_object_name = f"button_{index}"
-                button.setObjectName(button_object_name)
-
-                # Crear stylesheet de tooltip din?mico
-                tooltip_stylesheet = create_tooltip_stylesheet(style)
-                # Modificar el tooltip stylesheet para usar el selector del bot?n
-                tooltip_stylesheet = tooltip_stylesheet.replace("QToolTip", f"#{button_object_name} QToolTip")
-
-                # Combinar estilos del bot?n con estilos de tooltip
-                full_stylesheet = button_stylesheet + tooltip_stylesheet
-                button.setStyleSheet(full_stylesheet)
-
-                # Agregar el tooltip
-                button.setToolTip(tooltip)
+                button.setObjectName(f"button_{index}")
+                set_custom_tooltip(button, panel_tooltip_html(tooltip))
 
             # Agregar shortcut si existe
             if shortcut:
@@ -1105,6 +1120,28 @@ class FlowProdPanel(QtWidgets.QWidget):
             module.main()
         except Exception as e:
             show_warning(self, "Error al ejecutar Check Shots", str(e))
+
+    def triple_check_versions(self):
+        """Compara Flow, Wasabi y local para los shots del timeline."""
+        script_path = os.path.join(
+            os.path.dirname(__file__), "LGA_NKS_Flow_S3_Panel_py", "LGA_NKS_Flow_TripleCheck.py"
+        )
+        if not os.path.exists(script_path):
+            show_warning(self, "Script not found", f"Missing script:\n{script_path}")
+            return
+        try:
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(
+                "LGA_NKS_Flow_TripleCheck", script_path
+            )
+            if spec is None or spec.loader is None:
+                raise ImportError("No se pudo cargar LGA_NKS_Flow_TripleCheck.py")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            module.main()
+        except Exception as e:
+            show_warning(self, "Triple Check failed", str(e))
 
 
 # Crear la instancia del panel y agregarlo al windowManager de Hiero

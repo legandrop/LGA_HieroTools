@@ -143,6 +143,13 @@ Internal reference: [Flow | S3 Panel](LGA_HieroTools/docs/LGA_NKS_Flow_S3_Panel_
 - **Check Shots Exist**  
   Checks whether shots from the context task tracks exist in Flow: Comp in
   Studio, and Comp plus every CG track in Client.
+- **Triple Check**  
+  For every shot and task of the active timeline, compares the latest
+  published EXR version in Flow, in Wasabi and on the local disk, and lists
+  what does not match: versions missing on one side, incomplete or misnamed
+  version folders, shots that are not in Flow, and Flow shots of the same
+  sequences that are not in the timeline. Rows that need it get a Download or
+  Upload button (through FileManagerS3), plus Download all / Upload all.
 - **Thumbnail**
 
   Click: replaces the shot's thumbnail in Flow with a viewer snapshot, after a
