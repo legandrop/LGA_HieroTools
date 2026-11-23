@@ -1,5 +1,15 @@
 # What's new in LGA HieroTools
 
+## v4.028 (2026-11-23)
+
+- **New:** Botón `Triple Check` en el panel Flow | S3: compara la última versión publicada de cada shot del timeline en Flow, en Wasabi y en tu disco, te avisa lo que no coincide (versiones que faltan, incompletas o en la carpeta de otro shot, shots que no están en Flow, que están repetidos en Flow o que faltan en el timeline) y te deja bajar o subir cada una con un click. Muestra el estado de cada task en Flow, se puede filtrar por estado y ordenar con un click en cada columna, y cada fila tiene un botón para ir a ese shot en el timeline.
+- **Improved:** El botón `Check Shots Exist` sale del panel Flow | S3: lo que hacía, avisar los shots del timeline que no están en Flow, ahora lo hace `Triple Check`.
+- **Improved:** El botón OK for Delivery del Flow Review Panel abre la ventana de nota, para mandar un mensaje y capturas junto con la aprobación; si la dejás vacía, no se crea nota.
+- **Fixed:** Coordinators: quitar shots de Wasabi desde el panel de assignees (Ctrl+Shift+Click en un usuario, o la limpieza de shots entregados) encuentra también los shots de las personas que tienen muchos asignados, y ya no falla al sacar uno de una policy casi llena. (Studio only)
+- **Fixed:** Flow Pull ya no cierra Nuke Studio al terminar cuando el timeline tiene clips rotos (los que arregla Fix Zombies).
+- **Fixed:** Flow Push vuelve a adjuntar a la nota las capturas de ReviewPic cuando la conexión falla en el primer intento; si igual no sube, el aviso dice por qué y la captura no se borra.
+- **Fixed:** Flow Pull ya no llena XYplorer de carteles «Label … is not defined» cuando tu XYplorer no tiene las etiquetas de color de los estados de Flow: esas carpetas simplemente no se pintan. (Windows only)
+
 ## v4.027 (2026-11-16)
 
 - **New:** En LGA BurnIn, el timecode se pinta de rojo cuando no coincide con el del plate del track `aPlate` en ese frame, así ves enseguida un comp corrido.
