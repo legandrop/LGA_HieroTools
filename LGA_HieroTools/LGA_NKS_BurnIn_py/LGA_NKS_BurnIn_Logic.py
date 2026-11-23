@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Logic v1.12 | Lega
+  LGA_NKS_BurnIn_Logic v1.13 | Lega
 
   Logica viva del soft effect LGA_BurnIn. Las expresiones [python ...]
   de los Text2 internos del gizmo llaman a bi_text() y bi_ok() en cada
@@ -13,6 +13,9 @@ ____________________________________________________________________
   proyecto; el modulo de registro invalida el cache en los eventos de
   load/save de proyecto.
 
+  v1.13: Registro de tiempos [Perf]: cabecera de sesion, contadores del
+         render en _frame_state (calculo separado en _compute_state) y
+         resumen cada ~2 s que escribe el vigia del registro.
   v1.12: Fondos sin BlinkScript: el estado por frame suma "shapes"
          (paneles y franjas Band, las de los costados recortadas entre
          arriba y abajo) y shape_msg()/shape_geo() dan el mensaje en la
@@ -118,6 +121,77 @@ def _log_error_once(key, message):
         return
     _logged_error_keys.add(key)
     _log("ERROR {}: {}".format(key, message))
+
+
+# ── Registro de tiempos ([Perf]) ──────────────────────────────────────────────
+#
+# Existe para diagnosticar maquinas donde el efecto anda lento (un usuario con
+# una RTX 3080 tenia todo trabado). Siempre prendido y barato: el render solo
+# suma contadores en _frame_state y el resumen lo escribe el vigia del
+# registro (LGA_NKS_BurnIn.py) cada ~2 s, nunca una linea por frame. El vigia
+# tambien anota cuando el hilo principal estuvo trabado y cual fue la ultima
+# actividad del efecto (perf_mark). Formato de las lineas: Docu_LGA_BurnIn.md.
+
+_perf = {
+    "calls": 0,
+    "states": 0,
+    "state_ms": 0.0,
+    "state_max": 0.0,
+    "since": time.time(),
+    "last": "",
+}
+
+
+def perf_log(message):
+    _log("[Perf] " + message)
+
+
+def perf_mark(what):
+    """Anota la ultima actividad del efecto; se nombra si el hilo se traba."""
+    _perf["last"] = "{} ({})".format(what, time.strftime("%H:%M:%S"))
+
+
+def perf_last():
+    return _perf["last"] or "ninguna"
+
+
+def perf_flush():
+    """Resumen del render desde el ultimo resumen (solo si hubo render)."""
+    if not _perf["calls"]:
+        _perf["since"] = time.time()
+        return
+    dt = time.time() - _perf["since"]
+    perf_log(
+        "render {:.1f} s: {} expresiones, {} estados calculados "
+        "({:.1f} ms en total, el peor {:.1f} ms)".format(
+            dt, _perf["calls"], _perf["states"], _perf["state_ms"], _perf["state_max"]
+        )
+    )
+    _perf.update(calls=0, states=0, state_ms=0.0, state_max=0.0, since=time.time())
+
+
+def perf_header():
+    """Primera linea de la sesion: con que se corre (para comparar maquinas)."""
+    try:
+        import nuke
+
+        host = nuke.NUKE_VERSION_STRING
+    except Exception:
+        host = "?"
+    version = "?"
+    try:
+        vpath = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "VERSION")
+        with open(vpath, encoding="utf-8") as f:
+            version = f.read().strip()
+    except Exception:
+        pass
+    import platform
+
+    perf_log(
+        "sesion: NKS {}, HieroTools {}, {} {}, {} nucleos, pid {}".format(
+            host, version, platform.system(), platform.release(), os.cpu_count(), os.getpid()
+        )
+    )
 
 
 # ── Config cacheada ───────────────────────────────────────────────────────────
@@ -777,6 +851,7 @@ def _frame_state(parent, frame):
         name = parent.fullName()
     except Exception:
         return None
+    _perf["calls"] += 1
     text = layout_text(parent)
     sig = _knob_sig(parent)
     key = (name, frame, fmt_w, fmt_h, text, sig)
@@ -784,6 +859,18 @@ def _frame_state(parent, frame):
     if hit is not None:
         return hit
 
+    t0 = time.perf_counter()
+    try:
+        return _compute_state(parent, frame, fmt_w, fmt_h, text, key)
+    finally:
+        ms = (time.perf_counter() - t0) * 1000.0
+        _perf["states"] += 1
+        _perf["state_ms"] += ms
+        if ms > _perf["state_max"]:
+            _perf["state_max"] = ms
+
+
+def _compute_state(parent, frame, fmt_w, fmt_h, text, key):
     meta = _frame_meta(parent, frame)
     arr = bi_layout.active(bi_layout.parse(text))
     style = _weight_style(parent)

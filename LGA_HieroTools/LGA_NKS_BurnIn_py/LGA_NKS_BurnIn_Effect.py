@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Effect v1.09 | Lega
+  LGA_NKS_BurnIn_Effect v1.10 | Lega
 
   Puente entre los knobs del soft effect LGA_BurnIn y sus nodos
   internos. setup() es el onCreate del gizmo (en su Dot interno): pone
@@ -11,6 +11,8 @@ ____________________________________________________________________
   schedule_update() junta los pedidos del panel y del knobChanged en una
   sola actualizacion por ciclo de eventos.
 
+  v1.10: Registro de tiempos [Perf]: update_now() y setup() anotan cuanto
+         tardan (fuente, layout, nudge) y marcan la ultima actividad.
   v1.09: Sin BlinkScript (antes LGA_NKS_BurnIn_Blink). Los fondos son
          Text2 con la fuente LGA Shapes del pack (Panel_<Campo> y
          Band_<T/B/L/R>): no dependen de la GPU. Sale todo lo del kernel
@@ -460,16 +462,45 @@ def update_now(gizmo, font=False):
     un solo write. Los writes de aca no re-entran al knobChanged."""
     if gizmo is None:
         return
+    import time
+
     _busy[0] = True
+    t0 = time.perf_counter()
+    t_font = t_layout = t0
     try:
         if font:
             apply_font(gizmo)
+        t_font = time.perf_counter()
         apply_layout(gizmo, do_nudge=False)
+        t_layout = time.perf_counter()
         nudge(gizmo)
     except Exception as exc:
         _log("ERROR en update_now: {}".format(exc))
     finally:
         _busy[0] = False
+    _perf_update("actualizacion", gizmo, t0, t_font, t_layout, font)
+
+
+def _perf_update(what, gizmo, t0, t_font, t_layout, font):
+    """Linea [Perf] de una actualizacion: total y cuanto se fue en cada paso."""
+    try:
+        import time
+        import LGA_NKS_BurnIn_Logic as bi_logic
+
+        end = time.perf_counter()
+        bi_logic.perf_mark("{} de {}".format(what, gizmo.name()))
+        bi_logic.perf_log(
+            "{} {}: {:.1f} ms (fuente {}, layout {:.1f}, nudge {:.1f})".format(
+                what,
+                gizmo.name(),
+                (end - t0) * 1000.0,
+                "{:.1f}".format((t_font - t0) * 1000.0) if font else "-",
+                (t_layout - t_font) * 1000.0,
+                (end - t_layout) * 1000.0,
+            )
+        )
+    except Exception:
+        pass
 
 
 def _aspect_from_name(name):
@@ -533,9 +564,14 @@ def setup(node):
         gizmo = node if _is_gizmo(node) else _gizmo_of(node)
         if gizmo is None:
             return
+        import time
+
         _busy[0] = True
+        t0 = time.perf_counter()
+        t_font = t0
         try:
             apply_font(gizmo)
+            t_font = time.perf_counter()
             # Un efecto recien agregado arranca con la mascara que ya tiene
             # el viewer (el vigia del registro solo avisa cambios).
             aspect = round(viewer_mask_aspect(), 4)
@@ -544,5 +580,7 @@ def setup(node):
             apply_layout(gizmo)
         finally:
             _busy[0] = False
+        end = time.perf_counter()
+        _perf_update("setup", gizmo, t0, t_font, end, True)
     except Exception as exc:
         _log("ERROR en setup: {}".format(exc))

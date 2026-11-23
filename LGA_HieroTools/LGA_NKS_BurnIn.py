@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn v1.10 | Lega
+  LGA_NKS_BurnIn v1.11 | Lega
 
   Registra el soft effect LGA_BurnIn (solo Text2; fondos redondeados
   con la fuente LGA Shapes) en el menu Effects del timeline de NKS. Muestra
@@ -13,6 +13,10 @@ ____________________________________________________________________
   "foundry.timeline.effect." + setData(clase del nodo), via
   hiero.ui.registerAction (patron oficial de custom_soft_effect.py).
 
+  v1.11: Registro de tiempos [Perf]: el vigia de 500 ms anota cuando el
+         hilo principal estuvo trabado (con la ultima actividad del
+         efecto) y escribe el resumen del render cada ~2 s; el
+         knobChanged marca el knob que cambio.
   v1.10: Sin BlinkScript: importa LGA_NKS_BurnIn_Effect (antes
          LGA_NKS_BurnIn_Blink). bi_bg_radius pasa a pedir actualizacion
          (el radio va en el mensaje de los fondos de glifos).
@@ -154,6 +158,12 @@ def _on_knob_changed():
     if _es_derivado(name, bi_effect.FIELDS):
         return
     try:
+        import LGA_NKS_BurnIn_Logic as bi_logic
+
+        bi_logic.perf_mark("knob " + name)
+    except Exception:
+        pass
+    try:
         bi_effect.schedule_update(nuke.thisNode(), font=(name == "bi_weight"))
     except Exception as exc:
         _log("ERROR en knobChanged {}: {}".format(name, exc))
@@ -188,7 +198,40 @@ def _burnins_of(seq):
     return out
 
 
+# Un tick que llega mas de _FREEZE_MS tarde significa que el hilo principal
+# estuvo trabado (los timers de Qt no se atienden mientras tanto). Se anota con
+# la ultima actividad del efecto: es la pista para diagnosticar una maquina
+# donde todo anda lento. Cada _PERF_EVERY ticks se escribe el resumen del render.
+_FREEZE_MS = 700
+_PERF_EVERY = 4
+
+
+def _perf_tick():
+    try:
+        import time
+        import LGA_NKS_BurnIn_Logic as bi_logic
+
+        now = time.perf_counter()
+        prev = _state.get("tick_t")
+        _state["tick_t"] = now
+        if prev is not None:
+            late = (now - prev) * 1000.0 - _MASK_POLL_MS
+            if late > _FREEZE_MS:
+                bi_logic.perf_flush()
+                bi_logic.perf_log(
+                    "NKS trabado ~{:.0f} ms (ultima actividad del efecto: {})".format(
+                        late, bi_logic.perf_last()
+                    )
+                )
+        _state["ticks"] = _state.get("ticks", 0) + 1
+        if _state["ticks"] % _PERF_EVERY == 0:
+            bi_logic.perf_flush()
+    except Exception:
+        pass
+
+
 def _mask_tick():
+    _perf_tick()
     try:
         import hiero.ui
         import LGA_NKS_BurnIn_Effect as bi_effect
@@ -242,6 +285,8 @@ def _register():
     nuke.pluginAddPath(package_dir)
 
     import LGA_NKS_BurnIn_Logic as bi_logic
+
+    bi_logic.perf_header()
 
     action = QAction(QtGui.QIcon("icons:Text.png"), "LGA BurnIn", None)
     action.setObjectName("foundry.timeline.effect.addLGABurnIn")

@@ -282,6 +282,41 @@ y tres o mas Merge2 encadenados tiran NKS 17. Detalle en
 decidir el diseno: todo cambio de estructura se valida mirando el visor del
 timeline.
 
+## Diagnostico en otra maquina: log de tiempos [Perf]
+
+Existe porque a un usuario con una RTX 3080 el efecto le andaba lentisimo
+en su maquina (en la de Lega anda bien): lento al agregarlo, al prender o
+apagar cosas, y NKS se trababa al apretar Open Burn-in Panel. En la maquina
+de Lega abrir el panel tarda ~16 ms y no escribe ningun knob (medido el
+23-11), asi que la causa hay que medirla en la maquina que falla. Con v4.029
+(sin BlinkScript) se le pide al usuario que repita lo que le andaba lento y
+que mande el log.
+
+- **Donde:** `LGA_HieroTools/LGA_NKS_BurnIn_py/logs/DebugPy_LGA_NKS_BurnIn.log`,
+  dentro del pack instalado. Se pisa en cada sesion de NKS: hay que mandarlo
+  ANTES de volver a abrir NKS. Con dos NKS abiertos a la vez escriben el
+  mismo archivo (la linea `sesion` lleva el pid para separarlos).
+- **Siempre prendido y barato:** el render solo suma contadores; nada se
+  escribe por frame.
+
+Lineas, todas con el prefijo `[Perf]`:
+
+| Linea | Que dice | Quien la escribe |
+|---|---|---|
+| `sesion: NKS ..., HieroTools ..., Windows ..., N nucleos, pid ...` | con que se corre | `perf_header` (al registrar el efecto) |
+| `setup <efecto>: X ms (fuente, layout, nudge)` | agregar el efecto o cargar un proyecto que lo tiene | `LGA_NKS_BurnIn_Effect.setup` |
+| `actualizacion <efecto>: X ms (...)` | cada cambio de knob o del panel (agrupado por ciclo de eventos) | `LGA_NKS_BurnIn_Effect.update_now` |
+| `abrir panel: X ms (buscar efecto, armar, fuente, mostrar)` | el costo del panel en si | `LGA_NKS_BurnIn_Panel._perf_open` |
+| `panel visible y NKS libre a los X ms del click` | cuando NKS vuelve a atender eventos con la ventana mostrada; si aca hay segundos y la linea anterior es chica, lo lento es lo que NKS hace al mostrarla, no el panel | idem (QTimer de 0 ms) |
+| `render X s: N expresiones, M estados calculados (total, el peor)` | cuanto trabajo Python le pide el render; cada ~2 s y solo si hubo render | `perf_flush`, desde el vigia |
+| `NKS trabado ~X ms (ultima actividad del efecto: ...)` | el hilo principal estuvo trabado mas de 0,7 s; nombra lo ultimo que hizo el efecto (knob, actualizacion, abrir el panel, setup) | `_perf_tick` del vigia de la mascara (`LGA_NKS_BurnIn.py`) |
+
+Como leerlo: si los `NKS trabado` son largos y los `render` y
+`actualizacion` chicos, el tiempo no se va en el Python del efecto sino en
+el render del propio NKS (los Text2, la lectura del media, la GPU). Si
+`ultima actividad` dice `ninguna`, el efecto no hizo nada antes del trabado
+(por ejemplo al arrancar NKS).
+
 ## Limitaciones conocidas
 
 - Un burn-in por vez en la ventana: edita el primer efecto LGA_BurnIn que
@@ -308,6 +343,9 @@ timeline.
 
 ## Pendientes
 
+- **Usuario con RTX 3080 al que todo le anda lento** (ver «Diagnostico en
+  otra maquina»): pasarle v4.029, que repita lo que le andaba lento
+  (agregar el efecto, prender y apagar, abrir el panel) y mandar el log.
 - Aplicar defaults de config a instancias nuevas (hoy los defaults viven en
   el gizmo generado).
 - **Texto un poco desalineado dentro de su panel** (visto por Lega el 17-10,
@@ -333,12 +371,12 @@ duena (el pivote se fuerza con el formato del Read).
 
 | Modulo | Import | Funciones clave |
 |---|---|---|
-| `LGA_HieroTools/LGA_NKS_BurnIn.py` | registro (startup) | `_register`, `_on_knob_changed`, `_es_derivado`, `_start_mask_watcher`, `_mask_tick` |
+| `LGA_HieroTools/LGA_NKS_BurnIn.py` | registro (startup) | `_register`, `_on_knob_changed`, `_es_derivado`, `_start_mask_watcher`, `_mask_tick`, `_perf_tick` (log de NKS trabado y resumen del render) |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Layout.py` | `import LGA_NKS_BurnIn_Layout` | `parse`, `dump`, `active`, `default_state`, `fresh_arrangement`, `move_to`, `move_next_to`, `slot_of`, `visible_fields`, `stack_state`, `set_stack`, `is_default`, `compute`, `mask_inset`, `side_pivot`, `line_height` |
-| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Logic.py` | `import LGA_NKS_BurnIn_Logic` | `bi_text`, `bi_ok`, `field_geo`, `shape_msg`, `shape_geo`, `shape_message`, `_shapes`, `_frame_state`, `layout_text`, `mask_inset_px`, `line_height_px`, `_plate_tc_frames` (TC de aPlate), `invalidate_cache` |
-| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Effect.py` | `import LGA_NKS_BurnIn_Effect` | `setup`, `schedule_update`, `update_now`, `is_busy`, `apply_layout`, `apply_rotation`, `apply_font`, `nudge`, `viewer_mask_aspect`, `apply_mask`, `_timeline_format` |
+| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Logic.py` | `import LGA_NKS_BurnIn_Logic` | `bi_text`, `bi_ok`, `field_geo`, `shape_msg`, `shape_geo`, `shape_message`, `_shapes`, `_frame_state`, `layout_text`, `mask_inset_px`, `line_height_px`, `_plate_tc_frames` (TC de aPlate), `invalidate_cache`, `_compute_state`, `perf_log`, `perf_mark`, `perf_last`, `perf_flush`, `perf_header` (log [Perf]) |
+| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Effect.py` | `import LGA_NKS_BurnIn_Effect` | `setup`, `schedule_update`, `update_now`, `is_busy`, `apply_layout`, `apply_rotation`, `apply_font`, `nudge`, `viewer_mask_aspect`, `apply_mask`, `_timeline_format`, `_perf_update` |
 | `LGA_HieroTools/LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Viewer_Mask.py` | `from LGA_NKS_ViewerTL_Panel_py import LGA_NKS_Viewer_Mask` | `set_mask`, `apply_mask` (el boton 3:2; solo pone la mascara para LGA_BurnIn) |
-| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Panel.py` | `import LGA_NKS_BurnIn_Panel` | `show_panel`, `BurnInPanel`, `BurnInMap`, `TickSlider`, `Segmented`, `HieroController` |
+| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Panel.py` | `import LGA_NKS_BurnIn_Panel` | `show_panel`, `_perf_open`, `BurnInPanel`, `BurnInMap`, `TickSlider`, `Segmented`, `HieroController` |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Config.py` | `import LGA_NKS_BurnIn_Config` | `resolve`, `load_user_file`, `save_user_file`, `list_presets`, `load_preset`, `save_preset` |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_ProjectTag.py` | `import LGA_NKS_BurnIn_ProjectTag` | `find_project`, `read_config_json`, `write_config` |
 | `Python/Startup/LGA_HieroTools_Startup.py` (fuera del paquete) | startup | `NUKE_FONT_PATH`, `_refresh_font_cache`, `_font_cache_dirs` |

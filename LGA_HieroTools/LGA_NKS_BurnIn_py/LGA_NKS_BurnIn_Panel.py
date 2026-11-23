@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Panel v3.04 | Lega
+  LGA_NKS_BurnIn_Panel v3.05 | Lega
 
   Panel "Burn-ins" del soft effect LGA_BurnIn, con el diseno del menu
   Burn-ins de Shot Player (LGA Media Tools): cinco distribuciones
@@ -18,6 +18,9 @@ ____________________________________________________________________
   (LGA_NKS_BurnIn_Logic.field_geo). La ventana solo escribe knobs y
   config; los cambios se ven en el visor al instante.
 
+  v3.05: Registro de tiempos [Perf] al abrir: cuanto tarda cada paso
+         (buscar el efecto, armar la ventana, fuente, mostrar) y cuanto
+         hasta que NKS vuelve a atender eventos con la ventana visible.
   v3.04: Pide la actualizacion a LGA_NKS_BurnIn_Effect (antes
          LGA_NKS_BurnIn_Blink, que se fue con el BlinkScript).
   v3.03: El chip TC lleva el punto rojo como Res y FPS.
@@ -1443,12 +1446,52 @@ def show_panel():
         except Exception:
             pass
         _panel = None
+    import time
+
+    t0 = time.perf_counter()
     ctl = HieroController()
     ctl.attach()
+    t_attach = time.perf_counter()
     _panel = BurnInPanel(ctl)
+    t_build = time.perf_counter()
     apply_ui_font(_panel)
+    t_font = time.perf_counter()
     # Nunca abrir maximizada: es una ventana de edicion, no un workspace.
     _panel.setWindowState(Qt.WindowNoState)
     _panel.show()
     _panel.raise_()
+    t_show = time.perf_counter()
+    _perf_open(t0, t_attach, t_build, t_font, t_show)
     return _panel
+
+
+def _perf_open(t0, t_attach, t_build, t_font, t_show):
+    """Lineas [Perf] de la apertura. La segunda sale cuando NKS vuelve al loop
+    de eventos con la ventana ya mostrada: si ahi hay segundos, lo trabado no
+    es el panel sino lo que NKS hace al mostrarla."""
+    try:
+        import time
+        import LGA_NKS_BurnIn_Logic as bi_logic
+
+        def ms(a, b):
+            return (b - a) * 1000.0
+
+        bi_logic.perf_mark("abrir el panel")
+        bi_logic.perf_log(
+            "abrir panel: {:.1f} ms (buscar efecto {:.1f}, armar {:.1f}, "
+            "fuente {:.1f}, mostrar {:.1f})".format(
+                ms(t0, t_show), ms(t0, t_attach), ms(t_attach, t_build),
+                ms(t_build, t_font), ms(t_font, t_show),
+            )
+        )
+
+        def _visible():
+            bi_logic.perf_log(
+                "panel visible y NKS libre a los {:.1f} ms del click".format(
+                    ms(t0, time.perf_counter())
+                )
+            )
+
+        QtCore.QTimer.singleShot(0, _visible)
+    except Exception:
+        pass
