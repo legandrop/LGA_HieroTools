@@ -299,6 +299,11 @@ timeline.
 
 ## Pendientes
 
+- **Sacar el BlinkScript**: en maquinas sin una GPU buena el efecto se vuelve
+  lento. Los paneles redondeados salen con un Text2 por panel y la fuente
+  `LGA Shapes` (medido en el timeline de NKS 17 el 23-11-2026; mecanismo en
+  `Docu_SoftEffects_Aprendizajes.md`, "Fondos redondeados sin BlinkScript").
+  Falta migrar el gizmo, la logica de paneles y Band, y medir el costo.
 - Aplicar defaults de config a instancias nuevas (hoy los defaults viven en
   el gizmo generado).
 - **Texto un poco desalineado dentro de su panel** (visto por Lega el 17-10,

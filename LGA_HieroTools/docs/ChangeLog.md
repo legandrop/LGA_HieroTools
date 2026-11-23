@@ -1,3 +1,6 @@
+v4.029:
+Las fuentes del pack (Inter y JetBrains Mono) no se registraban en Nuke en Windows: el startup armaba `NUKE_FONT_PATH` con `:` y la ruta sin unidad, y Nuke en Windows parte esa variable por `;`. El burn-in andaba solo si Inter estaba instalado en el sistema, y el peso Bold caia a otra fuente. Ahora usa `os.pathsep` y la ruta completa; medido en NKS 17: se registran las cinco fuentes. Documentado tambien como hacer fondos redondeados sin BlinkScript, con glifos de una fuente propia en un Text2 (`Docu_SoftEffects_Aprendizajes.md`). `LGA_HieroTools_Startup v1.01`. [ Startup - Fuentes del pack en Windows ]
+
 v4.028:
 Triple Check avisa los shots que Flow tiene dos veces con el mismo nombre y distinto id (lo que PipeSync ya detecta). Antes el segundo pisaba al primero y se perdian sus tasks y versions sin aviso; ahora se juntan, la fila sale `Duplicate in Flow` con los ids en Detail y arriba hay una nota por cada repetido del proyecto. Sale de la misma consulta de Shots: no suma tiempo. `LGA_NKS_Flow_TripleCheck v1.04`, `LGA_NKS_TripleCheck_Core v1.03`. [ Triple Check - Shots repetidos en Flow ]
 

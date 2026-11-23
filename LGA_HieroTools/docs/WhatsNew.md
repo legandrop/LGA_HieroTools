@@ -12,6 +12,9 @@ platforms: [win, mac]
 
 ## Unreleased
 
+## v4.029
+- [fixed][win] el LGA BurnIn usa su propia tipografía aunque no la tengas instalada, y el peso Bold ya no sale con otra letra.
+
 ## v4.028
 - [improved] El botón `Check Shots Exist` sale del panel Flow | S3: lo que hacía, avisar los shots del timeline que no están en Flow, ahora lo hace `Triple Check`.
 - [new] Botón `Triple Check` en el panel Flow | S3: compara la última versión publicada de cada shot del timeline en Flow, en Wasabi y en tu disco, te avisa lo que no coincide (versiones que faltan, incompletas o en la carpeta de otro shot, shots que no están en Flow, que están repetidos en Flow o que faltan en el timeline) y te deja bajar o subir cada una con un click. Muestra el estado de cada task en Flow, se puede filtrar por estado y ordenar con un click en cada columna, y cada fila tiene un botón para ir a ese shot en el timeline.

@@ -41,9 +41,9 @@ custom soft effects**"* y *"Valid custom soft effects must have a GPUEngine
 implementation"*. En la practica: Text2, Transform, Grade, etc. — la lista
 del menu Effects. Un Read, Merge, Constant o Rectangle adentro del gizmo
 **rompe el render en tiempo real** del timeline (aunque el export renderiza).
-Consecuencia concreta: no hay esquinas redondeadas para fondos — el fondo
-nativo de Text2 es rectangular y no se puede meter un nodo que dibuje otra
-cosa. (Camino posible no explorado: BlinkScript, que si es soft effect.)
+El fondo nativo de Text2 es rectangular y no se puede meter un nodo que
+dibuje otra cosa; las esquinas redondeadas salen igual con glifos (ver
+"Fondos redondeados sin BlinkScript", abajo).
 
 **Confirmado otra vez, y con trampa (medido 2026-11-14, NKS 17.0v4):** un
 gizmo con Crop + Expression + Merge2 (o un Rectangle solo, encima de la
@@ -53,7 +53,42 @@ una estructura que en el timeline no anda: validar SIEMPRE con
 `viewer.image()` del timeline. Ademas, tres o mas Merge2 encadenados en el
 gizmo tiran NKS 17 al renderizar en el timeline (crash nativo; con dos no,
 con un Merge2 multi-A tampoco), y un `[python]` en un knob `disable`
-tambien. Los paneles redondeados de LGA_BurnIn son un BlinkScript por eso.
+tambien. Los paneles redondeados de LGA_BurnIn se hicieron con BlinkScript
+por eso; la via de glifos de abajo lo vuelve innecesario.
+
+## Fondos redondeados sin BlinkScript: una fuente de formas (medido 2026-11-23)
+
+BlinkScript depende de la GPU y en maquinas sin una buena se vuelve lento,
+asi que se busco otra via. Los soft effects que dibujan algo son solo Text2
+(y BlinkScript); Rectangle, Constant y Merge no corren en el timeline, y
+Blur y FilterErode del menu son Blink por dentro. Pero **Text2 dibuja
+cualquier glifo de cualquier fuente**, y un rectangulo redondeado es un
+glifo:
+
+- Fuente propia `LGA Shapes` (generador:
+  `+Building_Blocks/BurnIn/gen_LGA_Shapes_font.py`): tapa izquierda y derecha
+  con radio de 0 a 50 % del alto (`U+E000+i`, `U+E100+i`) y bloques de
+  1000/100/10/1 unidades (`U+E200`..`U+E203`). Un panel de w x h es UN Text2
+  con `tapa + bloques + tapa` (`rr_message()` de la sonda): ancho exacto a
+  0,1 % del alto, radio a 1 %.
+- **Un Text2 compone todos sus glifos como una sola forma**: superponerlos
+  no suma opacidad (medido con 0,5), y los glifos se solapan 30 unidades
+  para que no haya costuras. Bordes con antialiasing limpio.
+- Medido en el visor del timeline de NKS 17.0v4: posicion y tamano exactos
+  al pixel con `xjustify left`, `yjustify bottom` y box = (x, y, ancho de
+  sobra, y + h). El alto se fija con `global_font_scale = h / 100` y
+  `font_size 100`: un `font_size` puesto por codigo no se aplica.
+- Box angosto = el Text2 parte la linea y el panel sale en dos renglones:
+  el box tiene que sobrar a lo ancho.
+- **Text2 del timeline solo usa fuentes que Nuke escaneo al arrancar**
+  (`nuke.getFonts()`); una fuente puesta por ruta en el knob `font` no
+  dibuja nada. La fuente viaja en `LGA_NKS_Shared/fonts/`, que el startup
+  suma a `NUKE_FONT_PATH`. En Windows esa variable se parte por `;`
+  (medido): hasta el 23-11 el startup la armaba con `:` y ninguna fuente del
+  pack se registraba.
+
+Sonda y captura: `+Building_Blocks/BurnIn/explore_rounded_glyphs.py` y
+`explore_rounded_glyphs_NKS17.png`.
 
 ## El gran clasico: campos que no aparecen o aparecen todos apilados
 

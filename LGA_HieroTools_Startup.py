@@ -1,3 +1,17 @@
+"""
+____________________________________________________________________
+
+  LGA_HieroTools_Startup v1.01 | Lega
+
+  Arranque del pack: suma las fuentes del pack al font path de Nuke y
+  carga los modulos de MODULES.
+
+  v1.01: NUKE_FONT_PATH con os.pathsep y ruta completa. En Windows Nuke
+         parte por ";" y con ":" no registraba ninguna fuente del pack.
+  v1.00: Version inicial del header.
+____________________________________________________________________
+"""
+
 import importlib
 import os
 import sys
@@ -17,18 +31,17 @@ if TOOLS_DIR not in sys.path:
 # antepone para que el Inter del repo gane sobre un Inter de sistema si existe
 # (asi la medicion y el render usan el MISMO Inter en toda maquina).
 #
-# MEDIDO: Nuke parte NUKE_FONT_PATH por ":" (estilo Unix) incluso en Windows,
-# asi que el ":" de la letra de unidad ROMPE el path: getFonts registraba
-# "Tools/LGA_NKS_Shared/..." (relativo, invalido) y el render caia a la fuente
-# default en silencio. El path va SIN la letra de unidad ("/Users/...", valido
-# en Windows contra el drive del proceso) y con barras normales.
+# MEDIDO (NKS 17.0v4, 2026-11-23): en Windows Nuke parte NUKE_FONT_PATH por
+# ";" (os.pathsep) y acepta la ruta CON letra de unidad. Con "x;C:/.../fonts"
+# getFonts registro la fuente; con el armado viejo (ruta sin unidad unida por
+# ":") no registraba NINGUNA fuente del pack y Text2 caia a la del sistema.
 _FONTS_DIR = os.path.join(TOOLS_DIR, "LGA_NKS_Shared", "fonts")
 if os.path.isdir(_FONTS_DIR):
-    _fonts_nuke = os.path.splitdrive(_FONTS_DIR)[1].replace("\\", "/")
+    _fonts_nuke = os.path.abspath(_FONTS_DIR).replace("\\", "/")
     _prev = os.environ.get("NUKE_FONT_PATH", "")
-    if _fonts_nuke not in _prev.split(":"):
+    if _fonts_nuke not in _prev.split(os.pathsep):
         os.environ["NUKE_FONT_PATH"] = (
-            _fonts_nuke + (":" + _prev if _prev else "")
+            _fonts_nuke + (os.pathsep + _prev if _prev else "")
         )
 
 MODULES = [
