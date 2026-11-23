@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Config v1.02 | Lega
+  LGA_NKS_BurnIn_Config v1.03 | Lega
 
   Capa de configuracion de LGA_BurnIn. Resuelve la config efectiva
   en dos niveles: defaults + archivo de usuario en AppData
@@ -10,6 +10,9 @@ ____________________________________________________________________
   Modulo puro: no importa nuke ni hiero, para poder testearlo fuera
   del host.
 
+  v1.03: res_target acepta una LISTA de resoluciones validas ('timeline,
+         3840x2160' o una lista JSON): parse_res_targets() y
+         format_res_targets() (texto canonico + tokens invalidos).
   v1.02: Presets de usuario con nombre (list/load/save) en la seccion
          "presets" del BurnIn.json.
   v1.01: Frame/TC separados, campo colorspace, y pos como caja de
@@ -21,6 +24,7 @@ ____________________________________________________________________
 import copy
 import json
 import os
+import re
 import sys
 
 CONFIG_DIR_NAME = "LGA"
@@ -46,8 +50,9 @@ DEFAULTS = {
         "tc": {"enabled": True, "pos": [0.145, 0.03, 0.155, 0.05]},
         "fps": {"enabled": True, "pos": [0.90, 0.03, 0.08, 0.05]},
     },
-    # "timeline" compara contra el formato de salida del timeline;
-    # un valor "3840x2160" compara contra ese valor explicito.
+    # Lista de resoluciones validas, separadas por comas: "timeline" es el
+    # formato de salida del timeline y "3840x2160" un valor explicito. El
+    # plate esta bien si coincide con CUALQUIERA ("timeline, 3840x2160").
     "res_target": "timeline",
     # "timeline" compara contra hiero/sequence/frame_rate;
     # un numero (ej. 24) compara contra ese valor explicito.
@@ -110,6 +115,64 @@ def parse_res(value):
                 except ValueError:
                     return None
     return None
+
+
+def _res_tokens(value):
+    """Tokens de una lista de resoluciones: string separado por comas (o ;)
+    o una lista JSON. '3840 x 2160' cuenta como un solo token."""
+    if isinstance(value, (list, tuple)):
+        raw = [str(v) for v in value]
+    elif isinstance(value, str):
+        raw = re.split(r"[,;|]", value)
+    else:
+        return []
+    out = []
+    for part in raw:
+        part = re.sub(r"\s*[x*]\s*", "x", part.strip().lower())
+        out.extend(p for p in part.split() if p)
+    return out
+
+
+def parse_res_targets(value):
+    """Resoluciones validas de los plates: (usa_timeline, {(w, h), ...}, invalidos).
+
+    Acepta una lista: 'timeline, 3840x2160' (string con comas) o
+    ["timeline", "3840x2160"]. 'timeline' es el formato de la secuencia. Sin
+    nada valido, vale el timeline (el default de siempre).
+    """
+    use_timeline = False
+    sizes = set()
+    bad = []
+    for tok in _res_tokens(value):
+        if tok == "timeline":
+            use_timeline = True
+            continue
+        res = parse_res(tok)
+        if res and res[0] > 0 and res[1] > 0:
+            sizes.add(res)
+        else:
+            bad.append(tok)
+    if not use_timeline and not sizes:
+        use_timeline = True
+    return use_timeline, frozenset(sizes), bad
+
+
+def format_res_targets(value):
+    """Texto canonico de la lista ('timeline, 3840x2160') y los tokens que
+    no se entendieron (para avisar en el panel antes de guardar)."""
+    tokens = _res_tokens(value)
+    seen, parts, bad = set(), [], []
+    for tok in tokens:
+        if tok != "timeline":
+            res = parse_res(tok)
+            if not (res and res[0] > 0 and res[1] > 0):
+                bad.append(tok)
+                continue
+            tok = "%dx%d" % res
+        if tok not in seen:
+            seen.add(tok)
+            parts.append(tok)
+    return (", ".join(parts) or "timeline"), bad
 
 
 def parse_fps(value):

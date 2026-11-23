@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Panel v3.05 | Lega
+  LGA_NKS_BurnIn_Panel v3.06 | Lega
 
   Panel "Burn-ins" del soft effect LGA_BurnIn, con el diseno del menu
   Burn-ins de Shot Player (LGA Media Tools): cinco distribuciones
@@ -18,6 +18,10 @@ ____________________________________________________________________
   (LGA_NKS_BurnIn_Logic.field_geo). La ventana solo escribe knobs y
   config; los cambios se ven en el visor al instante.
 
+  v3.06: Plate res acepta varias resoluciones separadas por comas: se
+         normaliza al guardar (timeline, 3840x2160) y avisa los valores
+         que no entiende. El punto rojo de los chips mira el frame del
+         playhead (viewer_frame), no nuke.frame(), que por API vale 1.
   v3.05: Registro de tiempos [Perf] al abrir: cuanto tarda cada paso
          (buscar el efecto, armar la ventana, fuente, mostrar) y cuanto
          hasta que NKS vuelve a atender eventos con la ventana visible.
@@ -105,7 +109,7 @@ TOOLTIPS = {
         "preset_load": "Aplica el preset elegido al efecto.",
         "preset_name": "Nombre para guardar el estado actual como preset.",
         "preset_save": "Guarda distribucion, look y textos con ese nombre.",
-        "res_target": "Resolucion esperada de los plates: timeline o 3840x2160.<br>Si un plate EXR no coincide, Res se pinta de rojo.",
+        "res_target": "Resoluciones validas de los plates, separadas por comas.<br>timeline es el formato de la secuencia; por ejemplo: timeline, 3840x2160.<br>Si un plate EXR no coincide con ninguna, Res se pinta de rojo.",
         "fps_target": "FPS esperados: timeline o un numero.<br>Si el clip no coincide, FPS se pinta de rojo.",
         "keep_on_top": "Mantiene esta ventana por encima de las demas.",
         "save_defaults": "Guarda los targets como default del usuario (AppData).",
@@ -759,9 +763,10 @@ class HieroController(object):
         stream no tiene metadata y da 1.0: no grita rojo sin datos."""
         try:
             import LGA_NKS_BurnIn_Logic as bi_logic
-            import nuke
 
-            return bi_logic.bi_ok(field, self.node, nuke.frame())
+            # El frame del playhead, no nuke.frame(): por API vale el del
+            # root (1) y el estado se calculaba para un frame equivocado.
+            return bi_logic.bi_ok(field, self.node, bi_logic.viewer_frame())
         except Exception:
             return 1.0
 
@@ -771,7 +776,8 @@ class HieroController(object):
 
         tag_json = bi_tag.read_config_json(bi_tag.find_project(self.project_name))
         cfg, _warns = bi_config.resolve(user_data, self.project_name, tag_json)
-        return str(cfg.get("res_target", "timeline")), str(cfg.get("fps_target", "timeline"))
+        res_text, _bad = bi_config.format_res_targets(cfg.get("res_target", "timeline"))
+        return res_text, str(cfg.get("fps_target", "timeline"))
 
     def save_targets_project(self, res_target, fps_target):
         import LGA_NKS_BurnIn_ProjectTag as bi_tag
@@ -948,8 +954,8 @@ class BurnInPanel(QtWidgets.QDialog):
         grid_t.setColumnStretch(3, 1)
         layout.addLayout(grid_t)
         hint = QtWidgets.QLabel(
-            "Use %s to compare against the sequence, or values like 3840x2160 / 24."
-            % emphasis("timeline")
+            "Use %s to compare against the sequence, or values like 3840x2160 / 24. "
+            "Plate res takes several, separated by commas." % emphasis("timeline")
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: %s;" % Color.TEXT_DIM)
@@ -1401,10 +1407,25 @@ class BurnInPanel(QtWidgets.QDialog):
         self._cargar_estado()
 
     # -- targets -------------------------------------------------------------
+    def _res_normalizada(self):
+        """Lista de resoluciones en texto canonico, o None (y aviso) si hay
+        algun valor que no se entiende: no se guarda a medias."""
+        texto, malos = bi_config.format_res_targets(self.edit_res.text())
+        if malos:
+            self._avisar(
+                "Plate res: could not read %s. Use timeline or values like 3840x2160, separated by commas."
+                % ", ".join(malos),
+                "",
+            )
+            return None
+        self.edit_res.setText(texto)
+        return texto
+
     def _guardar_proyecto(self):
-        error = self.ctl.save_targets_project(
-            self.edit_res.text().strip(), self.edit_fps.text().strip()
-        )
+        res = self._res_normalizada()
+        if res is None:
+            return
+        error = self.ctl.save_targets_project(res, self.edit_fps.text().strip())
         if not error:
             self.ctl.nudge()
             self._sync_mapa()
@@ -1414,9 +1435,10 @@ class BurnInPanel(QtWidgets.QDialog):
         )
 
     def _guardar_defaults(self):
-        error = self.ctl.save_targets_defaults(
-            self.edit_res.text().strip(), self.edit_fps.text().strip()
-        )
+        res = self._res_normalizada()
+        if res is None:
+            return
+        error = self.ctl.save_targets_defaults(res, self.edit_fps.text().strip())
         if not error:
             self.ctl.nudge()
             self._sync_mapa()

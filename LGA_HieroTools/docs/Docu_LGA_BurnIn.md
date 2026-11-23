@@ -33,9 +33,9 @@ BlinkScript ni depende de la GPU mas que el BurnIn nativo.
 |---|---|---|
 | Clip | `hiero/clip` | no |
 | Colorspace | `sourceMediaColourTransform()` del clip (por API + cache; no viaja en la metadata del stream) | no |
-| Res | `input/width` x `input/height` | si: difiere del objetivo. **Solo compara plates** (`compare_res_exts`, default `exr`) |
+| Res | `input/width` x `input/height` | si: no coincide con NINGUNA de las resoluciones validas. **Solo compara plates** (`compare_res_exts`, default `exr`) |
 | Frame | `Frame: <input/frame>` | no |
-| TC | `TC: <input/timecode>` | si: difiere del TC del clip del track **aPlate** en ese frame (`timecodeStart` + `sourceIn` + offset, items cacheados 3 s). Sin timecode en la metadata (comp sin TC) o sin aPlate en el frame, no compara |
+| TC | `TC: <input/timecode>` | si: difiere del TC del clip del track **aPlate** en ese frame del timeline (`timecodeStart` + `sourceIn` + offset, items cacheados 3 s; una edicion del aPlate se ve a los 3 s como mucho). Sin timecode en la metadata (comp sin TC) o sin aPlate en el frame, no compara |
 | FPS | `input/frame_rate` | si: difiere del objetivo |
 | Track | `Track: <nombre>`: el track del clip visible. Por API (`hiero/track` llega vacio en el stream, medido): el track item de la secuencia activa cuya fuente es el clip y cubre el frame, de arriba abajo; cache de 1,5 s | no |
 | Date | fecha de modificacion del archivo visible (`input/mtime`, `AAAA-MM-DD`), no la del dia: decision de Lega (12-11-2026) | no |
@@ -43,7 +43,12 @@ BlinkScript ni depende de la GPU mas que el BurnIn nativo.
 | Custom 1 / 2 | texto libre (`bi_custom1_text`, `bi_custom2_text`) | no |
 
 Objetivos: `res_target` y `fps_target` — `"timeline"` (formato/fps de la
-secuencia) o explicitos (`"3840x2160"`, `24`). **Labels** (`bi_labels`)
+secuencia) o explicitos (`"3840x2160"`, `24`). `res_target` acepta una
+**lista** separada por comas (`"timeline, 3840x2160"`, o una lista JSON): un
+proyecto puede tener dos resoluciones correctas (en uno de Lega, el formato
+del timeline y 3840x2160) y el rojo se apaga si el plate coincide con
+cualquiera (`parse_res_targets` de la config, parseado una vez por config en
+`_res_targets` de la logica). **Labels** (`bi_labels`)
 prende o apaga el prefijo `Frame:`, `TC:` y `Track:`.
 
 ## Default de fabrica
@@ -82,12 +87,15 @@ resuelve en pixeles en cada frame.
 
 - **Geometria en render**: `field_geo(field, comp)` de la logica calcula el
   layout entero (`Layout.compute`) con los anchos medidos de los textos y lo
-  cachea por (efecto, frame, estado). Los Text2 de fondo y las cajas de
-  los Text2 de texto leen lo mismo, asi que el fondo no se separa del texto.
-- **Solo se cachea con stream**: fuera del render (un `setValue`, el
-  onCreate) el Input no tiene metadata y todos los textos dan vacio; ese
-  layout vacio quedaba guardado y el render lo reusaba (todo apilado en el
-  origen, medido).
+  cachea por (efecto, CUADRO QUE LLEGA, estado): ver "Clave del cache" en
+  Rendimiento. Los Text2 de fondo y las cajas de los Text2 de texto leen lo
+  mismo, asi que el fondo no se separa del texto.
+- **Sin cuadro, clave aparte**: fuera del render (un `setValue`, el
+  onCreate) y en muchas evaluaciones del propio Nuke el Input no tiene
+  metadata y todos los textos dan vacio. Ese estado vacio va a su propia
+  clave (`_NO_STREAM`) y un render con cuadro nunca lo usa. Antes de v1.15
+  no se guardaba y se recalculaba en cada llamada (medido en un proyecto
+  real: 252 veces en 3 s).
 - **Los paneles abrazan al texto**: el ancho se mide con el TTF real de
   LGA Inter Tab que usa Nuke. Como sus digitos son tabulares (todos del
   mismo ancho), el fondo de frame y TC no cambia de ancho entre frames y
@@ -181,7 +189,10 @@ Inter pasa solo a la fuente nueva al abrirse (medido).
 - **Text2 x11** (9 de metadata + custom1/custom2): anatomia calcada del
   BurnIn nativo (blobs de estado incluidos — sin ellos el GPU los dibuja en
   el origen). Cada message llama a `LGA_NKS_BurnIn_Logic.bi_text()` con
-  `[frame]`; res y fps llevan el color condicional via `bi_ok()` en los
+  `[frame]`. **Todas** las llamadas python del gizmo (cajas, fondos, color)
+  reciben el `[frame]` de TCL, nunca `nuke.frame()`: ese es el frame global
+  del root y reproduciendo vale 0 en la mitad de las evaluaciones (medido;
+  generador v12); res y fps llevan el color condicional via `bi_ok()` en los
   canales g/b. El texto se centra verticalmente dentro de su panel
   (`yjustify center`) con `text padding`. La caja de cada Text2 usa tres
   llamadas a `field_geo` (x, y, y2; el borde derecho es `width*3`) y suma
@@ -239,7 +250,10 @@ en `+Building_Blocks/BurnIn/design/BurnIn_Panel_Mapa.html`.
 - **Saved presets**: guardan mapa, look y textos con nombre en el
   BurnIn.json de AppData (formato `v: 3`). Un preset de la version con
   tabla (v2) aplica su estilo; sus x / y por campo se ignoran.
-- **Project targets**: Save to Project escribe el tag `LGA_BurnIn_Settings`
+- **Project targets**: Plate res acepta varias resoluciones separadas por
+  comas; al guardar se normaliza (`format_res_targets`: `timeline,
+  3840x2160`) y si hay un valor que no se entiende avisa y no guarda. Save to
+  Project escribe el tag `LGA_BurnIn_Settings`
   en el `tagsBin()` (key `tag.lga_burnin_config`), que viaja dentro del
   `.hrox` (Clean Project no toca tags; hay que guardar el proyecto). Save as
   Defaults escribe `%APPDATA%\LGA\HieroTools\BurnIn.json` (**no se
@@ -305,6 +319,55 @@ y tres o mas Merge2 encadenados tiran NKS 17. Detalle en
 decidir el diseno: todo cambio de estructura se valida mirando el visor del
 timeline.
 
+**Clave del cache: el cuadro que llega (v1.15, 23-11-2026).** Lega vio en
+el primer cuadro de un plano el frame y el TC del plano anterior (TC en rojo);
+un cuadro despues se veia bien. Medido en NKS 17: el estado se guardaba por
+(efecto, frame), pero fuera del render (el punto rojo del panel con
+`nuke.frame()`, que por API vale 1; el Properties; el knobChanged) el frame
+no corresponde al cuadro que tiene el Input en ese momento, y el estado
+guardado con el cuadro de otro plano lo reusaba despues el render. En su
+proyecto, el estado del frame del corte tenia un plano de otra parte de la
+secuencia. Ademas las cajas, los fondos y el color usaban `nuke.frame()`,
+que reproduciendo vale 0 en la mitad de las evaluaciones: todas leian el
+estado viejo del frame 0, y el TC se comparaba contra el aPlate del frame 0.
+
+Ahora la clave es el cuadro que llega (`_stream_id`: `input/filename` +
+`input/frame`, dos lecturas de ~1 us), sin el frame del timeline; el rojo del
+TC va aparte, por (frame, version de los items de aPlate). Todas las
+llamadas reciben `[frame]`. Reproduciendo, un estado por cuadro (antes, dos
+o reusados equivocados) y 16,0 us por llamada contra 14,9 us antes (el
+formato se lee del Input1, 0,7 us contra 3 us del grupo, y la firma con
+`getValue()`). Prueba de corte armada en una instancia aparte: dos planos
+pegados, aPlate que cubre solo una parte, el cache ensuciado a proposito con
+llamadas por API en frames equivocados; primer y ultimo cuadro de cada plano
+correctos y el TC rojo solo donde el aPlate no coincide.
+
+**Prueba de estres (23-11-2026, NKS 17, copia de un proyecto real de 6819
+frames con EXR 4K en red, nunca guardada).** 1900 acciones al azar en cuatro
+tandas, una cada 120 ms: agregar y sacar el efecto, prenderlo y apagarlo,
+saltar a cuadros y a cortes, reproducir y parar, prender y apagar tracks,
+abrir y cerrar el panel, cambiar presets y knobs. Cero errores y cero
+cuelgues. Sin el efecto (linea de base, 400 acciones) no hay trabas de mas
+de 0,5 s; con el efecto hay 5 a 10 por tanda, de 0,5 a 0,9 s, siempre
+despues de prender o apagar un track o de agregar el efecto.
+
+Medido en esa copia (peor demora del hilo principal en los 2 s despues de
+prender o apagar un track): NKS re-evalua las expresiones de los cuadros que
+tiene cacheados, 5000 a 8000 llamadas `[python]` por cambio. Con la llamada
+real, 410-670 ms; con `[python 0]` en las 99 expresiones numericas, 125-155
+ms (el mecanismo TCL a python es barato); con la llamada real pero sin la
+logica (estado fijo), la mitad. Lo que pesa adentro es la primera lectura de
+metadata del Input (12-30 us con los EXR reales, 1 us con media chica: Nuke
+arma la metadata entera); por eso `_stream_id` lee `input/frame` solo si el
+archivo no es de una secuencia. El BurnIn nativo traba 33-116 ms. No es nuevo
+de v1.15 (con `nuke.frame()` da lo mismo). Bajarlo de verdad pide menos
+expresiones `[python]` por nodo (ver Pendientes). Descartado, medido: la
+escala de los fondos en TCL puro (dispara MAS evaluaciones: 11000 contra
+8400) y leer la metadata por TCL desde python (232 us por lectura).
+
+Agregar CUALQUIER efecto por API con la reproduccion andando (tambien un
+Text2 comun) traba NKS 10 s exactos; parado tarda 5-20 ms: es de NKS.
+
 ## Diagnostico en otra maquina: log de tiempos [Perf]
 
 Existe porque a un usuario con una RTX 3080 el efecto le andaba lentisimo
@@ -366,7 +429,16 @@ el render del propio NKS (los Text2, la lectura del media, la GPU). Si
   cacheo en diferido y el viewer deja de dibujar frames al mover el playhead
   (era el cuelgue al agregar el efecto, hasta v1.04 de `LGA_NKS_BurnIn`).
 
+- **Agregar un efecto reproduciendo** (por API, cualquier efecto) traba NKS
+  10 s; parar antes (medido el 23-11).
+
 ## Pendientes
+
+- **Traba al prender o apagar un track con el efecto puesto** (0,4-0,9 s en
+  un proyecto real con EXR 4K; el nativo 33-116 ms; ver "Prueba de estres").
+  Viene de la cantidad de expresiones `[python]` que NKS re-evalua por
+  cuadro cacheado (~190 por cuadro). Opcion a medir: menos llamadas por nodo
+  (por ejemplo, que y2 no llame a python) sin que Nuke sume evaluaciones.
 
 - **Usuario con RTX 3080 al que todo le anda lento** (ver «Diagnostico en
   otra maquina»): pasarle v4.029, que repita lo que le andaba lento
@@ -398,11 +470,11 @@ duena (el pivote se fuerza con el formato del Read).
 |---|---|---|
 | `LGA_HieroTools/LGA_NKS_BurnIn.py` | registro (startup) | `_register`, `_on_knob_changed`, `_es_derivado`, `_start_mask_watcher`, `_mask_tick`, `_perf_tick` (log de NKS trabado y resumen del render) |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Layout.py` | `import LGA_NKS_BurnIn_Layout` | `parse`, `dump`, `active`, `default_state`, `fresh_arrangement`, `move_to`, `move_next_to`, `slot_of`, `visible_fields`, `stack_state`, `set_stack`, `is_default`, `compute`, `mask_inset`, `side_pivot`, `line_height` |
-| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Logic.py` | `import LGA_NKS_BurnIn_Logic` | `bi_text`, `bi_ok`, `field_geo`, `shape_msg`, `shape_geo`, `shape_message`, `_shapes`, `_frame_state`, `layout_text`, `mask_inset_px`, `line_height_px`, `_plate_tc_frames` (TC de aPlate), `invalidate_cache`, `TEXT_FAMILY`, `_measure_text`, `_font_path`, `_qt_family`, `_digit_template`, `_compute_state`, `perf_log`, `perf_mark`, `perf_last`, `perf_flush`, `perf_header` (log [Perf]) |
+| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Logic.py` | `import LGA_NKS_BurnIn_Logic` | `bi_text`, `bi_ok`, `field_geo`, `shape_msg`, `shape_geo`, `shape_message`, `_shapes`, `_frame_state`, `_stream_id` (clave del cache: el cuadro que llega), `viewer_frame` (playhead, para el panel), `_plate_version`, `_res_targets` / `_res_matches` (varias resoluciones), `layout_text`, `mask_inset_px`, `line_height_px`, `_plate_tc_frames` (TC de aPlate), `invalidate_cache`, `TEXT_FAMILY`, `_measure_text`, `_font_path`, `_qt_family`, `_digit_template`, `_compute_state`, `perf_log`, `perf_mark`, `perf_last`, `perf_flush`, `perf_header` (log [Perf]) |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Effect.py` | `import LGA_NKS_BurnIn_Effect` | `setup`, `schedule_update`, `update_now`, `is_busy`, `apply_layout`, `apply_rotation`, `apply_font`, `nudge`, `viewer_mask_aspect`, `apply_mask`, `_timeline_format`, `_perf_update` |
 | `LGA_HieroTools/LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Viewer_Mask.py` | `from LGA_NKS_ViewerTL_Panel_py import LGA_NKS_Viewer_Mask` | `set_mask`, `apply_mask` (el boton 3:2; solo pone la mascara para LGA_BurnIn) |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Panel.py` | `import LGA_NKS_BurnIn_Panel` | `show_panel`, `_perf_open`, `BurnInPanel`, `BurnInMap`, `TickSlider`, `Segmented`, `HieroController` |
-| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Config.py` | `import LGA_NKS_BurnIn_Config` | `resolve`, `load_user_file`, `save_user_file`, `list_presets`, `load_preset`, `save_preset` |
+| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Config.py` | `import LGA_NKS_BurnIn_Config` | `resolve`, `parse_res`, `parse_res_targets`, `format_res_targets`, `parse_fps`, `load_user_file`, `save_user_file`, `list_presets`, `load_preset`, `save_preset` |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_ProjectTag.py` | `import LGA_NKS_BurnIn_ProjectTag` | `find_project`, `read_config_json`, `write_config` |
 | `Python/Startup/LGA_HieroTools_Startup.py` (fuera del paquete) | startup | `NUKE_FONT_PATH`, `_refresh_font_cache`, `_font_cache_dirs` |
 | `LGA_HieroTools/LGA_NKS_Shared/fonts/LGA_Inter_Tab-400/600/700.ttf` | fuente (generada por `+Building_Blocks/BurnIn/gen_LGA_Inter_Tab_font.py` desde `Inter-*.ttf`) | familia `LGA Inter Tab`, estilos Regular / SemiBold / Bold; digitos 0-9 = `zero.tf`..`nine.tf` de Inter |

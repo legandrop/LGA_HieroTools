@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Logic v1.14 | Lega
+  LGA_NKS_BurnIn_Logic v1.15 | Lega
 
   Logica viva del soft effect LGA_BurnIn. Las expresiones [python ...]
   de los Text2 internos del gizmo llaman a bi_text() y bi_ok() en cada
@@ -13,6 +13,16 @@ ____________________________________________________________________
   proyecto; el modulo de registro invalida el cache en los eventos de
   load/save de proyecto.
 
+  v1.15: Frame y TC equivocados en el primer cuadro de un plano. El estado
+         se guardaba por (efecto, frame) y fuera del render el frame no es
+         el del cuadro que tiene el Input: la clave pasa a ser el cuadro
+         que llega (_stream_id: archivo + frame de la media). El TC contra
+         aPlate va por frame del timeline y por version de los items de
+         aPlate (_plate_version), asi una edicion se ve a los 3 s. Varias
+         resoluciones validas (_res_targets/_res_matches). El estado sin
+         cuadro va a su propia clave (_NO_STREAM) y se guarda. Formato
+         leido del Input1, firma con getValue() e input/frame solo para
+         video de un archivo (_SEQ_EXTS): mas baratos.
   v1.14: El texto se mide con LGA Inter Tab (TEXT_FAMILY, Inter con
          digitos tabulares): el fondo de frame/tc ya no cambia de ancho
          ni queda vacio de un lado.
@@ -352,16 +362,31 @@ def _clip_colorspace(parent, clip_name):
     return value
 
 
-def _target_res(parent, cfg):
-    """Resolucion objetivo: explicita de config, o el formato del timeline."""
-    explicit = bi_config.parse_res(cfg.get("res_target"))
-    if explicit:
-        return explicit
+def _res_targets(cfg):
+    """(usa_timeline, {(w, h)}) de res_target, parseado una vez por config
+    (la config esta cacheada: el parseo queda guardado en ella)."""
+    parsed = cfg.get("_res_parsed")
+    if parsed is None:
+        use_tl, sizes, bad = bi_config.parse_res_targets(cfg.get("res_target"))
+        if bad:
+            _log_error_once("res_target", "resoluciones que no se entienden: {}".format(bad))
+        parsed = (use_tl, sizes)
+        cfg["_res_parsed"] = parsed
+    return parsed
+
+
+def _res_matches(parent, cfg, clip):
+    """True si la resolucion del clip es CUALQUIERA de las validas."""
+    use_tl, sizes = _res_targets(cfg)
+    if clip in sizes:
+        return True
+    if not use_tl:
+        return False
     try:
-        return (int(parent.width()), int(parent.height()))
+        return clip == (int(parent.width()), int(parent.height()))
     except Exception as exc:
         _log_error_once("target_res", str(exc))
-        return None
+        return True
 
 
 def _labeled(parent, label, value):
@@ -453,7 +478,10 @@ def _clip_track(parent, frame=None, clip_name=None):
 # rango que el plate). Los items de aPlate se cachean con TTL corto, como el
 # track: (in, out, frame de media del in, velocidad).
 REF_TRACK = "aplate"
-_plate_cache = {"t": 0.0, "spans": None}
+# "ver" sube cada vez que los items de aPlate cambian: entra en la clave del
+# rojo del TC (bi_ok), asi una edicion del aPlate se ve a los 3 s como mucho
+# en vez de quedar guardada en el estado para siempre (medido en NKS 17).
+_plate_cache = {"t": 0.0, "spans": None, "ver": 0}
 
 
 def _tc_to_frames(tc, fps):
@@ -491,9 +519,17 @@ def _plate_spans():
                     continue
     except Exception as exc:
         _log_error_once("plate_spans", str(exc))
+    if spans != _plate_cache["spans"]:
+        _plate_cache["ver"] += 1
     _plate_cache["spans"] = spans
     _plate_cache["t"] = now
     return spans
+
+
+def _plate_version():
+    """Version de los items de aPlate (refresca el cache si vencio)."""
+    _plate_spans()
+    return _plate_cache["ver"]
 
 
 def _plate_tc_frames(frame):
@@ -578,8 +614,7 @@ def _ok_from(field, parent, meta, frame=None):
             clip = (int(float(meta["input/width"])), int(float(meta["input/height"])))
         except (KeyError, TypeError, ValueError):
             return 1.0
-        target = _target_res(parent, cfg)
-        return 0.0 if target is not None and clip != target else 1.0
+        return 1.0 if _res_matches(parent, cfg, clip) else 0.0
     if field == "fps":
         try:
             clip = float(meta["input/frame_rate"])
@@ -603,8 +638,8 @@ def _ok_from(field, parent, meta, frame=None):
 # gizmo se evaluan en el HILO PRINCIPAL, varias veces por frame, y una
 # referencia TCL a un knob con [python] vuelve a correr el python (no hay
 # cache de Nuke en el medio). Por eso TODO sale de _frame_state(): un estado
-# por (efecto, frame, knobs) calculado una vez, y cada llamada siguiente es
-# una busqueda en un dict (~10 us). La version anterior pedia metadata del
+# por (efecto, cuadro que llega, knobs) calculado una vez, y cada llamada
+# siguiente es una busqueda en un dict (~16 us con la clave, medido el 23-11). La version anterior pedia metadata del
 # input en cada llamada solo para armar la clave del cache (~100-250 us x
 # 150 llamadas por frame).
 
@@ -633,9 +668,15 @@ def bi_ok(field, parent, frame=None):
         if st is None:
             return 1.0
         oks = st["oks"]
-        if field not in oks:
-            oks[field] = _ok_from(field, parent, st["meta"], frame)
-        return oks[field]
+        # El estado es por cuadro de media; el TC se compara contra el aPlate
+        # del frame del TIMELINE, asi que va por frame. Las llamadas que Nuke
+        # hace en el tiempo 0 no son las del render: no pisan el resultado.
+        key = (field, frame, _plate_version()) if field == "tc" else field
+        if key not in oks:
+            if len(oks) > 64:
+                oks.clear()
+            oks[key] = _ok_from(field, parent, st["meta"], frame)
+        return oks[key]
     except Exception as exc:
         _log_error_once("ok:" + str(field), str(exc))
         return 1.0
@@ -811,6 +852,7 @@ def _measure_text(text, px, style):
 
 _geo_cache = {}
 _GEO_CACHE_MAX = 300
+_NO_STREAM = "<sin cuadro>"
 
 # Knobs que cambian textos o geometria (el radio entra en el mensaje de los
 # fondos). Colores y opacidades llegan al render por expresiones TCL directas.
@@ -831,11 +873,13 @@ def layout_text(node):
 
 
 def _knob_sig(parent):
+    # getValue() y no value(): la mitad de caro (medido, ~0,2 us por knob) y
+    # para la firma alcanza (en los enum da el indice en vez del label).
     sig = []
     for name in _SIG_KNOBS:
         try:
             k = parent[name]
-            sig.append(k.getText() if name.endswith("_text") else k.value())
+            sig.append(k.getText() if name.endswith("_text") else k.getValue())
         except Exception:
             sig.append(None)
     return tuple(sig)
@@ -855,21 +899,92 @@ def _frame_meta(parent, frame):
         return {}
 
 
+def _stream_id(inp, frame):
+    """(archivo, frame de la media) del cuadro que el Input1 tiene AHORA.
+
+    El frame que recibe la expresion NO alcanza como clave (medido en NKS 17,
+    2026-11-23): fuera del render (el panel, el Properties, el knobChanged) el
+    [frame] vale el del root (1) o uno viejo, y el Input devuelve el cuadro que
+    tiene cargado en ese momento, que puede ser de otro plano. Con la clave
+    solo por frame ese estado quedaba guardado y el render de ese frame lo
+    reusaba: en el primer cuadro de un plano se veia el frame y el TC del plano
+    anterior (y el TC en rojo).
+
+    Cada lectura de metadata cuesta ~12 us justo despues de un cambio en el
+    timeline (medido en NKS 17 al prender un track: era el 60 % del costo de
+    la clave). En una secuencia de imagenes el archivo ya es UNO por cuadro,
+    asi que input/frame se lee solo para un video de un archivo (mov, mxf...)
+    o una extension desconocida.
+    """
+    try:
+        if inp is None:
+            return None
+        if frame is None:
+            fn = inp.metadata("input/filename")
+            if fn and str(fn).lower().endswith(_SEQ_EXTS):
+                return (fn, None)
+            return (fn, inp.metadata("input/frame"))
+        fn = inp.metadata("input/filename", frame)
+        if fn and str(fn).lower().endswith(_SEQ_EXTS):
+            return (fn, None)
+        return (fn, inp.metadata("input/frame", frame))
+    except Exception:
+        return None
+
+
+# Extensiones de secuencias de imagenes: un archivo por cuadro.
+_SEQ_EXTS = (".exr", ".dpx", ".cin", ".tif", ".tiff", ".png", ".jpg", ".jpeg",
+             ".tga", ".hdr", ".sgi", ".rgb", ".bmp", ".jp2", ".psd", ".ari", ".sxr")
+
+
+def viewer_frame():
+    """Frame del playhead del visor actual (para llamadas por API), o None."""
+    try:
+        import hiero.ui
+
+        viewer = hiero.ui.currentViewer()
+        return int(viewer.time()) if viewer is not None else None
+    except Exception:
+        return None
+
+
 def _frame_state(parent, frame):
     """Estado del efecto en un frame: textos, rects, bandas, crops, oks.
 
-    Sin stream (el Input no tiene metadata: un setValue, el onCreate, el
-    panel) no se cachea: el render despues lo calcula con los textos reales.
+    La clave lleva el cuadro que de verdad llega (_stream_id), no el frame.
+    Sin cuadro en el Input (un setValue, el onCreate, el panel, y muchas
+    evaluaciones del propio Nuke) el estado vacio va a la clave _NO_STREAM:
+    nunca lo usa un render que si tiene cuadro.
     """
     try:
-        fmt_w, fmt_h = float(parent.width()), float(parent.height())
+        # El formato del Input1 es el mismo que el del grupo (el gizmo no lo
+        # cambia) y leerlo cuesta la cuarta parte (medido: 0,7 us contra 3).
+        inp = parent.node("Input1")
+        src = inp if inp is not None else parent
+        fmt_w, fmt_h = float(src.width()), float(src.height())
         name = parent.fullName()
     except Exception:
         return None
     _perf["calls"] += 1
     text = layout_text(parent)
     sig = _knob_sig(parent)
-    key = (name, frame, fmt_w, fmt_h, text, sig)
+    # La clave es el cuadro que llega, NO el frame: Nuke tambien evalua las
+    # cajas y los colores en el tiempo 0 de cada cuadro (medido: la mitad de
+    # las llamadas de bi_ok/field_geo/shape_geo reproduciendo) y con el frame
+    # en la clave eso eran dos estados por cuadro. Lo unico que depende del
+    # frame del timeline (el TC contra aPlate) va aparte, en bi_ok.
+    sid = _stream_id(inp, frame)
+    if sid and sid[0]:
+        ident = sid
+    elif not sid or sid == (None, None):
+        # Sin cuadro en el Input (Nuke evalua las expresiones tambien asi,
+        # medido: cientos de veces por segundo en un proyecto real). El
+        # estado vacio es el mismo para cualquier frame: va a una sola clave
+        # y se guarda, en vez de recalcularse en cada llamada.
+        ident = _NO_STREAM
+    else:
+        ident = frame
+    key = (name, ident, fmt_w, fmt_h, text, sig)
     hit = _geo_cache.get(key)
     if hit is not None:
         return hit
@@ -919,7 +1034,9 @@ def _compute_state(parent, frame, fmt_w, fmt_h, text, key):
         "meta": meta,
         "oks": {},
     }
-    if "input/width" in meta:
+    # Con cuadro (su metadata trae input/width) o sin nada en el Input (clave
+    # _NO_STREAM y metadata vacia). Lo que quede en el medio no se guarda.
+    if "input/width" in meta or (key[1] is _NO_STREAM and not meta):
         if len(_geo_cache) > _GEO_CACHE_MAX:
             _geo_cache.clear()
         _geo_cache[key] = state
