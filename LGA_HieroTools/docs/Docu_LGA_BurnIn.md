@@ -392,6 +392,28 @@ expresiones `[python]` por nodo (ver Pendientes). Descartado, medido: la
 escala de los fondos en TCL puro (dispara MAS evaluaciones: 11000 contra
 8400) y leer la metadata por TCL desde python (232 us por lectura).
 
+**Memo de la ultima llamada (v1.16, 23-11-2026).** Contando las llamadas
+de un toggle de track en esa copia: un render evalua las ~84 expresiones del
+efecto seguidas sobre el mismo cuadro, y la mitad de las llamadas son NKS
+re-renderizando en segundo plano cuadros de todo el timeline. Validar el
+cache costaba ~11 us por llamada (firma de knobs 3,3; formato 2,6; cuadro
+que llega 2,1). Ahora `_frame_state` guarda la ultima respuesta (`_fast`):
+dentro de `_FAST_TTL` (0,25 s) solo relee el cuadro que llega y `bi_rev`
+(todo cambio de knobs que mueve la geometria termina en `nudge()`, que lo
+incrementa) y devuelve el mismo estado; formato, mapa y firma se validan de
+nuevo despues. La metadata se lee sin el argumento de tiempo: el Input de un
+soft effect solo tiene el cuadro que le pasa el timeline, y con tiempo
+cuesta el triple (6,2 us contra 2,2) con el mismo resultado en 16894 de
+16894 lecturas. Medido al prender y apagar un track: dentro de las
+funciones del efecto, de 22-36 us por llamada a 5-8 us (de 190-270 ms a
+22-33 ms por toggle); traba total, mediana de 622-1394 ms con v1.15 a
+206-388 ms. Estres de 400 acciones: 0 errores, 4 trabas de mas de 0,5 s
+(antes 10), tres de ellas justo despues de agregar el efecto. Cortes
+verificados otra vez con el cache ensuciado. Descartados, medidos: acortar
+el texto de las expresiones (`[python bi_g(...)]` en vez de
+`__import__(...)`): 5 %, dentro del ruido; y2 de los fondos constante:
+Text2 trabaja mas con una caja enorme (414 ms contra 215).
+
 Agregar CUALQUIER efecto por API con la reproduccion andando (tambien un
 Text2 comun) traba NKS 10 s exactos; parado tarda 5-20 ms: es de NKS.
 
@@ -464,11 +486,13 @@ el render del propio NKS (los Text2, la lectura del media, la GPU). Si
 - **Bajar la CPU por cuadro hasta la de la pila vieja** (medido el 23-11,
   ver «Contra la pila vieja» en Rendimiento): 309 llamadas de Python por
   cuadro con 6 campos visibles, y 12 Text2 activos contra 4.
-- **Traba al prender o apagar un track con el efecto puesto** (0,4-0,9 s en
-  un proyecto real con EXR 4K; el nativo 33-116 ms; ver "Prueba de estres").
-  Viene de la cantidad de expresiones `[python]` que NKS re-evalua por
-  cuadro cacheado (~190 por cuadro). Opcion a medir: menos llamadas por nodo
-  (por ejemplo, que y2 no llame a python) sin que Nuke sume evaluaciones.
+- **Traba al prender o apagar un track con el efecto puesto**: con el memo
+  de v1.16 queda en 0,2-0,4 s en un proyecto real con EXR 4K (el nativo
+  33-116 ms; ver "Memo de la ultima llamada"). Lo que queda es el puente
+  TCL a python (~12 us por llamada, ~3800 llamadas por toggle) y el render
+  de los Text2. Bajarlo mas pide menos expresiones `[python]` por nodo sin
+  que Nuke sume evaluaciones (la escala en TCL y la caja constante ya se
+  midieron peores).
 
 - **Usuario con RTX 3080 al que todo le anda lento** (ver «Diagnostico en
   otra maquina»): pasarle v4.029, que repita lo que le andaba lento
@@ -500,7 +524,7 @@ duena (el pivote se fuerza con el formato del Read).
 |---|---|---|
 | `LGA_HieroTools/LGA_NKS_BurnIn.py` | registro (startup) | `_register`, `_on_knob_changed`, `_es_derivado`, `_start_mask_watcher`, `_mask_tick`, `_perf_tick` (log de NKS trabado y resumen del render) |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Layout.py` | `import LGA_NKS_BurnIn_Layout` | `parse`, `dump`, `active`, `default_state`, `fresh_arrangement`, `move_to`, `move_next_to`, `slot_of`, `visible_fields`, `stack_state`, `set_stack`, `is_default`, `compute`, `mask_inset`, `side_pivot`, `line_height` |
-| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Logic.py` | `import LGA_NKS_BurnIn_Logic` | `bi_text`, `bi_ok`, `field_geo`, `shape_msg`, `shape_geo`, `shape_message`, `_shapes`, `_frame_state`, `_stream_id` (clave del cache: el cuadro que llega), `viewer_frame` (playhead, para el panel), `_plate_version`, `_res_targets` / `_res_matches` (varias resoluciones), `layout_text`, `mask_inset_px`, `line_height_px`, `_plate_tc_frames` (TC de aPlate), `invalidate_cache`, `TEXT_FAMILY`, `_measure_text`, `_font_path`, `_qt_family`, `_digit_template`, `_compute_state`, `perf_log`, `perf_mark`, `perf_last`, `perf_flush`, `perf_header` (log [Perf]) |
+| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Logic.py` | `import LGA_NKS_BurnIn_Logic` | `bi_text`, `bi_ok`, `field_geo`, `shape_msg`, `shape_geo`, `shape_message`, `_shapes`, `_frame_state` (con el memo `_fast` / `_FAST_TTL`), `_stream_id` (clave del cache: el cuadro que llega), `viewer_frame` (playhead, para el panel), `_plate_version`, `_res_targets` / `_res_matches` (varias resoluciones), `layout_text`, `mask_inset_px`, `line_height_px`, `_plate_tc_frames` (TC de aPlate), `invalidate_cache`, `TEXT_FAMILY`, `_measure_text`, `_font_path`, `_qt_family`, `_digit_template`, `_compute_state`, `perf_log`, `perf_mark`, `perf_last`, `perf_flush`, `perf_header` (log [Perf]) |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Effect.py` | `import LGA_NKS_BurnIn_Effect` | `setup`, `schedule_update`, `update_now`, `is_busy`, `apply_layout`, `apply_rotation`, `apply_font`, `nudge`, `viewer_mask_aspect`, `apply_mask`, `_timeline_format`, `_perf_update` |
 | `LGA_HieroTools/LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Viewer_Mask.py` | `from LGA_NKS_ViewerTL_Panel_py import LGA_NKS_Viewer_Mask` | `set_mask`, `apply_mask` (el boton 3:2; solo pone la mascara para LGA_BurnIn) |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Panel.py` | `import LGA_NKS_BurnIn_Panel` | `show_panel`, `_perf_open`, `BurnInPanel`, `BurnInMap`, `TickSlider`, `Segmented`, `HieroController` |

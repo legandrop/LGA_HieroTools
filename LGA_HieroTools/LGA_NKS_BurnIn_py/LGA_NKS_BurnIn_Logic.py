@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Logic v1.15 | Lega
+  LGA_NKS_BurnIn_Logic v1.16 | Lega
 
   Logica viva del soft effect LGA_BurnIn. Las expresiones [python ...]
   de los Text2 internos del gizmo llaman a bi_text() y bi_ok() en cada
@@ -13,6 +13,12 @@ ____________________________________________________________________
   proyecto; el modulo de registro invalida el cache en los eventos de
   load/save de proyecto.
 
+  v1.16: Prender un track traba menos. Memo de la ultima llamada en
+         _frame_state (_fast): dentro de la rafaga de un render solo se
+         relee el cuadro que llega y bi_rev; formato, mapa y firma se
+         validan cada _FAST_TTL. Metadata del Input sin argumento de tiempo
+         y formato con un solo format(). Medido al prender un track en un
+         proyecto real: 22-36 us por llamada pasan a 5-8 us.
   v1.15: Frame y TC equivocados en el primer cuadro de un plano. El estado
          se guardaba por (efecto, frame) y fuera del render el frame no es
          el del cuadro que tiene el Input: la clave pasa a ser el cuadro
@@ -216,6 +222,7 @@ def invalidate_cache():
     _colorspace_cache.clear()
     _measure_cache.clear()
     _geo_cache.clear()
+    _fast[:] = [None, None, 0.0]
     _track_cache.clear()
     _logged_error_keys.clear()
     _log("Cache de config invalidado")
@@ -854,6 +861,10 @@ _geo_cache = {}
 _GEO_CACHE_MAX = 300
 _NO_STREAM = "<sin cuadro>"
 
+# Memo de la ultima llamada de _frame_state: [clave rapida, estado, hora].
+_fast = [None, None, 0.0]
+_FAST_TTL = 0.25
+
 # Knobs que cambian textos o geometria (el radio entra en el mensaje de los
 # fondos). Colores y opacidades llegan al render por expresiones TCL directas.
 _SIG_KNOBS = ("bi_weight", "bi_size", "bi_text_pad", "bi_labels", "bi_bg_mode",
@@ -886,14 +897,16 @@ def _knob_sig(parent):
 
 
 def _frame_meta(parent, frame):
-    """Toda la metadata del input en UNA lectura (dict). {} sin stream."""
+    """Toda la metadata del input en UNA lectura (dict). {} sin stream.
+
+    Sin el argumento de tiempo: el Input de un soft effect solo tiene el cuadro
+    que le pasa el timeline, y pedirlo con time= cuesta el triple y devuelve
+    lo mismo (medido en NKS 17, ver _stream_id). `frame` queda por firma."""
     try:
         inp = parent.node("Input1")
         if inp is None:
             return {}
-        if frame is None:
-            return dict(inp.metadata() or {})
-        return dict(inp.metadata(time=frame) or {})
+        return dict(inp.metadata() or {})
     except Exception as exc:
         _log_error_once("meta_dict", str(exc))
         return {}
@@ -910,24 +923,21 @@ def _stream_id(inp, frame):
     reusaba: en el primer cuadro de un plano se veia el frame y el TC del plano
     anterior (y el TC en rojo).
 
-    Cada lectura de metadata cuesta ~12 us justo despues de un cambio en el
-    timeline (medido en NKS 17 al prender un track: era el 60 % del costo de
-    la clave). En una secuencia de imagenes el archivo ya es UNO por cuadro,
+    Las lecturas van SIN el argumento de tiempo: medido en NKS 17 al prender
+    un track en un proyecto real, metadata(key, frame) cuesta 6,2 us y
+    metadata(key) 2,2 us, con el mismo resultado en 16894 de 16894 lecturas
+    (el Input de un soft effect solo tiene el cuadro que le pasa el
+    timeline). En una secuencia de imagenes el archivo ya es UNO por cuadro,
     asi que input/frame se lee solo para un video de un archivo (mov, mxf...)
-    o una extension desconocida.
+    o una extension desconocida. `frame` queda por firma.
     """
     try:
         if inp is None:
             return None
-        if frame is None:
-            fn = inp.metadata("input/filename")
-            if fn and str(fn).lower().endswith(_SEQ_EXTS):
-                return (fn, None)
-            return (fn, inp.metadata("input/frame"))
-        fn = inp.metadata("input/filename", frame)
+        fn = inp.metadata("input/filename")
         if fn and str(fn).lower().endswith(_SEQ_EXTS):
             return (fn, None)
-        return (fn, inp.metadata("input/frame", frame))
+        return (fn, inp.metadata("input/frame"))
     except Exception:
         return None
 
@@ -957,23 +967,27 @@ def _frame_state(parent, frame):
     nunca lo usa un render que si tiene cuadro.
     """
     try:
-        # El formato del Input1 es el mismo que el del grupo (el gizmo no lo
-        # cambia) y leerlo cuesta la cuarta parte (medido: 0,7 us contra 3).
         inp = parent.node("Input1")
-        src = inp if inp is not None else parent
-        fmt_w, fmt_h = float(src.width()), float(src.height())
         name = parent.fullName()
     except Exception:
         return None
     _perf["calls"] += 1
-    text = layout_text(parent)
-    sig = _knob_sig(parent)
     # La clave es el cuadro que llega, NO el frame: Nuke tambien evalua las
     # cajas y los colores en el tiempo 0 de cada cuadro (medido: la mitad de
     # las llamadas de bi_ok/field_geo/shape_geo reproduciendo) y con el frame
     # en la clave eso eran dos estados por cuadro. Lo unico que depende del
     # frame del timeline (el TC contra aPlate) va aparte, en bi_ok.
     sid = _stream_id(inp, frame)
+    try:
+        rev = parent["bi_rev"].getValue()
+    except Exception:
+        rev = None
+    # Memo de la ultima llamada: un render evalua las ~84 expresiones del
+    # efecto seguidas sobre el mismo cuadro. Dentro de esa rafaga solo se
+    # vuelve a leer el cuadro que llega y bi_rev (todo cambio de knobs que
+    # mueve la geometria termina en nudge(), que lo incrementa); formato,
+    # mapa y firma se validan de nuevo pasados _FAST_TTL. Medido en NKS 17
+    # al prender un track: el 60 % del costo de validar se iba en eso.
     if sid and sid[0]:
         ident = sid
     elif not sid or sid == (None, None):
@@ -984,14 +998,34 @@ def _frame_state(parent, frame):
         ident = _NO_STREAM
     else:
         ident = frame
+    fast = (name, ident, rev)
+    now = time.perf_counter()
+    if fast == _fast[0] and now - _fast[2] < _FAST_TTL:
+        return _fast[1]
+    try:
+        # El formato del Input1 es el mismo que el del grupo (el gizmo no lo
+        # cambia) y leerlo es mas barato; format() una vez cuesta la mitad que
+        # width() + height() (medido en el render: 1,9 us contra 3,5).
+        fmt = (inp if inp is not None else parent).format()
+        fmt_w, fmt_h = float(fmt.width()), float(fmt.height())
+    except Exception:
+        return None
+    text = layout_text(parent)
+    sig = _knob_sig(parent)
     key = (name, ident, fmt_w, fmt_h, text, sig)
     hit = _geo_cache.get(key)
     if hit is not None:
+        _fast[:] = [fast, hit, now]
         return hit
 
     t0 = time.perf_counter()
     try:
-        return _compute_state(parent, frame, fmt_w, fmt_h, text, key)
+        state = _compute_state(parent, frame, fmt_w, fmt_h, text, key)
+        # Solo un estado que quedo guardado (con cuadro o sin nada) entra al
+        # memo: uno a medio cargar se vuelve a calcular.
+        if state is not None and _geo_cache.get(key) is state:
+            _fast[:] = [fast, state, now]
+        return state
     finally:
         ms = (time.perf_counter() - t0) * 1000.0
         _perf["states"] += 1
