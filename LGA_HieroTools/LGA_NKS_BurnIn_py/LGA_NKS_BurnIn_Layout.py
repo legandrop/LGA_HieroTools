@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Layout v1.02 | Lega
+  LGA_NKS_BurnIn_Layout v1.03 | Lega
 
   Modelo del mapa de LGA BurnIn, en Python puro (sin Nuke ni Qt, se
   prueba con el runtime embebido). Lo comparten el panel (que edita el
@@ -11,13 +11,17 @@ ____________________________________________________________________
   El mapa tiene ocho lugares (cuatro esquinas, arriba y abajo al
   centro, los dos costados) y la bandeja Hidden. Cada lugar es una
   lista de LINEAS, de arriba hacia abajo, y cada linea una lista de
-  campos, de izquierda a derecha. Hay cinco distribuciones (presets);
+  campos, de izquierda a derecha. Hay seis distribuciones (presets);
   cada una recuerda como la dejo el usuario. Todo viaja en un JSON
   dentro del knob invisible bi_layout del gizmo.
 
   Es el mismo modelo que el menu Burn-ins de Shot Player (LGA Media
   Tools), del que sale el diseno.
 
+  v1.03: Distribucion Classic: el orden de los burn-ins amarillos que se
+         apilaban en el track BurnIn (Frame y debajo el clip abajo a la
+         izquierda, TC abajo al centro, Res / FPS / Codec abajo a la
+         derecha).
   v1.02: Default de fabrica: Bottom line con la distribucion de Lega
          (clip | fps res | codec y colorspace abajo; TC y Frame arriba a
          la derecha).
@@ -53,6 +57,7 @@ PRESETS = (
     ("bottom", "Bottom line"),
     ("edge", "Edge"),
     ("left", "Left list"),
+    ("classic", "Classic"),
 )
 DEFAULT_PRESET = "bottom"
 
@@ -68,6 +73,12 @@ _PRESET_SLOTS = {
     "edge": {"tl": [["clip"]], "ml": [["tc"]], "mr": [["res", "fps"]],
              "br": [["frame"]]},
     "left": {"tl": [["clip"], ["cspace"], ["res"], ["fps"], ["frame"], ["tc"]]},
+    # Classic: el orden de la pila de Text2 amarillos que Lega usaba antes en
+    # el track BurnIn (medido en sus .hrox el 23-11): Frame y debajo el clip
+    # abajo a la izquierda, el TC hacia el centro, y abajo a la derecha la
+    # resolucion, los fps y la compresion. El ojo ya busca el frame ahi.
+    "classic": {"bl": [["frame"], ["clip"]], "bc": [["tc"]],
+                "br": [["res"], ["fps"], ["codec"]]},
 }
 _PRESET_SIDES = {"edge": "rotated"}
 

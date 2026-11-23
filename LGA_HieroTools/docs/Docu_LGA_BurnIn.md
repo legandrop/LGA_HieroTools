@@ -9,7 +9,7 @@
 
 > Estado (12 nov 2026): **panel Burn-ins con mapa**, el diseno del menu
 > Burn-ins de Shot Player (LGA Media Tools). La tabla X / Y / Size por campo
-> se reemplazo por un mapa de ocho lugares con cinco distribuciones; todo el
+> se reemplazo por un mapa de ocho lugares con seis distribuciones; todo el
 > look es global. Once campos (suma Track, Date y Codec), fondo Panels /
 > Band / Text, costados girados. Validado en NKS 17.0v4 por dev-link
 > (render a archivo y panel real) y con el harness. La version anterior
@@ -74,9 +74,16 @@ esos valores a los tres lugares.
 Lo que antes era un ancla X / Y por campo ahora es un **mapa**: ocho
 lugares (cuatro esquinas, arriba y abajo al centro, los dos costados) y la
 bandeja **Hidden**. Cada lugar es una lista de LINEAS de arriba abajo, y
-cada linea una lista de campos de izquierda a derecha. Hay cinco
-distribuciones (Corners, Top & bottom, Bottom line, Edge, Left list) y cada
-una recuerda como la dejo el usuario. Todo viaja como JSON en el knob
+cada linea una lista de campos de izquierda a derecha. Hay seis
+distribuciones (Corners, Top & bottom, Bottom line, Edge, Left list, Classic) y cada
+una recuerda como la dejo el usuario. **Classic** reproduce el orden de la pila
+de Text2 amarillos que Lega usaba antes en un track BurnIn (leido de sus
+.hrox el 23-11): Frame y debajo el clip abajo a la izquierda, TC abajo al
+centro, y Res / FPS / Codec abajo a la derecha. Existe porque el ojo ya busca
+el frame abajo a la izquierda. En la pila vieja el TC iba en la linea del
+Frame; aca va en la linea de abajo (un lugar del centro con una sola linea
+se apoya en el borde). La pila tenia ademas la letra de la unidad, el
+dataWindow y el displayWindow, que no son campos del efecto. Todo viaja como JSON en el knob
 invisible `bi_layout` (modelo en `LGA_NKS_BurnIn_Layout`).
 
 **Por que:** la tabla obligaba a pensar en fracciones del formato y el ancho
@@ -231,7 +238,7 @@ Panel**; todo se edita en la ventana **Burn-ins** (`LGA_NKS_BurnIn_Panel`,
 `Style.FORM`, captura en `UI_Captures/BurnIn_Panel.png`). Mockup aprobado
 en `+Building_Blocks/BurnIn/design/BurnIn_Panel_Mapa.html`.
 
-- **Presets**: las cinco distribuciones en un segmentado, y **Reset** vuelve
+- **Presets**: las seis distribuciones en un segmentado, y **Reset** vuelve
   la activa a la de fabrica (deshabilitado si ya lo esta).
 - **Mapa** (`BurnInMap`, pintado con QPainter y tokens del modulo de
   estilo): se arrastra un campo a un lugar, o click en el campo y despues en
@@ -294,6 +301,26 @@ cuadros, mediana de 3, NKS 17): plate solo 237 ms por cuadro, LGA_BurnIn
 nuevo 224, el viejo con BlinkScript 306 en GPU y 256 forzado a CPU. Todo
 dentro del ruido de escribir el EXR: el efecto nuevo no se distingue del
 plate solo. Sus nodos son todos Text2, como el BurnIn nativo.
+
+**Contra la pila vieja de Text2 amarillos (23-11-2026).** En el visor del
+timeline de una instancia aparte de NKS 17: plate EXR 4K, 600 cuadros sin
+cache, cinco rondas alternadas de 30 cuadros, se espera la senal
+`frameDisplayed` de cada uno (sonda `+Building_Blocks/BurnIn/perf_stack.py`).
+La pila son los 4 Text2 de los .hrox viejos (Frame/TC/clip, Reso, Drive,
+Fps), con `[metadata]` en TCL; el LGA BurnIn va en Classic (6 campos).
+
+| Caso | Pared por cuadro (mediana) | CPU del proceso por cuadro |
+|---|---|---|
+| Sin burn-in | 26 ms | 65 ms |
+| Pila vieja (4 Text2) | 47 ms | 89 ms |
+| LGA BurnIn Classic | 45 ms | 148 ms |
+
+La pared es muy ruidosa (cada caso va de 20 a 90 ms segun la ronda): en
+tiempo de visor no se distinguen. La CPU si: el LGA BurnIn usa del orden de
+60 ms mas por cuadro que la pila. Una parte se midio aparte: el Python de
+sus expresiones son 6,8 ms por cuadro en 309 llamadas, y tiene 12 Text2
+activos (texto y fondo de cada campo) contra 4. Es el proximo lugar para
+optimizar (ver Pendientes).
 
 Numeros de la version con BlinkScript (CPU del proceso, instancia aparte):
 
@@ -434,6 +461,9 @@ el render del propio NKS (los Text2, la lectura del media, la GPU). Si
 
 ## Pendientes
 
+- **Bajar la CPU por cuadro hasta la de la pila vieja** (medido el 23-11,
+  ver «Contra la pila vieja» en Rendimiento): 309 llamadas de Python por
+  cuadro con 6 campos visibles, y 12 Text2 activos contra 4.
 - **Traba al prender o apagar un track con el efecto puesto** (0,4-0,9 s en
   un proyecto real con EXR 4K; el nativo 33-116 ms; ver "Prueba de estres").
   Viene de la cantidad de expresiones `[python]` que NKS re-evalua por

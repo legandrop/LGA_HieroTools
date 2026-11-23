@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.029
+- [new] El panel de LGA BurnIn tiene la distribución `Classic`, con el orden de los burn-ins amarillos de siempre: el frame y el nombre del clip abajo a la izquierda, el timecode abajo al centro, y la resolución, los fps y el codec abajo a la derecha.
 - [fixed] LGA BurnIn ya no muestra en el primer cuadro de un plano el frame y el timecode del plano anterior, ni pinta el timecode de rojo sin motivo.
 - [improved] En `Plate res` del panel de LGA BurnIn podés poner varias resoluciones válidas separadas por comas (por ejemplo `timeline, 3840x2160`): la resolución se pinta de rojo solo si el plate no coincide con ninguna.
 - [fixed] El fondo del frame y del timecode del LGA BurnIn ya no cambia de ancho al reproducir ni queda vacío de un lado: los números ocupan siempre el mismo lugar.

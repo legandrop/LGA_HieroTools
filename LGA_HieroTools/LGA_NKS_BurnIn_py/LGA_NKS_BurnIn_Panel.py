@@ -4,8 +4,8 @@ ____________________________________________________________________
   LGA_NKS_BurnIn_Panel v3.06 | Lega
 
   Panel "Burn-ins" del soft effect LGA_BurnIn, con el diseno del menu
-  Burn-ins de Shot Player (LGA Media Tools): cinco distribuciones
-  (Corners, Top & bottom, Bottom line, Edge, Left list) con Reset, un
+  Burn-ins de Shot Player (LGA Media Tools): seis distribuciones
+  (Corners, Top & bottom, Bottom line, Edge, Left list, Classic) con Reset, un
   mapa con los ocho lugares del cuadro donde se arrastran los campos
   (o se elige uno con un click y despues el lugar), la bandeja Hidden,
   el texto de los dos Custom, y el Look en segmentos y sliders de
