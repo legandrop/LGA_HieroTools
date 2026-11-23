@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Logic v1.13 | Lega
+  LGA_NKS_BurnIn_Logic v1.14 | Lega
 
   Logica viva del soft effect LGA_BurnIn. Las expresiones [python ...]
   de los Text2 internos del gizmo llaman a bi_text() y bi_ok() en cada
@@ -13,6 +13,9 @@ ____________________________________________________________________
   proyecto; el modulo de registro invalida el cache en los eventos de
   load/save de proyecto.
 
+  v1.14: El texto se mide con LGA Inter Tab (TEXT_FAMILY, Inter con
+         digitos tabulares): el fondo de frame/tc ya no cambia de ancho
+         ni queda vacio de un lado.
   v1.13: Registro de tiempos [Perf]: cabecera de sesion, contadores del
          render en _frame_state (calculo separado en _compute_state) y
          resumen cada ~2 s que escribe el vigia del registro.
@@ -640,26 +643,38 @@ def bi_ok(field, parent, frame=None):
 
 # ── Medicion del texto ────────────────────────────────────────────────────────
 #
-# El panel de cada campo ABRAZA a su texto. La fuente del burn-in es Inter (la
-# del pack). Para que el ancho medido coincida con lo que Nuke RENDERIZA se mide
-# con QFontMetrics cargando EL MISMO archivo TTF que Nuke usa: se le pregunta a
+# El panel de cada campo ABRAZA a su texto. La fuente del burn-in es LGA Inter
+# Tab (del pack): Inter con los digitos TABULARES, todos del mismo ancho (los
+# zero.tf..nine.tf que Inter ya trae, con el cmap apuntado a ellos; generador
+# +Building_Blocks/BurnIn/gen_LGA_Inter_Tab_font.py). Text2 no aplica el rasgo
+# tnum ni deja ubicar cada caracter, y con los digitos proporcionales de Inter
+# un '1' mide 0,41 em y un '4' 0,65 em: el texto de frame/tc cambiaba de ancho
+# por frame y el fondo, reservado para el digito ancho, quedaba vacio de un
+# lado (medido: margen 22 px a la izquierda y hasta 45 a la derecha). Es la
+# idea del Shot Player de Media Tools (cada digito en una celda fija), resuelta
+# en la fuente: costo cero en el render.
+#
+# Para que el ancho medido coincida con lo que Nuke RENDERIZA se mide con
+# QFontMetrics cargando EL MISMO archivo TTF que Nuke usa: se le pregunta a
 # nuke.getFonts() el path de (family, style) y se carga ESE en Qt. El peso
-# (Regular/SemiBold/Bold) cambia el TTF y por lo tanto las metricas. Para
-# frame/tc los digitos se normalizan a '0' (ancho estable por frame). Todo
-# cacheado. VERIFICADO en NKS (sonda 29-08): render Inter + paneles abrazan.
+# (Regular/SemiBold/Bold) cambia el TTF y por lo tanto las metricas. Todo
+# cacheado. VERIFICADO en NKS 17 (2026-11-23): fondo de frame/tc fijo y
+# centrado (23/24 px) en 1001, 1011, 1044 y 1111.
+
+TEXT_FAMILY = "LGA Inter Tab"
 
 _measure_cache = {}
 _qt_family_cache = {}  # (family, style) -> familia que informa Qt (carga 1 vez)
 
 # El TTF del repo, fallback cuando no hay `nuke` (banco) o la fuente no esta en
-# getFonts. LGA_NKS_Shared/fonts/ tiene los tres pesos de Inter.
+# getFonts. LGA_NKS_Shared/fonts/ tiene los tres pesos.
 _FONT_DIR_REPO = os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "LGA_NKS_Shared", "fonts")
 )
-_INTER_REPO_TTF = {
-    "Regular": "Inter-400.ttf",
-    "SemiBold": "Inter-600.ttf",
-    "Bold": "Inter-700.ttf",
+_TEXT_REPO_TTF = {
+    "Regular": "LGA_Inter_Tab-400.ttf",
+    "SemiBold": "LGA_Inter_Tab-600.ttf",
+    "Bold": "LGA_Inter_Tab-700.ttf",
 }
 _WEIGHT_BY_INDEX = ["Regular", "SemiBold", "Bold"]
 _DEFAULT_STYLE = "SemiBold"
@@ -697,7 +712,7 @@ def _font_path(family, style):
                     break
         except Exception:
             pass
-    fname = _INTER_REPO_TTF.get(style)
+    fname = _TEXT_REPO_TTF.get(style)
     if fname:
         p = os.path.join(_FONT_DIR_REPO, fname)
         if os.path.exists(p):
@@ -726,14 +741,14 @@ def _qt_family(family, style):
     return fam
 
 
-# Solo frame y tc cambian de contenido por frame: para que su panel no
-# "respire" se mide con los digitos normalizados a '0'. El resto de los
-# campos se miden exactos: no cambian por frame.
+# Solo frame y tc cambian de contenido por frame. Con digitos tabulares
+# normalizarlos a '0' da el mismo ancho exacto; se hace para que el cache de
+# medidas tenga UNA entrada por campo y no una por frame.
 _DIGIT_FIELDS = ("frame", "tc")
 
 
 def _digit_template(text):
-    """Normaliza digitos a '0' para medir un ancho estable en frame/tc."""
+    """Normaliza digitos a '0': misma medida, una sola entrada de cache."""
     return "".join("0" if ch.isdigit() else ch for ch in str(text))
 
 
@@ -760,13 +775,13 @@ def _font_px(parent, field=None, fmt_h=None):
 
 
 def _measure_text(text, px, style):
-    """Ancho en px del texto en Inter <style> a <px>, con QFontMetrics del TTF real."""
+    """Ancho en px del texto en LGA Inter Tab <style> a <px>, con QFontMetrics del TTF real."""
     key = (text, px, style)
     cached = _measure_cache.get(key)
     if cached is not None:
         return cached
     width = None
-    fam = _qt_family("Inter", style)
+    fam = _qt_family(TEXT_FAMILY, style)
     try:
         from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtGui
 

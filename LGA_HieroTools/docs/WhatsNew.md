@@ -13,6 +13,7 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.029
+- [fixed] El fondo del frame y del timecode del LGA BurnIn ya no cambia de ancho al reproducir ni queda vacío de un lado: los números ocupan siempre el mismo lugar.
 - [improved] LGA BurnIn ya no depende de la placa de video: en computadoras sin una GPU potente el timeline anda fluido con el efecto puesto, con el mismo look de fondos redondeados.
 - [fixed][win] el LGA BurnIn usa su propia tipografía aunque no la tengas instalada, y el peso Bold ya no sale con otra letra.
 

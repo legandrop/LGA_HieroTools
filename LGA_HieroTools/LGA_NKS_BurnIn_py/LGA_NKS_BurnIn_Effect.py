@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Effect v1.10 | Lega
+  LGA_NKS_BurnIn_Effect v1.11 | Lega
 
   Puente entre los knobs del soft effect LGA_BurnIn y sus nodos
   internos. setup() es el onCreate del gizmo (en su Dot interno): pone
@@ -11,6 +11,8 @@ ____________________________________________________________________
   schedule_update() junta los pedidos del panel y del knobChanged en una
   sola actualizacion por ciclo de eventos.
 
+  v1.11: apply_font() pone LGA Inter Tab (TEXT_FAMILY de la logica) en
+         vez de Inter: digitos tabulares, fondo de frame/tc de ancho fijo.
   v1.10: Registro de tiempos [Perf]: update_now() y setup() anotan cuanto
          tardan (fuente, layout, nudge) y marcan la ultima actividad.
   v1.09: Sin BlinkScript (antes LGA_NKS_BurnIn_Blink). Los fondos son
@@ -94,7 +96,8 @@ def _log(message):
         pass
 
 
-# La fuente del burn-in es Inter (la del pack). El peso se elige con el knob
+# La fuente del burn-in es LGA Inter Tab (Inter con digitos tabulares, del
+# pack; ver "Medicion del texto" en la logica). El peso se elige con el knob
 # bi_weight (enum 0/1/2). El knob font de Text2 es un FreeType_Knob: se setea
 # con setValue(family, style), NO acepta un path. Lo maneja apply_font, que
 # corre en el onCreate (via setup) y en el knobChanged de bi_weight (registrado
@@ -116,10 +119,12 @@ def _gizmo_of(node):
 
 
 def apply_font(gizmo):
-    """Setea el knob bi_font a Inter con el estilo del peso elegido.
+    """Setea el knob bi_font a LGA Inter Tab (Inter con digitos tabulares)
+    con el estilo del peso elegido. Corre en el onCreate, asi que un efecto
+    de un proyecto viejo (guardado con Inter) pasa solo a la fuente nueva.
 
     bi_weight es un Enumeration_Knob: value() devuelve el LABEL, que a
-    proposito ES el estilo de Inter ('Regular'/'SemiBold'/'Bold').
+    proposito ES el estilo ('Regular'/'SemiBold'/'Bold').
     """
     if gizmo is None:
         return
@@ -129,10 +134,13 @@ def apply_font(gizmo):
         style = "SemiBold"
     if style not in _WEIGHT_STYLES:
         style = "SemiBold"
+    import LGA_NKS_BurnIn_Logic as bi_logic
+
+    family = bi_logic.TEXT_FAMILY
     try:
-        gizmo["bi_font"].setValue("Inter", style)
+        gizmo["bi_font"].setValue(family, style)
     except Exception as exc:
-        _log("ERROR seteando bi_font a Inter {}: {}".format(style, exc))
+        _log("ERROR seteando bi_font a {} {}: {}".format(family, style, exc))
     # Fuente de formas de los fondos (Panel_* y Band_*): fija.
     try:
         knob = gizmo.knobs().get("bi_shape_font")

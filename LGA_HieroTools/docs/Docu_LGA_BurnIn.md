@@ -89,8 +89,10 @@ resuelve en pixeles en cada frame.
   layout vacio quedaba guardado y el render lo reusaba (todo apilado en el
   origen, medido).
 - **Los paneles abrazan al texto**: el ancho se mide con el TTF real de
-  Inter que usa Nuke; frame y TC con los digitos normalizados a "0" (el
-  layout no "respira" entre frames). Un campo sin texto no ocupa lugar.
+  LGA Inter Tab que usa Nuke. Como sus digitos son tabulares (todos del
+  mismo ancho), el fondo de frame y TC no cambia de ancho entre frames y
+  queda centrado; los digitos se normalizan a "0" solo para que el cache de
+  medidas tenga una entrada por campo. Un campo sin texto no ocupa lugar.
 - **Tamano global**: Size S / M / L es una fraccion del alto del formato
   (`SIZE_FRACTIONS`; M = 50 px en 4K, el tamano historico).
 - **Costados girados** (Sides = Rotated, default en Edge): el izquierdo gira
@@ -133,7 +135,8 @@ adentro para quedar en el area visible. Cuenta tambien la mascara al 50%
 Input -> Dot -> Band_T/B/L/R -> 11x (Panel_<Campo> -> Text_<Campo>) -> Output
 ```
 
-**Fuente**: es **Inter**, fija (la del pack); el usuario elige solo el PESO
+**Fuente**: es **LGA Inter Tab** (Inter con digitos tabulares, ver abajo),
+fija (la del pack); el usuario elige solo el PESO
 (Regular/SemiBold/Bold via `bi_weight`, que setea el `bi_font` invisible por
 `apply_font()`). Para no depender de que Inter este instalada en la maquina,
 el startup (`LGA_HieroTools_Startup.py`) antepone el fonts dir del repo
@@ -143,8 +146,26 @@ descubre el Inter del repo —incluido Bold, que el Inter de Windows no trae—
 sin instalar nada. Al cambiar el peso, el fondo se recalcula (mide con el
 TTF del peso nuevo).
 
+**Digitos tabulares: LGA Inter Tab.** Text2 dibuja con los digitos
+proporcionales de Inter (un "1" mide 0,41 em y un "4" 0,65 em) y no aplica el
+rasgo OpenType `tnum` ni deja ubicar cada caracter por separado. Con Inter, el
+texto de frame y TC cambiaba de ancho en cada frame y el fondo, reservado para
+el digito ancho, quedaba vacio de un lado (medido en NKS 17 a 1080: margen de
+22 px a la izquierda y de 28 a 45 a la derecha segun el frame). El Shot Player
+de Media Tools resolvio lo mismo dibujando cada digito en una celda del ancho
+del digito mas ancho; en Text2 eso se resuelve en la FUENTE: `LGA Inter Tab`
+(`LGA_NKS_Shared/fonts/LGA_Inter_Tab-400/600/700.ttf`) es Inter con el cmap de
+0-9 apuntado a sus digitos tabulares propios (`zero.tf`..`nine.tf`), renombrada
+(Inter es OFL sin Reserved Font Name). Mismo look, cero costo en el render
+(medido: 0,19-0,20 ms por estado calculado con las dos fuentes). Despues: fondo
+fijo y margenes 23/24 px en 1001, 1011, 1044 y 1111. Los demas campos tambien
+usan esta fuente; solo cambian sus digitos. La genera
+`+Building_Blocks/BurnIn/gen_LGA_Inter_Tab_font.py` (necesita fontTools, solo
+en desarrollo). `apply_font()` corre en el onCreate: un proyecto guardado con
+Inter pasa solo a la fuente nueva al abrirse (medido).
+
 - **Dot1**: lleva el `onCreate`, que llama a
-  `LGA_NKS_BurnIn_Effect.setup()`: fuentes (`bi_font` Inter del peso y
+  `LGA_NKS_BurnIn_Effect.setup()`: fuentes (`bi_font` LGA Inter Tab del peso y
   `bi_shape_font` LGA Shapes), mascara del viewer y layout.
 - **Band_T/B/L/R** y **Panel_<Campo>**: un Text2 por fondo, con la fuente
   **LGA Shapes** (`LGA_NKS_Shared/fonts/LGA_Shapes.ttf`, generada por
@@ -184,6 +205,8 @@ LGA_HieroTools/
     LGA_NKS_BurnIn_Panel.py        ventana Burn-ins (mapa + look)
     logs/DebugPy_LGA_NKS_BurnIn.log
   LGA_NKS_Shared/fonts/LGA_Shapes.ttf               fuente de los fondos
+  LGA_NKS_Shared/fonts/LGA_Inter_Tab-*.ttf          fuente del texto (Inter, digitos tabulares)
+  +Building_Blocks/BurnIn/gen_LGA_Inter_Tab_font.py generador de LGA Inter Tab (dev)
   +Building_Blocks/BurnIn/gen_LGA_BurnIn_gizmo.py   generador (dev)
   +Building_Blocks/BurnIn/gen_LGA_Shapes_font.py    generador de la fuente (dev)
   +Building_Blocks/BurnIn/design/BurnIn_Panel_Mapa.html  mockup aprobado
@@ -324,7 +347,9 @@ el render del propio NKS (los Text2, la lectura del media, la GPU). Si
 - El colorspace se cachea por clip; un cambio a mano se refleja al
   guardar/reabrir el proyecto.
 - Comparacion de resolucion solo para plates (EXR por default).
-- **Fuente de los fondos**: si `LGA Shapes` no esta registrada (cache de
+- **Fuentes del pack**: si `LGA Shapes` o `LGA Inter Tab` no estan
+  registradas, los fondos no se dibujan o el texto sale con otra letra
+  (cache de
   fuentes de Nuke viejo), los fondos no se dibujan. El startup borra ese
   cache cuando le falta una fuente del pack (`_refresh_font_cache`).
 - **Costados girados**: el pivote sale del formato de la secuencia que
@@ -373,13 +398,14 @@ duena (el pivote se fuerza con el formato del Read).
 |---|---|---|
 | `LGA_HieroTools/LGA_NKS_BurnIn.py` | registro (startup) | `_register`, `_on_knob_changed`, `_es_derivado`, `_start_mask_watcher`, `_mask_tick`, `_perf_tick` (log de NKS trabado y resumen del render) |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Layout.py` | `import LGA_NKS_BurnIn_Layout` | `parse`, `dump`, `active`, `default_state`, `fresh_arrangement`, `move_to`, `move_next_to`, `slot_of`, `visible_fields`, `stack_state`, `set_stack`, `is_default`, `compute`, `mask_inset`, `side_pivot`, `line_height` |
-| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Logic.py` | `import LGA_NKS_BurnIn_Logic` | `bi_text`, `bi_ok`, `field_geo`, `shape_msg`, `shape_geo`, `shape_message`, `_shapes`, `_frame_state`, `layout_text`, `mask_inset_px`, `line_height_px`, `_plate_tc_frames` (TC de aPlate), `invalidate_cache`, `_compute_state`, `perf_log`, `perf_mark`, `perf_last`, `perf_flush`, `perf_header` (log [Perf]) |
+| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Logic.py` | `import LGA_NKS_BurnIn_Logic` | `bi_text`, `bi_ok`, `field_geo`, `shape_msg`, `shape_geo`, `shape_message`, `_shapes`, `_frame_state`, `layout_text`, `mask_inset_px`, `line_height_px`, `_plate_tc_frames` (TC de aPlate), `invalidate_cache`, `TEXT_FAMILY`, `_measure_text`, `_font_path`, `_qt_family`, `_digit_template`, `_compute_state`, `perf_log`, `perf_mark`, `perf_last`, `perf_flush`, `perf_header` (log [Perf]) |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Effect.py` | `import LGA_NKS_BurnIn_Effect` | `setup`, `schedule_update`, `update_now`, `is_busy`, `apply_layout`, `apply_rotation`, `apply_font`, `nudge`, `viewer_mask_aspect`, `apply_mask`, `_timeline_format`, `_perf_update` |
 | `LGA_HieroTools/LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Viewer_Mask.py` | `from LGA_NKS_ViewerTL_Panel_py import LGA_NKS_Viewer_Mask` | `set_mask`, `apply_mask` (el boton 3:2; solo pone la mascara para LGA_BurnIn) |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Panel.py` | `import LGA_NKS_BurnIn_Panel` | `show_panel`, `_perf_open`, `BurnInPanel`, `BurnInMap`, `TickSlider`, `Segmented`, `HieroController` |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Config.py` | `import LGA_NKS_BurnIn_Config` | `resolve`, `load_user_file`, `save_user_file`, `list_presets`, `load_preset`, `save_preset` |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_ProjectTag.py` | `import LGA_NKS_BurnIn_ProjectTag` | `find_project`, `read_config_json`, `write_config` |
 | `Python/Startup/LGA_HieroTools_Startup.py` (fuera del paquete) | startup | `NUKE_FONT_PATH`, `_refresh_font_cache`, `_font_cache_dirs` |
+| `LGA_HieroTools/LGA_NKS_Shared/fonts/LGA_Inter_Tab-400/600/700.ttf` | fuente (generada por `+Building_Blocks/BurnIn/gen_LGA_Inter_Tab_font.py` desde `Inter-*.ttf`) | familia `LGA Inter Tab`, estilos Regular / SemiBold / Bold; digitos 0-9 = `zero.tf`..`nine.tf` de Inter |
 | `LGA_HieroTools/LGA_NKS_Shared/fonts/LGA_Shapes.ttf` | fuente (generada por `+Building_Blocks/BurnIn/gen_LGA_Shapes_font.py`) | tapas `U+E000+i` / `U+E100+i`, bloques `U+E200..E203`, bloques sin solape `U+E210..E213` |
 | `LGA_HieroTools/LGA_NKS_Shared/LGA_UI_Style_HieroTools.py` | `from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, Metric` | `apply_ui_font`, `semibold_css`, `emphasis` |
 | `LGA_HieroTools/LGA_NKS_Shared/LGA_UI_CustomTooltip_HieroTools.py` | `from LGA_NKS_Shared.LGA_UI_CustomTooltip_HieroTools import set_custom_tooltip` | tooltips del panel |
