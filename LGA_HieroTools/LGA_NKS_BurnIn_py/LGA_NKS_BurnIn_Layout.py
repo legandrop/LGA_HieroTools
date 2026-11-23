@@ -6,7 +6,7 @@ ____________________________________________________________________
   Modelo del mapa de LGA BurnIn, en Python puro (sin Nuke ni Qt, se
   prueba con el runtime embebido). Lo comparten el panel (que edita el
   mapa) y la logica del render (que convierte el mapa en rectangulos
-  de pixeles para los paneles del kernel y las cajas de los Text2).
+  de pixeles para los fondos y las cajas de los Text2).
 
   El mapa tiene ocho lugares (cuatro esquinas, arriba y abajo al
   centro, los dos costados) y la bandeja Hidden. Cada lugar es una
@@ -31,7 +31,7 @@ import copy
 import json
 import math
 
-# Campos del efecto, en el orden del motor (Text2 y params del kernel).
+# Campos del efecto, en el orden del gizmo (Text2 de fondo y de texto).
 FIELDS = (
     "clip", "cspace", "res", "frame", "tc", "fps",
     "track", "date", "codec", "custom1", "custom2",

@@ -1,10 +1,10 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn v1.09 | Lega
+  LGA_NKS_BurnIn v1.10 | Lega
 
-  Registra el soft effect LGA_BurnIn (BlinkScript + Text2, paneles
-  redondeados) en el menu Effects del timeline de NKS. Muestra
+  Registra el soft effect LGA_BurnIn (solo Text2; fondos redondeados
+  con la fuente LGA Shapes) en el menu Effects del timeline de NKS. Muestra
   metadata del clip visible y pinta en rojo resolucion/fps cuando no
   coinciden con el objetivo del proyecto. La config vive en AppData y el override por proyecto en
   un tag que viaja en el .hrox.
@@ -13,6 +13,9 @@ ____________________________________________________________________
   "foundry.timeline.effect." + setData(clase del nodo), via
   hiero.ui.registerAction (patron oficial de custom_soft_effect.py).
 
+  v1.10: Sin BlinkScript: importa LGA_NKS_BurnIn_Effect (antes
+         LGA_NKS_BurnIn_Blink). bi_bg_radius pasa a pedir actualizacion
+         (el radio va en el mensaje de los fondos de glifos).
   v1.09: Performance: el knobChanged solo anota el pedido
          (Blink.schedule_update, agrupado por ciclo de eventos) e ignora los
          knobs que van directo al render y los writes de la propia
@@ -104,13 +107,15 @@ def _log(message):
 # y el viewer re-renderiza el frame actual solo (medido: frameDisplayed se
 # dispara y la imagen refleja la opacidad y la rotacion nuevas). Lo unico que
 # no ensucia el nodo es el write del blob animation_layers, y para eso esta
-# nudge() en el modulo Blink.
+# nudge() en LGA_NKS_BurnIn_Effect.
 
 # Knobs bi_* que llegan al render por expresiones TCL directas (o que escribe
 # el propio update): no necesitan re-aplicar nada ni ensuciar el efecto.
+# bi_bg_radius NO va aca: el radio entra en el mensaje de los fondos (glifos
+# de LGA Shapes), que se re-evalua solo con el nudge de bi_rev.
 _KNOBS_DIRECTOS = (
-    "bi_open_panel", "bi_rev", "bi_font", "bi_color", "bi_opacity",
-    "bi_bg_color", "bi_bg_opacity", "bi_bg_radius",
+    "bi_open_panel", "bi_rev", "bi_font", "bi_shape_font", "bi_color",
+    "bi_opacity", "bi_bg_color", "bi_bg_opacity",
 )
 # Por campo (bi_<campo>_<sufijo>): on/bg/rot/ax/ay los deriva apply_layout
 # del mapa; x/y/size quedaron inertes desde el panel con mapa. _text (custom)
@@ -128,17 +133,17 @@ def _es_derivado(name, fields):
 def _on_knob_changed():
     """knobChanged de la clase LGA_BurnIn (registrado en _register).
 
-    Solo ANOTA el pedido: LGA_NKS_BurnIn_Blink.schedule_update lo resuelve
+    Solo ANOTA el pedido: LGA_NKS_BurnIn_Effect.schedule_update lo resuelve
     una vez por efecto al volver al loop de eventos (una rafaga del panel o de
     un script termina en una sola actualizacion y un solo nudge). Los writes
     que hace la propia actualizacion no vuelven a entrar (is_busy)."""
     import nuke
 
     try:
-        import LGA_NKS_BurnIn_Blink as bi_blink
+        import LGA_NKS_BurnIn_Effect as bi_effect
     except Exception:
         return
-    if bi_blink.is_busy():
+    if bi_effect.is_busy():
         return
     k = nuke.thisKnob()
     if k is None:
@@ -146,10 +151,10 @@ def _on_knob_changed():
     name = k.name()
     if not name.startswith("bi_") or name in _KNOBS_DIRECTOS:
         return
-    if _es_derivado(name, bi_blink.FIELDS):
+    if _es_derivado(name, bi_effect.FIELDS):
         return
     try:
-        bi_blink.schedule_update(nuke.thisNode(), font=(name == "bi_weight"))
+        bi_effect.schedule_update(nuke.thisNode(), font=(name == "bi_weight"))
     except Exception as exc:
         _log("ERROR en knobChanged {}: {}".format(name, exc))
 
@@ -186,9 +191,9 @@ def _burnins_of(seq):
 def _mask_tick():
     try:
         import hiero.ui
-        import LGA_NKS_BurnIn_Blink as bi_blink
+        import LGA_NKS_BurnIn_Effect as bi_effect
 
-        aspect = round(bi_blink.viewer_mask_aspect(), 4)
+        aspect = round(bi_effect.viewer_mask_aspect(), 4)
         seq = hiero.ui.activeSequence()
         key = (aspect, id(seq) if seq is not None else None)
         if key == _state.get("mask_key") or seq is None:
@@ -197,7 +202,7 @@ def _mask_tick():
         _state["mask_key"] = key
         changed = 0
         for node in _burnins_of(seq):
-            if bi_blink.apply_mask(node, aspect):
+            if bi_effect.apply_mask(node, aspect):
                 changed += 1
         if changed:
             _log("mascara del viewer {} -> {} efecto(s)".format(aspect, changed))

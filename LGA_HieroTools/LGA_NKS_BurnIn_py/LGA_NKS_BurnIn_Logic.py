@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Logic v1.11 | Lega
+  LGA_NKS_BurnIn_Logic v1.12 | Lega
 
   Logica viva del soft effect LGA_BurnIn. Las expresiones [python ...]
   de los Text2 internos del gizmo llaman a bi_text() y bi_ok() en cada
@@ -13,6 +13,10 @@ ____________________________________________________________________
   proyecto; el modulo de registro invalida el cache en los eventos de
   load/save de proyecto.
 
+  v1.12: Fondos sin BlinkScript: el estado por frame suma "shapes"
+         (paneles y franjas Band, las de los costados recortadas entre
+         arriba y abajo) y shape_msg()/shape_geo() dan el mensaje en la
+         fuente LGA Shapes y la caja de cada Text2 de fondo.
   v1.11: TC en rojo si no coincide con el del clip de aPlate en ese
          frame (_plate_tc_frames, items de aPlate cacheados 3 s). Sin
          timecode en la metadata o sin aPlate en el frame, no compara.
@@ -719,10 +723,11 @@ def _measure_text(text, px, style):
 _geo_cache = {}
 _GEO_CACHE_MAX = 300
 
-# Knobs que cambian textos o geometria. El resto (colores, opacidades, radio)
-# llega al render por expresiones TCL directas y no pasa por aca.
+# Knobs que cambian textos o geometria (el radio entra en el mensaje de los
+# fondos). Colores y opacidades llegan al render por expresiones TCL directas.
 _SIG_KNOBS = ("bi_weight", "bi_size", "bi_text_pad", "bi_labels", "bi_bg_mode",
-              "bi_custom1_text", "bi_custom2_text", "bi_mask_aspect")
+              "bi_custom1_text", "bi_custom2_text", "bi_mask_aspect",
+              "bi_bg_radius")
 
 
 
@@ -802,10 +807,12 @@ def _frame_state(parent, frame):
     rects, bands = bi_layout.compute(
         arr, widths, fmt_w, fmt_h, fs, pad, mask_inset_px(parent, fmt_w, fmt_h)
     )
+    bands = bands if mode == 1 else {"t": 0.0, "b": 0.0, "l": 0.0, "r": 0.0}
     state = {
         "texts": texts,
         "rects": rects,
-        "bands": bands if mode == 1 else {"t": 0.0, "b": 0.0, "l": 0.0, "r": 0.0},
+        "bands": bands,
+        "shapes": _shapes(rects, bands, fmt_w, fmt_h, parent),
         "line_h": bi_layout.line_height(fs, pad),
         "meta": meta,
         "oks": {},
@@ -844,6 +851,128 @@ def field_geo(field, comp, parent, frame=None):
     except Exception as exc:
         _log_error_once("geo:" + str(field) + comp, str(exc))
         return 0.0
+
+
+# ── Fondos con glifos (fuente LGA Shapes) ─────────────────────────────────────
+#
+# Cada fondo (panel de un campo o franja del modo Band) es UN Text2 que
+# escribe con la fuente LGA Shapes del pack: tapa izquierda redondeada +
+# bloques de relleno + tapa derecha. El glifo mide 1000 unidades de alto y el
+# Text2 dibuja a 100 px por unidad de global_font_scale, asi que con
+# scale = h / 100 el fondo mide h px de alto. Un Text2 compone todos sus
+# glifos como una sola forma (superponer no suma opacidad) y los glifos se
+# solapan para que no haya costuras. Reemplaza al BlinkScript (v1.12): no
+# depende de la GPU. Mecanismo medido en Docu_SoftEffects_Aprendizajes.md.
+
+_CAP_L = 0xE000   # + radio en % del alto (0..50)
+_CAP_R = 0xE100
+_BLOCKS = ((1000, 0xE200), (100, 0xE201), (10, 0xE202), (1, 0xE203))
+_START_OFFSET = 0x10  # U+E210..E213: mismos bloques sin solape (primer bloque)
+BAND_KEYS = ("band_t", "band_b", "band_l", "band_r")
+_BLEED = 6.0
+_GLYPH_DY = 2.0
+
+
+def shape_message(w, h, radius):
+    """Texto en LGA Shapes que dibuja un rectangulo redondeado de w x h px con
+    esquinas de radio `radius` px. '' si no hay rectangulo."""
+    if w <= 0.5 or h <= 0.5:
+        return ""
+    r = max(0.0, min(float(radius), w * 0.5, h * 0.5))
+    pct = int(round(r * 100.0 / h))
+    pct = max(0, min(50, pct))
+    # Un radio menor que el solape de los glifos (3 % del alto, 1,5 px a 50 px)
+    # se ve recto: va como rectangulo sin tapas.
+    if pct < 3:
+        pct = 0
+    total_u = int(round(w * 1000.0 / h))
+    cap_u = int(round(10.0 * pct))
+    inner = max(0, total_u - 2 * cap_u)
+    blocks = []
+    for size, code in _BLOCKS:
+        n, inner = divmod(inner, size)
+        blocks.extend([code] * n)
+    if pct == 0:
+        # Sin tapa izquierda: el primer bloque no se solapa hacia afuera.
+        if blocks:
+            blocks[0] += _START_OFFSET
+        return "".join(chr(c) for c in blocks)
+    return chr(_CAP_L + pct) + "".join(chr(c) for c in blocks) + chr(_CAP_R + pct)
+
+
+def _shapes(rects, bands, fmt_w, fmt_h, parent):
+    """key -> (x, y, w, h, radio) de cada fondo a dibujar.
+
+    Paneles: el rect del campo (sin rotar; el giro lo pone el blob del Text2
+    con el mismo pivote que el texto). Franjas: arriba y abajo de lado a
+    lado; las de los costados SOLO entre esas dos, para que las esquinas no
+    se pinten dos veces (dos Text2 superpuestos si suman opacidad)."""
+    try:
+        radius = float(parent["bi_bg_radius"].value())
+    except Exception:
+        radius = 0.0
+    out = {}
+    for f, rect in rects.items():
+        out[f] = (float(rect[0]), float(rect[1]), float(rect[2]), float(rect[3]), radius)
+    t, b = float(bands.get("t", 0.0)), float(bands.get("b", 0.0))
+    l, r = float(bands.get("l", 0.0)), float(bands.get("r", 0.0))
+    mid_h = max(0.0, fmt_h - t - b)
+    # Las franjas pasan _BLEED px por afuera del cuadro por los bordes de la
+    # imagen: medido en NKS 17, el Text2 dejaba ~1,5 px sin cubrir justo en
+    # el borde derecho y en el de abajo. Lo de afuera no se ve.
+    m = _BLEED
+    if t > 0:
+        out["band_t"] = (-m, fmt_h - t, fmt_w + 2 * m, t + m, 0.0)
+    if b > 0:
+        out["band_b"] = (-m, -m, fmt_w + 2 * m, b + m, 0.0)
+    if l > 0 and mid_h > 0:
+        out["band_l"] = (-m, b, l + m, mid_h, 0.0)
+    if r > 0 and mid_h > 0:
+        out["band_r"] = (fmt_w - r, b, r + m, mid_h, 0.0)
+    return out
+
+
+def shape_msg(key, parent, frame=None, rev=None):
+    """Mensaje del Text2 de fondo `key` (campo o band_t/b/l/r). `rev` no se
+    usa: pasar [value parent.bi_rev] hace que Nuke re-evalue el mensaje
+    cuando nudge() lo incrementa."""
+    try:
+        st = _frame_state(parent, frame)
+        if st is None:
+            return ""
+        shape = st["shapes"].get(key)
+        if shape is None:
+            return ""
+        return shape_message(shape[2], shape[3], shape[4])
+    except Exception as exc:
+        _log_error_once("shape_msg:" + str(key), str(exc))
+        return ""
+
+
+def shape_geo(key, comp, parent, frame=None):
+    """Caja del Text2 de fondo: 'x', 'y', 'y2' en px y 'scale' (alto / 100,
+    para global_font_scale). Sin fondo: 0 (scale 0.01)."""
+    try:
+        st = _frame_state(parent, frame)
+        shape = st["shapes"].get(key) if st is not None else None
+        if shape is None:
+            return 0.01 if comp == "scale" else 0.0
+        x, y, w, h = shape[0], shape[1], shape[2], shape[3]
+        if comp == "x":
+            return x
+        # Text2 apoya el glifo _GLYPH_DY px por encima del borde de abajo de
+        # la caja (medido en NKS 17: igual con 50 y con 200 px de alto), asi
+        # que la caja baja eso.
+        if comp == "y":
+            return y - _GLYPH_DY
+        if comp == "y2":
+            return y + h - _GLYPH_DY
+        if comp == "scale":
+            return max(0.01, h / 100.0)
+        return 0.0
+    except Exception as exc:
+        _log_error_once("shape_geo:" + str(key) + comp, str(exc))
+        return 0.01 if comp == "scale" else 0.0
 
 
 def mask_inset_px(parent, fmt_w, fmt_h):

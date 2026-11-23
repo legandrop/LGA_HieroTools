@@ -1,16 +1,23 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Blink v1.08 | Lega
+  LGA_NKS_BurnIn_Effect v1.09 | Lega
 
-  Puente entre los knobs del soft effect LGA_BurnIn y su BlinkScript
-  interno. setup() es el onCreate del BlinkScript: compila el kernel
-  LGA_RoundedPanels y ata sus params, fuente, mascara del viewer y
-  layout. apply_layout() traduce el mapa a los knobs on/bg/rot de cada
-  campo y apply_rotation() escribe el giro de los costados en los Text2.
+  Puente entre los knobs del soft effect LGA_BurnIn y sus nodos
+  internos. setup() es el onCreate del gizmo (en su Dot interno): pone
+  las fuentes, la mascara del viewer y el layout. apply_layout() traduce
+  el mapa a los knobs on/bg/rot de cada campo y apply_rotation() escribe
+  el giro de los costados en el Text2 del texto y en el de su fondo.
   schedule_update() junta los pedidos del panel y del knobChanged en una
   sola actualizacion por ciclo de eventos.
 
+  v1.09: Sin BlinkScript (antes LGA_NKS_BurnIn_Blink). Los fondos son
+         Text2 con la fuente LGA Shapes del pack (Panel_<Campo> y
+         Band_<T/B/L/R>): no dependen de la GPU. Sale todo lo del kernel
+         (compilar, atar params, centinela). apply_font() pone tambien la
+         fuente de formas (bi_shape_font) y apply_rotation() gira el fondo
+         con el mismo blob que su texto. setup() acepta el gizmo o un
+         nodo interno.
   v1.08: Performance. Centinela del kernel v0.08 (param kver: recompila
          instancias viejas). nudge() escribe UN knob (bi_rev, que el
          kernel y las cajas de los Text2 leen); el toque de opacidad que
@@ -65,162 +72,24 @@ ____________________________________________________________________
 ____________________________________________________________________
 """
 
-import os
-
-KERNEL_NAME = "LGARoundedPanels"
-KERNEL_FILE = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "LGA_RoundedPanels.blink"
-)
-
 import LGA_NKS_BurnIn_Layout as bi_layout
 
 FIELDS = bi_layout.FIELDS
 
-# Grados -> radianes para el knob de rotacion por campo (bi_<f>_rot en grados).
-_DEG2RAD = 0.017453292519943295
+# Fondos que no son de un campo: las franjas del modo Band.
+BAND_NODES = {"band_t": "Band_T", "band_b": "Band_B", "band_l": "Band_L", "band_r": "Band_R"}
+
+SHAPE_FAMILY = "LGA Shapes"
+SHAPE_STYLE = "Regular"
 
 
 def _log(message):
     try:
         import LGA_NKS_BurnIn_Logic as bi_logic
 
-        bi_logic._log("[Blink] " + message)
+        bi_logic._log("[Effect] " + message)
     except Exception:
         pass
-
-
-def _py_geo(field, comp):
-    """Misma llamada que las cajas de los Text2 (generador, geo_expr)."""
-    return (
-        "[python {__import__('LGA_NKS_BurnIn_Logic')"
-        ".field_geo('%s', '%s', nuke.thisParent(), nuke.frame())}]" % (field, comp)
-    )
-
-
-def _bindings():
-    """Sufijo del knob del kernel -> expresion sobre los knobs del padre.
-
-    x/y/w/h salen del mapa via field_geo (python, cacheado por frame): el
-    mismo calculo que ubica las cajas de los Text2.
-    """
-    binds = {}
-    for f in FIELDS:
-        for comp in ("x", "y", "w", "h"):
-            binds["%s_%s" % (f, comp)] = _py_geo(f, comp)
-        binds["%s_on" % f] = "parent.bi_%s_on*parent.bi_%s_bg" % (f, f)
-        # Pivote de rotacion (ax, ay): knobs literales del gizmo, escritos por
-        # apply_rotation() — LA MISMA fuente que usa el blob del Text2. Si el
-        # kernel lo calculara por expresion y el texto por python, cualquier
-        # divergencia (formato del stream, medicion) separa el fondo del texto
-        # al rotar. Con rot=0 el kernel es la SDF axis-aligned y no se usan.
-        binds["%s_ax" % f] = "parent.bi_%s_ax" % f
-        binds["%s_ay" % f] = "parent.bi_%s_ay" % f
-        binds["%s_rot" % f] = "parent.bi_%s_rot*%s" % (f, _DEG2RAD)
-    binds["corner_radius"] = "parent.bi_bg_radius"
-    binds["color_r"] = "parent.bi_bg_color.r"
-    binds["color_g"] = "parent.bi_bg_color.g"
-    binds["color_b"] = "parent.bi_bg_color.b"
-    binds["bg_opacity"] = "parent.bi_bg_opacity"
-    for edge in ("t", "b", "l", "r"):
-        binds["band_%s" % edge] = _py_geo("_band", edge)
-    binds["fmt_w"] = "width"
-    binds["fmt_h"] = "height"
-    # Sin uso en el calculo: hace que el hash del kernel cambie con nudge().
-    binds["rev"] = "parent.bi_rev"
-    return binds
-
-
-# Param que solo existe en el kernel de la version actual (v0.08, kver): si el nodo tiene el nombre del kernel pero no este knob, es una
-# instancia compilada con un kernel viejo y hay que recompilar.
-_KERNEL_SENTINEL = "kver"
-
-
-def _find_param(node, suffix):
-    """Nombre del knob del kernel para un sufijo (prefijado con el nombre del
-    kernel), o None. Busca por sufijo porque el prefijo lo pone Nuke."""
-    try:
-        names = list(node.knobs())
-    except Exception:
-        return None
-    for name in names:
-        if name == suffix or name.endswith("_" + suffix):
-            return name
-    return None
-
-
-def _compile_kernel(node):
-    """Compila el kernel via Load si el nodo no lo tiene ya. True si quedo."""
-    try:
-        if node["kernelName"].value() == KERNEL_NAME:
-            if _find_param(node, _KERNEL_SENTINEL) is not None:
-                return True
-            _log("kernel viejo (sin '{}'): recompilo".format(_KERNEL_SENTINEL))
-    except Exception:
-        pass
-    try:
-        node["kernelSourceFile"].setValue(KERNEL_FILE.replace("\\", "/"))
-        node["reloadKernelSourceFile"].execute()
-    except Exception as exc:
-        _log("ERROR compilando kernel: {}".format(exc))
-        return False
-    try:
-        ok = node["kernelName"].value() == KERNEL_NAME
-    except Exception:
-        ok = False
-    _log("kernel compilado: {}".format("si" if ok else "NO"))
-    return ok
-
-
-def _norm_expr(text):
-    """Normaliza una expresion para compararla: sin llaves externas ni blancos."""
-    text = str(text or "").strip()
-    while text.startswith("{") and text.endswith("}"):
-        text = text[1:-1].strip()
-    return "".join(text.split())
-
-
-def _current_expr(knob):
-    """Expresion actual del knob (texto), o '' si no tiene."""
-    try:
-        if not knob.hasExpression():
-            return ""
-    except Exception:
-        return ""
-    try:
-        return str(knob.animation(0).expression())
-    except Exception:
-        pass
-    try:
-        return str(knob.toScript())
-    except Exception:
-        return ""
-
-
-def _bind_params(node):
-    """Ata los params del kernel (prefijados con el nombre del kernel) al padre.
-
-    Se re-ata todo knob cuya expresion no sea la esperada: una instancia
-    creada con una version anterior conserva los binds viejos en el .hrox
-    (v1.03 ataba ax/ay a una cuenta por python que podia divergir del texto)
-    y antes se salteaba por tener "alguna" expresion.
-    """
-    binds = _bindings()
-    bound = 0
-    for suffix, expr in binds.items():
-        target = _find_param(node, suffix)
-        if target is None:
-            _log("param no encontrado para sufijo '{}'".format(suffix))
-            continue
-        knob = node[target]
-        if _norm_expr(_current_expr(knob)) == _norm_expr(expr):
-            continue
-        try:
-            knob.setExpression(expr)
-            bound += 1
-        except Exception as exc:
-            _log("ERROR atando {} -> {}: {}".format(target, expr, exc))
-    if bound:
-        _log("{} parametros atados al padre".format(bound))
 
 
 # La fuente del burn-in es Inter (la del pack). El peso se elige con el knob
@@ -262,6 +131,21 @@ def apply_font(gizmo):
         gizmo["bi_font"].setValue("Inter", style)
     except Exception as exc:
         _log("ERROR seteando bi_font a Inter {}: {}".format(style, exc))
+    # Fuente de formas de los fondos (Panel_* y Band_*): fija.
+    try:
+        knob = gizmo.knobs().get("bi_shape_font")
+        if knob is not None:
+            knob.setValue(SHAPE_FAMILY, SHAPE_STYLE)
+    except Exception as exc:
+        _log("ERROR seteando bi_shape_font: {}".format(exc))
+
+
+def _is_gizmo(node):
+    """True si el nodo es el propio LGA_BurnIn (tiene el mapa)."""
+    try:
+        return "bi_layout" in node.knobs()
+    except Exception:
+        return False
 
 
 # ── Rotacion por campo ────────────────────────────────────────────────────────
@@ -435,13 +319,18 @@ def apply_rotation(gizmo, fields=None):
             blob = "{1 11 %s %s 0 0 1 1 0 0 %s 0}" % (
                 repr(round(cx, 4)), repr(round(cy, 4)), repr(round(rot, 4))
             )
-            if _blob_nums(text_node["animation_layers"].toScript()) == _blob_nums(blob):
-                continue
-            text_node["group_animations"].fromScript(
-                '{0} imported: 0 selected: 0 items: "root transform"'
-            )
-            text_node["animation_layers"].fromScript(blob)
-            changed = True
+            # El fondo gira con el MISMO blob que su texto: mismo pivote y
+            # mismo angulo, asi no se separan.
+            for node in (text_node, gizmo.node("Panel_%s" % f.capitalize())):
+                if node is None:
+                    continue
+                if _blob_nums(node["animation_layers"].toScript()) == _blob_nums(blob):
+                    continue
+                node["group_animations"].fromScript(
+                    '{0} imported: 0 selected: 0 items: "root transform"'
+                )
+                node["animation_layers"].fromScript(blob)
+                changed = True
         except Exception as exc:
             _log("ERROR rotando campo {}: {}".format(f, exc))
     if changed:
@@ -503,12 +392,13 @@ def nudge(gizmo):
 def _touch_texts(gizmo):
     """Ensucia los Text2: el write por API de animation_layers no dispara el
     re-render solo (medido)."""
-    try:
-        value = gizmo["bi_opacity"].value()
-        gizmo["bi_opacity"].setValue(value - 0.001)
-        gizmo["bi_opacity"].setValue(value)
-    except Exception:
-        pass
+    for name in ("bi_opacity", "bi_bg_opacity"):
+        try:
+            value = gizmo[name].value()
+            gizmo[name].setValue(value - 0.001)
+            gizmo[name].setValue(value)
+        except Exception:
+            pass
 
 
 # ── Actualizacion agrupada ────────────────────────────────────────────────────
@@ -636,17 +526,15 @@ def apply_mask(gizmo, aspect):
 
 
 def setup(node):
-    """onCreate del BlinkScript interno del gizmo: compila el kernel y ata sus
-    params (si hace falta), fuente, mascara del viewer y layout (on/bg/rot por
-    campo y rotaciones). Corre al agregar el efecto y al cargar un proyecto."""
+    """onCreate del gizmo (lo dispara su Dot interno): fuentes, mascara del
+    viewer y layout (on/bg/rot por campo y rotaciones). Corre al agregar el
+    efecto y al cargar un proyecto. Acepta el gizmo o un nodo interno."""
     try:
-        gizmo = _gizmo_of(node)
+        gizmo = node if _is_gizmo(node) else _gizmo_of(node)
         if gizmo is None:
             return
         _busy[0] = True
         try:
-            if _compile_kernel(node):
-                _bind_params(node)
             apply_font(gizmo)
             # Un efecto recien agregado arranca con la mascara que ya tiene
             # el viewer (el vigia del registro solo avisa cambios).

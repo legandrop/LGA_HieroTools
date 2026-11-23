@@ -1,5 +1,12 @@
 # LGA_BurnIn — soft effect de burn-in con metadata del clip visible
 
+> **Sin BlinkScript (23 nov 2026).** Los fondos redondeados y las franjas de
+> Band son Text2 que escriben con la fuente propia **LGA Shapes** (glifos con
+> forma de tapa redondeada y de bloque). El BlinkScript dependia de la GPU y
+> en maquinas sin una buena el efecto se volvia lento. Validado en el visor
+> del timeline de NKS 17.0v4: Panels, Band, Text, los once campos, radio 0,
+> costados girados y un proyecto guardado con el efecto viejo.
+
 > Estado (12 nov 2026): **panel Burn-ins con mapa**, el diseno del menu
 > Burn-ins de Shot Player (LGA Media Tools). La tabla X / Y / Size por campo
 > se reemplazo por un mapa de ocho lugares con cinco distribuciones; todo el
@@ -16,8 +23,9 @@ Un unico soft effect para el timeline de Hiero/Nuke Studio (NKS) que
 reemplaza la pila de soft effects Text con metadata. Es un **gizmo**
 registrado en el menu Effects que muestra datos del **clip visible**
 (respeta tracks prendidos/apagados) sobre **paneles redondeados** dibujados
-en GPU por un kernel BlinkScript propio, y pinta en **rojo** lo que no
-coincide con el objetivo del proyecto.
+con Text2 y la fuente LGA Shapes del pack, y pinta en **rojo** lo que no
+coincide con el objetivo del proyecto. Todos sus nodos son Text2: no usa
+BlinkScript ni depende de la GPU mas que el BurnIn nativo.
 
 ## Campos
 
@@ -74,8 +82,8 @@ resuelve en pixeles en cada frame.
 
 - **Geometria en render**: `field_geo(field, comp)` de la logica calcula el
   layout entero (`Layout.compute`) con los anchos medidos de los textos y lo
-  cachea por (efecto, frame, estado). Los paneles del kernel y las cajas de
-  los Text2 leen lo mismo, asi que el fondo no se separa del texto.
+  cachea por (efecto, frame, estado). Los Text2 de fondo y las cajas de
+  los Text2 de texto leen lo mismo, asi que el fondo no se separa del texto.
 - **Solo se cachea con stream**: fuera del render (un `setValue`, el
   onCreate) el Input no tiene metadata y todos los textos dan vacio; ese
   layout vacio quedaba guardado y el render lo reusaba (todo apilado en el
@@ -89,9 +97,10 @@ resuelve en pixeles en cada frame.
   90 (se lee de abajo arriba) y el derecho 270. El pivote es FIJO por
   costado (`Layout.side_pivot`): sale del formato del timeline, del tamano y
   del padding, no del ancho del texto. Lo escribe `apply_rotation` en
-  `bi_<f>_ax/ay`, y lo leen el kernel y el blob del Text2.
+  `bi_<f>_ax/ay`, y va en el blob del Text2 del texto y en el de su fondo.
 - **Fondo** (`bi_bg_mode`): Panels (uno por campo), Band (una franja de lado
-  a lado en cada borde usado: `field_geo('_band', t/b/l/r)`) o Text (sin
+  a lado en cada borde usado: `field_geo('_band', t/b/l/r)`; las de los
+  costados entre la de arriba y la de abajo) o Text (sin
   fondo, con la sombra de los Text2).
 
 ## Mascara del viewer
@@ -101,7 +110,7 @@ viewer o con el boton del panel Viewer | TL), los burn-ins se corren hacia
 adentro para quedar en el area visible. Cuenta tambien la mascara al 50%
 (Half): ya los tapa a medias.
 
-- **Deteccion**: `viewer_mask_aspect()` (Blink) lee `maskOverlayStyle()`,
+- **Deteccion**: `viewer_mask_aspect()` (`LGA_NKS_BurnIn_Effect`) lee `maskOverlayStyle()`,
   `maskOverlayName()` (`"3:2"`, `"2.35:1"`) y `overlaysShown()`. Ojo: el
   nombre queda puesto aunque el estilo sea None (medido en NKS 17), por eso
   manda el estilo.
@@ -121,7 +130,7 @@ adentro para quedar en el area visible. Cuenta tambien la mascara al 50%
 ## Arquitectura del gizmo
 
 ```
-Input -> Dot -> Crop_Format -> BlinkScript (Blink_Panels) -> 11x Text2 -> Output
+Input -> Dot -> Band_T/B/L/R -> 11x (Panel_<Campo> -> Text_<Campo>) -> Output
 ```
 
 **Fuente**: es **Inter**, fija (la del pack); el usuario elige solo el PESO
@@ -134,25 +143,20 @@ descubre el Inter del repo —incluido Bold, que el Inter de Windows no trae—
 sin instalar nada. Al cambiar el peso, el fondo se recalcula (mide con el
 TTF del peso nuevo).
 
-- **Crop_Format**: Crop al formato (`box 0 0 width height`, `intersect`
-  apagado) para que el bbox que ve el kernel sea EXACTAMENTE el formato. Sin
-  el, con un clip reformateado que no llena justo el cuadro (1920x1080 en una
-  secuencia 4094x2160 escalado al ancho: bbox de -74 a 2234) el kernel
-  reparte sus coordenadas sobre el bbox y los paneles salian estirados en
-  vertical respecto del texto (arriba pegados al borde, abajo corridos hacia
-  abajo). Detalle en `Docu_SoftEffects_Aprendizajes.md`.
-- **Blink_Panels**: kernel `LGA_RoundedPanels.blink` (SDF de rounded box,
-  antialiasing 1px, los 11 paneles y las 4 franjas de Band en UNA pasada,
-  params solo float; x/y/w/h atados a `field_geo()`). Desde v0.08 un
-  `init()` precalcula por panel seno, coseno, centro, radio y la caja ya
-  girada, y `process()` solo hace la SDF dentro de esas cajas (el resto del
-  cuadro copia la entrada). Es el UNICO nodo que puede dibujar los paneles:
-  ver "Rendimiento" abajo. Su
-  `onCreate` llama a `LGA_NKS_BurnIn_Blink.setup()`, que compila el kernel
-  via `kernelSourceFile` + Load (la unica via que compila por script en el
-  timeline) y ata cada parametro a los knobs del gizmo padre por expresion
-  (los knobs del kernel recien existen tras compilar, prefijados con el
-  nombre del kernel).
+- **Dot1**: lleva el `onCreate`, que llama a
+  `LGA_NKS_BurnIn_Effect.setup()`: fuentes (`bi_font` Inter del peso y
+  `bi_shape_font` LGA Shapes), mascara del viewer y layout.
+- **Band_T/B/L/R** y **Panel_<Campo>**: un Text2 por fondo, con la fuente
+  **LGA Shapes** (`LGA_NKS_Shared/fonts/LGA_Shapes.ttf`, generada por
+  `+Building_Blocks/BurnIn/gen_LGA_Shapes_font.py`). El mensaje es
+  `tapa izquierda + bloques + tapa derecha` y mide justo el rect del fondo
+  (`LGA_NKS_BurnIn_Logic.shape_msg`); la caja y el alto (`global_font_scale
+  = h / 100`) salen de `shape_geo`. Un Text2 compone todos sus glifos como
+  una sola forma: la opacidad queda pareja. Las franjas de los costados van
+  solo entre la de arriba y la de abajo, para no pintar dos veces las
+  esquinas. Cada panel va antes que su texto y gira con el mismo blob.
+  Medido al pixel en NKS 17 (detalle y trampas en
+  `Docu_SoftEffects_Aprendizajes.md`, "Fondos redondeados sin BlinkScript").
 - **Text2 x11** (9 de metadata + custom1/custom2): anatomia calcada del
   BurnIn nativo (blobs de estado incluidos — sin ellos el GPU los dibuja en
   el origen). Cada message llama a `LGA_NKS_BurnIn_Logic.bi_text()` con
@@ -163,7 +167,7 @@ TTF del peso nuevo).
   `0*parent.bi_rev`, para que `nudge()` la haga re-evaluar.
 - El gizmo se REGENERA con
   `+Building_Blocks/BurnIn/gen_LGA_BurnIn_gizmo.py` (tabla de layout +
-  kernel + plantilla Text2). No editar el `.gizmo` a mano.
+  plantillas Text2 de fondo y de texto). No editar el `.gizmo` a mano.
 
 ## Archivos
 
@@ -172,16 +176,16 @@ LGA_HieroTools/
   LGA_NKS_BurnIn.py                registro de LGA_BurnIn + eventos + vigia de mascara
   LGA_NKS_BurnIn_py/
     LGA_BurnIn.gizmo               el efecto (generado)
-    LGA_RoundedPanels.blink        kernel de los paneles (produccion)
-    LGA_RoundedPanel.blink         kernel de UN panel (sonda historica)
-    LGA_NKS_BurnIn_Blink.py        setup del BlinkScript (compilar + atar params)
+    LGA_NKS_BurnIn_Effect.py       puente gizmo <-> knobs (fuentes, layout, giro)
     LGA_NKS_BurnIn_Logic.py        textos, comparaciones, geometria en render
     LGA_NKS_BurnIn_Layout.py       modelo del mapa (Python puro, sin Nuke ni Qt)
     LGA_NKS_BurnIn_Config.py       capa pura de config (testeable sin Nuke)
     LGA_NKS_BurnIn_ProjectTag.py   override que viaja en el .hrox (tag)
     LGA_NKS_BurnIn_Panel.py        ventana Burn-ins (mapa + look)
     logs/DebugPy_LGA_NKS_BurnIn.log
+  LGA_NKS_Shared/fonts/LGA_Shapes.ttf               fuente de los fondos
   +Building_Blocks/BurnIn/gen_LGA_BurnIn_gizmo.py   generador (dev)
+  +Building_Blocks/BurnIn/gen_LGA_Shapes_font.py    generador de la fuente (dev)
   +Building_Blocks/BurnIn/design/BurnIn_Panel_Mapa.html  mockup aprobado
   +Building_Blocks/UI_Capture/fixtures/h3_burnin_panel.py  fixture del harness
 ```
@@ -243,12 +247,18 @@ y al cambiar el mtime del JSON.
 Toda la logica de Python lee de UN estado por frame
 (`LGA_NKS_BurnIn_Logic._frame_state`): la metadata se pide una vez al Input,
 los textos se miden una vez y el layout se calcula una vez; las ~60
-expresiones del gizmo (cajas, params del kernel, mensajes, colores) solo
+expresiones del gizmo (cajas, mensajes de texto y de fondo, colores) solo
 leen de ahi. El panel y el knobChanged piden la actualizacion a
-`LGA_NKS_BurnIn_Blink.schedule_update`, que junta todo lo de un ciclo de
+`LGA_NKS_BurnIn_Effect.schedule_update`, que junta todo lo de un ciclo de
 eventos en una sola por efecto, y `nudge()` escribe un solo knob.
 
-Numeros (CPU del proceso, instancia aparte):
+**Sin BlinkScript (23-11-2026).** Render offline a 4K (CPU de Nuke, 10
+cuadros, mediana de 3, NKS 17): plate solo 237 ms por cuadro, LGA_BurnIn
+nuevo 224, el viejo con BlinkScript 306 en GPU y 256 forzado a CPU. Todo
+dentro del ruido de escribir el EXR: el efecto nuevo no se distingue del
+plate solo. Sus nodos son todos Text2, como el BurnIn nativo.
+
+Numeros de la version con BlinkScript (CPU del proceso, instancia aparte):
 
 | Caso | CPU |
 |---|---|
@@ -263,7 +273,7 @@ El costo de un movimiento de slider es NKS re-renderizando tras el cambio
 de knob: el BurnIn nativo cuesta lo mismo. Varios writes en el mismo ciclo
 de eventos se juntan en un solo re-render.
 
-**Lo que NO funciona, medido:** reemplazar el BlinkScript por nodos nativos
+**Lo que NO funciona, medido:** dibujar los fondos con nodos nativos
 (Crop + Expression + Merge, o Rectangle). En un render offline
 (`Read -> gizmo -> Write`) da bien y hasta mas barato, pero en el timeline
 esos nodos no dibujan nada (solo corren los nodos con motor de soft effect)
@@ -279,10 +289,9 @@ timeline.
 - El colorspace se cachea por clip; un cambio a mano se refleja al
   guardar/reabrir el proyecto.
 - Comparacion de resolucion solo para plates (EXR por default).
-- El kernel es una pasada full-frame por instancia. En el timeline corre en
-  GPU y cuesta poco; fuera del timeline (render offline en CPU) el
-  BlinkScript tiene un costo fijo de ~40-70 ms por frame que no depende de
-  lo que calcule adentro (medido: v0.06 y v0.08 dan lo mismo ahi).
+- **Fuente de los fondos**: si `LGA Shapes` no esta registrada (cache de
+  fuentes de Nuke viejo), los fondos no se dibujan. El startup borra ese
+  cache cuando le falta una fuente del pack (`_refresh_font_cache`).
 - **Costados girados**: el pivote sale del formato de la secuencia que
   contiene el efecto (`_timeline_format`: la activa si lo contiene, si no la
   primera que lo contenga). Una secuencia sin formato da 0x0 (medido en una
@@ -299,18 +308,14 @@ timeline.
 
 ## Pendientes
 
-- **Sacar el BlinkScript**: en maquinas sin una GPU buena el efecto se vuelve
-  lento. Los paneles redondeados salen con un Text2 por panel y la fuente
-  `LGA Shapes` (medido en el timeline de NKS 17 el 23-11-2026; mecanismo en
-  `Docu_SoftEffects_Aprendizajes.md`, "Fondos redondeados sin BlinkScript").
-  Falta migrar el gizmo, la logica de paneles y Band, y medir el costo.
 - Aplicar defaults de config a instancias nuevas (hoy los defaults viven en
   el gizmo generado).
 - **Texto un poco desalineado dentro de su panel** (visto por Lega el 17-10,
   tras el fix de paneles alineados en cualquier formato): el panel ya sigue al
-  texto, pero el texto no queda del todo centrado en la caja. Falta medirlo
-  en NKS con `viewer.image()` en una secuencia de formato distinto al del clip
-  y en una igual, y corregirlo. Se dejo para cuando la GPU este libre.
+  texto, pero el texto no queda del todo centrado en la caja. Una causa
+  medida el 23-11: el fondo de glifos quedaba 2 px mas arriba que su caja
+  (corregido con `_GLYPH_DY` en `shape_geo`). Falta confirmar a ojo con
+  material real en un formato distinto al del clip.
 
 ## Como probarlo sin el visor
 
@@ -330,13 +335,14 @@ duena (el pivote se fuerza con el formato del Read).
 |---|---|---|
 | `LGA_HieroTools/LGA_NKS_BurnIn.py` | registro (startup) | `_register`, `_on_knob_changed`, `_es_derivado`, `_start_mask_watcher`, `_mask_tick` |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Layout.py` | `import LGA_NKS_BurnIn_Layout` | `parse`, `dump`, `active`, `default_state`, `fresh_arrangement`, `move_to`, `move_next_to`, `slot_of`, `visible_fields`, `stack_state`, `set_stack`, `is_default`, `compute`, `mask_inset`, `side_pivot`, `line_height` |
-| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Logic.py` | `import LGA_NKS_BurnIn_Logic` | `bi_text`, `bi_ok`, `field_geo`, `_frame_state`, `layout_text`, `mask_inset_px`, `line_height_px`, `_plate_tc_frames` (TC de aPlate), `invalidate_cache` |
-| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Blink.py` | `import LGA_NKS_BurnIn_Blink` | `setup`, `schedule_update`, `update_now`, `is_busy`, `apply_layout`, `apply_rotation`, `apply_font`, `nudge`, `viewer_mask_aspect`, `apply_mask`, `_timeline_format` |
+| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Logic.py` | `import LGA_NKS_BurnIn_Logic` | `bi_text`, `bi_ok`, `field_geo`, `shape_msg`, `shape_geo`, `shape_message`, `_shapes`, `_frame_state`, `layout_text`, `mask_inset_px`, `line_height_px`, `_plate_tc_frames` (TC de aPlate), `invalidate_cache` |
+| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Effect.py` | `import LGA_NKS_BurnIn_Effect` | `setup`, `schedule_update`, `update_now`, `is_busy`, `apply_layout`, `apply_rotation`, `apply_font`, `nudge`, `viewer_mask_aspect`, `apply_mask`, `_timeline_format` |
 | `LGA_HieroTools/LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Viewer_Mask.py` | `from LGA_NKS_ViewerTL_Panel_py import LGA_NKS_Viewer_Mask` | `set_mask`, `apply_mask` (el boton 3:2; solo pone la mascara para LGA_BurnIn) |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Panel.py` | `import LGA_NKS_BurnIn_Panel` | `show_panel`, `BurnInPanel`, `BurnInMap`, `TickSlider`, `Segmented`, `HieroController` |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Config.py` | `import LGA_NKS_BurnIn_Config` | `resolve`, `load_user_file`, `save_user_file`, `list_presets`, `load_preset`, `save_preset` |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_ProjectTag.py` | `import LGA_NKS_BurnIn_ProjectTag` | `find_project`, `read_config_json`, `write_config` |
-| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_RoundedPanels.blink` | kernel `LGARoundedPanels` v0.08 | `init` (cajas por panel), `process` (SDF + franjas Band) |
+| `Python/Startup/LGA_HieroTools_Startup.py` (fuera del paquete) | startup | `NUKE_FONT_PATH`, `_refresh_font_cache`, `_font_cache_dirs` |
+| `LGA_HieroTools/LGA_NKS_Shared/fonts/LGA_Shapes.ttf` | fuente (generada por `+Building_Blocks/BurnIn/gen_LGA_Shapes_font.py`) | tapas `U+E000+i` / `U+E100+i`, bloques `U+E200..E203`, bloques sin solape `U+E210..E213` |
 | `LGA_HieroTools/LGA_NKS_Shared/LGA_UI_Style_HieroTools.py` | `from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style, Color, Metric` | `apply_ui_font`, `semibold_css`, `emphasis` |
 | `LGA_HieroTools/LGA_NKS_Shared/LGA_UI_CustomTooltip_HieroTools.py` | `from LGA_NKS_Shared.LGA_UI_CustomTooltip_HieroTools import set_custom_tooltip` | tooltips del panel |
 

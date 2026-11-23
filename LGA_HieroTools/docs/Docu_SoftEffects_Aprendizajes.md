@@ -87,6 +87,29 @@ glifo:
   (medido): hasta el 23-11 el startup la armaba con `:` y ninguna fuente del
   pack se registraba.
 
+Trampas medidas al migrar LGA_BurnIn (23-11-2026), con un rect opaco y la
+cobertura pixel a pixel:
+
+- **El glifo queda 2 px mas arriba que la caja** con yjustify bottom, igual
+  con 50 y con 200 px de alto: la caja baja 2 px (`_GLYPH_DY`).
+- **El solape va SOLO hacia la izquierda.** Si el bloque se pasa a la
+  derecha, con radio 0 el ultimo asoma detras de la tapa (3 % del alto de
+  mas). Y un rectangulo de radio 0 arranca con un bloque SIN solape
+  (`U+E210..E213`), o el primero se mete 3 % del alto hacia afuera. Radios
+  menores al 3 % del alto van como 0.
+- **Franjas de lado a lado**: el Text2 deja ~1,5 px sin cubrir justo en el
+  borde derecho y en el de abajo de la imagen; las franjas pasan 6 px por
+  afuera del cuadro (`_BLEED`).
+- **Dos Text2 superpuestos si suman opacidad** (solo los glifos de UN Text2
+  se componen como una forma): las franjas de los costados van entre la de
+  arriba y la de abajo.
+- **Expresion python en un knob escalar del .gizmo**: va con doble llave,
+  `knob {{"\[python ...]"}}`. Con una sola, la carga tira `Bad curve data`.
+- **Cache de fuentes**: Nuke guarda `<temp>/nuke/fontmapping.<version>.fcache`
+  con un hash de las carpetas y no re-escanea una carpeta que ya conoce: una
+  fuente nueva del pack no aparece hasta borrar ese cache. El startup lo
+  borra si le falta alguna fuente del pack (`_refresh_font_cache`).
+
 Sonda y captura: `+Building_Blocks/BurnIn/explore_rounded_glyphs.py` y
 `explore_rounded_glyphs_NKS17.png`.
 
@@ -173,6 +196,9 @@ mano si funciona (probado). El center va horneado en pixeles: recalcular por
 formato.
 
 ## BlinkScript en el timeline (lo aprendido construyendo LGA_BurnIn)
+
+> Historico: LGA_BurnIn ya no usa BlinkScript (23-11-2026, fondos con la
+> fuente LGA Shapes). Queda por si otra herramienta lo necesita.
 
 | # | Problema | Causa real / solucion |
 |---|---|---|

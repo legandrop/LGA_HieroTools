@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Panel v3.03 | Lega
+  LGA_NKS_BurnIn_Panel v3.04 | Lega
 
   Panel "Burn-ins" del soft effect LGA_BurnIn, con el diseno del menu
   Burn-ins de Shot Player (LGA Media Tools): cinco distribuciones
@@ -18,6 +18,8 @@ ____________________________________________________________________
   (LGA_NKS_BurnIn_Logic.field_geo). La ventana solo escribe knobs y
   config; los cambios se ven en el visor al instante.
 
+  v3.04: Pide la actualizacion a LGA_NKS_BurnIn_Effect (antes
+         LGA_NKS_BurnIn_Blink, que se fue con el BlinkScript).
   v3.03: El chip TC lleva el punto rojo como Res y FPS.
   v3.02: Performance. Los cambios pasan por Blink.schedule_update (una sola
          actualizacion y un solo nudge por efecto y por ciclo de eventos, en
@@ -737,12 +739,12 @@ class HieroController(object):
         self.apply_layout()
 
     def _schedule(self, font=False):
-        """Una sola actualizacion por ciclo de eventos (Blink.schedule_update):
+        """Una sola actualizacion por ciclo de eventos (LGA_NKS_BurnIn_Effect.schedule_update):
         el knobChanged del registro pide la misma y se juntan."""
         try:
-            import LGA_NKS_BurnIn_Blink as bi_blink
+            import LGA_NKS_BurnIn_Effect as bi_effect
 
-            bi_blink.schedule_update(self.node, font=font)
+            bi_effect.schedule_update(self.node, font=font)
         except Exception:
             pass
 
