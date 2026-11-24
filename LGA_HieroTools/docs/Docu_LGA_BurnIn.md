@@ -202,8 +202,24 @@ Inter pasa solo a la fuente nueva al abrirse (medido).
   generador v12); res y fps llevan el color condicional via `bi_ok()` en los
   canales g/b. El texto se centra verticalmente dentro de su panel
   (`yjustify center`) con `text padding`. La caja de cada Text2 usa tres
-  llamadas a `field_geo` (x, y, y2; el borde derecho es `width*3`) y suma
-  `0*parent.bi_rev`, para que `nudge()` la haga re-evaluar.
+  llamadas a `field_geo` (`tx`, y, y2; el borde derecho es `width*3`) y suma
+  `0*parent.bi_rev`, para que `nudge()` la haga re-evaluar. Desde v13 el
+  mensaje de la mayoria de los campos es TCL (ver «Mensajes en TCL» en
+  Rendimiento).
+- **Padding parejo a los cuatro lados** (Lega, 23-11-2026): el fondo mide
+  `alto de mayusculas + 2 x padding` de alto (`CAP_HEIGHT_FS` del layout) y
+  `tinta del texto + 2 x padding` de ancho (`_measure_ink`, sin los margenes
+  laterales de los glifos), y el texto se ubica con `field_geo('tx')` para
+  que la tinta empiece a un padding del borde. `yjustify center` centra la
+  linea, no las mayusculas: la caja del texto baja `TEXT_DY_FS * fs`.
+  Medido en NKS 17 (formatos 1080 y 2160, tamanos S/M/L, padding 10/28/40):
+  arriba y abajo +-1 px del padding, costados +-2 px. Las excepciones son
+  de la tipografia: un frame con un 1 tiene 2-3 px mas a la izquierda (el
+  1 tabular es angosto dentro de su celda) y las letras con descendente
+  (p, _) bajan del fondo pareado por las mayusculas. Text2 dibuja la `x`
+  entre digitos de la resolucion 0,12 fs mas angosta que lo que mide Qt
+  (`_DIGIT_X_FS`). Antes: 25 px arriba, 31 abajo y 30-33 a los costados con
+  padding 28.
 - El gizmo se REGENERA con
   `+Building_Blocks/BurnIn/gen_LGA_BurnIn_gizmo.py` (tabla de layout +
   plantillas Text2 de fondo y de texto). No editar el `.gizmo` a mano.
@@ -321,6 +337,38 @@ tiempo de visor no se distinguen. La CPU si: el LGA BurnIn usa del orden de
 sus expresiones son 6,8 ms por cuadro en 309 llamadas, y tiene 12 Text2
 activos (texto y fondo de cada campo) contra 4. Es el proximo lugar para
 optimizar (ver Pendientes).
+
+**Mensajes en TCL en vez de python (23-11-2026, generador v13).** Medido en
+el visor del timeline de una instancia aparte de NKS 17 (EXR 4K, Classic),
+separando la CPU del HILO PRINCIPAL (`GetThreadTimes`), que es donde Nuke
+evalua las expresiones `[python]` y lo que traba la interfaz:
+
+- Un mensaje `[python]` de un Text2 se evalua ~20 veces por cuadro; una caja
+  ~5. Con los 12 mensajes del efecto en python, el hilo principal gastaba
+  ~35 ms por cuadro mas que sin efecto. Los mismos mensajes en TCL (aunque
+  cambien en cada cuadro) cuestan casi lo mismo que sin efecto. Doce Text2
+  sin python cuestan ~+30 ms de CPU del proceso (dibujarlos), la mitad del
+  costo del efecto.
+- Por eso el texto de frame, tc, res, fps, clip, date y custom es TCL
+  (`[metadata ...]`, `TEXT_TCL` del generador) y el fondo de frame, tc, res,
+  fps, date y custom es un elemento de la lista `bi_pm`
+  (`[lindex [value parent.bi_pm] <offset + largo>]`, `PANEL_TCL`). Con
+  digitos tabulares el ancho del fondo solo depende de la cantidad de
+  caracteres (en fps, tambien de donde cae el punto), asi que la lista se
+  arma una vez (`panel_map_text`) y la escribe `apply_panel_map()` al
+  actualizarse el efecto; el primer elemento es el alto de formato con el
+  que se armo, y si el cuadro que llega tiene otro, `_check_pm` pide
+  rehacerla. Quedan en python: el fondo del clip (texto libre), texto y
+  fondo de cspace, track y codec, las cajas y el color de rojo.
+- Resultado (4 rondas alternadas, carga de la maquina variable): llamadas
+  python por cuadro de ~700 a ~360; hilo principal, efecto menos sin
+  efecto, de +41/+69/+97 ms a +25/+34/+55 ms por cuadro (~40 % menos); CPU
+  del proceso ~10 % menos. Mismo resultado en pantalla: capturas pixel a
+  pixel iguales en Bottom, Edge, Band, radio 0 y Left (sonda
+  `+Building_Blocks/BurnIn/perf_opt.py`; padding:
+  `+Building_Blocks/BurnIn/explore_padding.py`). La unica
+  diferencia, en Classic con labels, fue el TC: la version python mostraba
+  el TC de otro cuadro y en rojo; el TCL lee el del cuadro que se dibuja.
 
 Numeros de la version con BlinkScript (CPU del proceso, instancia aparte):
 
@@ -484,8 +532,11 @@ el render del propio NKS (los Text2, la lectura del media, la GPU). Si
 ## Pendientes
 
 - **Bajar la CPU por cuadro hasta la de la pila vieja** (medido el 23-11,
-  ver «Contra la pila vieja» en Rendimiento): 309 llamadas de Python por
-  cuadro con 6 campos visibles, y 12 Text2 activos contra 4.
+  ver «Contra la pila vieja» y «Mensajes en TCL» en Rendimiento). Los
+  mensajes ya no son python; lo que queda: las cajas `[python]` (~180
+  evaluaciones por cuadro en Classic) y dibujar 12 Text2 (~+30 ms de CPU
+  contra 4 de la pila). Pasar las cajas a TCL pide resolver en TCL el
+  re-apilado de lineas cuando un campo queda vacio.
 - **Traba al prender o apagar un track con el efecto puesto**: con el memo
   de v1.16 queda en 0,2-0,4 s en un proyecto real con EXR 4K (el nativo
   33-116 ms; ver "Memo de la ultima llamada"). Lo que queda es el puente
@@ -499,12 +550,6 @@ el render del propio NKS (los Text2, la lectura del media, la GPU). Si
   (agregar el efecto, prender y apagar, abrir el panel) y mandar el log.
 - Aplicar defaults de config a instancias nuevas (hoy los defaults viven en
   el gizmo generado).
-- **Texto un poco desalineado dentro de su panel** (visto por Lega el 17-10,
-  tras el fix de paneles alineados en cualquier formato): el panel ya sigue al
-  texto, pero el texto no queda del todo centrado en la caja. Una causa
-  medida el 23-11: el fondo de glifos quedaba 2 px mas arriba que su caja
-  (corregido con `_GLYPH_DY` en `shape_geo`). Falta confirmar a ojo con
-  material real en un formato distinto al del clip.
 
 ## Como probarlo sin el visor
 
@@ -523,9 +568,9 @@ duena (el pivote se fuerza con el formato del Read).
 | Modulo | Import | Funciones clave |
 |---|---|---|
 | `LGA_HieroTools/LGA_NKS_BurnIn.py` | registro (startup) | `_register`, `_on_knob_changed`, `_es_derivado`, `_start_mask_watcher`, `_mask_tick`, `_perf_tick` (log de NKS trabado y resumen del render) |
-| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Layout.py` | `import LGA_NKS_BurnIn_Layout` | `parse`, `dump`, `active`, `default_state`, `fresh_arrangement`, `move_to`, `move_next_to`, `slot_of`, `visible_fields`, `stack_state`, `set_stack`, `is_default`, `compute`, `mask_inset`, `side_pivot`, `line_height` |
-| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Logic.py` | `import LGA_NKS_BurnIn_Logic` | `bi_text`, `bi_ok`, `field_geo`, `shape_msg`, `shape_geo`, `shape_message`, `_shapes`, `_frame_state` (con el memo `_fast` / `_FAST_TTL`), `_stream_id` (clave del cache: el cuadro que llega), `viewer_frame` (playhead, para el panel), `_plate_version`, `_res_targets` / `_res_matches` (varias resoluciones), `layout_text`, `mask_inset_px`, `line_height_px`, `_plate_tc_frames` (TC de aPlate), `invalidate_cache`, `TEXT_FAMILY`, `_measure_text`, `_font_path`, `_qt_family`, `_digit_template`, `_compute_state`, `perf_log`, `perf_mark`, `perf_last`, `perf_flush`, `perf_header` (log [Perf]) |
-| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Effect.py` | `import LGA_NKS_BurnIn_Effect` | `setup`, `schedule_update`, `update_now`, `is_busy`, `apply_layout`, `apply_rotation`, `apply_font`, `nudge`, `viewer_mask_aspect`, `apply_mask`, `_timeline_format`, `_perf_update` |
+| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Layout.py` | `import LGA_NKS_BurnIn_Layout` | `line_height` (`CAP_HEIGHT_FS`, `TEXT_DY_FS`), `parse`, `dump`, `active`, `default_state`, `fresh_arrangement`, `move_to`, `move_next_to`, `slot_of`, `visible_fields`, `stack_state`, `set_stack`, `is_default`, `compute`, `mask_inset`, `side_pivot`, `line_height` |
+| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Logic.py` | `import LGA_NKS_BurnIn_Logic` | `bi_text`, `bi_ok`, `field_geo`, `shape_msg`, `shape_geo`, `shape_message`, `_shapes`, `_frame_state` (con el memo `_fast` / `_FAST_TTL`), `_stream_id` (clave del cache: el cuadro que llega), `viewer_frame` (playhead, para el panel), `_plate_version`, `_res_targets` / `_res_matches` (varias resoluciones), `layout_text`, `mask_inset_px`, `line_height_px`, `_plate_tc_frames` (TC de aPlate), `invalidate_cache`, `TEXT_FAMILY`, `_measure_text`, `_measure_ink` (tinta, padding parejo), `panel_map_text` / `PM_OFF` / `_check_pm` / `pm_want` (lista `bi_pm` de los fondos TCL), `_font_path`, `_qt_family`, `_digit_template`, `_compute_state`, `perf_log`, `perf_mark`, `perf_last`, `perf_flush`, `perf_header` (log [Perf]) |
+| `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Effect.py` | `import LGA_NKS_BurnIn_Effect` | `apply_panel_map` (escribe `bi_pm`), `setup`, `schedule_update`, `update_now`, `is_busy`, `apply_layout`, `apply_rotation`, `apply_font`, `nudge`, `viewer_mask_aspect`, `apply_mask`, `_timeline_format`, `_perf_update` |
 | `LGA_HieroTools/LGA_NKS_ViewerTL_Panel_py/LGA_NKS_Viewer_Mask.py` | `from LGA_NKS_ViewerTL_Panel_py import LGA_NKS_Viewer_Mask` | `set_mask`, `apply_mask` (el boton 3:2; solo pone la mascara para LGA_BurnIn) |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Panel.py` | `import LGA_NKS_BurnIn_Panel` | `show_panel`, `_perf_open`, `BurnInPanel`, `BurnInMap`, `TickSlider`, `Segmented`, `HieroController` |
 | `LGA_HieroTools/LGA_NKS_BurnIn_py/LGA_NKS_BurnIn_Config.py` | `import LGA_NKS_BurnIn_Config` | `resolve`, `parse_res`, `parse_res_targets`, `format_res_targets`, `parse_fps`, `load_user_file`, `save_user_file`, `list_presets`, `load_preset`, `save_preset` |

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Logic v1.16 | Lega
+  LGA_NKS_BurnIn_Logic v1.17 | Lega
 
   Logica viva del soft effect LGA_BurnIn. Las expresiones [python ...]
   de los Text2 internos del gizmo llaman a bi_text() y bi_ok() en cada
@@ -13,6 +13,13 @@ ____________________________________________________________________
   proyecto; el modulo de registro invalida el cache en los eventos de
   load/save de proyecto.
 
+  v1.17: Menos trabajo en el hilo principal y padding parejo. Mapa de
+         fondos para TCL (panel_map_text, knob bi_pm): frame, tc, res,
+         fps, date y custom ya no llaman a python desde sus mensajes. El
+         fondo mide la tinta del texto (_measure_ink) y el texto se ubica
+         con field_geo('tx'), asi el padding visible es el pedido a los
+         cuatro lados. _GLYPH_DY 2 -> 0,5 (re-medido). res, fps y date se
+         miden con los digitos normalizados; el frame 0 ya no se esconde.
   v1.16: Prender un track traba menos. Memo de la ultima llamada en
          _frame_state (_fast): dentro de la rafaga de un render solo se
          relee el cuadro que llega y bi_rev; formato, mapa y firma se
@@ -95,6 +102,7 @@ ____________________________________________________________________
 
 import os
 import sys
+import threading
 import time
 
 import LGA_NKS_BurnIn_Config as bi_config
@@ -397,8 +405,11 @@ def _res_matches(parent, cfg, clip):
 
 
 def _labeled(parent, label, value):
-    """'Label: valor' con los labels prendidos (bi_labels), o el valor solo."""
-    if not value:
+    """'Label: valor' con los labels prendidos (bi_labels), o el valor solo.
+
+    Vacio solo sin valor: el frame 0 es un frame (antes `not value` lo
+    escondia, y el mensaje TCL del gizmo si lo muestra)."""
+    if value is None or str(value) == "":
         return ""
     try:
         on = bool(parent["bi_labels"].value())
@@ -792,12 +803,17 @@ def _qt_family(family, style):
 # Solo frame y tc cambian de contenido por frame. Con digitos tabulares
 # normalizarlos a '0' da el mismo ancho exacto; se hace para que el cache de
 # medidas tenga UNA entrada por campo y no una por frame.
-_DIGIT_FIELDS = ("frame", "tc")
+# Campos cuyo ancho se mide con los digitos normalizados: con digitos
+# tabulares el ancho solo depende de la cantidad de digitos y de donde caen
+# los separadores. Son los mismos campos cuyo fondo sale del mapa TCL
+# (bi_pm, ver panel_map_text): el mapa y la geometria miden lo mismo.
+_DIGIT_FIELDS = ("frame", "tc", "res", "fps", "date")
 
 
 def _digit_template(text):
-    """Normaliza digitos a '0': misma medida, una sola entrada de cache."""
-    return "".join("0" if ch.isdigit() else ch for ch in str(text))
+    """Normaliza digitos a '0' (y el ';' del TC drop frame a ':'): misma
+    medida, una sola entrada de cache, la misma plantilla que el mapa TCL."""
+    return "".join("0" if ch.isdigit() else (":" if ch == ";" else ch) for ch in str(text))
 
 
 def _size_fraction(parent):
@@ -847,6 +863,49 @@ def _measure_text(text, px, style):
         _measure_cache.clear()
     _measure_cache[key] = width
     return width
+
+
+_ink_cache = {}
+_DIGIT_X_FS = 0.12
+
+
+def _measure_ink(text, px, style):
+    """(izquierda, ancho) de la TINTA del texto en px: lo que se ve, sin los
+    margenes laterales de los glifos. El fondo mide tinta + padding a cada
+    lado y el texto se corre para que la tinta empiece justo en el padding
+    (antes el padding visible era el pedido + el margen del primer glifo,
+    2 a 5 px mas; medido en NKS 17). Sin Qt: el avance, desde 0."""
+    key = (text, px, style)
+    hit = _ink_cache.get(key)
+    if hit is not None:
+        return hit
+    out = None
+    fam = _qt_family(TEXT_FAMILY, style)
+    try:
+        from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtGui
+
+        ft = QtGui.QFont()
+        if fam:
+            ft.setFamily(fam)
+        ft.setPixelSize(max(1, int(round(px))))
+        r = QtGui.QFontMetricsF(ft).tightBoundingRect(text)
+        if r.width() > 0:
+            out = (float(r.left()), float(r.width()))
+    except Exception as exc:
+        _log_error_once("ink", str(exc))
+    if out is None:
+        out = (0.0, _measure_text(text, px, style))
+    # Text2 dibuja una 'x' entre digitos (la resolucion, 4096x2160) mas
+    # angosta que lo que mide Qt: 6 px menos a fs 50 y 3 a fs 25 (medido
+    # en NKS 17 render contra Qt; el resto de los textos da 0 a 3 px).
+    n_x = sum(1 for i in range(1, len(text) - 1)
+              if text[i] == "x" and text[i - 1].isdigit() and text[i + 1].isdigit())
+    if n_x:
+        out = (out[0], out[1] - _DIGIT_X_FS * px * n_x)
+    if len(_ink_cache) > 4000:
+        _ink_cache.clear()
+    _ink_cache[key] = out
+    return out
 
 
 # ── Estado por frame: textos + geometria desde el mapa ────────────────────────
@@ -1047,14 +1106,16 @@ def _compute_state(parent, frame, fmt_w, fmt_h, text, key):
         mode = int(parent["bi_bg_mode"].getValue())
     except Exception:
         mode = 0
-    texts, widths = {}, {}
+    texts, widths, inks = {}, {}, {}
     for f in bi_layout.visible_fields(arr):
         t = _text_from(f, parent, frame, meta)
         texts[f] = t
         if f in _DIGIT_FIELDS:
             t = _digit_template(t)
         if t:
-            widths[f] = _measure_text(t, fs, style) + 2.0 * pad
+            left, ink_w = _measure_ink(t, fs, style)
+            widths[f] = ink_w + 2.0 * pad
+            inks[f] = left
     rects, bands = bi_layout.compute(
         arr, widths, fmt_w, fmt_h, fs, pad, mask_inset_px(parent, fmt_w, fmt_h)
     )
@@ -1065,6 +1126,8 @@ def _compute_state(parent, frame, fmt_w, fmt_h, text, key):
         "bands": bands,
         "shapes": _shapes(rects, bands, fmt_w, fmt_h, parent),
         "line_h": bi_layout.line_height(fs, pad),
+        "ink_left": inks,
+        "pad": pad,
         "meta": meta,
         "oks": {},
     }
@@ -1074,6 +1137,8 @@ def _compute_state(parent, frame, fmt_w, fmt_h, text, key):
         if len(_geo_cache) > _GEO_CACHE_MAX:
             _geo_cache.clear()
         _geo_cache[key] = state
+    if "input/width" in meta and threading.current_thread() is threading.main_thread():
+        _check_pm(parent, fmt_h)
     return state
 
 
@@ -1099,6 +1164,9 @@ def field_geo(field, comp, parent, frame=None):
             return 0.0
         if comp == "y2":
             return float(rect[1] + rect[3])
+        if comp == "tx":
+            # x del Text2 del texto: la tinta arranca a un padding del borde.
+            return float(rect[0] + st.get("pad", 0.0) - st.get("ink_left", {}).get(field, 0.0))
         idx = _RECT_INDEX.get(comp)
         return float(rect[idx]) if idx is not None else 0.0
     except Exception as exc:
@@ -1123,7 +1191,7 @@ _BLOCKS = ((1000, 0xE200), (100, 0xE201), (10, 0xE202), (1, 0xE203))
 _START_OFFSET = 0x10  # U+E210..E213: mismos bloques sin solape (primer bloque)
 BAND_KEYS = ("band_t", "band_b", "band_l", "band_r")
 _BLEED = 6.0
-_GLYPH_DY = 2.0
+_GLYPH_DY = 0.5
 
 
 def shape_message(w, h, radius):
@@ -1214,8 +1282,9 @@ def shape_geo(key, comp, parent, frame=None):
         if comp == "x":
             return x
         # Text2 apoya el glifo _GLYPH_DY px por encima del borde de abajo de
-        # la caja (medido en NKS 17: igual con 50 y con 200 px de alto), asi
-        # que la caja baja eso.
+        # la caja, asi que la caja baja eso. Re-medido el 23-11 en NKS 17
+        # (alto de mayusculas + 2 padding, fs 20 a 63, formatos 1080 y 2160):
+        # con 2 px el fondo quedaba 1 a 2 px mas abajo que su rectangulo.
         if comp == "y":
             return y - _GLYPH_DY
         if comp == "y2":
@@ -1226,6 +1295,150 @@ def shape_geo(key, comp, parent, frame=None):
     except Exception as exc:
         _log_error_once("shape_geo:" + str(key) + comp, str(exc))
         return 0.01 if comp == "scale" else 0.0
+
+
+# ── Mapa de fondos para TCL (knob bi_pm) ──────────────────────────────────────
+#
+# Los mensajes de los Text2 de frame, tc, res, fps, date y custom NO llaman a
+# python: el texto es TCL ([metadata ...]) y el fondo sale de una lista que
+# arma esta funcion y el efecto escribe en el knob bi_pm al actualizarse. Con
+# digitos tabulares el ancho del fondo solo depende de la CANTIDAD de
+# caracteres (y en fps de donde cae el punto), asi que el mensaje del fondo
+# es un [lindex [value parent.bi_pm] <indice>] con el indice armado en TCL
+# desde el largo del texto.
+#
+# Por que (medido en NKS 17, 2026-11-23, visor del timeline a 4K, Classic):
+# un mensaje [python] de un Text2 se evalua ~20 veces por cuadro, en el hilo
+# principal. Los 12 mensajes python del efecto le costaban al hilo principal
+# ~35 ms por cuadro; el mismo efecto con mensajes TCL (aunque cambien en cada
+# cuadro) queda casi igual que sin efecto. Las cajas [python] cuestan bastante
+# menos (~10 ms, se evaluan ~5 veces).
+#
+# Elemento 0: alto del formato con el que se calculo (el estado lo compara y
+# pide rehacerlo si el formato del timeline cambio). Offsets fijos por campo;
+# un indice fuera de su bloque da "" (sin fondo), nunca un error.
+
+PM_OFF = {"frame": 1, "tc": 17, "fps": 33, "res": 73, "date": 143,
+          "custom1": 159, "custom2": 160}
+PM_SIZE = 161
+PM_FIELDS = tuple(PM_OFF)
+_PM_LABELS = {"frame": "Frame", "tc": "TC"}
+
+
+def _pm_tc_template(n):
+    """'00:00:00:00' para el largo n (los ':' donde los pone un TC)."""
+    return "".join(":" if i in (2, 5, 8) else "0" for i in range(n))
+
+
+def _pm_entries(field, labels, custom_text=""):
+    """[(indice, plantilla)] del campo. La plantilla es lo que se mide."""
+    pre = (_PM_LABELS[field] + ": ") if (labels and field in _PM_LABELS) else ""
+    out = []
+    if field == "frame":
+        for n in range(1, 16):
+            out.append((PM_OFF[field] + n, pre + "0" * n))
+    elif field == "tc":
+        for n in range(1, 16):
+            out.append((PM_OFF[field] + n, pre + _pm_tc_template(n)))
+    elif field == "fps":
+        # Indice = largo*4 + posicion del punto + 1 (0 sin punto). El largo es
+        # el del "%g" (24, 23.976, 29.97, 7.5...).
+        for n in range(1, 10):
+            for dot in range(-1, min(n, 3)):
+                idx = n * 4 + dot + 1
+                if idx >= 40:
+                    continue
+                digits = "".join("." if i == dot else "0" for i in range(n))
+                out.append((PM_OFF[field] + idx, digits + " fps"))
+    elif field == "res":
+        for lw in range(1, 7):
+            for lh in range(1, 10):
+                out.append((PM_OFF[field] + lw * 10 + lh, "0" * lw + "x" + "0" * lh))
+    elif field == "date":
+        for n in range(1, 16):
+            tpl = "0000-00-00" if n == 10 else "0" * n
+            out.append((PM_OFF[field] + n, tpl))
+    elif field in ("custom1", "custom2"):
+        if custom_text:
+            out.append((PM_OFF[field], custom_text))
+    return out
+
+
+def panel_map_text(parent, fmt_h):
+    """Lista TCL del knob bi_pm para un alto de formato. '' si falla."""
+    try:
+        fmt_h = float(fmt_h)
+        style = _weight_style(parent)
+        fs = _font_px(parent, None, fmt_h)
+        try:
+            pad = float(parent["bi_text_pad"].value())
+        except Exception:
+            pad = 28.0
+        try:
+            radius = float(parent["bi_bg_radius"].value())
+        except Exception:
+            radius = 0.0
+        try:
+            labels = bool(parent["bi_labels"].value())
+        except Exception:
+            labels = False
+        h = bi_layout.line_height(fs, pad)
+        items = ["{}"] * PM_SIZE
+        items[0] = str(int(round(fmt_h)))
+        for f in PM_FIELDS:
+            custom = ""
+            if f in ("custom1", "custom2"):
+                try:
+                    custom = str(parent["bi_%s_text" % f].value() or "")
+                except Exception:
+                    custom = ""
+            for idx, tpl in _pm_entries(f, labels, custom):
+                w = _measure_ink(tpl, fs, style)[1] + 2.0 * pad
+                msg = shape_message(w, h, radius)
+                if msg:
+                    items[idx] = msg
+        return " ".join(items)
+    except Exception as exc:
+        _log_error_once("panel_map", str(exc))
+        return ""
+
+
+def _pm_height(parent):
+    """Alto de formato con el que esta armado el bi_pm del efecto, o None."""
+    try:
+        txt = parent["bi_pm"].getText()
+    except Exception:
+        return None
+    head = txt.split(" ", 1)[0] if txt else ""
+    try:
+        return int(head)
+    except ValueError:
+        return None
+
+
+_pm_asked = {}
+# Alto del cuadro que de verdad llega, por efecto: lo usa el efecto al
+# rehacer el mapa (manda sobre el formato de la secuencia).
+pm_want = {}
+
+
+def _check_pm(parent, fmt_h):
+    """El mapa TCL se arma con el formato del timeline. Si el cuadro que
+    llega tiene otro alto (se cambio el formato de la secuencia), se pide
+    rehacerlo fuera de la evaluacion. Una vez por (efecto, alto)."""
+    try:
+        if _pm_height(parent) == int(round(fmt_h)):
+            return
+        key = (parent.fullName(), int(round(fmt_h)))
+        pm_want[key[0]] = key[1]
+        if key in _pm_asked:
+            return
+        _pm_asked[key] = True
+        import LGA_NKS_BurnIn_Effect as bi_effect
+
+        bi_effect.schedule_update(parent)
+    except Exception as exc:
+        _log_error_once("check_pm", str(exc))
 
 
 def mask_inset_px(parent, fmt_w, fmt_h):

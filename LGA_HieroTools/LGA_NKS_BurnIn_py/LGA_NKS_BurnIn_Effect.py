@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Effect v1.11 | Lega
+  LGA_NKS_BurnIn_Effect v1.12 | Lega
 
   Puente entre los knobs del soft effect LGA_BurnIn y sus nodos
   internos. setup() es el onCreate del gizmo (en su Dot interno): pone
@@ -11,6 +11,9 @@ ____________________________________________________________________
   schedule_update() junta los pedidos del panel y del knobChanged en una
   sola actualizacion por ciclo de eventos.
 
+  v1.12: apply_panel_map() escribe el mapa de fondos (bi_pm) que leen en
+         TCL los mensajes de frame, tc, res, fps, date y custom; lo llama
+         apply_layout() y solo escribe si cambio.
   v1.11: apply_font() pone LGA Inter Tab (TEXT_FAMILY de la logica) en
          vez de Inter: digitos tabulares, fondo de frame/tc de ancho fijo.
   v1.10: Registro de tiempos [Perf]: update_now() y setup() anotan cuanto
@@ -376,8 +379,35 @@ def apply_layout(gizmo, do_nudge=True):
         except Exception as exc:
             _log("ERROR aplicando layout a {}: {}".format(f, exc))
     apply_rotation(gizmo)
+    apply_panel_map(gizmo)
     if do_nudge:
         nudge(gizmo)
+
+
+def apply_panel_map(gizmo):
+    """Escribe en bi_pm la lista de fondos que leen en TCL los Text2 de
+    frame, tc, res, fps, date y custom (ver panel_map_text en la logica).
+    Se arma con el alto del cuadro que llega (si el render ya lo vio) o el
+    del formato del timeline; sin ninguno se usa el alto con el que ya
+    estaba armado, o no se toca. Solo escribe si cambio: cada
+    write vuelve a renderizar los cuadros cacheados."""
+    import LGA_NKS_BurnIn_Logic as bi_logic
+
+    try:
+        knob = gizmo.knobs().get("bi_pm")
+        if knob is None:
+            return
+        fmt_h = bi_logic.pm_want.get(gizmo.fullName())
+        if not fmt_h:
+            fmt = _timeline_format(gizmo)
+            fmt_h = fmt[1] if fmt else bi_logic._pm_height(gizmo)
+        if not fmt_h:
+            return
+        text = bi_logic.panel_map_text(gizmo, fmt_h)
+        if text and knob.getText() != text:
+            knob.setValue(text)
+    except Exception as exc:
+        _log("ERROR armando bi_pm: {}".format(exc))
 
 
 def nudge(gizmo):

@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn_Layout v1.03 | Lega
+  LGA_NKS_BurnIn_Layout v1.04 | Lega
 
   Modelo del mapa de LGA BurnIn, en Python puro (sin Nuke ni Qt, se
   prueba con el runtime embebido). Lo comparten el panel (que edita el
@@ -18,6 +18,8 @@ ____________________________________________________________________
   Es el mismo modelo que el menu Burn-ins de Shot Player (LGA Media
   Tools), del que sale el diseno.
 
+  v1.04: Alto de linea = alto de mayusculas + 2 padding (CAP_HEIGHT_FS),
+         padding parejo a los cuatro lados; TEXT_DY_FS para centrar.
   v1.03: Distribucion Classic: el orden de los burn-ins amarillos que se
          apilaban en el track BurnIn (Frame y debajo el clip abajo a la
          izquierda, TC abajo al centro, Res / FPS / Codec abajo a la
@@ -92,7 +94,16 @@ SIZE_FRACTIONS = (("S", 0.0185), ("M", 0.023), ("L", 0.029))
 MARGIN_FRAC = 0.025   # margen a los bordes, fraccion del alto del formato
 GAP_FS = 0.35         # separacion entre paneles de una misma linea
 LINE_GAP_FS = 0.3     # separacion entre lineas
-LINE_HEIGHT_FS = 1.3  # alto del panel = fs * 1.3 + padding (como siempre)
+# Alto del panel = alto de las mayusculas y digitos + el padding arriba y
+# abajo, asi el texto queda con el MISMO padding a los cuatro lados (Lega,
+# 2026-11-23). Antes era fs * 1.3 + padding: medido en NKS 17 a 4K (fs 50,
+# padding 28) el texto quedaba a 25 px del borde de arriba y a 31 del de
+# abajo. CAP_HEIGHT_FS es el capHeight de Inter (1490/2048).
+CAP_HEIGHT_FS = 0.7275
+# El Text2 con yjustify center centra la linea (ascendente + descendente),
+# no las mayusculas: quedan TEXT_DY_FS * fs mas arriba (medido en NKS 17: 0,061 a
+# 0,088 fs entre fs 20 y 63). La caja del texto baja eso.
+TEXT_DY_FS = 0.073
 
 
 # ── Estado ────────────────────────────────────────────────────────────────────
@@ -302,7 +313,7 @@ def side_pivot(edge, fmt_w, fmt_h, h, inset_x=0.0):
 
 
 def line_height(fs, pad):
-    return fs * LINE_HEIGHT_FS + pad
+    return fs * CAP_HEIGHT_FS + 2.0 * pad
 
 
 def _unrotate(cx, cy, w, h, rot, pivot):

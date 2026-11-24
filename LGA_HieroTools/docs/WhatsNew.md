@@ -17,7 +17,8 @@ platforms: [win, mac]
 - [fixed] LGA BurnIn ya no muestra en el primer cuadro de un plano el frame y el timecode del plano anterior, ni pinta el timecode de rojo sin motivo.
 - [improved] En `Plate res` del panel de LGA BurnIn podés poner varias resoluciones válidas separadas por comas (por ejemplo `timeline, 3840x2160`): la resolución se pinta de rojo solo si el plate no coincide con ninguna.
 - [fixed] El fondo del frame y del timecode del LGA BurnIn ya no cambia de ancho al reproducir ni queda vacío de un lado: los números ocupan siempre el mismo lugar.
-- [improved] LGA BurnIn ya no depende de la placa de video: en computadoras sin una GPU potente el timeline anda fluido con el efecto puesto, con el mismo look de fondos redondeados, y prender o apagar un track ya casi no traba Nuke Studio.
+- [improved] LGA BurnIn ya no depende de la placa de video y le pide mucho menos trabajo a Nuke Studio: en computadoras sin una GPU potente el timeline anda fluido con el efecto puesto, con el mismo look de fondos redondeados, y prender o apagar un track ya casi no traba Nuke Studio.
+- [improved] En LGA BurnIn el texto queda centrado en su fondo, con el mismo espacio arriba, abajo y a los costados.
 - [fixed][win] el LGA BurnIn usa su propia tipografía aunque no la tengas instalada, y el peso Bold ya no sale con otra letra.
 
 ## v4.028

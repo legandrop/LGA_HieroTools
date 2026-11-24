@@ -28,6 +28,8 @@ Gizmo {
  bi_labels false
  addUserKnob {7 bi_rev l "rev" +INVISIBLE}
  bi_rev 0
+ addUserKnob {1 bi_pm l "panel map" +INVISIBLE}
+ bi_pm ""
  addUserKnob {7 bi_mask_aspect l "mask aspect" +INVISIBLE}
  bi_mask_aspect 0
  addUserKnob {6 bi_clip_on l "clip name" +INVISIBLE}
@@ -375,7 +377,7 @@ Gizmo {
     }
   font "\[value parent.bi_shape_font]"
   cursor_position 1
-  global_font_scale {{"\[python __import__('LGA_NKS_BurnIn_Logic').shape_geo('clip','scale',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  global_font_scale {{(0.7275*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))+2*parent.bi_text_pad)/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -395,19 +397,19 @@ Gizmo {
   font_width_toolbar 100
   font_height_toolbar 100
   opacity {{parent.bi_opacity}}
-  message "\[python __import__('LGA_NKS_BurnIn_Logic').bi_text('clip', nuke.thisParent(), \[frame\])]"
+  message "\[metadata hiero/clip]"
   old_message {{48 49 58 48 48 58 48 48 58 48 48}
     }
   old_expression_markers {{0 10}
     }
-  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('clip','x',nuke.thisParent(),\[frame\])]+0*parent.bi_rev+parent.bi_text_pad"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('clip','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('clip','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('clip','tx',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('clip','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('clip','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"}}
   yjustify center
   cliptype none
   transforms {{0 2}
     }
   font "\[value parent.bi_font]"
   cursor_position 74
-  global_font_scale {{(parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height/100}}
+  global_font_scale {{max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -444,7 +446,7 @@ Gizmo {
     }
   font "\[value parent.bi_shape_font]"
   cursor_position 1
-  global_font_scale {{"\[python __import__('LGA_NKS_BurnIn_Logic').shape_geo('cspace','scale',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  global_font_scale {{(0.7275*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))+2*parent.bi_text_pad)/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -469,14 +471,14 @@ Gizmo {
     }
   old_expression_markers {{0 10}
     }
-  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('cspace','x',nuke.thisParent(),\[frame\])]+0*parent.bi_rev+parent.bi_text_pad"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('cspace','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('cspace','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('cspace','tx',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('cspace','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('cspace','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"}}
   yjustify center
   cliptype none
   transforms {{0 2}
     }
   font "\[value parent.bi_font]"
   cursor_position 74
-  global_font_scale {{(parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height/100}}
+  global_font_scale {{max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -500,7 +502,7 @@ Gizmo {
   font_width_toolbar 100
   font_height_toolbar 100
   opacity {{parent.bi_bg_opacity}}
-  message "\[python __import__('LGA_NKS_BurnIn_Logic').shape_msg('res', nuke.thisParent(), \[frame\], \[value parent.bi_rev\])]"
+  message "\[lindex \[value parent.bi_pm] \[expr \{73+\[string length \[metadata input/width]]*10+\[string length \[metadata input/height]]\}]]"
   old_message {{48}
     }
   old_expression_markers {{0 0}
@@ -513,7 +515,7 @@ Gizmo {
     }
   font "\[value parent.bi_shape_font]"
   cursor_position 1
-  global_font_scale {{"\[python __import__('LGA_NKS_BurnIn_Logic').shape_geo('res','scale',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  global_font_scale {{(0.7275*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))+2*parent.bi_text_pad)/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -533,19 +535,19 @@ Gizmo {
   font_width_toolbar 100
   font_height_toolbar 100
   opacity {{parent.bi_opacity}}
-  message "\[python __import__('LGA_NKS_BurnIn_Logic').bi_text('res', nuke.thisParent(), \[frame\])]"
+  message "\[if \{\[string length \[metadata input/width]] && \[string length \[metadata input/height]]\} \{format \{%sx%s\} \[metadata input/width] \[metadata input/height]\}]"
   old_message {{48 49 58 48 48 58 48 48 58 48 48}
     }
   old_expression_markers {{0 10}
     }
-  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('res','x',nuke.thisParent(),\[frame\])]+0*parent.bi_rev+parent.bi_text_pad"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('res','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('res','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('res','tx',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('res','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('res','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"}}
   yjustify center
   cliptype none
   transforms {{0 2}
     }
   font "\[value parent.bi_font]"
   cursor_position 74
-  global_font_scale {{(parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height/100}}
+  global_font_scale {{max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -569,7 +571,7 @@ Gizmo {
   font_width_toolbar 100
   font_height_toolbar 100
   opacity {{parent.bi_bg_opacity}}
-  message "\[python __import__('LGA_NKS_BurnIn_Logic').shape_msg('frame', nuke.thisParent(), \[frame\], \[value parent.bi_rev\])]"
+  message "\[lindex \[value parent.bi_pm] \[expr \{1+\[string length \[metadata input/frame]]\}]]"
   old_message {{48}
     }
   old_expression_markers {{0 0}
@@ -582,7 +584,7 @@ Gizmo {
     }
   font "\[value parent.bi_shape_font]"
   cursor_position 1
-  global_font_scale {{"\[python __import__('LGA_NKS_BurnIn_Logic').shape_geo('frame','scale',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  global_font_scale {{(0.7275*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))+2*parent.bi_text_pad)/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -602,19 +604,19 @@ Gizmo {
   font_width_toolbar 100
   font_height_toolbar 100
   opacity {{parent.bi_opacity}}
-  message "\[python __import__('LGA_NKS_BurnIn_Logic').bi_text('frame', nuke.thisParent(), \[frame\])]"
+  message "\[if \{\[value parent.bi_labels] && \[string length \[metadata input/frame]]\} \{format \{Frame: \}\}]\[metadata input/frame]"
   old_message {{48 49 58 48 48 58 48 48 58 48 48}
     }
   old_expression_markers {{0 10}
     }
-  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('frame','x',nuke.thisParent(),\[frame\])]+0*parent.bi_rev+parent.bi_text_pad"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('frame','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('frame','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('frame','tx',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('frame','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('frame','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"}}
   yjustify center
   cliptype none
   transforms {{0 2}
     }
   font "\[value parent.bi_font]"
   cursor_position 74
-  global_font_scale {{(parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height/100}}
+  global_font_scale {{max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -638,7 +640,7 @@ Gizmo {
   font_width_toolbar 100
   font_height_toolbar 100
   opacity {{parent.bi_bg_opacity}}
-  message "\[python __import__('LGA_NKS_BurnIn_Logic').shape_msg('tc', nuke.thisParent(), \[frame\], \[value parent.bi_rev\])]"
+  message "\[lindex \[value parent.bi_pm] \[expr \{17+\[string length \[metadata input/timecode]]\}]]"
   old_message {{48}
     }
   old_expression_markers {{0 0}
@@ -651,7 +653,7 @@ Gizmo {
     }
   font "\[value parent.bi_shape_font]"
   cursor_position 1
-  global_font_scale {{"\[python __import__('LGA_NKS_BurnIn_Logic').shape_geo('tc','scale',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  global_font_scale {{(0.7275*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))+2*parent.bi_text_pad)/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -671,19 +673,19 @@ Gizmo {
   font_width_toolbar 100
   font_height_toolbar 100
   opacity {{parent.bi_opacity}}
-  message "\[python __import__('LGA_NKS_BurnIn_Logic').bi_text('tc', nuke.thisParent(), \[frame\])]"
+  message "\[if \{\[value parent.bi_labels] && \[string length \[metadata input/timecode]]\} \{format \{TC: \}\}]\[metadata input/timecode]"
   old_message {{48 49 58 48 48 58 48 48 58 48 48}
     }
   old_expression_markers {{0 10}
     }
-  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('tc','x',nuke.thisParent(),\[frame\])]+0*parent.bi_rev+parent.bi_text_pad"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('tc','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('tc','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('tc','tx',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('tc','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('tc','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"}}
   yjustify center
   cliptype none
   transforms {{0 2}
     }
   font "\[value parent.bi_font]"
   cursor_position 74
-  global_font_scale {{(parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height/100}}
+  global_font_scale {{max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -707,7 +709,7 @@ Gizmo {
   font_width_toolbar 100
   font_height_toolbar 100
   opacity {{parent.bi_bg_opacity}}
-  message "\[python __import__('LGA_NKS_BurnIn_Logic').shape_msg('fps', nuke.thisParent(), \[frame\], \[value parent.bi_rev\])]"
+  message "\[lindex \[value parent.bi_pm] \[if \{\[string length \[metadata input/frame_rate]]\} \{expr \{33+\[string length \[format %g \[metadata input/frame_rate]]]*4+\[string first . \[format %g \[metadata input/frame_rate]]]+1\}\} else \{format 0\}]]"
   old_message {{48}
     }
   old_expression_markers {{0 0}
@@ -720,7 +722,7 @@ Gizmo {
     }
   font "\[value parent.bi_shape_font]"
   cursor_position 1
-  global_font_scale {{"\[python __import__('LGA_NKS_BurnIn_Logic').shape_geo('fps','scale',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  global_font_scale {{(0.7275*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))+2*parent.bi_text_pad)/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -740,19 +742,19 @@ Gizmo {
   font_width_toolbar 100
   font_height_toolbar 100
   opacity {{parent.bi_opacity}}
-  message "\[python __import__('LGA_NKS_BurnIn_Logic').bi_text('fps', nuke.thisParent(), \[frame\])]"
+  message "\[if \{\[string length \[metadata input/frame_rate]]\} \{format \{%g fps\} \[metadata input/frame_rate]\}]"
   old_message {{48 49 58 48 48 58 48 48 58 48 48}
     }
   old_expression_markers {{0 10}
     }
-  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('fps','x',nuke.thisParent(),\[frame\])]+0*parent.bi_rev+parent.bi_text_pad"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('fps','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('fps','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('fps','tx',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('fps','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('fps','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"}}
   yjustify center
   cliptype none
   transforms {{0 2}
     }
   font "\[value parent.bi_font]"
   cursor_position 74
-  global_font_scale {{(parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height/100}}
+  global_font_scale {{max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -789,7 +791,7 @@ Gizmo {
     }
   font "\[value parent.bi_shape_font]"
   cursor_position 1
-  global_font_scale {{"\[python __import__('LGA_NKS_BurnIn_Logic').shape_geo('track','scale',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  global_font_scale {{(0.7275*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))+2*parent.bi_text_pad)/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -814,14 +816,14 @@ Gizmo {
     }
   old_expression_markers {{0 10}
     }
-  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('track','x',nuke.thisParent(),\[frame\])]+0*parent.bi_rev+parent.bi_text_pad"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('track','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('track','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('track','tx',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('track','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('track','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"}}
   yjustify center
   cliptype none
   transforms {{0 2}
     }
   font "\[value parent.bi_font]"
   cursor_position 74
-  global_font_scale {{(parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height/100}}
+  global_font_scale {{max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -845,7 +847,7 @@ Gizmo {
   font_width_toolbar 100
   font_height_toolbar 100
   opacity {{parent.bi_bg_opacity}}
-  message "\[python __import__('LGA_NKS_BurnIn_Logic').shape_msg('date', nuke.thisParent(), \[frame\], \[value parent.bi_rev\])]"
+  message "\[lindex \[value parent.bi_pm] \[expr \{143+\[string length \[lindex \[split \[metadata input/mtime] \{ \}] 0]]\}]]"
   old_message {{48}
     }
   old_expression_markers {{0 0}
@@ -858,7 +860,7 @@ Gizmo {
     }
   font "\[value parent.bi_shape_font]"
   cursor_position 1
-  global_font_scale {{"\[python __import__('LGA_NKS_BurnIn_Logic').shape_geo('date','scale',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  global_font_scale {{(0.7275*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))+2*parent.bi_text_pad)/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -878,19 +880,19 @@ Gizmo {
   font_width_toolbar 100
   font_height_toolbar 100
   opacity {{parent.bi_opacity}}
-  message "\[python __import__('LGA_NKS_BurnIn_Logic').bi_text('date', nuke.thisParent(), \[frame\])]"
+  message "\[lindex \[split \[metadata input/mtime] \{ \}] 0]"
   old_message {{48 49 58 48 48 58 48 48 58 48 48}
     }
   old_expression_markers {{0 10}
     }
-  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('date','x',nuke.thisParent(),\[frame\])]+0*parent.bi_rev+parent.bi_text_pad"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('date','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('date','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('date','tx',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('date','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('date','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"}}
   yjustify center
   cliptype none
   transforms {{0 2}
     }
   font "\[value parent.bi_font]"
   cursor_position 74
-  global_font_scale {{(parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height/100}}
+  global_font_scale {{max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -927,7 +929,7 @@ Gizmo {
     }
   font "\[value parent.bi_shape_font]"
   cursor_position 1
-  global_font_scale {{"\[python __import__('LGA_NKS_BurnIn_Logic').shape_geo('codec','scale',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  global_font_scale {{(0.7275*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))+2*parent.bi_text_pad)/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -952,14 +954,14 @@ Gizmo {
     }
   old_expression_markers {{0 10}
     }
-  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('codec','x',nuke.thisParent(),\[frame\])]+0*parent.bi_rev+parent.bi_text_pad"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('codec','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('codec','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('codec','tx',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('codec','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('codec','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"}}
   yjustify center
   cliptype none
   transforms {{0 2}
     }
   font "\[value parent.bi_font]"
   cursor_position 74
-  global_font_scale {{(parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height/100}}
+  global_font_scale {{max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -983,7 +985,7 @@ Gizmo {
   font_width_toolbar 100
   font_height_toolbar 100
   opacity {{parent.bi_bg_opacity}}
-  message "\[python __import__('LGA_NKS_BurnIn_Logic').shape_msg('custom1', nuke.thisParent(), \[frame\], \[value parent.bi_rev\])]"
+  message "\[lindex \[value parent.bi_pm] 159]"
   old_message {{48}
     }
   old_expression_markers {{0 0}
@@ -996,7 +998,7 @@ Gizmo {
     }
   font "\[value parent.bi_shape_font]"
   cursor_position 1
-  global_font_scale {{"\[python __import__('LGA_NKS_BurnIn_Logic').shape_geo('custom1','scale',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  global_font_scale {{(0.7275*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))+2*parent.bi_text_pad)/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -1016,19 +1018,19 @@ Gizmo {
   font_width_toolbar 100
   font_height_toolbar 100
   opacity {{parent.bi_opacity}}
-  message "\[python __import__('LGA_NKS_BurnIn_Logic').bi_text('custom1', nuke.thisParent(), \[frame\])]"
+  message "\[value parent.bi_custom1_text]"
   old_message {{48 49 58 48 48 58 48 48 58 48 48}
     }
   old_expression_markers {{0 10}
     }
-  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('custom1','x',nuke.thisParent(),\[frame\])]+0*parent.bi_rev+parent.bi_text_pad"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('custom1','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('custom1','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('custom1','tx',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('custom1','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('custom1','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"}}
   yjustify center
   cliptype none
   transforms {{0 2}
     }
   font "\[value parent.bi_font]"
   cursor_position 74
-  global_font_scale {{(parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height/100}}
+  global_font_scale {{max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -1052,7 +1054,7 @@ Gizmo {
   font_width_toolbar 100
   font_height_toolbar 100
   opacity {{parent.bi_bg_opacity}}
-  message "\[python __import__('LGA_NKS_BurnIn_Logic').shape_msg('custom2', nuke.thisParent(), \[frame\], \[value parent.bi_rev\])]"
+  message "\[lindex \[value parent.bi_pm] 160]"
   old_message {{48}
     }
   old_expression_markers {{0 0}
@@ -1065,7 +1067,7 @@ Gizmo {
     }
   font "\[value parent.bi_shape_font]"
   cursor_position 1
-  global_font_scale {{"\[python __import__('LGA_NKS_BurnIn_Logic').shape_geo('custom2','scale',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  global_font_scale {{(0.7275*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))+2*parent.bi_text_pad)/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false
@@ -1085,19 +1087,19 @@ Gizmo {
   font_width_toolbar 100
   font_height_toolbar 100
   opacity {{parent.bi_opacity}}
-  message "\[python __import__('LGA_NKS_BurnIn_Logic').bi_text('custom2', nuke.thisParent(), \[frame\])]"
+  message "\[value parent.bi_custom2_text]"
   old_message {{48 49 58 48 48 58 48 48 58 48 48}
     }
   old_expression_markers {{0 10}
     }
-  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('custom2','x',nuke.thisParent(),\[frame\])]+0*parent.bi_rev+parent.bi_text_pad"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('custom2','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('custom2','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"}}
+  box {{"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('custom2','tx',nuke.thisParent(),\[frame\])]+0*parent.bi_rev"} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('custom2','y',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"} {width*3} {"\[python __import__('LGA_NKS_BurnIn_Logic').field_geo('custom2','y2',nuke.thisParent(),\[frame\])]+0*parent.bi_rev-0.073*max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))"}}
   yjustify center
   cliptype none
   transforms {{0 2}
     }
   font "\[value parent.bi_font]"
   cursor_position 74
-  global_font_scale {{(parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height/100}}
+  global_font_scale {{max(8,int((parent.bi_size==0?0.0185:parent.bi_size==2?0.029:0.023)*height+0.5))/100}}
   scale {1 1}
   cursor_initialised true
   autofit_bbox false

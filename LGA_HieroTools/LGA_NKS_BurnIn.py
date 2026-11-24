@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_BurnIn v1.11 | Lega
+  LGA_NKS_BurnIn v1.12 | Lega
 
   Registra el soft effect LGA_BurnIn (solo Text2; fondos redondeados
   con la fuente LGA Shapes) en el menu Effects del timeline de NKS. Muestra
@@ -13,6 +13,7 @@ ____________________________________________________________________
   "foundry.timeline.effect." + setData(clase del nodo), via
   hiero.ui.registerAction (patron oficial de custom_soft_effect.py).
 
+  v1.12: El knobChanged ignora bi_pm (lo escribe la propia actualizacion).
   v1.11: Registro de tiempos [Perf]: el vigia de 500 ms anota cuando el
          hilo principal estuvo trabado (con la ultima actividad del
          efecto) y escribe el resumen del render cada ~2 s; el
@@ -118,7 +119,7 @@ def _log(message):
 # bi_bg_radius NO va aca: el radio entra en el mensaje de los fondos (glifos
 # de LGA Shapes), que se re-evalua solo con el nudge de bi_rev.
 _KNOBS_DIRECTOS = (
-    "bi_open_panel", "bi_rev", "bi_font", "bi_shape_font", "bi_color",
+    "bi_open_panel", "bi_rev", "bi_pm", "bi_font", "bi_shape_font", "bi_color",
     "bi_opacity", "bi_bg_color", "bi_bg_opacity",
 )
 # Por campo (bi_<campo>_<sufijo>): on/bg/rot/ax/ay los deriva apply_layout
