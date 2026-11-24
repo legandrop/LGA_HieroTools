@@ -1,12 +1,13 @@
 """
 ____________________________________________________________________
 
-  LGA_colorPanel v1.10 | Lega
+  LGA_NKS_ClipColor_Panel v1.11 | Lega
 
   Panel para etiquetar visualmente los clips seleccionados sin enviar cambios
   a Flow. Conserva los colores de trabajo locales y ofrece estados de review
   con el mismo color que Flow Review.
 
+  v1.11: Fix Clip Colors corrige plates, referencias y versiones cero de la secuencia.
   v1.10: Suma cuatro colores de Flow Review, conserva el estilo compacto de
          los paneles dockeados, evita reconstrucciones innecesarias y registra
          errores.
@@ -15,6 +16,7 @@ ____________________________________________________________________
 """
 
 import os
+import re
 from datetime import datetime
 
 import hiero.ui
@@ -25,6 +27,13 @@ from LGA_NKS_Shared.LGA_NKS_StyleUtils import (
     create_data_button_stylesheet,
     ensure_max_luminance,
 )
+from LGA_NKS_Edit_Panel_py.LGA_import_shots_preview import classify_track_type
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style
+from LGA_NKS_Shared.LGA_UI_CustomTooltip_HieroTools import set_custom_tooltip
+
+FIX_TOOLTIP = "Corrige los colores de plates, referencias de edición y versiones cero en toda la secuencia activa."
+ZERO_VERSION = re.compile(r"(?:^|[._])v0{2,}(?=$|[._])", re.IGNORECASE)
+
 DEBUG = False
 LOG_PATH = os.path.join(
     os.path.dirname(__file__), "logs", "DebugPy_LGA_NKS_ClipColor_Panel.log"
@@ -136,6 +145,12 @@ class ColorChangeWidget(QtWidgets.QWidget):
             if widget:
                 widget.deleteLater()
 
+        fix_button = QtWidgets.QPushButton("Fix Clip Colors")
+        fix_button.setStyleSheet(Style.BTN_SMALL)
+        set_custom_tooltip(fix_button, FIX_TOOLTIP)
+        fix_button.clicked.connect(self.fix_clip_colors)
+        self.layout.addWidget(fix_button, 0, 0, 1, self.num_columns)
+
         max_button_width = 0
         for index, (name, color, style) in enumerate(self.buttons):
             display_style = ensure_max_luminance(style, MAX_STATUS_BG_LUMINANCE)
@@ -149,14 +164,14 @@ class ColorChangeWidget(QtWidgets.QWidget):
             max_button_width = max(max_button_width, button.sizeHint().width())
             row = index // self.num_columns
             column = index % self.num_columns
-            self.layout.addWidget(button, row, column)
+            self.layout.addWidget(button, row + 1, column)
 
         self.button_width_hint = max_button_width
         num_rows = (len(self.buttons) + self.num_columns - 1) // self.num_columns
         spacer = QtWidgets.QSpacerItem(
             20, 20, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding
         )
-        self.layout.addItem(spacer, num_rows, 0, 1, self.num_columns)
+        self.layout.addItem(spacer, num_rows + 1, 0, 1, self.num_columns)
         self.update_scrollbar_policy()
 
     def create_button_click_handler(self, color):
@@ -187,6 +202,65 @@ class ColorChangeWidget(QtWidgets.QWidget):
         if not SCROLLBAR_VISIBLE:
             self.scroll_area.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
             self.scroll_widget.setMinimumHeight(0)
+
+    def fix_clip_colors(self):
+        """Corrige una vez cada BinItem usado en los tracks de video."""
+        messages = []
+        try:
+            sequence = hiero.ui.activeSequence()
+            project = sequence.project() if sequence else None
+            if not project:
+                messages.append("No hay una secuencia activa con proyecto.")
+                return
+
+            colors = dict(LOCAL_COLOR_BUTTONS)
+            # Un BinItem tiene un solo color aunque aparezca en varios tracks.
+            priority = {"EditRef": 1, "Plate": 2, "v_00": 3}
+            targets = {}
+            for track in sequence.videoTracks():
+                kind = classify_track_type(track.name().replace(" ", ""))
+                track_label = {"plate": "Plate", "editref": "EditRef"}.get(kind)
+                for item in track.items():
+                    if isinstance(item, hiero.core.EffectTrackItem):
+                        continue
+                    try:
+                        bin_item = item.source().binItem()
+                        if not bin_item:
+                            continue
+                        version = bin_item.activeVersion()
+                        label = track_label
+                        if version and ZERO_VERSION.search(version.name()):
+                            label = "v_00"
+                        if label:
+                            key = bin_item.guid()
+                            if key not in targets or priority[label] > priority[targets[key][1]]:
+                                targets[key] = (bin_item, label)
+                    except Exception as error:
+                        messages.append("No se pudo clasificar un clip de %s: %s" % (track.name(), error))
+
+            changed = 0
+            undo_started = False
+            try:
+                for bin_item, label in targets.values():
+                    try:
+                        color = QtGui.QColor(colors[label])
+                        if bin_item.color() == color:
+                            continue
+                        if not undo_started:
+                            project.beginUndo("Fix Clip Colors")
+                            undo_started = True
+                        bin_item.setColor(color)
+                        changed += 1
+                    except Exception as error:
+                        messages.append("No se pudo aplicar el color %s: %s" % (label, error))
+            finally:
+                if undo_started:
+                    project.endUndo()
+            messages.append("Colores corregidos: %d." % changed)
+        except Exception as error:
+            messages.append("Error al corregir colores: %s" % error)
+        finally:
+            debug_log(messages)
 
     def change_clip_color(self, color):
         log_messages = ["Color solicitado: %s." % color.name()]
