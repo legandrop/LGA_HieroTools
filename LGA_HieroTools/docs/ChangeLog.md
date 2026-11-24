@@ -1,4 +1,6 @@
 v4.029:
+ClipColor: Fix Colors ocupa una celda de la grilla con el mismo tamaño y estilo que los botones de color. [Compactar el botón Fix Colors]
+
 ClipColor: Fix Clip Colors recorre los tracks de video y corrige cada BinItem con los colores del panel en un único Undo. [Corregir colores de la secuencia]
 
 Viewer | TL: Prev/Next Rev recorre Review Dir con Shift+clic o Ctrl+Alt+coma/punto y abre Shot Info tras el salto para cualquier reviewer. [Navegación por Review Dir]

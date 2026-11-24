@@ -12,7 +12,7 @@ Push: no escriben estados, notas ni datos remotos.
 
 ## Colores
 
-El primer botón, `Fix Clip Colors`, recorre todos los tracks de video de la secuencia activa, incluidos los deshabilitados. Usa la versión activa del bin aunque el clip esté renombrado en el timeline. Las versiones cero (v00, v000, etc.) reciben el gris de `v_00`. Los tracks terminados en Plate reciben el azul de Plate y los EditRef (incluido EditRefClean) el amarillo de EditRef. Si el mismo material aparece en ambos tipos de track, su único color de bin se resuelve con prioridad versión cero, Plate, EditRef. Solo los cambios efectivos generan Undo.
+El primer botón, `Fix Colors`, recorre todos los tracks de video de la secuencia activa, incluidos los deshabilitados. Usa la versión activa del bin aunque el clip esté renombrado en el timeline. Las versiones cero (v00, v000, etc.) reciben el gris de `v_00`. Los tracks terminados en Plate reciben el azul de Plate y los EditRef (incluido EditRefClean) el amarillo de EditRef. Si el mismo material aparece en ambos tipos de track, su único color de bin se resuelve con prioridad versión cero, Plate, EditRef. Solo los cambios efectivos generan Undo.
 
 Los siguientes ocho botones son colores locales de trabajo (`v_00`, Plate,
 EditRef, Reference, Error, Violet, Magenta y Cyan). Sus valores pertenecen al
@@ -64,7 +64,7 @@ de columnas.
 
 - `LGA_HieroTools/LGA_NKS_Edit_Panel_py/LGA_import_shots_preview.py`: `from LGA_NKS_Edit_Panel_py.LGA_import_shots_preview import classify_track_type` clasifica el track para `ColorChangeWidget.fix_clip_colors()`.
 - `LGA_HieroTools/LGA_NKS_Shared/LGA_UI_CustomTooltip_HieroTools.py`: `from LGA_NKS_Shared.LGA_UI_CustomTooltip_HieroTools import set_custom_tooltip` instala la ayuda de la acción.
-- `LGA_HieroTools/LGA_NKS_Shared/LGA_UI_Style_HieroTools.py`: `from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style` aporta `Style.BTN_SMALL`.
+- `LGA_HieroTools/LGA_NKS_Shared/LGA_UI_Style_HieroTools.py`: `from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color` aporta el fondo de la acción compacta (`Color.SURFACE_RAISED`).
 
 - `LGA_HieroTools/LGA_NKS_ClipColor_Panel.py`
   - `ColorChangeWidget._build_buttons()` arma los colores locales y resuelve

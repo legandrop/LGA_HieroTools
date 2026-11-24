@@ -7,7 +7,7 @@ ____________________________________________________________________
   a Flow. Conserva los colores de trabajo locales y ofrece estados de review
   con el mismo color que Flow Review.
 
-  v1.11: Fix Clip Colors corrige plates, referencias y versiones cero de la secuencia.
+  v1.11: Fix Colors ocupa la primera celda de la grilla y corrige plates, referencias y versiones cero de la secuencia.
   v1.10: Suma cuatro colores de Flow Review, conserva el estilo compacto de
          los paneles dockeados, evita reconstrucciones innecesarias y registra
          errores.
@@ -28,7 +28,7 @@ from LGA_NKS_Shared.LGA_NKS_StyleUtils import (
     ensure_max_luminance,
 )
 from LGA_NKS_Edit_Panel_py.LGA_import_shots_preview import classify_track_type
-from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Color
 from LGA_NKS_Shared.LGA_UI_CustomTooltip_HieroTools import set_custom_tooltip
 
 FIX_TOOLTIP = "Corrige los colores de plates, referencias de edición y versiones cero en toda la secuencia activa."
@@ -145,14 +145,14 @@ class ColorChangeWidget(QtWidgets.QWidget):
             if widget:
                 widget.deleteLater()
 
-        fix_button = QtWidgets.QPushButton("Fix Clip Colors")
-        fix_button.setStyleSheet(Style.BTN_SMALL)
+        fix_button = QtWidgets.QPushButton("Fix Colors")
+        fix_button.setStyleSheet(create_data_button_stylesheet(Color.SURFACE_RAISED))
         set_custom_tooltip(fix_button, FIX_TOOLTIP)
         fix_button.clicked.connect(self.fix_clip_colors)
-        self.layout.addWidget(fix_button, 0, 0, 1, self.num_columns)
+        self.layout.addWidget(fix_button, 0, 0)
 
-        max_button_width = 0
-        for index, (name, color, style) in enumerate(self.buttons):
+        max_button_width = fix_button.sizeHint().width()
+        for index, (name, color, style) in enumerate(self.buttons, start=1):
             display_style = ensure_max_luminance(style, MAX_STATUS_BG_LUMINANCE)
             button = QtWidgets.QPushButton(name)
             button.setStyleSheet(
@@ -164,14 +164,15 @@ class ColorChangeWidget(QtWidgets.QWidget):
             max_button_width = max(max_button_width, button.sizeHint().width())
             row = index // self.num_columns
             column = index % self.num_columns
-            self.layout.addWidget(button, row + 1, column)
+            self.layout.addWidget(button, row, column)
 
         self.button_width_hint = max_button_width
-        num_rows = (len(self.buttons) + self.num_columns - 1) // self.num_columns
+        button_count = 1 + len(self.buttons)
+        num_rows = (button_count + self.num_columns - 1) // self.num_columns
         spacer = QtWidgets.QSpacerItem(
             20, 20, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding
         )
-        self.layout.addItem(spacer, num_rows + 1, 0, 1, self.num_columns)
+        self.layout.addItem(spacer, num_rows, 0, 1, self.num_columns)
         self.update_scrollbar_policy()
 
     def create_button_click_handler(self, color):
@@ -247,7 +248,7 @@ class ColorChangeWidget(QtWidgets.QWidget):
                         if bin_item.color() == color:
                             continue
                         if not undo_started:
-                            project.beginUndo("Fix Clip Colors")
+                            project.beginUndo("Fix Colors")
                             undo_started = True
                         bin_item.setColor(color)
                         changed += 1

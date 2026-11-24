@@ -469,7 +469,7 @@ Project browser and sequence switcher built around the studio's project structur
 Fast local clip-color utility for visually tagging selected clips without
 changing any Flow status.
 
-- **Fix Clip Colors** — Corrects plate, EditRef and zero-version colors across all video tracks in the active sequence. One Undo restores the previous colors.
+- **Fix Colors** — Corrects plate, EditRef and zero-version colors across all video tracks in the active sequence. One Undo restores the previous colors.
 - **v_00**  
   Sets the clip color to the `v_00` color.
 - **Plate**  
