@@ -1,10 +1,11 @@
 """
 ____________________________________________________________________
 
-  LGA_ViewerPanel v1.81 | Lega
+  LGA_ViewerPanel v1.82 | Lega
 
   Panel con herramientas para el viewer y el timeline de Hiero
 
+  v1.82: Shift+Click y Ctrl+Alt+coma/punto recorren Review Dir con Shot Info.
   v1.81: Nuevo boton TL | Solo EditRef (Alt+Shift+D) al final del bloque de
          toggles: apaga todo menos EditRef y BurnIn, y vuelve a prender.
   v1.80: El tooltip de Snapshot describe el recorte nuevo: viewer entero menos
@@ -60,8 +61,9 @@ import logging
 import queue
 import time
 import importlib.util
+from functools import partial
 from logging.handlers import QueueHandler, QueueListener
-from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore
+from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtWidgets, QtGui, QtCore, QShortcut
 from LGA_NKS_Shared.LGA_NKS_ShotInfoOnReview import (
     is_enabled_for as shot_info_on_review_enabled,
     open_shot_info as open_shot_info_on_review,
@@ -70,10 +72,10 @@ from LGA_NKS_Shared.LGA_NKS_ShotInfoOnReview import (
 # Importar funciones de utilidad de estilos
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "LGA_NKS_Shared"))
 from LGA_NKS_Shared.LGA_NKS_StyleUtils import (
-    calculate_dynamic_border,
-    calculate_dynamic_hover,
-    create_tooltip_stylesheet
+    create_data_button_stylesheet,
 )
+
+from LGA_NKS_Shared.LGA_UI_CustomTooltip_HieroTools import set_custom_tooltip, tooltip_label
 
 # Añadir el directorio padre al path para importar módulos de PipeSync
 parent_dir = os.path.dirname(os.path.dirname(__file__))
@@ -98,6 +100,16 @@ class RelativeTimeFormatter(logging.Formatter):
         relative_time = record.created - script_start_time
         record.relative_time = f"{relative_time:.3f}s"
         return super().format(record)
+
+
+def _tooltip_html(text):
+    lines = []
+    for line in text.splitlines():
+        label, separator, body = line.partition(": ")
+        if separator and label in ("Click", "Shift+Click"):
+            line = f"{tooltip_label(label + ':')} {body}"
+        lines.append(line)
+    return "<br>".join(lines)
 
 
 class ShiftClickButton(QtWidgets.QPushButton):
@@ -400,29 +412,23 @@ class ViewerPanel(QtWidgets.QWidget):
             # Verificar si el usuario está en la configuración
             if usuario_normalizado in usuarios_config:
                 config = usuarios_config[usuario_normalizado]
-                # Reviewers habilitados en LGA_NKS_ShotInfoOnReview encadenan el Shot Info.
-                extra_tip = (
-                    "\nAl terminar abre el Shot Info del shot"
-                    if shot_info_on_review_enabled(usuario_normalizado)
-                    else ""
-                )
-
-                user_buttons.extend([
-                    (
-                        f"TL | Prev Rev {config['nombre']}",
-                        getattr(self, f"prev_rev_{usuario_normalizado}"),
-                        config['color'],
-                        config['prev_shortcut'],
-                        f"{config['prev_shortcut']}\nBusca el clip anterior con estado Rev {config['nombre']} y ajusta la vista\n(establece In/Out desde EditRef, selecciona clip, ajusta zoom)" + extra_tip,
-                    ),
-                    (
-                        f"TL | Next Rev {config['nombre']}",
-                        getattr(self, f"next_rev_{usuario_normalizado}"),
-                        config['color'],
-                        config['next_shortcut'],
-                        f"{config['next_shortcut']}\nBusca el clip siguiente con estado Rev {config['nombre']} y ajusta la vista\n(establece In/Out desde EditRef, selecciona clip, ajusta zoom)" + extra_tip,
-                    ),
-                ])
+                extra_tip = " y abre Shot Info" if shot_info_on_review_enabled(usuario_normalizado) else ""
+                for direction, label, destino, dir_shortcut in (
+                    ("prev", "Prev", "anterior", "Ctrl+Alt+,"),
+                    ("next", "Next", "siguiente", "Ctrl+Alt+."),
+                ):
+                    shortcut = config[f"{direction}_shortcut"]
+                    nombre = config["nombre"]
+                    user_buttons.append((
+                        f"TL | {label} Rev {nombre}",
+                        getattr(self, f"{direction}_rev_{usuario_normalizado}"),
+                        config["color"],
+                        shortcut,
+                        f"Click: Salta al Review {nombre} {destino}{extra_tip} ({shortcut}).\n"
+                        f"Shift+Click: Salta al Review Dir {destino} y abre Shot Info ({dir_shortcut}).",
+                        partial(self.execute_prevnext_rev, direction, "rev_di"),
+                        dir_shortcut,
+                    ))
                 debug_print(f"Mostrando botones para usuario: {config['nombre']}")
             else:
                 debug_print(f"Usuario '{usuario_normalizado}' no reconocido en configuración")
@@ -479,31 +485,7 @@ class ViewerPanel(QtWidgets.QWidget):
             tooltip = button_info[4] if len(button_info) > 4 else None
             shift_handler = button_info[5] if len(button_info) > 5 else None
 
-            border_color = calculate_dynamic_border(style)
-            hover_color = calculate_dynamic_hover(style)
-
-            button_stylesheet = f"""
-                QPushButton {{
-                    background-color: {style};
-                    border: 1px solid {border_color};
-                    border-radius: 3px;
-                    color: #d8d8d8;
-                    padding: 0px 0px;
-                    min-height: 20px;
-                }}
-                QPushButton:hover {{
-                    background-color: {hover_color};
-                }}
-                QPushButton:pressed {{
-                    background-color: {style}aa;
-                }}
-            """
-
-            if tooltip:
-                button_object_name = f"button_{index}"
-                tooltip_stylesheet = create_tooltip_stylesheet(style)
-                tooltip_stylesheet = tooltip_stylesheet.replace("QToolTip", f"#{button_object_name} QToolTip")
-                button_stylesheet += tooltip_stylesheet
+            shift_shortcut = button_info[6] if len(button_info) > 6 else None
 
             if shift_handler:
                 button = ShiftClickButton(name, handler, shift_handler)
@@ -511,11 +493,16 @@ class ViewerPanel(QtWidgets.QWidget):
                 button = QtWidgets.QPushButton(name)
                 button.clicked.connect(handler)
             button.setObjectName(f"button_{index}")
-            button.setStyleSheet(button_stylesheet)
+            button.setStyleSheet(create_data_button_stylesheet(style))
 
             if tooltip:
-                button.setToolTip(tooltip)
-            if shortcut:
+                set_custom_tooltip(button, _tooltip_html(tooltip))
+            if shift_shortcut:
+                # El teclado invierte el Shift del mouse: cada atajo llama a su accion.
+                for keys, callback in ((shortcut, handler), (shift_shortcut, shift_handler)):
+                    key = QShortcut(QtGui.QKeySequence(keys), button)
+                    key.activated.connect(callback)
+            elif shortcut:
                 button.setShortcut(QtGui.QKeySequence(shortcut))
 
             max_button_width = max(max_button_width, button.sizeHint().width())
@@ -843,7 +830,7 @@ class ViewerPanel(QtWidgets.QWidget):
                 )
                 # Sebas usa el rev_type "sup"; el resto coincide con su clave de usuario.
                 reviewer = "sebas" if rev_type == "sup" else rev_type
-                if moved and shot_info_on_review_enabled(reviewer):
+                if moved and (rev_type == "rev_di" or shot_info_on_review_enabled(reviewer)):
                     self._schedule_shot_info_after_rev()
                 return moved
             else:

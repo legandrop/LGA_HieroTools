@@ -227,9 +227,11 @@ or `TL |`, so similarly colored controls do not imply an unrelated function.
   Searches for the previous clip with that user's review status and adjusts the view by setting In / Out from EditRef, selecting the clip, and fitting the zoom.
 - **TL | Next Rev [User]**
   Searches for the next clip with that user's review status and adjusts the view by setting In / Out from EditRef, selecting the clip, and fitting the zoom.
+  For every reviewer, Shift+click jumps to **Review Dir** and opens **Shot Info**.
+  Use **Ctrl+Alt+,** for previous and **Ctrl+Alt+.** for next. Add **Shift** to either shortcut to jump to your own review status.
   For Lega, both Prev and Next Rev also open **Shot Info** (Flow Review Panel)
   for the new shot after the jump, in the same single Shot Info window.
-  Other reviewers can be enabled in
+  For personal review jumps, other reviewers can be enabled in
   `LGA_NKS_ShotInfoOnReview.py`.
   Flow Shot Info distinguishes responsible artists from Viewers who retain
   access to the task; recorded work and version authors remain unchanged.

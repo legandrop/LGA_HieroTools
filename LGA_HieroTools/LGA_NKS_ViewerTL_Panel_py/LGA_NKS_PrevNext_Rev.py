@@ -1,9 +1,9 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_PrevNext_Rev v1.28 | Lega
+  LGA_NKS_PrevNext_Rev v1.29 | Lega
 
-  Busca el clip anterior o siguiente con estado Rev Lega, Rev Sebas, Rev Charly, Rev Juano o Rev Javi
+  Busca el clip anterior o siguiente con estado Review Dir, Rev Lega, Rev Sebas, Rev Charly, Rev Juano o Rev Javi
   y ajusta la vista:
   1. Obtiene la posición actual del playhead.
   2. Encuentra el clip más cercano con el color especificado en la dirección indicada.
@@ -16,6 +16,7 @@ ____________________________________________________________________
   main() devuelve True si efectivamente saltó a un clip, para que el panel
   pueda encadenar acciones solo cuando hubo salto.
 
+  v1.29: Busca Review Dir con el color del catálogo de estados de Flow.
   v1.28: main() devuelve True/False según haya saltado o no a un clip.
   v1.27: Corrige Rev Juano para buscar el color real #7F4B69, igual que Pull/Push.
   v1.26: Agrega soporte para Rev Charly (#a9909d).
@@ -28,6 +29,7 @@ ____________________________________________________________________
 import hiero.core
 import hiero.ui
 from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtGui, QtCore
+from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import get_status_color
 import logging
 import queue
 import time
@@ -130,6 +132,7 @@ def debug_print(*message):
 
 # Definir los colores que buscamos
 COLORS = {
+    "rev_di": QtGui.QColor(get_status_color("rev_di")),
     "lega": QtGui.QColor(105, 19, 94),  # #69135e
     "sup": QtGui.QColor(189, 127, 159),  # #bd7f9f
     "charly": QtGui.QColor(169, 144, 157),  # #a9909d

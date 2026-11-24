@@ -1,4 +1,6 @@
 v4.029:
+Viewer | TL: Prev/Next Rev recorre Review Dir con Shift+clic o Ctrl+Alt+coma/punto y abre Shot Info tras el salto para cualquier reviewer. [Navegación por Review Dir]
+
 Shot Info: abierto con el boton o Shift+T salia centrado y era una ventana aparte de la que abren Prev/Next Rev y el Flow Pull; y al saltar con Prev/Next Rev se llevaba el foco, asi que el shortcut del siguiente salto no llegaba a NKS. La causa del foco: `WA_ShowWithoutActivating` se ponia despues del primer `show()`. Ahora todas las entradas pasan por `open_shot_info`: una sola ventana, al costado, que si esta abierta se recarga en su lugar (`GUIWindow.reload`), nunca se activa y tiene un checkbox Keep on top (prendido, persistido). Medido en NKS 17. `LGA_NKS_Flow_Shot_info v2.06`, `LGA_NKS_ShotInfoOnReview v1.03`, `LGA_NKS_Flow_Panel v2.64`, `LGA_NKS_Flow_Pull v3.79`.
 [Shot Info - Ventana unica al costado sin foco]
 

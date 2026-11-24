@@ -30,7 +30,7 @@ Reglas, iguales para las tres (Lega, 2026-11-24):
 
 **Flow Pull:** quien prenda el checkbox **Shot Info**, apagado por default y guardado en `FlowPull.ini` (clave `shot_info`).
 
-**Prev/Next Rev del ViewerTL:** hoy solo Lega. La lista es `REVIEWERS_WITH_AUTO_SHOT_INFO` en `LGA_NKS_ShotInfoOnReview.py`. **Para habilitarlo a otro reviewer basta con agregar su clave a ese set**: ViewerTL consulta `is_enabled_for()`. Las claves son las normalizadas que ya usan los dos paneles: `lega`, `sebas`, `juano`, `javi`, `charly`. Ojo con Sebas: en ViewerTL su `rev_type` es `sup`, y `execute_prevnext_rev` lo traduce a `sebas` antes de consultar. Para que un reviewer nuevo lo tenga, primero tiene que existir en `usuarios_config` de ViewerTL.
+**Prev/Next Rev del ViewerTL:** el clic recorre el estado personal y hoy abre Shot Info solo para Lega. Shift+clic recorre Review Dir y abre Shot Info para cualquier reviewer después de un salto efectivo. Por teclado, Ctrl+Alt+coma/punto recorre Review Dir y Ctrl+Alt+Shift+coma/punto recorre el estado personal. La lista para el salto personal es `REVIEWERS_WITH_AUTO_SHOT_INFO` en `LGA_NKS_ShotInfoOnReview.py`. **Para habilitarlo a otro reviewer basta con agregar su clave a ese set**: ViewerTL consulta `is_enabled_for()`. Las claves son las normalizadas que ya usan los dos paneles: `lega`, `sebas`, `juano`, `javi`, `charly`. Ojo con Sebas: en ViewerTL su `rev_type` es `sup`, y `execute_prevnext_rev` lo traduce a `sebas` antes de consultar. Para que un reviewer nuevo lo tenga, primero tiene que existir en `usuarios_config` de ViewerTL.
 
 ### Como decide cada entrada la task
 
@@ -170,7 +170,8 @@ esto no sustituye una prueba nativa del host en la otra plataforma.
 - `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py` (se carga por ruta con `importlib`): `main`, `GUIWindow` (`reload`, `placement`, `apply_keep_on_top`, `_open_fitted`, `_fit_height`, `_opening_position`, `display_results`), `load_keep_on_top` / `save_keep_on_top`, `ShotGridManager`, `HieroOperations.process_selected_clips`.
 - `from LGA_NKS_Shared.LGA_NKS_ShotInfoOnReview import open_shot_info, is_enabled_for, _set_topmost_native`: ventana unica (`_reusable_window`), lista `REVIEWERS_WITH_AUTO_SHOT_INFO`.
 - `LGA_HieroTools/LGA_NKS_Flow_Panel.py`: `run_shot_info_script` (boton y Shift+T).
-- `LGA_HieroTools/LGA_NKS_ViewerTL_Panel.py`: `_schedule_shot_info_after_rev`, `_open_shot_info_after_rev`.
+- `LGA_HieroTools/LGA_NKS_ViewerTL_Panel_py/LGA_NKS_PrevNext_Rev.py`: `main` y `find_clip_with_color` buscan el destino; el color de `rev_di` sale de `from LGA_NKS_Shared.LGA_NKS_Flow_Status_Config import get_status_color`.
+- `LGA_HieroTools/LGA_NKS_ViewerTL_Panel.py`: `create_dynamic_buttons`, `execute_prevnext_rev`, `_schedule_shot_info_after_rev`, `_open_shot_info_after_rev`.
 - `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py`: `navigate_to_table_row`, `_row_opens_shot_info`, `_open_shot_info`.
 - `from LGA_NKS_Shared.LGA_UI_CustomTooltip_HieroTools import set_custom_tooltip, tooltip_label`: tooltips de la ventana.
 - `from LGA_NKS_Shared.LGA_NKS_TaskSelectionDialog import ...`: selector de task cuando hay varias en el playhead.
