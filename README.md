@@ -58,8 +58,8 @@ Internal reference: [Flow Review Panel](LGA_HieroTools/docs/LGA_NKS_Flow_Rev_Pan
   Click: pull all shots from the timeline.  
   Shift+Click: pull only the selected shot.
   Clicking a result row jumps to that shot. With **Shot Info** ticked, it also
-  opens Shot Info for that shot and task on top of the results window, against
-  the left edge of the screen, and the results window keeps the focus.
+  shows Shot Info for that shot and task, and the results window keeps the
+  focus.
   **Only in review** (on by default) lists only the shots whose New Status is a
   review; untick it to see every change. **Only for me** narrows it to the
   shots waiting for your own review (Lega sees Review Lega, Sebas sees Review
@@ -75,8 +75,12 @@ Internal reference: [Flow Review Panel](LGA_HieroTools/docs/LGA_NKS_Flow_Rev_Pan
 - **Shot Info**  
   Shows shot information and version comments for the task resolved from the
   active context (Comp, Roto, Cleanup, or another enabled task scope).
-  The window opens centered and as tall as its content, up to a maximum
-  height; past that it scrolls.
+  There is only one Shot Info window: opening it again (from this button,
+  Shift+T, Prev/Next Rev or a Flow Pull row) replaces its content where you
+  left it. The first one opens against the left edge of the screen, as tall
+  as its content up to a maximum height. It never takes the keyboard focus,
+  so your shortcuts keep working in Nuke Studio. **Keep on top** (on by
+  default) keeps it above the other windows.
 - **Review Pic**  
   Creates a snapshot of the whole viewer without the black area around the
   image, saves it with its frame number, and opens it in
@@ -224,8 +228,7 @@ or `TL |`, so similarly colored controls do not imply an unrelated function.
 - **TL | Next Rev [User]**
   Searches for the next clip with that user's review status and adjusts the view by setting In / Out from EditRef, selecting the clip, and fitting the zoom.
   For Lega, both Prev and Next Rev also open **Shot Info** (Flow Review Panel)
-  for the new shot after the jump, against the left edge of the screen instead
-  of centered, replacing the previous Shot Info window in the same position.
+  for the new shot after the jump, in the same single Shot Info window.
   Other reviewers can be enabled in
   `LGA_NKS_ShotInfoOnReview.py`.
   Flow Shot Info distinguishes responsible artists from Viewers who retain

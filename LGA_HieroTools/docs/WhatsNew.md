@@ -13,6 +13,8 @@ platforms: [win, mac]
 ## Unreleased
 
 ## v4.029
+- [improved] `Shot Info` es siempre una sola ventana, al costado de la pantalla: abrirlo de nuevo (botón, Shift+T, `Prev/Next Rev` o una fila del `Flow Pull`) cambia su contenido en el lugar donde la dejaste, y tiene `Keep on top` prendido por defecto.
+- [fixed] Al saltar con `Prev/Next Rev`, `Shot Info` ya no se queda con el teclado: podés seguir saltando con los shortcuts.
 - [new] El panel de LGA BurnIn tiene la distribución `Classic`, con el orden de los burn-ins amarillos de siempre: el frame y el nombre del clip abajo a la izquierda, el timecode abajo al centro, y la resolución, los fps y el codec abajo a la derecha.
 - [fixed] LGA BurnIn ya no muestra en el primer cuadro de un plano el frame y el timecode del plano anterior, ni pinta el timecode de rojo sin motivo.
 - [improved] En `Plate res` del panel de LGA BurnIn podés poner varias resoluciones válidas separadas por comas (por ejemplo `timeline, 3840x2160`): la resolución se pinta de rojo solo si el plate no coincide con ninguna.

@@ -1,28 +1,33 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_ShotInfoOnReview v1.02 | Lega
+  LGA_NKS_ShotInfoOnReview v1.03 | Lega
 
-  Abre el Shot Info del Flow Review Panel cuando un reviewer llega a un
-  shot que esta en SU estado de review, para revisar en cadena sin un
-  segundo click.
-
-  Lo usan dos puntos de entrada:
-  - Prev/Next Rev del panel Viewer | TL, al terminar el salto.
+  Punto de entrada UNICO del Shot Info del Flow Review Panel. Todas las
+  formas de abrirlo pasan por open_shot_info():
+  - Boton Shot Info del panel Flow y su shortcut Shift+T.
+  - Prev/Next Rev del panel Viewer | TL, al terminar el salto (solo para
+    los reviewers de REVIEWERS_WITH_AUTO_SHOT_INFO).
   - Click en una fila del Flow Pull, con su checkbox Shot Info prendido.
 
-  Los dos comparten UNA sola ventana: si sigue abierta la del shot anterior,
-  se cierra y la nueva toma su lugar y su ancho, asi no se apilan ventanas.
-  El alto no se hereda: cada ventana se abre al alto de su contenido.
+  Siempre hay UNA sola ventana: si esta abierta, se le reemplaza el
+  contenido en su lugar (posicion y tamano que le haya dado el usuario);
+  si no, se abre contra el borde IZQUIERDO de la pantalla, porque centrada
+  tapa el viewer.
 
-  Desde aca la ventana se abre contra el borde IZQUIERDO de la pantalla, no
-  centrada como desde el boton del panel: en una revision en cadena la
-  ventana centrada tapa el viewer en cada salto.
+  La ventana NUNCA toma el foco al abrirse ni al recargarse, aunque quede
+  on top (checkbox Keep on top de la propia ventana, prendido por defecto):
+  si lo tomara, los shortcuts de Prev/Next Rev dejarian de llegar a NKS.
 
   Para habilitarlo en Prev/Next Rev a otro reviewer, agregar su clave a
   REVIEWERS_WITH_AUTO_SHOT_INFO. Las claves son las normalizadas que ya usan
   ViewerTL y Pull: lega, sebas, juano, javi, charly.
 
+  v1.03: Ventana unica para todas las entradas (tambien el boton y
+         Shift+T, que antes abrian una ventana suelta y centrada). Si esta
+         abierta se recarga en su lugar con GUIWindow.reload() en vez de
+         cerrarla y abrir otra. Nunca se activa. El on top lo decide el
+         checkbox de la ventana: se saca el parametro keep_on_top.
   v1.02: open_shot_info(activate=False) abre el Shot Info sin activarlo,
          para que el foco siga en el Flow Pull. El Pull ya no consulta
          REVIEWERS_WITH_AUTO_SHOT_INFO: lo decide su checkbox Shot Info;
@@ -119,48 +124,53 @@ def _set_topmost_native(widget, on):
         return False
 
 
-def _close_previous_window():
-    """Cierra la ventana anterior de este flujo y devuelve donde estaba.
+def _reusable_window():
+    """La ventana abierta, si se le puede reemplazar el contenido; si no, None.
 
-    Devuelve (posicion del marco, ancho) si estaba visible y en tamano
-    normal; None si no habia ventana o estaba maximizada/minimizada, que no
-    es un lugar que tenga sentido heredar.
+    Se reusa si esta visible, en tamano normal y viene de una version del
+    Shot Info que sabe recargarse. Una minimizada o maximizada se cierra:
+    no es un lugar que tenga sentido conservar.
     """
     global _current_window
-    previous = _current_window
-    _current_window = None
-    if previous is None:
+    window = _current_window
+    if window is None:
         return None
     try:
-        if previous.isVisible():
-            placement = None
-            if not (previous.isMaximized() or previous.isMinimized()):
-                placement = (previous.pos(), previous.width())
-            previous.close()
-            return placement
+        if not window.isVisible():
+            _current_window = None
+            return None
+        if window.isMinimized() or window.isMaximized() or not hasattr(window, "reload"):
+            window.close()
+            _current_window = None
+            return None
+        return window
     except RuntimeError:
         # El objeto C++ ya no existe (la ventana se destruyo antes).
-        pass
-    return None
+        _current_window = None
+        return None
 
 
-def open_shot_info(source, task_name=None, keep_on_top=False, activate=True):
-    """Abre el Shot Info del shot del playhead, reemplazando la ventana anterior.
+def open_shot_info(source, task_name=None):
+    """Muestra el Shot Info del shot del playhead en la ventana unica.
 
-    source: quien lo pide, solo para el log ("ViewerTL", "Pull").
+    source: quien lo pide, solo para el log ("FlowPanel", "ViewerTL", "Pull").
     task_name: task a mostrar ('comp', 'roto', ...). Si viene, el Shot Info no
         pregunta; si es None, la resuelve en el playhead como el boton normal.
-    keep_on_top: dejar la ventana topmost (hace falta sobre el Pull topmost).
-    activate: False la abre sin sacarle el foco a quien la pidio (el Pull).
+
+    Nunca activa la ventana: el foco sigue donde estaba (NKS o el Pull).
     """
     global _current_window
     try:
-        debug_print(
-            "Pedido desde {0} | task={1} | keep_on_top={2}".format(
-                source, task_name, keep_on_top
-            )
-        )
-        previous_placement = _close_previous_window()
+        debug_print("Pedido desde {0} | task={1}".format(source, task_name))
+
+        window = _reusable_window()
+        if window is not None:
+            window.reload(task_name)
+            # Por si otra ventana topmost (el Pull) quedo arriba: se reafirma
+            # sin activar.
+            window.apply_keep_on_top()
+            debug_print("Contenido reemplazado en la ventana abierta.")
+            return window
 
         if not os.path.exists(_SHOT_INFO_PATH):
             debug_print("Shot Info no encontrado en la ruta: {0}".format(_SHOT_INFO_PATH))
@@ -171,39 +181,17 @@ def open_shot_info(source, task_name=None, keep_on_top=False, activate=True):
         )
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        # Alineada a la izquierda y, si reemplaza a otra, en su mismo lugar.
-        # Se le pasa a main() en vez de mover la ventana despues: asi se
-        # muestra ya ubicada, sin el salto desde el centro.
-        module.main(
-            task_name=task_name,
-            align_left=True,
-            previous_placement=previous_placement,
-            activate=activate,
-        )
+        # Contra el borde izquierdo. Se le pasa a main() en vez de mover la
+        # ventana despues: asi se muestra ya ubicada, sin el salto desde el
+        # centro. main() aplica el Keep on top de la ventana.
+        module.main(task_name=task_name, align_left=True, activate=False)
 
         window = getattr(module, "window", None)
         _current_window = window
         if window is None:
             debug_print("El Shot Info no dejo ventana (DB ausente o error previo).")
             return None
-
-        if keep_on_top:
-            applied = _set_topmost_native(window, True)
-            if not applied:
-                # Fuera de Windows el Pull usa WindowStaysOnTopHint: mismo recurso.
-                from LGA_NKS_Shared.LGA_QtAdapter_HieroTools import QtCore
-
-                window.setWindowFlags(window.windowFlags() | QtCore.Qt.WindowStaysOnTopHint)
-                window.show()
-            debug_print("Topmost aplicado (nativo={0})".format(applied))
-        window.raise_()
-        if activate:
-            window.activateWindow()
-        debug_print(
-            "Shot Info abierto a la izquierda (reemplaza anterior: {0})".format(
-                previous_placement is not None
-            )
-        )
+        debug_print("Shot Info abierto a la izquierda, sin activar.")
         return window
     except Exception as e:
         debug_print("Error abriendo Shot Info: {0}".format(e))

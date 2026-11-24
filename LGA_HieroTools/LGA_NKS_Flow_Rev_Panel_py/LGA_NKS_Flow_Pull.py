@@ -1,12 +1,14 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Pull v3.78 | Lega
+  LGA_NKS_Flow_Pull v3.79 | Lega
 
   Compara los estados de las task Comp de los shots del timeline de Hiero
   con los estados registrados en un archivo JSON basado en Flow PT
   Tambien aplica tags con los colores de los estados en xyplorer
 
+  v3.79: El Shot Info de la fila ya no recibe keep_on_top: lo decide el
+         checkbox Keep on top de la propia ventana del Shot Info.
   v3.78: El tag de XYplorer solo se manda si ese label esta definido en el
          XYplorer abierto (se lee la cabecera de su tag.dat). Sin los labels
          instalados, XYplorer abria un cartel "Label X is not defined." por
@@ -1675,9 +1677,7 @@ class GUI_Table(QtWidgets.QDialog):
         La ventana se muestra sin activarse; ademas el Pull se reactiva por si
         la navegacion de la fila (cambio de secuencia, zoom) movio el foco.
         """
-        open_shot_info_on_review(
-            "Pull", task_name=task_name, keep_on_top=self._keep_on_top, activate=False
-        )
+        open_shot_info_on_review("Pull", task_name=task_name)
         self.activateWindow()
 
     def set_download_cell(self, row, flow_version, nks_version):

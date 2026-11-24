@@ -11,36 +11,40 @@ Archivo: [LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py](../LGA_NKS_Flow_R
 3. Se consulta `pipesync.db` (`ShotGridManager`) y se arma una estructura `shot -> tasks -> versions -> comments -> replies`.
 4. La GUI (`GUIWindow`) lista cabecera del shot, franja **Task history**, Responsible/Viewers actuales, descripcion, versiones, comentarios con thumbnails clickeables y replies anidados.
 
-## Apertura automatica desde ViewerTL y Flow Pull
+## Ventana unica: todas las entradas pasan por ShotInfoOnReview
 
-Ademas del boton del Flow Review Panel, el Shot Info se abre solo en dos casos. Existe para revisar en cadena: cada shot nuevo trae su info sin un segundo click. Los puntos de entrada son:
+Hay **una sola ventana de Shot Info**. Todas las formas de abrirla llaman a `open_shot_info()` de `LGA_NKS_Shared/LGA_NKS_ShotInfoOnReview.py`:
 
-1. **Prev/Next Rev** del panel Viewer | TL (`LGA_NKS_ViewerTL_Panel.py`), al terminar el salto.
-2. **Click en una fila del Flow Pull** (`LGA_NKS_Flow_Pull.py`, `navigate_to_table_row`), con el checkbox **Shot Info** de esa ventana prendido. Vale para cualquier fila. La ventana queda arriba de la del Pull, pero el foco sigue en el Pull.
+1. **Boton Shot Info** del Flow Review Panel y su shortcut **Shift+T** (`LGA_NKS_Flow_Panel.py`, `run_shot_info_script`).
+2. **Prev/Next Rev** del panel Viewer | TL (`LGA_NKS_ViewerTL_Panel.py`), al terminar el salto. Existe para revisar en cadena: cada shot nuevo trae su info sin un segundo click.
+3. **Click en una fila del Flow Pull** (`LGA_NKS_Flow_Pull.py`, `navigate_to_table_row`), con el checkbox **Shot Info** de esa ventana prendido. Vale para cualquier fila.
 
-Los dos pasan por `LGA_NKS_Shared/LGA_NKS_ShotInfoOnReview.py` (`open_shot_info`).
+Reglas, iguales para las tres (Lega, 2026-11-24):
 
-### Quien lo tiene habilitado
+- **Si hay una abierta, se le reemplaza el contenido** (`GUIWindow.reload`): misma ventana, mismo lugar y mismo tamaño que le haya dado el usuario. Si el alto lo puso a mano, se conserva; si no, sigue al contenido nuevo. No se apilan ventanas.
+- **Si no hay ninguna, se abre al costado** (borde izquierdo de la pantalla). Ya no se abre centrada desde el boton: tapaba el viewer.
+- **Nunca toma el foco**, ni al abrirse ni al recargarse. Sin esto, despues de un Prev/Next Rev el teclado quedaba en el Shot Info y el shortcut del siguiente salto no llegaba a NKS.
+- **Keep on top** es un checkbox en el pie de la propia ventana, prendido por defecto y guardado en `%APPDATA%\LGA\HieroTools\ShotInfo.ini` (`[ShotInfoWindow] keep_on_top`). Vale para todas las aperturas. Quedar arriba no le roba el foco a nadie.
 
-**Flow Pull:** quien prenda el checkbox **Shot Info**, apagado por default y guardado en `FlowPull.ini` (clave `shot_info`). Antes lo decidia la lista de abajo y solo para las filas del review propio; con el checkbox cada uno elige, sin tocar codigo.
+### Quien tiene la apertura automatica
 
-**Prev/Next Rev del ViewerTL:** hoy solo Lega. La lista es `REVIEWERS_WITH_AUTO_SHOT_INFO` en `LGA_NKS_ShotInfoOnReview.py`. **Para habilitarlo a otro reviewer basta con agregar su clave a ese set**: ViewerTL consulta `is_enabled_for()`. Las claves son las normalizadas que ya usan los dos paneles: `lega`, `sebas`, `juano`, `javi`, `charly`. Ojo con Sebas: en ViewerTL su `rev_type` es `sup`, y `execute_prevnext_rev` lo traduce a `sebas` antes de consultar.
+**Flow Pull:** quien prenda el checkbox **Shot Info**, apagado por default y guardado en `FlowPull.ini` (clave `shot_info`).
 
-Para habilitarlo a todos, poner las cinco claves. Para que un reviewer nuevo lo tenga, primero tiene que existir en `usuarios_config` de ViewerTL.
+**Prev/Next Rev del ViewerTL:** hoy solo Lega. La lista es `REVIEWERS_WITH_AUTO_SHOT_INFO` en `LGA_NKS_ShotInfoOnReview.py`. **Para habilitarlo a otro reviewer basta con agregar su clave a ese set**: ViewerTL consulta `is_enabled_for()`. Las claves son las normalizadas que ya usan los dos paneles: `lega`, `sebas`, `juano`, `javi`, `charly`. Ojo con Sebas: en ViewerTL su `rev_type` es `sup`, y `execute_prevnext_rev` lo traduce a `sebas` antes de consultar. Para que un reviewer nuevo lo tenga, primero tiene que existir en `usuarios_config` de ViewerTL.
 
-### Como decide cada entrada
+### Como decide cada entrada la task
 
-- **ViewerTL**: solo si hubo salto. `LGA_NKS_PrevNext_Rev.main()` devuelve `True`/`False`; sin clip siguiente no se abre nada. La task se resuelve en el playhead como en el boton normal (si hay varias, pregunta).
-- **Pull**: al click abre si el checkbox **Shot Info** esta prendido, sea cual sea el estado de la fila. La task sale de la fila y se pasa a `main(task_name=...)`, asi el Shot Info no pregunta.
+- **Boton / Shift+T y ViewerTL**: se resuelve en el playhead (si hay varias, pregunta). ViewerTL solo abre si hubo salto: `LGA_NKS_PrevNext_Rev.main()` devuelve `True`/`False`.
+- **Pull**: la task sale de la fila y se pasa como `task_name`, asi no pregunta.
 
 ### Detalles que costo resolver
 
-- Corre con un `QTimer.singleShot(0)` encolado despues del `Zoom to Fit` que deja la navegacion (PrevNext y Pull hacen lo mismo), asi el Shot Info lee el playhead ya movido.
-- Una sola ventana compartida entre las dos entradas: si sigue abierta la anterior se cierra y la nueva toma su lugar y su ancho (no el alto, que se calcula por ventana). No se apilan ventanas al recorrer revs.
-- Desde estas dos entradas la ventana se abre contra el borde izquierdo de la pantalla; desde el boton del panel, centrada. Ver [Tamaño y ubicacion de la ventana](#tamaño-y-ubicacion-de-la-ventana).
-- La ventana del Pull es topmost via `SetWindowPos` (Windows). Una ventana normal nunca queda arriba de una topmost, asi que desde el Pull el Shot Info se abre topmost tambien cuando "Keep on top" esta prendido. Fuera de Windows se usa `WindowStaysOnTopHint`, como el Pull.
-- **Desde el Pull el Shot Info no se lleva el foco**: el que sigue con el teclado es el Pull. Hacen falta tres cosas, y con una sola no alcanza: `main(activate=False)` muestra la ventana con `WA_ShowWithoutActivating`; el `SetWindowPos` del topmost lleva `SWP_NOACTIVATE` (sin ese flag `SetWindowPos` tambien activa); y el Pull se reactiva despues, por si la navegacion de la fila movio el foco. Prev/Next Rev del ViewerTL sigue activando la ventana.
-- Log de cada apertura: `LGA_HieroTools/logs/DebugPy_ShotInfoOnReview.log`.
+- ViewerTL y Pull corren con un `QTimer.singleShot(0)` encolado despues del `Zoom to Fit` que deja la navegacion, asi el Shot Info lee el playhead ya movido.
+- **Sin foco hacen falta dos cosas:** `WA_ShowWithoutActivating` **antes del primer `show()`** y `SWP_NOACTIVATE` en el `SetWindowPos` del topmost. Hasta v2.05 el atributo se ponia despues de `display_results`, que es donde ocurre el primer `show()`: no tenia efecto, y desde el Pull no se notaba porque el Pull se reactiva solo despues. Medido en NKS 17 por dev-link: la ventana queda topmost y `GetForegroundWindow()` sigue en NKS, en la apertura y en la recarga.
+- **Recarga sin parpadeo:** al agregar widgets a una ventana ya visible, Qt los muestra recien en el ciclo siguiente, y ocultos no ocupan lugar en el layout: la ventana se achicaba vacia un instante. `_open_fitted` los muestra antes de medir.
+- El topmost es nativo (`_set_topmost_native`, `SetWindowPos`) porque una ventana normal nunca queda arriba de otra topmost como el Pull. Fuera de Windows se usa `WindowStaysOnTopHint` y la ventana se vuelve a mostrar sin activar. La recarga reafirma el topmost por si el Pull quedo arriba.
+- Una ventana minimizada o maximizada no se reusa: se cierra y se abre una nueva al costado.
+- Log de cada pedido: `LGA_HieroTools/logs/DebugPy_ShotInfoOnReview.log`.
 
 ## Tamaño y ubicacion de la ventana
 
@@ -57,15 +61,15 @@ Lo que costo descubrir: **cuando el contenido entra entero, el scroll vertical s
 
 ### Ubicacion
 
-| Quien la abre | Donde |
+| Caso | Donde |
 | --- | --- |
-| Boton Shot Info del panel | Centrada en el monitor donde esta el host |
-| Prev/Next Rev y fila del Flow Pull, primera de la cadena | Borde izquierdo de ese monitor |
-| Prev/Next Rev y fila del Flow Pull, reemplazando a otra | El lugar y el ancho de la anterior |
+| No hay ventana abierta (cualquier entrada) | Borde izquierdo del monitor donde esta el host |
+| Ya hay una abierta | Se recarga en su lugar y con su tamaño |
 
 - Alineada a la izquierda, el borde de **arriba** no depende del alto de esa ventana: es el que tendria una ventana de alto maximo centrada. Asi el titulo queda en el mismo lugar de un shot al siguiente aunque el alto cambie, y la ventana crece hacia abajo.
 - La ubicacion se le pasa a `main(align_left=..., previous_placement=...)` y la aplica `GUIWindow._opening_position` antes del `show()`. Moverla despues de abrir (como hacia `ShotInfoOnReview` con `setGeometry`) la muestra un instante en el centro.
-- De la ventana anterior se hereda `pos()` (esquina del marco) y `width()`, no `geometry()`. Una anterior maximizada o minimizada no se hereda.
+- En la recarga se conserva `pos()` (esquina del marco), `width()` y, si el usuario la redimensiono, el alto (`GUIWindow.placement()`).
+- El pie con **Keep on top** va fuera del scroll: su alto se suma al del contenido en `_fit_height`.
 - Cada apertura deja en `logs/DebugPy_FlowShotInfo.log` el tamaño, la posicion y si reemplazo a otra.
 
 ## Origen de los datos
@@ -160,6 +164,16 @@ Qt aislados en una carpeta privada de QA y stubs únicamente del host. No se
 instalan bindings en Nuke/Hiero ni en el user-site y no se copia la UI. Se
 verifican las dependencias nativas antes del render, que corre sin escritorio;
 esto no sustituye una prueba nativa del host en la otra plataforma.
+
+## Referencias tecnicas
+
+- `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Shot_info.py` (se carga por ruta con `importlib`): `main`, `GUIWindow` (`reload`, `placement`, `apply_keep_on_top`, `_open_fitted`, `_fit_height`, `_opening_position`, `display_results`), `load_keep_on_top` / `save_keep_on_top`, `ShotGridManager`, `HieroOperations.process_selected_clips`.
+- `from LGA_NKS_Shared.LGA_NKS_ShotInfoOnReview import open_shot_info, is_enabled_for, _set_topmost_native`: ventana unica (`_reusable_window`), lista `REVIEWERS_WITH_AUTO_SHOT_INFO`.
+- `LGA_HieroTools/LGA_NKS_Flow_Panel.py`: `run_shot_info_script` (boton y Shift+T).
+- `LGA_HieroTools/LGA_NKS_ViewerTL_Panel.py`: `_schedule_shot_info_after_rev`, `_open_shot_info_after_rev`.
+- `LGA_HieroTools/LGA_NKS_Flow_Rev_Panel_py/LGA_NKS_Flow_Pull.py`: `navigate_to_table_row`, `_row_opens_shot_info`, `_open_shot_info`.
+- `from LGA_NKS_Shared.LGA_UI_CustomTooltip_HieroTools import set_custom_tooltip, tooltip_label`: tooltips de la ventana.
+- `from LGA_NKS_Shared.LGA_NKS_TaskSelectionDialog import ...`: selector de task cuando hay varias en el playhead.
 
 ## Pendiente
 

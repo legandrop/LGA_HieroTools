@@ -1,4 +1,7 @@
 v4.029:
+Shot Info: abierto con el boton o Shift+T salia centrado y era una ventana aparte de la que abren Prev/Next Rev y el Flow Pull; y al saltar con Prev/Next Rev se llevaba el foco, asi que el shortcut del siguiente salto no llegaba a NKS. La causa del foco: `WA_ShowWithoutActivating` se ponia despues del primer `show()`. Ahora todas las entradas pasan por `open_shot_info`: una sola ventana, al costado, que si esta abierta se recarga en su lugar (`GUIWindow.reload`), nunca se activa y tiene un checkbox Keep on top (prendido, persistido). Medido en NKS 17. `LGA_NKS_Flow_Shot_info v2.06`, `LGA_NKS_ShotInfoOnReview v1.03`, `LGA_NKS_Flow_Panel v2.64`, `LGA_NKS_Flow_Pull v3.79`.
+[Shot Info - Ventana unica al costado sin foco]
+
 LGA BurnIn: el efecto le cargaba al hilo principal de NKS ~35 ms por cuadro porque los mensajes `[python]` de sus Text2 se evaluan ~20 veces por cuadro. Ahora el texto de frame, tc, res, fps, clip, date y custom es TCL y su fondo sale de la lista `bi_pm` que arma el efecto (con digitos tabulares el ancho depende solo del largo): la mitad de llamadas python y ~40 % menos de hilo principal, mismo resultado en pantalla. Ademas el texto quedaba 3 px alto en su fondo y con mas padding a los costados que el pedido: el fondo pasa a medir alto de mayusculas y tinta mas el padding, y el texto se ubica por su tinta (padding parejo a los cuatro lados, +-1-2 px).
 [LGA BurnIn - Mensajes en TCL y padding parejo]
 

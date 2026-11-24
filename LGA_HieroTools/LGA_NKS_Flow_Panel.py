@@ -1,7 +1,7 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Panel v2.63 | Lega
+  LGA_NKS_Flow_Panel v2.64 | Lega
 
   Panel Flow Review con herramientas de review que interactuan con las tasks de
   Flow Production Tracking descargadas previamente con LGA_NKS_Flow_Downloader.
@@ -9,6 +9,9 @@ ____________________________________________________________________
   - PROYECTO_SEQ_SHOT_DESC1_DESC2 (5 bloques con descripción)
   - PROYECTO_SEQ_SHOT (3 bloques simplificado)
 
+  v2.64: Shot Info (y Shift+T) abre la ventana unica de
+         LGA_NKS_ShotInfoOnReview: al costado, reemplaza a la abierta y no
+         toma el foco.
   v2.63: Todos los botones de estado tienen tooltip, una linea corta por
          gesto: Click, Shift+Click (solo estados con nota) y, en Rev Dir y
          contexto studio, Ctrl+Alt+Click. Los textos salen de PUSH_TOOLTIPS.
@@ -619,26 +622,13 @@ class ColorChangeWidget(QtWidgets.QWidget):
         if project:
             project.beginUndo("Run External Script")
             try:
-                script_path = os.path.join(
-                    os.path.dirname(__file__),
-                    "LGA_NKS_Flow_Rev_Panel_py",
-                    "LGA_NKS_Flow_Shot_info.py",
-                )
-                if os.path.exists(script_path):
-                    try:
-                        import importlib.util
+                # Misma ventana unica que Prev/Next Rev y el Flow Pull: al
+                # costado, reemplaza a la abierta y no toma el foco.
+                from LGA_NKS_Shared.LGA_NKS_ShotInfoOnReview import open_shot_info
 
-                        spec = importlib.util.spec_from_file_location(
-                            "LGA_NKS_Flow_Shot_info", script_path
-                        )
-                        if spec is not None and spec.loader is not None:
-                            module = importlib.util.module_from_spec(spec)
-                            spec.loader.exec_module(module)
-                            module.main()  # Asumimos que el script tiene un metodo main
-                    except Exception as e:
-                        debug_print(f"Error al ejecutar el script: {e}")
-                else:
-                    debug_print(f"Script no encontrado en la ruta: {script_path}")
+                open_shot_info("FlowPanel")
+            except Exception as e:
+                debug_print(f"Error al abrir Shot Info: {e}")
             finally:
                 project.endUndo()
 

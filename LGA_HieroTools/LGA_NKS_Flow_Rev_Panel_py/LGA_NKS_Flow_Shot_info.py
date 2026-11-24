@@ -1,11 +1,18 @@
 """
 ____________________________________________________________________
 
-  LGA_NKS_Flow_Shot_info v2.05 | Lega
+  LGA_NKS_Flow_Shot_info v2.06 | Lega
 
   Imprime informacion del shot y las versiones de la task seleccionada
   (comp, roto o cleanup) en el playhead.
 
+  v2.06: Ventana unica para todas las entradas (boton, Shift+T, Prev/Next
+         Rev, fila del Flow Pull), manejada por LGA_NKS_ShotInfoOnReview:
+         GUIWindow.reload() reemplaza el contenido de la ventana abierta
+         en su lugar. Checkbox "Keep on top" en el pie (prendido por
+         defecto, persiste en ShotInfo.ini). WA_ShowWithoutActivating se
+         pone ANTES del primer show(): antes iba despues y la ventana igual
+         se activaba. Los tooltips pasan al propio (set_custom_tooltip).
   v2.05: main(activate=False) muestra la ventana sin activarla
          (WA_ShowWithoutActivating): la abre el click en una fila del Flow
          Pull y el foco tiene que seguir en el Pull.
@@ -119,17 +126,66 @@ from LGA_NKS_Shared.LGA_NKS_TaskAssignmentHistory import (
 )
 from LGA_NKS_Shared.LGA_NKS_TaskHistoryBand import build_assignment_history_band
 
-try:
-    from LGA_NKS_Shared.LGA_tooltip_helper import apply_tooltip_stylesheet, set_rich_tooltip
-except Exception:
-    try:
-        from LGA_tooltip_helper import apply_tooltip_stylesheet, set_rich_tooltip
-    except Exception:
-        def apply_tooltip_stylesheet(target=None):
-            return None
+from LGA_NKS_Shared.LGA_UI_Style_HieroTools import Style as UIStyle
+from LGA_NKS_Shared.LGA_UI_CustomTooltip_HieroTools import set_custom_tooltip, tooltip_label
+import configparser
 
-        def set_rich_tooltip(widget, html):
-            widget.setToolTip(html)
+# Textos de tooltip en un solo lugar (van a pasar a ser bilingues).
+_TOOLTIPS = {
+    "thumbnail": (
+        tooltip_label("Click:") + " abre {name}<sbr/>"
+        + tooltip_label("Shift+Click:") + " vuelve a bajar los thumbnails desde Flow"
+    ),
+    "assigned_then": (
+        "Quién tenía asignada la task cuando se escribió esto.<br>"
+        "Solo aparece cuando no son los mismos que ahora."
+    ),
+    "keep_on_top": (
+        "Deja esta ventana arriba de las demás.<br>"
+        "Igual no toma el foco: los shortcuts siguen yendo a NKS."
+    ),
+}
+
+# Estado del checkbox Keep on top, compartido por todas las aperturas.
+_SETTINGS_SECTION = "ShotInfoWindow"
+
+
+def _settings_path():
+    if sys.platform.startswith("win"):
+        root = os.getenv("APPDATA") or os.path.expanduser("~")
+    elif sys.platform == "darwin":
+        root = os.path.expanduser("~/Library/Application Support")
+    else:
+        root = os.path.expanduser("~/.config")
+    return Path(root) / "LGA" / "HieroTools" / "ShotInfo.ini"
+
+
+def load_keep_on_top():
+    """Keep on top de la ventana; True si nunca se toco."""
+    try:
+        cfg = configparser.ConfigParser()
+        p = _settings_path()
+        if p.exists():
+            cfg.read(str(p), encoding="utf-8")
+        return cfg.getboolean(_SETTINGS_SECTION, "keep_on_top", fallback=True)
+    except Exception:
+        return True
+
+
+def save_keep_on_top(value):
+    try:
+        p = _settings_path()
+        cfg = configparser.ConfigParser()
+        if p.exists():
+            cfg.read(str(p), encoding="utf-8")
+        if not cfg.has_section(_SETTINGS_SECTION):
+            cfg.add_section(_SETTINGS_SECTION)
+        cfg.set(_SETTINGS_SECTION, "keep_on_top", "true" if value else "false")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with open(str(p), "w", encoding="utf-8", newline="\n") as fh:
+            cfg.write(fh)
+    except Exception as e:
+        debug_print(f"No se pudo guardar keep_on_top: {e}")
 
 # Usar directamente las clases del adapter (ya manejan compatibilidad PySide2/6)
 QCoreApplication = QApplication  # Para compatibilidad
@@ -329,6 +385,10 @@ COLORS = {
 SHOT_INFO_QSS = """
 QWidget#flowNotesContentWidget {
     background-color: %(bg_popover)s;
+}
+QWidget#flowShotInfoFooter {
+    background-color: %(bg_popover)s;
+    border-top: 1px solid %(border_principal)s;
 }
 QWidget#flowNotesHeaderWidget {
     background-color: %(bg_popover)s;
@@ -927,9 +987,8 @@ class ThumbnailButton(QPushButton):
         self.setIcon(QIcon(pix))
         self.setIconSize(pix.size())
         self.setFixedSize(pix.size())
-        self.setToolTip(
-            f"Clic para abrir: {os.path.basename(image_path)}\n"
-            "Shift+Click: Forzar descarga del thumbnail desde FLOW"
+        set_custom_tooltip(
+            self, _TOOLTIPS["thumbnail"].format(name=os.path.basename(image_path))
         )
         self.clicked.connect(self._open_image)
 
@@ -1571,7 +1630,6 @@ class GUIWindow(QWidget):
         self.setWindowTitle("Info")
         self.setObjectName("flowNotesContentWidget")
         self.setStyleSheet(SHOT_INFO_QSS)
-        apply_tooltip_stylesheet(self)
         self.setMinimumSize(WINDOW_WIDTH, WINDOW_MIN_HEIGHT)
 
         main_layout = QVBoxLayout(self)
@@ -1595,6 +1653,23 @@ class GUIWindow(QWidget):
 
         self.scroll_area.setWidget(self.scroll_content)
         main_layout.addWidget(self.scroll_area, 1)
+
+        # Pie con Keep on top. La ventana nunca toma el foco al abrirse, asi
+        # que quedar arriba no le roba los shortcuts a NKS.
+        self.footer = QWidget()
+        self.footer.setObjectName("flowShotInfoFooter")
+        self.footer.setAttribute(Qt.WA_StyledBackground, True)
+        footer_layout = QHBoxLayout(self.footer)
+        footer_layout.setContentsMargins(12, 4, 12, 4)
+        footer_layout.addStretch(1)
+        self.keep_on_top_chk = QtWidgets.QCheckBox("Keep on top")
+        self.keep_on_top_chk.setProperty("lgaLabeled", True)
+        self.keep_on_top_chk.setStyleSheet(UIStyle.CHECKBOX)
+        self.keep_on_top_chk.setChecked(load_keep_on_top())
+        set_custom_tooltip(self.keep_on_top_chk, _TOOLTIPS["keep_on_top"])
+        self.keep_on_top_chk.toggled.connect(self._on_keep_on_top_toggled)
+        footer_layout.addWidget(self.keep_on_top_chk, 0, Qt.AlignRight | Qt.AlignVCenter)
+        main_layout.addWidget(self.footer, 0)
         # Para seguir con el alto los cambios de contenido (ver eventFilter).
         self.scroll_content.installEventFilter(self)
 
@@ -1682,7 +1757,9 @@ class GUIWindow(QWidget):
             if width is None:
                 width = self.width()
             cap = self._auto_height_cap()
-            needed = self._content_height(width)
+            # El pie (Keep on top) va fuera del scroll: se suma a lo que pide
+            # el contenido para que el contenido entre sin barra.
+            needed = self._content_height(width) + self.footer.sizeHint().height()
             fits = needed <= cap
             target = max(WINDOW_MIN_HEIGHT, min(needed, cap))
 
@@ -1747,6 +1824,26 @@ class GUIWindow(QWidget):
         width = WINDOW_WIDTH
         if self._previous_placement is not None:
             width = max(WINDOW_WIDTH, int(self._previous_placement[1]))
+            manual_height = (
+                self._previous_placement[2] if len(self._previous_placement) > 2 else None
+            )
+            if manual_height:
+                # La anterior tenia el alto puesto a mano: se respeta.
+                self._auto_fit = False
+                self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+                self.resize(width, int(manual_height))
+
+        # Recarga sobre la ventana ya visible (reload): Qt muestra los hijos
+        # nuevos recien en el proximo ciclo, y medidos ocultos no ocupan
+        # lugar, asi que la ventana se achicaba vacia un instante. Se
+        # muestran ya, salvo los que se ocultaron a proposito.
+        if self.isVisible():
+            for i in range(self.scroll_layout.count()):
+                child = self.scroll_layout.itemAt(i).widget()
+                if child is not None and not child.testAttribute(
+                    Qt.WA_WState_ExplicitShowHide
+                ):
+                    child.show()
 
         # El alto se mide con la ventana todavia oculta: cada widget tiene
         # que tener su hoja aplicada (font-size, padding) para que la medida
@@ -1772,6 +1869,54 @@ class GUIWindow(QWidget):
         except RuntimeError:
             return
         self._fit_height()
+
+    # ----------------------------------------------------------------- #
+    # Ventana unica: recarga y Keep on top
+    # ----------------------------------------------------------------- #
+    def placement(self):
+        """(posicion del marco, ancho, alto manual o None) para reabrir aca."""
+        manual_height = None if self._auto_fit else self.height()
+        return (self.pos(), self.width(), manual_height)
+
+    def reload(self, task_name=None):
+        """Reemplaza el contenido por el shot del playhead, sin mover la ventana.
+
+        Es lo que usa LGA_NKS_ShotInfoOnReview cuando la ventana ya esta
+        abierta: mismo lugar, mismo tamano, sin parpadeo y sin activarla.
+        """
+        results = self.hiero_ops.process_selected_clips(task_override=task_name)
+        self.set_opening_placement(previous_placement=self.placement())
+        self.display_results(results)
+        self.scroll_area.verticalScrollBar().setValue(0)
+
+    def _on_keep_on_top_toggled(self, checked):
+        save_keep_on_top(checked)
+        self.apply_keep_on_top()
+
+    def apply_keep_on_top(self):
+        """Aplica el checkbox. En Windows via SetWindowPos (sin activar)."""
+        on = self.keep_on_top_chk.isChecked()
+        applied = False
+        try:
+            from LGA_NKS_Shared.LGA_NKS_ShotInfoOnReview import _set_topmost_native
+
+            applied = _set_topmost_native(self, on)
+        except Exception as e:
+            debug_print(f"Topmost nativo no disponible: {e}")
+        if not applied:
+            # Fuera de Windows: el flag recrea la ventana y hay que volver a
+            # mostrarla, siempre sin activarla.
+            geom = self.geometry()
+            flags = self.windowFlags()
+            if on:
+                flags |= Qt.WindowStaysOnTopHint
+            else:
+                flags &= ~Qt.WindowStaysOnTopHint
+            self.setWindowFlags(flags)
+            self.setAttribute(Qt.WA_ShowWithoutActivating, True)
+            self.setGeometry(geom)
+            self.show()
+        debug_print(f"Keep on top={on} (nativo={applied})")
 
     def closeEvent(self, event):
         # Cerrar la conexión de sg_manager si existe
@@ -1988,11 +2133,7 @@ class GUIWindow(QWidget):
         label.setTextFormat(Qt.RichText)
         label.setWordWrap(True)
         label.setText(html)
-        set_rich_tooltip(
-            label,
-            "Quien tenia asignada la task cuando se escribio esto. "
-            "Solo aparece cuando no son los mismos que ahora.",
-        )
+        set_custom_tooltip(label, _TOOLTIPS["assigned_then"])
         self._configure_wrapping_label(label, extra_width=30)
         return label
 
@@ -2420,12 +2561,15 @@ def main(task_name=None, align_left=False, previous_placement=None, activate=Tru
     window.set_opening_placement(
         align_left=align_left, previous_placement=previous_placement
     )
+    # Antes del primer show(), que ocurre dentro de display_results: puesto
+    # despues no tiene efecto y la ventana se activa igual.
+    if not activate:
+        window.setAttribute(Qt.WA_ShowWithoutActivating, True)
     results = hiero_ops.process_selected_clips(task_override=task_name)
     debug_print(f"Results: {results}")
     window.display_results(results)
-    if not activate:
-        window.setAttribute(Qt.WA_ShowWithoutActivating, True)
     window.show()
+    window.apply_keep_on_top()
     app.exec_()
 
 
